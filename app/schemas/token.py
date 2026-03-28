@@ -1,5 +1,6 @@
+from typing import Literal, Optional
+
 from pydantic import BaseModel
-from typing import Optional
 
 class Token(BaseModel):
     access_token: str
@@ -8,3 +9,5 @@ class Token(BaseModel):
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
     tenant_id: Optional[int] = None
+    client_id: Optional[int] = None
+    profile: Literal["internal", "client_portal"] = "internal"

@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Amigão do Meio Ambiente"
@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     # REDIS
     REDIS_URL: str = "redis://localhost:6379/0"
+    REALTIME_EVENTS_CHANNEL: str = "amigao_events"
     
     # STORAGE (MinIO)
     MINIO_SERVER: str = "localhost:9000"
@@ -38,9 +39,13 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     EMAILS_FROM_EMAIL: str = "noreply@amigao.com"
     EMAILS_FROM_NAME: str = "Amigão do Meio Ambiente"
-    
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
+    CLIENT_PORTAL_URL: str = "http://localhost:3000/dashboard"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://172.31.32.1:3000"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
+
+    model_config = SettingsConfigDict(case_sensitive=True, env_file=".env")
 
 settings = Settings()

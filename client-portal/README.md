@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Portal do Cliente
 
-## Getting Started
+Frontend Next.js do Portal do Cliente do Amigão do Meio Ambiente.
 
-First, run the development server:
+## Desenvolvimento local
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+O portal sobe em `http://localhost:3000` e usa rewrite para falar com o backend em `/api/v1`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variáveis relevantes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `API_BACKEND_URL`
+  URL base do backend usada nos rewrites do Next.js.
+  Desenvolvimento padrão: `http://127.0.0.1:8000`
+  Docker Compose: `http://api:8000`
 
-## Learn More
+## Docker
 
-To learn more about Next.js, take a look at the following resources:
+O `Dockerfile` usa build standalone do Next.js.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+docker compose up --build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Serviços publicados localmente:
 
-## Deploy on Vercel
+- Portal: `http://localhost:3000`
+- API: `http://localhost:8000`
+- Docs FastAPI: `http://localhost:8000/docs`
+- MinIO Console: `http://localhost:9001`
+- PostgreSQL: `localhost:5433`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Build manual de produção
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build
+npm run start
+```
+
+Para deploy fora do Docker, ajuste `API_BACKEND_URL` e a origem CORS correspondente no backend.

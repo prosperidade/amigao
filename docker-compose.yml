@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgis/postgis:15-3.3
@@ -11,6 +9,11 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d amigao_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -18,6 +21,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   minio:
     image: minio/minio
@@ -31,6 +39,65 @@ services:
     volumes:
       - minio_data:/data
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_SERVER: db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: amigao_db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      MINIO_SERVER: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "False"
+      SECRET_KEY: mude-esta-chave-em-producao-use-openssl-rand-hex-32
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      CLIENT_PORTAL_URL: http://localhost:3000/dashboard
+      BACKEND_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A app.core.celery_app worker --loglevel=info --pool=solo
+    environment:
+      POSTGRES_SERVER: db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: amigao_db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      MINIO_SERVER: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "False"
+      SECRET_KEY: mude-esta-chave-em-producao-use-openssl-rand-hex-32
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      CLIENT_PORTAL_URL: http://localhost:3000/dashboard
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   client-portal:
     build:
       context: ./client-portal
@@ -38,15 +105,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - API_BACKEND_URL=http://host.docker.internal:8000
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: 1
+      API_BACKEND_URL: http://api:8000
     restart: unless-stopped
     depends_on:
-      - db
-      - redis
-      - minio
+      api:
+        condition: service_started
 
 volumes:
   postgres_data:

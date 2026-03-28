@@ -14,7 +14,7 @@ def create_thread(
     *,
     db: Session = Depends(deps.get_db),
     thread_in: CommunicationThreadCreate,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     db_obj = ThreadModel(
         **thread_in.model_dump(), 
@@ -31,7 +31,7 @@ def get_threads(
     skip: int = 0,
     limit: int = 100,
     process_id: Optional[int] = None,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     query = db.query(ThreadModel).filter(ThreadModel.tenant_id == current_user.tenant_id)
     if process_id:
@@ -44,7 +44,7 @@ def add_message(
     db: Session = Depends(deps.get_db),
     thread_id: int,
     message_in: MessageCreate,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     thread_obj = db.query(ThreadModel).filter(
         ThreadModel.id == thread_id,

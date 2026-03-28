@@ -1,0 +1,16 @@
+.git
+.gitignore
+.pytest_cache
+__pycache__
+.vscode
+venv
+docs
+tests
+frontend
+mobile
+frontend.zip
+.fix.py
+client-portal/.next
+client-portal/node_modules
+frontend/node_modules
+mobile/node_modules

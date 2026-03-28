@@ -14,7 +14,7 @@ def create_task(
     *,
     db: Session = Depends(deps.get_db),
     task_in: TaskCreate,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     db_obj = TaskModel(
         **task_in.model_dump(), 
@@ -32,7 +32,7 @@ def get_tasks(
     skip: int = 0,
     limit: int = 100,
     process_id: Optional[int] = None,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     query = db.query(TaskModel).filter(TaskModel.tenant_id == current_user.tenant_id)
     if process_id:
@@ -43,7 +43,7 @@ def get_tasks(
 def get_task(
     id: int, 
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     task_obj = db.query(TaskModel).filter(
         TaskModel.id == id,
@@ -59,7 +59,7 @@ def update_task(
     db: Session = Depends(deps.get_db),
     id: int,
     task_in: TaskUpdate,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     task_obj = db.query(TaskModel).filter(
         TaskModel.id == id,

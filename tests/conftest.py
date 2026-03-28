@@ -1,12 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Column, Integer, MetaData, Table, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api import websockets
 from app.main import app
-from app.db.base import Base
 from app.api.deps import get_db
+from app.models.base import Base
+from app import models as model_registry  # noqa: F401
 
 # Setup an in-memory SQLite database for testing, or use a test postgres db
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -20,9 +22,15 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(scope="session")
 def db_engine():
-    Base.metadata.create_all(bind=engine)
+    stub_metadata = MetaData()
+    Table("properties", stub_metadata, Column("id", Integer, primary_key=True))
+    stub_metadata.create_all(bind=engine)
+
+    tables = [table for table in Base.metadata.sorted_tables if table.name != "properties"]
+    Base.metadata.create_all(bind=engine, tables=tables)
     yield engine
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=engine, tables=list(reversed(tables)))
+    stub_metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
 def db_session(db_engine):
@@ -41,6 +49,14 @@ def client(db_session):
             yield db_session
         finally:
             pass
+
+    async def fake_connect_redis():
+        return None
+
+    original_connect_redis = websockets.manager.connect_redis
     app.dependency_overrides[get_db] = override_get_db
+    websockets.manager.connect_redis = fake_connect_redis
     with TestClient(app) as c:
         yield c
+    websockets.manager.connect_redis = original_connect_redis
+    app.dependency_overrides.clear()

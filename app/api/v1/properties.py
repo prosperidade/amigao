@@ -14,7 +14,7 @@ def create_property(
     *,
     db: Session = Depends(deps.get_db),
     property_in: PropertyCreate,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     db_obj = PropertyModel(**property_in.dict(), tenant_id=current_user.tenant_id)
     db.add(db_obj)
@@ -28,7 +28,7 @@ def get_properties(
     skip: int = 0,
     limit: int = 100,
     client_id: Optional[int] = None,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     query = db.query(PropertyModel).filter(PropertyModel.tenant_id == current_user.tenant_id)
     if client_id:
@@ -39,7 +39,7 @@ def get_properties(
 def get_property(
     id: int, 
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     property_obj = db.query(PropertyModel).filter(
         PropertyModel.id == id,
@@ -55,7 +55,7 @@ def update_property(
     db: Session = Depends(deps.get_db),
     id: int,
     property_in: PropertyUpdate,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_internal_user),
 ):
     property_obj = db.query(PropertyModel).filter(
         PropertyModel.id == id,

@@ -4,10 +4,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
 from app.api.deps import get_db, get_current_active_user
 from app.core import security
 from app.core.config import settings
+from app.models.client import Client
 from app.models.user import User
 from app.schemas.token import Token
 from app.schemas.user import User as UserSchema
@@ -23,7 +25,12 @@ def login_access_token(
     """
     Login com email e senha. Retorna um token JWT.
     """
-    user = db.query(User).filter(User.email == form_data.username).first()
+    normalized_email = form_data.username.strip().lower()
+    user = (
+        db.query(User)
+        .filter(func.lower(func.trim(User.email)) == normalized_email)
+        .first()
+    )
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -34,12 +41,31 @@ def login_access_token(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Usuário inativo",
         )
+
+    portal_client_id = None
+    access_profile = "internal"
+    if not user.is_superuser:
+        portal_client = (
+            db.query(Client)
+            .filter(
+                Client.tenant_id == user.tenant_id,
+                Client.email.isnot(None),
+                func.lower(func.trim(Client.email)) == normalized_email,
+            )
+            .first()
+        )
+        if portal_client:
+            portal_client_id = portal_client.id
+            access_profile = "client_portal"
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return {
         "access_token": security.create_access_token(
             subject=user.id,
             tenant_id=user.tenant_id,
             expires_delta=access_token_expires,
+            client_id=portal_client_id,
+            profile=access_profile,
         ),
         "token_type": "bearer",
     }

@@ -29,3 +29,8 @@ def setup_logging(level: str = "INFO") -> None:
     # Silenciar logs excessivos de libs externas
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
+
+def get_logger(name: str) -> logging.Logger:
+    """Retorna logger padronizado para módulos da aplicação."""
+    return logging.getLogger(name)
