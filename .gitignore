@@ -1,0 +1,31 @@
+# Ambiente Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Ambiente
+.env
+*.env
+
+# Alembic
+alembic/versions/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Node / Frontend
+**/node_modules/
+**/.next/
+**/out/
+**/.expo/
+**/.turbo/
+coverage/
