@@ -1,6 +1,37 @@
+from typing import Literal
+from urllib.parse import urlparse
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "172.31.32.1"}
+
+
+def _extract_hostname(value: str) -> str:
+    candidate = value.strip()
+    if not candidate:
+        return ""
+
+    parsed = urlparse(candidate if "://" in candidate else f"http://{candidate}")
+    return (parsed.hostname or candidate).strip("[]").lower()
+
+
+def _is_local_address(value: str) -> bool:
+    hostname = _extract_hostname(value)
+    if not hostname:
+        return False
+    return hostname in _LOCAL_HOSTS or hostname.endswith(".local")
+
 class Settings(BaseSettings):
+    ENVIRONMENT: Literal["development", "test", "production"] = "development"
+    SERVICE_NAME: str = "api"
+    LOG_LEVEL: str = "INFO"
+    SLOW_REQUEST_THRESHOLD_MS: int = 500
+    ALERT_WEBHOOK_URL: str = ""
+    ALERT_WEBHOOK_TIMEOUT_SECONDS: float = 2.0
+    ALERT_WEBHOOK_MIN_SEVERITY: Literal["info", "warning", "error", "critical"] = "error"
+    PROMETHEUS_QUEUE_NAMES: str = "celery"
     PROJECT_NAME: str = "Amigão do Meio Ambiente"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
@@ -27,7 +58,7 @@ class Settings(BaseSettings):
     MINIO_SECURE: bool = False
     
     # JWT
-    SECRET_KEY: str = "change-this-in-production"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
@@ -46,6 +77,46 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
 
-    model_config = SettingsConfigDict(case_sensitive=True, env_file=".env")
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == "production"
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.SMTP_HOST and self.SMTP_USER and self.SMTP_PASSWORD)
+
+    @model_validator(mode="after")
+    def validate_security(self) -> "Settings":
+        secret_key = self.SECRET_KEY.strip()
+        if not secret_key:
+            raise ValueError("SECRET_KEY não pode ser vazia.")
+        if len(secret_key) < 32:
+            raise ValueError("SECRET_KEY deve ter pelo menos 32 caracteres.")
+
+        insecure_production_keys = {
+            "change-this-in-production",
+            "mude-esta-chave-em-producao-use-openssl-rand-hex-32",
+        }
+        if self.is_production and secret_key in insecure_production_keys:
+            raise ValueError("SECRET_KEY insegura para produção.")
+
+        if self.is_production and (
+            self.MINIO_ACCESS_KEY == "minioadmin" or self.MINIO_SECRET_KEY == "minioadmin"
+        ):
+            raise ValueError("Credenciais MinIO inseguras para produção.")
+
+        if self.is_production and _is_local_address(self.CLIENT_PORTAL_URL):
+            raise ValueError("CLIENT_PORTAL_URL não pode apontar para localhost em produção.")
+
+        local_origins = [origin for origin in self.cors_origins_list if _is_local_address(origin)]
+        if self.is_production and local_origins:
+            raise ValueError("BACKEND_CORS_ORIGINS não pode conter endereços locais em produção.")
+
+        if self.is_production and not self.smtp_configured:
+            raise ValueError("SMTP deve estar configurado em produção.")
+
+        return self
+
+    model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
 settings = Settings()

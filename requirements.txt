@@ -4,6 +4,7 @@ pydantic
 pydantic-settings
 email-validator
 sqlalchemy
+sqlalchemy-utils
 alembic
 psycopg2-binary
 redis
@@ -13,3 +14,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 boto3
 GeoAlchemy2
+fpdf2
+litellm
+httpx
+pytest

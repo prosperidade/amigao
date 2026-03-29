@@ -2,7 +2,9 @@ import smtplib
 from email.message import EmailMessage
 import logging
 
+from app.core.alerts import emit_operational_alert
 from app.core.config import settings
+from app.core.metrics import record_email_delivery
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +19,21 @@ class EmailService:
         self.use_tls = settings.SMTP_TLS
 
     def send_email(self, email_to: str, subject: str, html_content: str) -> bool:
-        if not self.user or not self.password:
-            logger.warning("SMTP Config invalida ou vazia. Simulando envio de E-mail (Console):")
-            logger.warning(f"  Para: {email_to}")
-            logger.warning(f"  Assunto: {subject}")
-            logger.warning(f"  Mensagem (HTML): {html_content[:200]}...")
-            return True
+        if not settings.smtp_configured:
+            log_message = "SMTP não configurado. O e-mail não será enviado."
+            if settings.is_production:
+                logger.error("%s Para=%s Assunto=%s", log_message, email_to, subject)
+                record_email_delivery("failed")
+                emit_operational_alert(
+                    category="email_delivery",
+                    severity="error",
+                    message="SMTP não configurado em produção",
+                    metadata={"email_to": email_to, "subject": subject},
+                )
+            else:
+                logger.warning("%s Para=%s Assunto=%s", log_message, email_to, subject)
+                record_email_delivery("skipped")
+            return False
 
         msg = EmailMessage()
         msg['Subject'] = subject
@@ -31,18 +42,25 @@ class EmailService:
         msg.set_content(html_content, subtype='html')
 
         try:
-            server = smtplib.SMTP(self.host, self.port)
-            if self.use_tls:
-                server.starttls()
-            
-            server.login(self.user, self.password)
-            server.send_message(msg)
-            server.quit()
-            
+            with smtplib.SMTP(self.host, self.port, timeout=20) as server:
+                if self.use_tls:
+                    server.starttls()
+
+                server.login(self.user, self.password)
+                server.send_message(msg)
+
             logger.info(f"Email enviado com sucesso para {email_to}")
+            record_email_delivery("success")
             return True
         except Exception as e:
             logger.error(f"Falha ao enviar e-mail para {email_to}: {str(e)}")
+            record_email_delivery("failed")
+            emit_operational_alert(
+                category="email_delivery",
+                severity="error",
+                message="Falha ao enviar e-mail",
+                metadata={"email_to": email_to, "subject": subject, "error": str(e)},
+            )
             return False
 
 

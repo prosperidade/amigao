@@ -1,6 +1,7 @@
 import logging
 
 from app.core.celery_app import celery_app
+from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.document import Document
 from app.models.process import Process
@@ -108,9 +109,16 @@ def notify_process_status_changed(
                 subject=f"Atualização do Processo: {process.title}",
                 html_content=email_html,
             )
-            if not email_sent:
+            if email_sent:
+                channels.append("email")
+            elif settings.is_production or settings.smtp_configured:
                 raise RuntimeError(f"Falha ao enviar notificação de status para {process.client.email}")
-            channels.append("email")
+            else:
+                logger.warning(
+                    "Notificação por e-mail ignorada para %s em ambiente %s por SMTP não configurado",
+                    process.client.email,
+                    settings.ENVIRONMENT,
+                )
 
         tenant_payload = {
             "process_id": process.id,
@@ -225,9 +233,15 @@ def notify_document_uploaded(
                     subject=f"Novo documento no processo {process.title}",
                     html_content=html,
                 )
-                if not delivered:
+                if delivered:
+                    channels.append("email_internal")
+                elif settings.is_production or settings.smtp_configured:
                     raise RuntimeError("Falha ao enviar alerta interno de documento enviado")
-                channels.append("email_internal")
+                else:
+                    logger.warning(
+                        "Alerta interno de documento ignorado em ambiente %s por SMTP não configurado",
+                        settings.ENVIRONMENT,
+                    )
 
         register_notification_audit(
             db=db,
@@ -265,6 +279,13 @@ def send_email_notification(self, email_to: str, subject: str, html_content: str
     try:
         success = service.send_email(email_to=email_to, subject=subject, html_content=html_content)
         if not success:
+            if not settings.is_production and not settings.smtp_configured:
+                logger.warning(
+                    "Envio de e-mail ignorado para %s em ambiente %s por SMTP não configurado",
+                    email_to,
+                    settings.ENVIRONMENT,
+                )
+                return {"status": "skipped", "to": email_to, "reason": "smtp_not_configured"}
             raise RuntimeError(f"Falha ao enviar e-mail para {email_to}")
         return {"status": "success", "to": email_to}
     except Exception as exc:

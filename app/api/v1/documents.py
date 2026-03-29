@@ -6,6 +6,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import AccessContext, get_access_context, get_db
+from app.core.metrics import record_document_upload
 from app.models.audit_log import AuditLog
 from app.models.document import Document
 from app.models.process import Process
@@ -160,6 +161,7 @@ def confirm_upload(
             exc,
         )
 
+    record_document_upload("client_portal" if access_context.is_client_portal else "internal", "success")
     logger.info(f"Documento #{db_doc.id} confirmado | tenant={access_context.tenant_id} | '{body.filename}'")
     return db_doc
 

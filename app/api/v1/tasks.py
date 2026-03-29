@@ -1,13 +1,168 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 from typing import List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app.api import deps
-from app.models.task import Task as TaskModel
+from app.core.metrics import record_task_transition
+from app.models.audit_log import AuditLog
+from app.models.task import (
+    TERMINAL_TASK_STATUSES,
+    Task as TaskModel,
+    TaskStatus,
+    VALID_TASK_TRANSITIONS,
+    is_valid_task_transition,
+)
 from app.models.user import User
-from app.schemas.task import TaskCreate, TaskUpdate, Task
+from app.schemas.task import Task, TaskCreate, TaskStatusUpdate, TaskUpdate
+from app.services.notifications import publish_realtime_event
 
 router = APIRouter()
+
+
+def _get_scoped_task_or_404(db: Session, task_id: int, tenant_id: int) -> TaskModel:
+    task_obj = db.query(TaskModel).filter(
+        TaskModel.id == task_id,
+        TaskModel.tenant_id == tenant_id,
+    ).first()
+    if not task_obj:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task_obj
+
+
+def _serialize_task(task_obj: TaskModel) -> Task:
+    task_payload = Task.model_validate(task_obj).model_dump()
+    task_payload["allowed_transitions"] = VALID_TASK_TRANSITIONS.get(task_obj.status, [])
+    return Task.model_validate(task_payload)
+
+
+def _emit_task_deadline_alert(task_obj: TaskModel) -> None:
+    if not task_obj.due_date or task_obj.status in TERMINAL_TASK_STATUSES:
+        return
+
+    due_date = task_obj.due_date
+    if due_date.tzinfo is None:
+        due_date = due_date.replace(tzinfo=timezone.utc)
+
+    if due_date < datetime.now(timezone.utc):
+        emit_operational_alert(
+            category="deadline_alert",
+            severity="warning",
+            message="Tarefa vencida permanece aberta",
+            metadata={
+                "task_id": task_obj.id,
+                "process_id": task_obj.process_id,
+                "status": task_obj.status.value,
+                "due_date": due_date.isoformat(),
+            },
+        )
+
+
+def _validate_task_status_transition(task_obj: TaskModel, new_status: TaskStatus) -> None:
+    if not is_valid_task_transition(task_obj.status, new_status):
+        record_task_transition(task_obj.status.value, new_status.value, "rejected")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Transição de status inválida: não é permitido ir de "
+                f"'{task_obj.status.value}' para '{new_status.value}'"
+            ),
+        )
+
+    if new_status == TaskStatus.concluida:
+        unresolved_dependencies = [
+            dependency.id
+            for dependency in task_obj.dependencies
+            if dependency.status != TaskStatus.concluida
+        ]
+        if unresolved_dependencies:
+            record_task_transition(task_obj.status.value, new_status.value, "blocked_by_dependency")
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Não é possível concluir a tarefa enquanto houver dependências pendentes: "
+                    + ", ".join(str(task_id) for task_id in unresolved_dependencies)
+                ),
+            )
+
+
+def _create_task_audit(
+    *,
+    db: Session,
+    current_user: User,
+    task_obj: TaskModel,
+    action: str,
+    details: str,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None,
+) -> None:
+    db.add(
+        AuditLog(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            entity_type="task",
+            entity_id=task_obj.id,
+            action=action,
+            details=details,
+            old_value=old_value,
+            new_value=new_value,
+        )
+    )
+
+
+def _apply_task_update(
+    db: Session,
+    task_obj: TaskModel,
+    task_in: TaskUpdate,
+    current_user: User,
+) -> Task:
+    update_data = task_in.model_dump(exclude_unset=True)
+    previous_status = task_obj.status
+
+    if "status" in update_data and update_data["status"] is not None:
+        _validate_task_status_transition(task_obj, update_data["status"])
+
+    for field, value in update_data.items():
+        setattr(task_obj, field, value)
+
+    if "status" in update_data and update_data["status"] is not None:
+        new_status = update_data["status"]
+        if new_status == TaskStatus.concluida:
+            task_obj.completed_at = datetime.now(timezone.utc)
+        elif previous_status == TaskStatus.concluida and new_status != TaskStatus.concluida:
+            task_obj.completed_at = None
+
+        _create_task_audit(
+            db=db,
+            current_user=current_user,
+            task_obj=task_obj,
+            action="status_changed",
+            details="Status da tarefa alterado via API",
+            old_value=previous_status.value,
+            new_value=new_status.value,
+        )
+
+    db.commit()
+    db.refresh(task_obj)
+    _emit_task_deadline_alert(task_obj)
+
+    if "status" in update_data and update_data["status"] is not None:
+        new_status = update_data["status"]
+        record_task_transition(previous_status.value, new_status.value, "success")
+        publish_realtime_event(
+            tenant_id=current_user.tenant_id,
+            event_type="task.completed" if new_status == TaskStatus.concluida else "task.status.changed",
+            payload={
+                "task_id": task_obj.id,
+                "process_id": task_obj.process_id,
+                "from_status": previous_status.value,
+                "to_status": new_status.value,
+            },
+        )
+
+    return _serialize_task(task_obj)
+
 
 @router.post("/", response_model=Task)
 def create_task(
@@ -17,14 +172,29 @@ def create_task(
     current_user: User = Depends(deps.get_current_internal_user),
 ):
     db_obj = TaskModel(
-        **task_in.model_dump(), 
+        **task_in.model_dump(),
         tenant_id=current_user.tenant_id,
-        created_by_user_id=current_user.id
+        created_by_user_id=current_user.id,
     )
     db.add(db_obj)
+    db.flush()
+    _create_task_audit(
+        db=db,
+        current_user=current_user,
+        task_obj=db_obj,
+        action="created",
+        details="Tarefa criada via API",
+    )
     db.commit()
     db.refresh(db_obj)
-    return db_obj
+    _emit_task_deadline_alert(db_obj)
+    publish_realtime_event(
+        tenant_id=current_user.tenant_id,
+        event_type="task.created",
+        payload={"task_id": db_obj.id, "process_id": db_obj.process_id, "status": db_obj.status.value},
+    )
+    return _serialize_task(db_obj)
+
 
 @router.get("/", response_model=List[Task])
 def get_tasks(
@@ -37,21 +207,17 @@ def get_tasks(
     query = db.query(TaskModel).filter(TaskModel.tenant_id == current_user.tenant_id)
     if process_id:
         query = query.filter(TaskModel.process_id == process_id)
-    return query.offset(skip).limit(limit).all()
+    return [_serialize_task(task_obj) for task_obj in query.offset(skip).limit(limit).all()]
+
 
 @router.get("/{id}", response_model=Task)
 def get_task(
-    id: int, 
+    id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    task_obj = db.query(TaskModel).filter(
-        TaskModel.id == id,
-        TaskModel.tenant_id == current_user.tenant_id
-    ).first()
-    if not task_obj:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task_obj
+    return _serialize_task(_get_scoped_task_or_404(db, id, current_user.tenant_id))
+
 
 @router.patch("/{id}", response_model=Task)
 def update_task(
@@ -61,17 +227,18 @@ def update_task(
     task_in: TaskUpdate,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    task_obj = db.query(TaskModel).filter(
-        TaskModel.id == id,
-        TaskModel.tenant_id == current_user.tenant_id
-    ).first()
-    if not task_obj:
-        raise HTTPException(status_code=404, detail="Task not found")
-        
-    update_data = task_in.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(task_obj, field, value)
-        
-    db.commit()
-    db.refresh(task_obj)
-    return task_obj
+    task_obj = _get_scoped_task_or_404(db, id, current_user.tenant_id)
+    return _apply_task_update(db, task_obj, task_in, current_user)
+
+
+@router.patch("/{id}/status", response_model=Task)
+@router.put("/{id}/status", response_model=Task)
+def update_task_status(
+    *,
+    db: Session = Depends(deps.get_db),
+    id: int,
+    status_in: TaskStatusUpdate,
+    current_user: User = Depends(deps.get_current_internal_user),
+):
+    task_obj = _get_scoped_task_or_404(db, id, current_user.tenant_id)
+    return _apply_task_update(db, task_obj, TaskUpdate(status=status_in.status), current_user)

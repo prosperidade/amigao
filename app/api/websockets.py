@@ -4,7 +4,9 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, List, Optional
 import redis.asyncio as aioredis
+from app.core.alerts import emit_operational_alert
 from app.core.config import settings
+from app.core.metrics import update_websocket_connections
 from app.schemas.token import TokenPayload
 from jose import jwt, JWTError
 import logging
@@ -25,6 +27,9 @@ class ConnectionManager:
         if client_id is not None:
             return f"client:{tenant_id}:{client_id}"
         return f"tenant:{tenant_id}"
+
+    def _scope_label(self, client_id: Optional[int] = None) -> str:
+        return "client" if client_id is not None else "tenant"
 
     async def connect_redis(self):
         if not self.redis:
@@ -70,6 +75,12 @@ class ConnectionManager:
                         for connection in self.active_connections[scope_key]:
                             await connection.send_json(data)
                 except Exception as e:
+                    emit_operational_alert(
+                        category="websocket_listener",
+                        severity="error",
+                        message="Erro ao processar evento do Redis no websocket",
+                        metadata={"error": str(e)},
+                    )
                     logger.error(f"Error parsing redis message: {e}")
 
     async def connect(self, websocket: WebSocket, tenant_id: int, client_id: Optional[int] = None):
@@ -78,12 +89,14 @@ class ConnectionManager:
         if scope_key not in self.active_connections:
             self.active_connections[scope_key] = []
         self.active_connections[scope_key].append(websocket)
+        update_websocket_connections(self._scope_label(client_id), 1)
 
     def disconnect(self, websocket: WebSocket, tenant_id: int, client_id: Optional[int] = None):
         scope_key = self._scope_key(tenant_id, client_id)
         if scope_key in self.active_connections:
             if websocket in self.active_connections[scope_key]:
                 self.active_connections[scope_key].remove(websocket)
+                update_websocket_connections(self._scope_label(client_id), -1)
             if not self.active_connections[scope_key]:
                 del self.active_connections[scope_key]
 
@@ -145,4 +158,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             manager.disconnect(websocket, tenant_id, client_id)
             
     except JWTError:
+        emit_operational_alert(
+            category="websocket_auth",
+            severity="warning",
+            message="Tentativa de conexão websocket com token inválido",
+            metadata={},
+        )
         await websocket.close(code=1008)

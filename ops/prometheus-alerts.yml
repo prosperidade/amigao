@@ -1,0 +1,75 @@
+groups:
+  - name: amigao-api
+    rules:
+      - alert: AmigaoApiHighErrorRate
+        expr: |
+          (
+            sum(rate(amigao_http_requests_total{service="api",status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(amigao_http_requests_total{service="api"}[5m])), 1)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: Taxa de erro 5xx acima do SLO da API
+          description: A API excedeu 5% de respostas 5xx nos ultimos 10 minutos.
+
+      - alert: AmigaoApiHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(amigao_http_request_duration_seconds_bucket{service="api"}[5m])) by (le)
+          ) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: Latencia p95 da API acima do SLO
+          description: O p95 da API superou 800ms por pelo menos 10 minutos.
+
+  - name: amigao-worker
+    rules:
+      - alert: AmigaoWorkerFailures
+        expr: increase(amigao_celery_tasks_total{service="worker",state="failure"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: worker
+        annotations:
+          summary: Falha em task Celery
+          description: Uma ou mais tasks do worker falharam nos ultimos 10 minutos.
+
+      - alert: AmigaoWorkerQueueBacklog
+        expr: max_over_time(amigao_celery_queue_depth{service="worker"}[10m]) > 20
+        for: 10m
+        labels:
+          severity: warning
+          service: worker
+        annotations:
+          summary: Fila Celery acumulando backlog
+          description: A fila Celery permaneceu acima de 20 itens por 10 minutos.
+
+  - name: amigao-docs-sync
+    rules:
+      - alert: AmigaoDocumentUploadFailures
+        expr: increase(amigao_document_uploads_total{result="failed"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: Falha em confirmacao de upload
+          description: Foram detectadas falhas de upload confirmado nos ultimos 15 minutos.
+
+      - alert: AmigaoOperationalAlertStorm
+        expr: increase(amigao_alerts_total{severity=~"error|critical"}[15m]) > 5
+        for: 5m
+        labels:
+          severity: critical
+          service: platform
+        annotations:
+          summary: Tempestade de alertas operacionais
+          description: Mais de 5 alertas de erro/critico ocorreram em 15 minutos.

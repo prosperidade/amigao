@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 from app.models.task import TaskStatus, TaskPriority
@@ -11,7 +11,7 @@ class TaskBase(BaseModel):
     property_id: Optional[int] = None
     document_id: Optional[int] = None
     
-    status: TaskStatus = TaskStatus.todo
+    status: TaskStatus = TaskStatus.a_fazer
     priority: TaskPriority = TaskPriority.medium
 
     assigned_to_user_id: Optional[int] = None
@@ -37,6 +37,10 @@ class TaskUpdate(BaseModel):
     completed_at: Optional[datetime] = None
 
 
+class TaskStatusUpdate(BaseModel):
+    status: TaskStatus
+
+
 class Task(TaskBase):
     id: int
     tenant_id: int
@@ -44,5 +48,6 @@ class Task(TaskBase):
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    allowed_transitions: list[TaskStatus] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)

@@ -132,7 +132,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> Dict[str, 
         logo_bytes = _load_tenant_logo(storage, tenant_id)
 
         total_tasks = len(tasks)
-        done_tasks = sum(1 for task in tasks if task.status == TaskStatus.done)
+        done_tasks = sum(1 for task in tasks if task.status == TaskStatus.concluida)
         generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
 
         pdf = VisitReportPDF(
@@ -168,7 +168,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> Dict[str, 
         pdf.section_title("Checklist de Campo")
         if tasks:
             for idx, task in enumerate(tasks, start=1):
-                status_text = "[OK]" if task.status == TaskStatus.done else "[PENDENTE]"
+                status_text = "[OK]" if task.status == TaskStatus.concluida else "[PENDENTE]"
                 due_date = _format_date(task.due_date)
                 pdf.set_font("Helvetica", "B", 10)
                 pdf.cell(0, 7, f"{idx}. {status_text} {task.title}", border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT)

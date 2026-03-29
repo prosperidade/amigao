@@ -72,7 +72,7 @@ def test_generate_process_visit_report_persists_document(db_session, monkeypatch
         tenant_id=tenant.id,
         process_id=process.id,
         title="Vistoria em campo",
-        status=TaskStatus.done,
+        status=TaskStatus.concluida,
         priority=TaskPriority.medium,
         created_by_user_id=user.id,
     )

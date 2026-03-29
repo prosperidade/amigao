@@ -81,7 +81,9 @@ export class SyncService {
         
         if (item.method.toUpperCase() === 'POST') {
           await api.post(item.endpoint, payload);
-        } else if (item.method.toUpperCase() === 'PATCH' || item.method.toUpperCase() === 'PUT') {
+        } else if (item.method.toUpperCase() === 'PATCH') {
+          await api.patch(item.endpoint, payload);
+        } else if (item.method.toUpperCase() === 'PUT') {
           await api.put(item.endpoint, payload);
         }
 

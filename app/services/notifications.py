@@ -5,7 +5,9 @@ from typing import Optional
 import redis
 from sqlalchemy.orm import Session
 
+from app.core.alerts import emit_operational_alert
 from app.core.config import settings
+from app.core.metrics import record_realtime_event
 from app.models.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -34,8 +36,16 @@ def publish_realtime_event(
             settings.REALTIME_EVENTS_CHANNEL,
             json.dumps(message, ensure_ascii=False),
         )
+        record_realtime_event(scope, event_type, "success")
         return True
     except Exception as exc:
+        record_realtime_event(scope, event_type, "failed")
+        emit_operational_alert(
+            category="realtime_publish",
+            severity="error",
+            message="Falha ao publicar evento realtime",
+            metadata={"event_type": event_type, "scope": scope, "error": str(exc)},
+        )
         logger.warning(
             "Falha ao publicar evento realtime '%s' no Redis: %s",
             event_type,

@@ -6,7 +6,7 @@ import logging
 
 from app.api.deps import AccessContext, get_access_context, get_current_internal_user, get_db
 from app.models.process import Process as ProcessModel, is_valid_transition, ProcessStatus
-from app.models.task import Task as TaskModel, TaskStatus
+from app.models.task import TERMINAL_TASK_STATUSES, Task as TaskModel
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.schemas.process import Process, ProcessCreate, ProcessUpdate, ProcessStatusUpdate
@@ -132,7 +132,7 @@ def update_process_status(
     if status_update.status not in [ProcessStatus.cancelado, ProcessStatus.arquivado, ProcessStatus.triagem, ProcessStatus.lead]:
         incomplete_tasks = db.query(TaskModel).filter(
             TaskModel.process_id == process.id,
-            TaskModel.status != TaskStatus.done
+            TaskModel.status.notin_(list(TERMINAL_TASK_STATUSES))
         ).count()
         if incomplete_tasks > 0:
             raise HTTPException(

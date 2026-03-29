@@ -12,6 +12,51 @@ export default function ProcessDetailsScreen() {
   const [processInfo, setProcessInfo] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
 
+  const isTaskDone = (status: string) => status === 'concluida' || status === 'done';
+  const getNextTaskStatus = (status: string) => {
+    switch (status) {
+      case 'backlog':
+        return 'a_fazer';
+      case 'a_fazer':
+      case 'todo':
+        return 'em_progresso';
+      case 'em_progresso':
+      case 'in_progress':
+        return 'revisao';
+      case 'aguardando':
+        return 'em_progresso';
+      case 'revisao':
+      case 'review':
+        return 'concluida';
+      default:
+        return null;
+    }
+  };
+  const getTaskStatusLabel = (status: string) => {
+    switch (status) {
+      case 'backlog':
+        return 'Backlog';
+      case 'a_fazer':
+      case 'todo':
+        return 'A Fazer';
+      case 'em_progresso':
+      case 'in_progress':
+        return 'Em Progresso';
+      case 'aguardando':
+        return 'Aguardando';
+      case 'revisao':
+      case 'review':
+        return 'Revisão';
+      case 'concluida':
+      case 'done':
+        return 'Concluída';
+      case 'cancelada':
+        return 'Cancelada';
+      default:
+        return status;
+    }
+  };
+
   const loadProcessAndTasks = async () => {
     try {
       const db = getDb();
@@ -30,7 +75,10 @@ export default function ProcessDetailsScreen() {
   }, [id]);
 
   const handleToggleTask = async (task: any) => {
-    const newStatus = task.status === 'done' ? 'todo' : 'done';
+    const newStatus = getNextTaskStatus(task.status);
+    if (!newStatus) {
+      return;
+    }
     
     try {
       const db = getDb();
@@ -92,7 +140,7 @@ export default function ProcessDetailsScreen() {
             <Text style={{ color: '#9ca3af', textAlign: 'center', marginTop: 32 }}>Este processo não possui checklists registrados.</Text>
           }
           renderItem={({ item }) => {
-            const isDone = item.status === 'done';
+            const isDone = isTaskDone(item.status);
             return (
               <TouchableOpacity 
                 onPress={() => handleToggleTask(item)}
@@ -116,6 +164,9 @@ export default function ProcessDetailsScreen() {
                 <View style={{ marginLeft: 16, flex: 1 }}>
                   <Text style={{ fontSize: 16, fontWeight: '500', color: isDone ? '#9ca3af' : '#111827', textDecorationLine: isDone ? 'line-through' : 'none' }}>
                     {item.title}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                    {getTaskStatusLabel(item.status)}
                   </Text>
                 </View>
               </TouchableOpacity>

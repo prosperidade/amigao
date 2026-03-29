@@ -130,8 +130,31 @@ export default function ProcessesPage() {
     }
   });
 
+  const isTaskDone = (status: string) => status === 'concluida' || status === 'done';
+  const TASK_PROGRESS_ORDER = ['backlog', 'a_fazer', 'em_progresso', 'aguardando', 'revisao', 'concluida'];
+  const TASK_STATUS_LABELS: Record<string, string> = {
+    backlog: 'Backlog',
+    a_fazer: 'A Fazer',
+    em_progresso: 'Em Progresso',
+    aguardando: 'Aguardando',
+    revisao: 'Revisão',
+    concluida: 'Concluída',
+    cancelada: 'Cancelada',
+    done: 'Concluída',
+  };
+  const getNextTaskStatus = (task: any) => {
+    const allowedTransitions = Array.isArray(task.allowed_transitions) ? task.allowed_transitions : [];
+    return TASK_PROGRESS_ORDER.find(status => allowedTransitions.includes(status)) ?? null;
+  };
+
   const toggleTaskMutation = useMutation({
-    mutationFn: (task: any) => api.patch(`/tasks/${task.id}/`, { status: task.status === 'done' ? 'todo' : 'done' }),
+    mutationFn: (task: any) => {
+      const nextStatus = getNextTaskStatus(task);
+      if (!nextStatus) {
+        return Promise.resolve();
+      }
+      return api.patch(`/tasks/${task.id}/status`, { status: nextStatus });
+    },
     onSuccess: () => {
       refetchTasks();
     }
@@ -349,11 +372,14 @@ export default function ProcessesPage() {
                       processTasks?.map(task => (
                         <div key={task.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-100 dark:border-zinc-800 group">
                           <button onClick={() => toggleTaskMutation.mutate(task)} className="text-gray-400 hover:text-primary transition-colors">
-                            {task.status === 'done' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5" />}
+                            {isTaskDone(task.status) ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5" />}
                           </button>
-                          <span className={`text-sm font-medium ${task.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-800 dark:text-gray-200'}`}>
-                            {task.title}
-                          </span>
+                          <div className="flex-1">
+                            <span className={`text-sm font-medium ${isTaskDone(task.status) ? 'text-gray-400 line-through' : 'text-gray-800 dark:text-gray-200'}`}>
+                              {task.title}
+                            </span>
+                            <p className="text-xs text-gray-500 mt-1">{TASK_STATUS_LABELS[task.status] || task.status}</p>
+                          </div>
                         </div>
                       ))
                     )}

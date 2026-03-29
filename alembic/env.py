@@ -7,8 +7,7 @@ from alembic import context
 
 from app.core.config import settings
 from app.models.base import Base
-import app.models.tenant
-import app.models.user
+from app import models as model_registry  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

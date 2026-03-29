@@ -1,9 +1,12 @@
 import os
+from time import perf_counter
 from typing import Dict, Any
 
 from sqlalchemy.orm import Session
 
+from app.core.alerts import emit_operational_alert
 from app.core.logging import get_logger
+from app.core.metrics import record_ai_summary
 from app.db.session import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.process import Process
@@ -14,6 +17,7 @@ logger = get_logger(__name__)
 
 def generate_weekly_summary(tenant_id: int, process_id: int) -> Dict[str, Any]:
     db: Session = SessionLocal()
+    started_at = perf_counter()
     try:
         process = db.query(Process).filter(Process.id == process_id, Process.tenant_id == tenant_id).first()
         if not process:
@@ -31,7 +35,7 @@ def generate_weekly_summary(tenant_id: int, process_id: int) -> Dict[str, Any]:
             .all()
         )
 
-        task_summaries = [f"- {t.title}: {'Concluido' if t.status == TaskStatus.done else 'Pendente'}" for t in tasks]
+        task_summaries = [f"- {t.title}: {'Concluido' if t.status == TaskStatus.concluida else 'Pendente'}" for t in tasks]
         log_summaries = [f"- Em {l.created_at.strftime('%d/%m/%Y')}: {l.details or l.action}" for l in logs]
 
         prompt = f"""
@@ -53,6 +57,12 @@ def generate_weekly_summary(tenant_id: int, process_id: int) -> Dict[str, Any]:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             logger.warning("OPENAI_API_KEY não definida. Retornando resumo simulado para o cliente.")
+            emit_operational_alert(
+                category="ai_fallback",
+                severity="warning",
+                message="Resumo semanal gerado com fallback local por ausência de OPENAI_API_KEY",
+                metadata={"tenant_id": tenant_id, "process_id": process_id},
+            )
             ai_text = f"Resumo automático simulado: O processo '{process.title}' encontra-se '{process.status.value}'. Analisamos e validamos as tarefas documentadas. Tudo está caminhando conforme o esperado e manteremos você atualizado nos próximos passos."
         else:
             response = completion(
@@ -78,11 +88,19 @@ def generate_weekly_summary(tenant_id: int, process_id: int) -> Dict[str, Any]:
         db.commit()
         
         logger.info(f"✨ Resumo de IA gerado para Processo #{process_id}")
+        record_ai_summary("success", perf_counter() - started_at)
         db.close()
         return {"status": "success", "summary": ai_text}
 
     except Exception as e:
         logger.error(f"Erro ao gerar resumo de IA: {str(e)}")
+        record_ai_summary("failed", perf_counter() - started_at)
+        emit_operational_alert(
+            category="ai_summary_failure",
+            severity="error",
+            message="Falha ao gerar resumo semanal por IA",
+            metadata={"tenant_id": tenant_id, "process_id": process_id, "error": str(e)},
+        )
         db.rollback()
         db.close()
         return {"error": str(e)}

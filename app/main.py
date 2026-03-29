@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.metrics import metrics_response
 from app.api.v1 import auth, clients, processes, documents, properties, tasks, threads
 from app.api.websockets import manager as websocket_manager
 from app.api.websockets import router as websocket_router
@@ -61,4 +62,9 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": settings.VERSION}
+    return {"status": "ok", "version": settings.VERSION, "service": settings.SERVICE_NAME}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    return metrics_response()

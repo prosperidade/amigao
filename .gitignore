@@ -12,9 +12,6 @@ build/
 .env
 *.env
 
-# Alembic
-alembic/versions/
-
 # IDE
 .vscode/
 .idea/

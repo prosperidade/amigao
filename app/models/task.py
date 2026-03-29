@@ -12,10 +12,13 @@ task_dependencies = Table(
     Column("depends_on_task_id", Integer, ForeignKey("tasks.id"), primary_key=True),
 )
 class TaskStatus(str, enum.Enum):
-    todo = "todo"
-    in_progress = "in_progress"
-    review = "review"
-    done = "done"
+    backlog = "backlog"
+    a_fazer = "a_fazer"
+    em_progresso = "em_progresso"
+    aguardando = "aguardando"
+    revisao = "revisao"
+    concluida = "concluida"
+    cancelada = "cancelada"
 
 
 class TaskPriority(str, enum.Enum):
@@ -23,6 +26,26 @@ class TaskPriority(str, enum.Enum):
     medium = "medium"
     high = "high"
     critical = "critical"
+
+
+VALID_TASK_TRANSITIONS = {
+    TaskStatus.backlog: [TaskStatus.a_fazer, TaskStatus.cancelada],
+    TaskStatus.a_fazer: [TaskStatus.em_progresso, TaskStatus.cancelada],
+    TaskStatus.em_progresso: [TaskStatus.aguardando, TaskStatus.revisao, TaskStatus.cancelada],
+    TaskStatus.aguardando: [TaskStatus.em_progresso, TaskStatus.cancelada],
+    TaskStatus.revisao: [TaskStatus.concluida, TaskStatus.cancelada],
+    TaskStatus.concluida: [TaskStatus.cancelada],
+    TaskStatus.cancelada: [],
+}
+
+
+TERMINAL_TASK_STATUSES = {TaskStatus.concluida, TaskStatus.cancelada}
+
+
+def is_valid_task_transition(from_status: TaskStatus, to_status: TaskStatus) -> bool:
+    if from_status == to_status:
+        return True
+    return to_status in VALID_TASK_TRANSITIONS.get(from_status, [])
 
 
 class Task(Base):
@@ -38,7 +61,7 @@ class Task(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     
-    status = Column(Enum(TaskStatus), default=TaskStatus.todo, nullable=False)
+    status = Column(Enum(TaskStatus), default=TaskStatus.a_fazer, nullable=False)
     priority = Column(Enum(TaskPriority), default=TaskPriority.medium, nullable=False)
     
     assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
