@@ -1,7 +1,7 @@
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import model_validator
+from pydantic import EmailStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     
     # STORAGE (MinIO)
     MINIO_SERVER: str = "localhost:9000"
+    MINIO_PUBLIC_URL: str = ""
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_SECURE: bool = False
@@ -68,7 +69,7 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "sandbox.smtp.mailtrap.io"
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    EMAILS_FROM_EMAIL: str = "noreply@amigao.com"
+    EMAILS_FROM_EMAIL: EmailStr = "noreply@amigao.com"
     EMAILS_FROM_NAME: str = "Amigão do Meio Ambiente"
     CLIENT_PORTAL_URL: str = "http://localhost:3000/dashboard"
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://172.31.32.1:3000"
@@ -76,6 +77,15 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def minio_internal_endpoint(self) -> str:
+        return self.MINIO_SERVER if self.MINIO_SERVER.startswith(("http://", "https://")) else f"http://{self.MINIO_SERVER}"
+
+    @property
+    def minio_public_endpoint(self) -> str:
+        public_url = self.MINIO_PUBLIC_URL.strip() or self.MINIO_SERVER
+        return public_url if public_url.startswith(("http://", "https://")) else f"http://{public_url}"
 
     @property
     def is_production(self) -> bool:
@@ -105,6 +115,9 @@ class Settings(BaseSettings):
         ):
             raise ValueError("Credenciais MinIO inseguras para produção.")
 
+        if self.is_production and _is_local_address(self.minio_public_endpoint):
+            raise ValueError("MINIO_PUBLIC_URL não pode apontar para endereço local em produção.")
+
         if self.is_production and _is_local_address(self.CLIENT_PORTAL_URL):
             raise ValueError("CLIENT_PORTAL_URL não pode apontar para localhost em produção.")
 
@@ -114,6 +127,9 @@ class Settings(BaseSettings):
 
         if self.is_production and not self.smtp_configured:
             raise ValueError("SMTP deve estar configurado em produção.")
+
+        if self.is_production and not self.EMAILS_FROM_NAME.strip():
+            raise ValueError("EMAILS_FROM_NAME não pode ser vazio em produção.")
 
         return self
 

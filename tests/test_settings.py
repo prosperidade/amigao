@@ -8,6 +8,7 @@ def build_settings(**overrides) -> Settings:
         "SECRET_KEY": "amigao-production-like-secret-key-1234",
         "CLIENT_PORTAL_URL": "https://portal.amigao.com/dashboard",
         "BACKEND_CORS_ORIGINS": "https://portal.amigao.com,https://app.amigao.com",
+        "MINIO_PUBLIC_URL": "https://storage.amigao.com",
         "MINIO_ACCESS_KEY": "tenant-storage-access-key",
         "MINIO_SECRET_KEY": "tenant-storage-secret-key",
         "SMTP_HOST": "smtp.amigao.com",
@@ -54,8 +55,24 @@ def test_requires_non_default_minio_credentials_in_production() -> None:
         )
 
 
+def test_rejects_local_minio_public_url_in_production() -> None:
+    with pytest.raises(ValueError, match="MINIO_PUBLIC_URL"):
+        build_settings(
+            ENVIRONMENT="production",
+            MINIO_PUBLIC_URL="http://localhost:9000",
+        )
+
+
 def test_accepts_hardened_production_settings() -> None:
     settings = build_settings(ENVIRONMENT="production")
 
     assert settings.is_production is True
     assert settings.smtp_configured is True
+
+
+def test_requires_sender_name_in_production() -> None:
+    with pytest.raises(ValueError, match="EMAILS_FROM_NAME"):
+        build_settings(
+            ENVIRONMENT="production",
+            EMAILS_FROM_NAME="   ",
+        )

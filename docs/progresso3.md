@@ -111,3 +111,44 @@ Fechar os riscos operacionais mais críticos do ambiente atual antes de abrir no
 - riscos imediatos de produção reduzidos
 - estratégia de banco mais consistente
 - base pronta para a próxima frente de observabilidade e endurecimento operacional
+
+---
+
+## Execução realizada em 29/03/2026
+
+### Itens validados
+- `docker compose up --build -d` executado com sucesso para `api`, `worker`, `db`, `redis`, `minio` e `client-portal`
+- `GET /health` retornando `200` na API
+- `http://localhost:3000/login` respondendo `200` no portal
+- autenticação real do cliente validada com `cliente@amigao.com`
+- listagem de processos do portal validada com escopo por `client_id`
+- fluxo documental fim a fim validado: presigned upload, `PUT` no MinIO, confirmação no backend e URL de download
+- worker consumindo a task `workers.notify_document_uploaded` com sucesso
+
+### Correções aplicadas durante a execução
+- `docker-compose.yml` passou a consumir variáveis de ambiente em vez de segredos hard-coded
+- bootstrap da API alinhado com `python -m app.db.init_db` como fluxo oficial de schema
+- `app/core/config.py` endurecido para produção:
+  - `SECRET_KEY` mínima de 32 caracteres
+  - bloqueio de chave insegura
+  - bloqueio de credenciais default do MinIO
+  - bloqueio de URLs locais em produção
+  - exigência de SMTP configurado em produção
+- `app/services/storage.py` corrigido para usar endpoint interno do MinIO no backend e endpoint público nas URLs assinadas
+- imagem base da API/worker ajustada para rodar com usuário não privilegiado
+
+### Bug real encontrado e corrigido
+- as URLs assinadas de upload/download estavam sendo geradas com host interno `minio:9000`
+- isso quebrava o upload real no navegador/host, embora o backend ainda confirmasse o documento
+- a correção introduziu `MINIO_PUBLIC_URL` para emissão de URLs públicas acessíveis fora da rede Docker
+
+### Validações executadas
+- `.\venv\Scripts\python.exe -m pytest -p no:cacheprovider tests\test_settings.py tests\test_storage_service.py -q` -> `9 passed`
+- `docker compose config` -> configuração resolvida sem erros
+- `docker compose up --build -d` -> stack integrada operacional
+- upload real homologado via URL assinada com `PUT 200` no MinIO
+
+### Pendências que seguem abertas
+- parametrizar SMTP real de produção para substituir o modo sem envio em `development`
+- revisar os alertas de latência observados em `auth/login`, `documents/upload-url` e `documents/confirm-upload`
+- consolidar o fechamento da frente de migrations com smoke de upgrade/downgrade

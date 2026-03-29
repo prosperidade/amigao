@@ -12,14 +12,22 @@ BUCKET_NAME = "amigao-docs"
 
 class StorageService:
     def __init__(self):
-        endpoint = settings.MINIO_SERVER if settings.MINIO_SERVER.startswith("http") else f"http://{settings.MINIO_SERVER}"
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=endpoint,
+            endpoint_url=settings.minio_internal_endpoint,
             aws_access_key_id=settings.MINIO_ACCESS_KEY,
             aws_secret_access_key=settings.MINIO_SECRET_KEY,
             region_name="us-east-1"
         )
+        self.presign_client = self.s3_client
+        if settings.minio_public_endpoint != settings.minio_internal_endpoint:
+            self.presign_client = boto3.client(
+                "s3",
+                endpoint_url=settings.minio_public_endpoint,
+                aws_access_key_id=settings.MINIO_ACCESS_KEY,
+                aws_secret_access_key=settings.MINIO_SECRET_KEY,
+                region_name="us-east-1"
+            )
         self._ensure_bucket_exists()
 
     def _ensure_bucket_exists(self):
@@ -43,7 +51,7 @@ class StorageService:
     ) -> dict:
         """Gera presigned URL para upload direto ao MinIO (sem passar pelo servidor)."""
         key = self._build_key(tenant_id, process_id, filename)
-        url = self.s3_client.generate_presigned_url(
+        url = self.presign_client.generate_presigned_url(
             "put_object",
             Params={"Bucket": BUCKET_NAME, "Key": key, "ContentType": content_type},
             ExpiresIn=expires_in,
@@ -52,7 +60,7 @@ class StorageService:
 
     def generate_presigned_get_url(self, storage_key: str, expires_in: int = 300) -> str:
         """Gera presigned URL para download seguro."""
-        return self.s3_client.generate_presigned_url(
+        return self.presign_client.generate_presigned_url(
             "get_object",
             Params={"Bucket": BUCKET_NAME, "Key": storage_key},
             ExpiresIn=expires_in,
@@ -117,5 +125,4 @@ class StorageService:
                 return b""
             logger.error(f"Erro ao baixar {storage_key} do MinIO: {e}")
             return b""
-
 
