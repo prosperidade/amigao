@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 import app.workers.tasks as worker_tasks
 from app.core.security import get_password_hash
+from app.models.audit_log import AuditLog
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.process import Process, ProcessStatus
 from app.models.tenant import Tenant
@@ -210,3 +211,73 @@ def test_update_process_status_enqueues_notification(client: TestClient, db_sess
         "new_status": "diagnostico",
         "actor_user_id": internal_user.id,
     }
+
+
+def test_get_process_timeline_serializes_audit_logs(client: TestClient, db_session):
+    tenant = Tenant(name="Tenant Timeline")
+    db_session.add(tenant)
+    db_session.flush()
+
+    internal_user = User(
+        email="consultor.timeline@example.com",
+        full_name="Consultor Timeline",
+        hashed_password=get_password_hash("consultor123"),
+        tenant_id=tenant.id,
+        is_active=True,
+    )
+    db_session.add(internal_user)
+    db_session.flush()
+
+    process_client = Client(
+        tenant_id=tenant.id,
+        full_name="Cliente Timeline",
+        email="cliente.timeline@example.com",
+        client_type=ClientType.pf,
+        status=ClientStatus.active,
+    )
+    db_session.add(process_client)
+    db_session.flush()
+
+    process = Process(
+        tenant_id=tenant.id,
+        client_id=process_client.id,
+        title="Processo Timeline",
+        process_type="licenciamento",
+        status=ProcessStatus.triagem,
+    )
+    db_session.add(process)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            AuditLog(
+                tenant_id=tenant.id,
+                user_id=internal_user.id,
+                entity_type="process",
+                entity_id=process.id,
+                action="created",
+                details="Processo criado via API",
+            ),
+            AuditLog(
+                tenant_id=tenant.id,
+                user_id=internal_user.id,
+                entity_type="process",
+                entity_id=process.id,
+                action="notification_process_status_changed",
+                details='{"channels":["email"],"email_sent":true}',
+            ),
+        ]
+    )
+    db_session.commit()
+
+    headers = _login(client, "consultor.timeline@example.com", "consultor123")
+    response = client.get(f"/api/v1/processes/{process.id}/timeline", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert sorted(item["action"] for item in payload) == [
+        "created",
+        "notification_process_status_changed",
+    ]
+    assert all(item["entity_id"] == process.id for item in payload)
+    assert any(item["details"] == '{"channels":["email"],"email_sent":true}' for item in payload)

@@ -235,3 +235,88 @@ Fechar os riscos operacionais mais críticos do ambiente atual antes de abrir no
 - autenticação SMTP real validada
 - stack integrada em execução com a configuração nova carregada
 - próxima frente natural: observabilidade operacional e teste funcional de envio real de notificação por e-mail
+
+---
+
+## Execução complementar 4 em 29/03/2026
+
+### Gap de observabilidade corrigido
+- corrigido o problema em que métricas do worker ficavam apenas em memória no processo Celery e não apareciam no endpoint `/metrics` da API
+- worker passou a persistir em Redis as séries de:
+  - tasks Celery por estado
+  - duração de tasks Celery
+  - entregas de e-mail
+  - alertas operacionais emitidos pelo worker
+- API passou a consolidar essas séries compartilhadas no scrape Prometheus
+
+### Validação técnica
+- suíte focada executada com sucesso: `16 passed`
+- `docker compose up --build -d api worker` executado sem erro
+- `GET /health` validado com `200` após estabilização do restart
+- endpoint `/metrics` passou a expor amostras `service="worker"` para:
+  - `amigao_celery_tasks_total`
+  - `amigao_celery_task_duration_seconds`
+  - `amigao_email_delivery_total`
+
+### Teste funcional real de e-mail
+- disparo real executado via task `workers.send_email_notification`
+- retorno da task: `{'status': 'success', 'to': 'vovoprogramador2024@gmail.com'}`
+- logs do worker confirmaram:
+  - recebimento da task
+  - envio SMTP com sucesso
+  - conclusão da task em aproximadamente `4,33s`
+
+### Situação atual
+- SMTP real homologado em fluxo assíncrono
+- observabilidade do worker consolidada no `/metrics`
+- próxima frente natural: webhook externo de alertas e teste funcional por evento de negócio real (`status change` ou `document upload`)
+
+---
+
+## Execução complementar 5 em 29/03/2026
+
+### Webhook externo de alertas homologado
+- criado o helper operacional `ops/alert_webhook_sink.py` para capturar webhooks localmente em JSONL
+- `docker-compose.yml` ajustado para repassar a `api` e `worker` as variáveis:
+  - `LOG_LEVEL`
+  - `SLOW_REQUEST_THRESHOLD_MS`
+  - `SLOW_REQUEST_THRESHOLD_OVERRIDES`
+  - `ALERT_WEBHOOK_URL`
+  - `ALERT_WEBHOOK_TIMEOUT_SECONDS`
+  - `ALERT_WEBHOOK_MIN_SEVERITY`
+  - `PROMETHEUS_QUEUE_NAMES`
+- exemplos `.env.example` e `.env.production.example` alinhados com essas variáveis
+- smoke executado com sink local em `http://host.docker.internal:8011/alerts`
+- alerta controlado emitido de dentro do container da API e recebido com sucesso pelo sink
+
+### Evento de negócio real homologado
+- criado cliente real de homologação com e-mail `vovoprogramador2024@gmail.com`
+- criado processo real de homologação e transição validada de `lead` para `triagem`
+- worker consumiu `workers.notify_process_status_changed` com sucesso
+- e-mail real de atualização de status enviado com sucesso para o cliente
+- auditoria de notificação registrada com canais:
+  - `email`
+  - `realtime_tenant`
+  - `realtime_client`
+- `/metrics` confirmou:
+  - `amigao_celery_tasks_total{service="worker",task_name="workers.notify_process_status_changed",state="success"} 1.0`
+  - `amigao_email_delivery_total{service="worker",result="success"} 2.0`
+
+### Bug real descoberto no fluxo e corrigido
+- `GET /api/v1/processes/{id}/timeline` falhava com `500` por ausência de schema serializável para `AuditLog`
+- corrigido com schema explícito de leitura em `app/schemas/audit_log.py`
+- endpoint passou a responder timeline completa do processo real com:
+  - `created`
+  - `status_changed`
+  - `notification_process_status_changed`
+- cobertura adicionada em `tests/api/test_processes.py`
+
+### Validação da rodada
+- `docker compose config` válido
+- `11 passed` em `tests/test_settings.py` e `tests/api/test_observability.py`
+- `8 passed` em `tests/api/test_processes.py` e `tests/api/test_observability.py`
+- `GET /health` retornando `200`
+- timeline real do processo `14` respondendo com `3` eventos após a correção
+
+### Higiene operacional
+- `.gitignore` atualizado para ignorar `ops/runtime/` e evitar versionamento acidental das capturas locais do webhook sink

@@ -18,6 +18,7 @@ build/
 
 # Logs
 *.log
+ops/runtime/
 
 # Node / Frontend
 **/node_modules/

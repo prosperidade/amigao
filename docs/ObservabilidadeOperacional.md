@@ -4,6 +4,7 @@
 
 - Logs estruturados em JSON com `request_id`, `tenant_id`, `user_id`, `trace_id` e `span_id`
 - Endpoint `/metrics` em formato Prometheus
+- Metricas do worker persistidas em Redis para exposicao consolidada no `/metrics`
 - Propagacao de tracing via `traceparent` entre API e worker
 - Alertas operacionais com contador Prometheus e envio opcional para webhook
 - Regras de alerta Prometheus em `ops/prometheus-alerts.yml`
@@ -17,6 +18,13 @@
 - `ALERT_WEBHOOK_URL`: webhook opcional para alertas
 - `ALERT_WEBHOOK_MIN_SEVERITY`: severidade minima enviada ao webhook
 - `ALERT_WEBHOOK_TIMEOUT_SECONDS`: timeout do webhook
+
+## Smoke local de webhook
+
+- subir `python ops/alert_webhook_sink.py --host 0.0.0.0 --port 8011`
+- apontar `ALERT_WEBHOOK_URL` para `http://host.docker.internal:8011/alerts`
+- recrear `api` e `worker`
+- disparar um alerta controlado para validar entrega do payload
 
 ## SLOs minimos sugeridos
 

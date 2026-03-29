@@ -9,6 +9,7 @@ from app.models.process import Process as ProcessModel, is_valid_transition, Pro
 from app.models.task import TERMINAL_TASK_STATUSES, Task as TaskModel
 from app.models.user import User
 from app.models.audit_log import AuditLog
+from app.schemas.audit_log import AuditLogRead
 from app.schemas.process import Process, ProcessCreate, ProcessUpdate, ProcessStatusUpdate
 
 router = APIRouter()
@@ -212,7 +213,7 @@ def delete_process(
     db.commit()
 
 
-@router.get("/{process_id}/timeline")
+@router.get("/{process_id}/timeline", response_model=List[AuditLogRead])
 def get_process_timeline(
     process_id: int,
     db: Session = Depends(get_db),

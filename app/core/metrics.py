@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from threading import Lock
 from typing import Iterable, Sequence
 
@@ -263,9 +264,160 @@ TASK_TRANSITIONS_TOTAL = CounterMetric(
     ("service", "from_status", "to_status", "result"),
 )
 
+_SHARED_WORKER_COUNTER_METRICS = {
+    CELERY_TASKS_TOTAL.name: CELERY_TASKS_TOTAL,
+    ALERTS_TOTAL.name: ALERTS_TOTAL,
+    EMAIL_DELIVERY_TOTAL.name: EMAIL_DELIVERY_TOTAL,
+}
+_SHARED_WORKER_HISTOGRAM_METRICS = {
+    CELERY_TASK_DURATION_SECONDS.name: CELERY_TASK_DURATION_SECONDS,
+}
+_SHARED_WORKER_METRICS_PREFIX = "amigao:metrics:worker"
+
 
 def _service_name() -> str:
     return settings.SERVICE_NAME
+
+
+def _shared_metrics_client():
+    return redis.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=0.2,
+        socket_timeout=0.2,
+    )
+
+
+def _shared_worker_metrics_enabled() -> bool:
+    return _service_name() == "worker"
+
+
+def _serialize_metric_labels(label_values: Sequence[object]) -> str:
+    return json.dumps(list(label_values), ensure_ascii=False, separators=(",", ":"))
+
+
+def _deserialize_metric_labels(raw_value: str, *, expected_size: int) -> tuple[object, ...]:
+    try:
+        parsed = json.loads(raw_value)
+    except json.JSONDecodeError:
+        parsed = []
+
+    if not isinstance(parsed, list):
+        parsed = []
+
+    normalized = list(parsed[:expected_size])
+    if len(normalized) < expected_size:
+        normalized.extend("" for _ in range(expected_size - len(normalized)))
+    return tuple(normalized)
+
+
+def _shared_counter_key(metric_name: str) -> str:
+    return f"{_SHARED_WORKER_METRICS_PREFIX}:counter:{metric_name}"
+
+
+def _shared_histogram_count_key(metric_name: str) -> str:
+    return f"{_SHARED_WORKER_METRICS_PREFIX}:histogram:{metric_name}:count"
+
+
+def _shared_histogram_sum_key(metric_name: str) -> str:
+    return f"{_SHARED_WORKER_METRICS_PREFIX}:histogram:{metric_name}:sum"
+
+
+def _shared_histogram_bucket_key(metric_name: str, bucket: float) -> str:
+    return f"{_SHARED_WORKER_METRICS_PREFIX}:histogram:{metric_name}:bucket:{bucket}"
+
+
+def _persist_shared_counter(metric: CounterMetric, label_values: tuple[object, ...], amount: float = 1.0) -> None:
+    if not _shared_worker_metrics_enabled():
+        return
+
+    try:
+        _shared_metrics_client().hincrbyfloat(
+            _shared_counter_key(metric.name),
+            _serialize_metric_labels(label_values),
+            amount,
+        )
+    except Exception:
+        return
+
+
+def _persist_shared_histogram(metric: HistogramMetric, label_values: tuple[object, ...], value: float) -> None:
+    if not _shared_worker_metrics_enabled():
+        return
+
+    label_key = _serialize_metric_labels(label_values)
+    try:
+        pipeline = _shared_metrics_client().pipeline()
+        pipeline.hincrby(_shared_histogram_count_key(metric.name), label_key, 1)
+        pipeline.hincrbyfloat(_shared_histogram_sum_key(metric.name), label_key, value)
+        for bucket in metric.buckets:
+            if value <= bucket:
+                pipeline.hincrby(_shared_histogram_bucket_key(metric.name, bucket), label_key, 1)
+        pipeline.execute()
+    except Exception:
+        return
+
+
+def _read_shared_hash(key: str) -> dict[str, str]:
+    try:
+        return _shared_metrics_client().hgetall(key)
+    except Exception:
+        return {}
+
+
+def _render_shared_counter_samples(metric: CounterMetric) -> list[str]:
+    if metric.name not in _SHARED_WORKER_COUNTER_METRICS:
+        return []
+
+    lines: list[str] = []
+    samples = _read_shared_hash(_shared_counter_key(metric.name))
+    for raw_labels in sorted(samples):
+        label_values = _deserialize_metric_labels(raw_labels, expected_size=len(metric.label_names))
+        lines.append(
+            f"{metric.name}{_format_labels(metric.label_names, label_values)} {float(samples[raw_labels])}"
+        )
+    return lines
+
+
+def _render_shared_histogram_samples(metric: HistogramMetric) -> list[str]:
+    if metric.name not in _SHARED_WORKER_HISTOGRAM_METRICS:
+        return []
+
+    count_samples = _read_shared_hash(_shared_histogram_count_key(metric.name))
+    sum_samples = _read_shared_hash(_shared_histogram_sum_key(metric.name))
+    bucket_samples = {
+        bucket: _read_shared_hash(_shared_histogram_bucket_key(metric.name, bucket))
+        for bucket in metric.buckets
+    }
+
+    label_keys = set(count_samples) | set(sum_samples)
+    for sample_set in bucket_samples.values():
+        label_keys.update(sample_set)
+
+    lines: list[str] = []
+    for raw_labels in sorted(label_keys):
+        label_values = _deserialize_metric_labels(raw_labels, expected_size=len(metric.label_names))
+        count_value = int(float(count_samples.get(raw_labels, 0)))
+        sum_value = float(sum_samples.get(raw_labels, 0.0))
+        for bucket in metric.buckets:
+            labels = metric.label_names + ("le",)
+            values = label_values + (bucket,)
+            bucket_value = int(float(bucket_samples[bucket].get(raw_labels, 0)))
+            lines.append(f"{metric.name}_bucket{_format_labels(labels, values)} {bucket_value}")
+        labels = metric.label_names + ("le",)
+        values = label_values + ("+Inf",)
+        lines.append(f"{metric.name}_bucket{_format_labels(labels, values)} {count_value}")
+        lines.append(f"{metric.name}_sum{_format_labels(metric.label_names, label_values)} {sum_value}")
+        lines.append(f"{metric.name}_count{_format_labels(metric.label_names, label_values)} {count_value}")
+    return lines
+
+
+def _render_shared_metric_samples(metric: BaseMetric) -> list[str]:
+    if isinstance(metric, CounterMetric):
+        return _render_shared_counter_samples(metric)
+    if isinstance(metric, HistogramMetric):
+        return _render_shared_histogram_samples(metric)
+    return []
 
 
 def route_path(request: Request) -> str:
@@ -294,9 +446,14 @@ def track_http_in_progress(method: str, path: str, delta: int) -> None:
 
 
 def record_celery_task(task_name: str, state: str, duration_seconds: float | None = None) -> None:
-    CELERY_TASKS_TOTAL.labels(service=_service_name(), task_name=task_name, state=state).inc()
+    service_name = _service_name()
+    counter_labels = (service_name, task_name, state)
+    CELERY_TASKS_TOTAL.labels(service=service_name, task_name=task_name, state=state).inc()
+    _persist_shared_counter(CELERY_TASKS_TOTAL, counter_labels)
     if duration_seconds is not None:
-        CELERY_TASK_DURATION_SECONDS.labels(service=_service_name(), task_name=task_name).observe(duration_seconds)
+        histogram_labels = (service_name, task_name)
+        CELERY_TASK_DURATION_SECONDS.labels(service=service_name, task_name=task_name).observe(duration_seconds)
+        _persist_shared_histogram(CELERY_TASK_DURATION_SECONDS, histogram_labels, duration_seconds)
 
 
 def update_celery_queue_depth(queue_name: str, depth: int) -> None:
@@ -304,11 +461,17 @@ def update_celery_queue_depth(queue_name: str, depth: int) -> None:
 
 
 def record_alert(category: str, severity: str) -> None:
-    ALERTS_TOTAL.labels(service=_service_name(), category=category, severity=severity).inc()
+    service_name = _service_name()
+    label_values = (service_name, category, severity)
+    ALERTS_TOTAL.labels(service=service_name, category=category, severity=severity).inc()
+    _persist_shared_counter(ALERTS_TOTAL, label_values)
 
 
 def record_email_delivery(result: str) -> None:
-    EMAIL_DELIVERY_TOTAL.labels(service=_service_name(), result=result).inc()
+    service_name = _service_name()
+    label_values = (service_name, result)
+    EMAIL_DELIVERY_TOTAL.labels(service=service_name, result=result).inc()
+    _persist_shared_counter(EMAIL_DELIVERY_TOTAL, label_values)
 
 
 def record_realtime_event(scope: str, event: str, result: str) -> None:
@@ -394,6 +557,7 @@ def render_metrics() -> str:
     lines: list[str] = []
     for metric in metrics:
         lines.extend(metric.render_lines())
+        lines.extend(_render_shared_metric_samples(metric))
     return "\n".join(lines) + "\n"
 
 
