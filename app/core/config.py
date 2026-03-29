@@ -23,11 +23,24 @@ def _is_local_address(value: str) -> bool:
         return False
     return hostname in _LOCAL_HOSTS or hostname.endswith(".local")
 
+
+def _normalize_path(value: str) -> str:
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    normalized = candidate.rstrip("/")
+    return normalized or "/"
+
 class Settings(BaseSettings):
     ENVIRONMENT: Literal["development", "test", "production"] = "development"
     SERVICE_NAME: str = "api"
     LOG_LEVEL: str = "INFO"
     SLOW_REQUEST_THRESHOLD_MS: int = 500
+    SLOW_REQUEST_THRESHOLD_OVERRIDES: str = (
+        "/api/v1/auth/login=2000,"
+        "/api/v1/documents/upload-url=800,"
+        "/api/v1/documents/confirm-upload=900"
+    )
     ALERT_WEBHOOK_URL: str = ""
     ALERT_WEBHOOK_TIMEOUT_SECONDS: float = 2.0
     ALERT_WEBHOOK_MIN_SEVERITY: Literal["info", "warning", "error", "critical"] = "error"
@@ -77,6 +90,29 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def slow_request_threshold_overrides(self) -> dict[str, int]:
+        overrides: dict[str, int] = {}
+        for raw_item in self.SLOW_REQUEST_THRESHOLD_OVERRIDES.split(","):
+            item = raw_item.strip()
+            if not item or "=" not in item:
+                continue
+            path, threshold = item.split("=", 1)
+            normalized_path = _normalize_path(path)
+            if not normalized_path:
+                continue
+            try:
+                overrides[normalized_path] = int(threshold.strip())
+            except ValueError:
+                continue
+        return overrides
+
+    def slow_request_threshold_for(self, path: str) -> int:
+        return self.slow_request_threshold_overrides.get(
+            _normalize_path(path),
+            self.SLOW_REQUEST_THRESHOLD_MS,
+        )
 
     @property
     def minio_internal_endpoint(self) -> str:

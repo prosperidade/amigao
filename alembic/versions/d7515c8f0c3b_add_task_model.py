@@ -56,4 +56,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    pass
+    op.drop_index(op.f('ix_tasks_tenant_id'), table_name='tasks')
+    op.drop_index(op.f('ix_tasks_property_id'), table_name='tasks')
+    op.drop_index(op.f('ix_tasks_process_id'), table_name='tasks')
+    op.drop_index(op.f('ix_tasks_id'), table_name='tasks')
+    op.drop_table('tasks')
+
+    task_priority_enum = postgresql.ENUM('low', 'medium', 'high', 'critical', name='taskpriority')
+    task_status_enum = postgresql.ENUM('todo', 'in_progress', 'review', 'done', name='taskstatus')
+    task_priority_enum.drop(op.get_bind(), checkfirst=True)
+    task_status_enum.drop(op.get_bind(), checkfirst=True)

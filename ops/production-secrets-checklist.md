@@ -36,3 +36,11 @@ Para gerar uma `SECRET_KEY` forte localmente:
 ```bash
 openssl rand -hex 32
 ```
+
+## Teste de conectividade SMTP
+
+Depois de preencher as variáveis reais, valide a autenticação SMTP com:
+
+```bash
+python ops/check_smtp.py
+```

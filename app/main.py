@@ -1,23 +1,52 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.metrics import metrics_response
+from app.core.security import warm_up_security
 from app.api.v1 import auth, clients, processes, documents, properties, tasks, threads
 from app.api.websockets import manager as websocket_manager
 from app.api.websockets import router as websocket_router
 from app.api.middleware import RequestContextMiddleware
+from app.db.session import SessionLocal
+from app.services.storage import get_storage_service
+
+
+logger = logging.getLogger(__name__)
+
+
+def _warm_up_runtime_dependencies() -> None:
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("Banco indisponível durante warm-up: %s", exc)
+
+    try:
+        warm_up_security()
+    except Exception as exc:
+        logger.warning("Falha no warm-up de segurança: %s", exc)
+
+    try:
+        get_storage_service()
+    except Exception as exc:
+        logger.warning("Falha no warm-up do storage: %s", exc)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _warm_up_runtime_dependencies()
     try:
         await websocket_manager.connect_redis()
     except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning("Redis indisponível no startup do WebSocket: %s", exc)
+        logger.warning("Redis indisponível no startup do WebSocket: %s", exc)
     try:
         yield
     finally:

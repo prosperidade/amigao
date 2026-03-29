@@ -90,3 +90,4 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_clients_id'), table_name='clients')
     op.drop_index(op.f('ix_clients_cpf_cnpj'), table_name='clients')
     op.drop_table('clients')
+    op.execute("DROP TYPE IF EXISTS processstatus")

@@ -16,7 +16,7 @@ from app.schemas.document import (
     DocumentConfirmRequest,
     DocumentResponse,
 )
-from app.services.storage import StorageService
+from app.services.storage import StorageService, get_storage_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def _scoped_document_query(db: Session, access_context: AccessContext):
 
 
 def _get_storage_service() -> StorageService:
-    return StorageService()
+    return get_storage_service()
 
 
 @router.get("/", response_model=List[DocumentResponse])

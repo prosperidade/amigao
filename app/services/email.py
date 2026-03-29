@@ -1,4 +1,5 @@
 import smtplib
+import socket
 from email.message import EmailMessage
 import logging
 
@@ -62,6 +63,21 @@ class EmailService:
                 metadata={"email_to": email_to, "subject": subject, "error": str(e)},
             )
             return False
+
+    def check_connection(self) -> tuple[bool, str]:
+        if not settings.smtp_configured:
+            return False, "SMTP não configurado no ambiente atual."
+
+        try:
+            with smtplib.SMTP(self.host, self.port, timeout=10) as server:
+                server.ehlo()
+                if self.use_tls:
+                    server.starttls()
+                    server.ehlo()
+                server.login(self.user, self.password)
+            return True, "Conexão SMTP validada com sucesso."
+        except (OSError, smtplib.SMTPException, socket.error) as exc:
+            return False, f"Falha na validação SMTP: {exc}"
 
 
 def _base_template(title: str, intro: str, body_html: str, footer: str) -> str:

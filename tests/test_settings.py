@@ -76,3 +76,14 @@ def test_requires_sender_name_in_production() -> None:
             ENVIRONMENT="production",
             EMAILS_FROM_NAME="   ",
         )
+
+
+def test_applies_slow_request_threshold_overrides() -> None:
+    settings = build_settings(
+        SLOW_REQUEST_THRESHOLD_MS=500,
+        SLOW_REQUEST_THRESHOLD_OVERRIDES="/api/v1/auth/login=1500,/api/v1/documents/upload-url=800",
+    )
+
+    assert settings.slow_request_threshold_for("/api/v1/auth/login") == 1500
+    assert settings.slow_request_threshold_for("/api/v1/auth/login/") == 1500
+    assert settings.slow_request_threshold_for("/api/v1/processes/") == 500

@@ -1,9 +1,11 @@
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import UploadFile
+from functools import lru_cache
 import uuid
 import hashlib
 import logging
+from threading import Lock
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -11,6 +13,9 @@ logger = logging.getLogger(__name__)
 BUCKET_NAME = "amigao-docs"
 
 class StorageService:
+    _bucket_ready = False
+    _bucket_lock = Lock()
+
     def __init__(self):
         self.s3_client = boto3.client(
             "s3",
@@ -31,10 +36,17 @@ class StorageService:
         self._ensure_bucket_exists()
 
     def _ensure_bucket_exists(self):
-        try:
-            self.s3_client.head_bucket(Bucket=BUCKET_NAME)
-        except ClientError:
-            self.s3_client.create_bucket(Bucket=BUCKET_NAME)
+        if self.__class__._bucket_ready:
+            return
+
+        with self.__class__._bucket_lock:
+            if self.__class__._bucket_ready:
+                return
+            try:
+                self.s3_client.head_bucket(Bucket=BUCKET_NAME)
+            except ClientError:
+                self.s3_client.create_bucket(Bucket=BUCKET_NAME)
+            self.__class__._bucket_ready = True
 
     def _build_key(self, tenant_id: int, process_id: int, filename: str) -> str:
         ext = filename.split('.')[-1] if '.' in filename else ''
@@ -126,3 +138,7 @@ class StorageService:
             logger.error(f"Erro ao baixar {storage_key} do MinIO: {e}")
             return b""
 
+
+@lru_cache(maxsize=1)
+def get_storage_service() -> StorageService:
+    return StorageService()

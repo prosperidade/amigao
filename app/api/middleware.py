@@ -67,7 +67,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             duration_seconds = perf_counter() - start
             record_http_request(request.method, path, response.status_code, duration_seconds)
-            if duration_seconds * 1000 > settings.SLOW_REQUEST_THRESHOLD_MS:
+            threshold_ms = settings.slow_request_threshold_for(path)
+            if duration_seconds * 1000 > threshold_ms:
                 emit_operational_alert(
                     category="latency",
                     severity="warning",
@@ -76,6 +77,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                         "method": request.method,
                         "path": path,
                         "status_code": response.status_code,
+                        "threshold_ms": threshold_ms,
                         "duration_ms": round(duration_seconds * 1000, 2),
                     },
                 )

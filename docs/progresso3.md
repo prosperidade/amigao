@@ -150,5 +150,88 @@ Fechar os riscos operacionais mais críticos do ambiente atual antes de abrir no
 
 ### Pendências que seguem abertas
 - parametrizar SMTP real de produção para substituir o modo sem envio em `development`
-- revisar os alertas de latência observados em `auth/login`, `documents/upload-url` e `documents/confirm-upload`
-- consolidar o fechamento da frente de migrations com smoke de upgrade/downgrade
+- evoluir a frente de observabilidade com alertas e métricas de operação mais acionáveis
+
+---
+
+## Execução complementar em 29/03/2026
+
+### SMTP e segredos de produção
+- criado o template [`.env.production.example`](/c:/Users/Administrador/Desktop/Amigao_do_Meio_Ambiente/.env.production.example) com os valores obrigatórios para produção
+- criado o checklist operacional [`ops/production-secrets-checklist.md`](/c:/Users/Administrador/Desktop/Amigao_do_Meio_Ambiente/ops/production-secrets-checklist.md)
+- `app/core/config.py` endurecido para exigir também `EMAILS_FROM_NAME` válido em produção
+- suíte local atualizada e validada com `10 passed`
+
+### Smoke de migrations
+- smoke executado em banco temporário `amigao_migration_smoke`
+- ciclo validado com sucesso:
+  - `upgrade head`
+  - `downgrade base`
+  - `upgrade head`
+
+### Bugs reais encontrados e corrigidos no fluxo de migrations
+- `e91d20acba9c` não garantia `CREATE EXTENSION IF NOT EXISTS postgis` antes da coluna `geometry`
+- `d7515c8f0c3b` tinha `downgrade()` vazio e não removia `tasks` nem enums associados
+- `afcea9834c04` tinha `downgrade()` vazio e não revertia colunas, tabela `properties` e enum `processstatus`
+- `b69a429faaa4` não removia o enum `processstatus` ao voltar para a revisão anterior
+
+### Situação atual após a sequência
+- frente de produção: template e validações prontos, faltando apenas preencher credenciais reais fora do repositório
+- frente de migrations: smoke fechado com rollback e reaplicação bem-sucedidos
+- próximas pendências concentradas em latência, SMTP real e observabilidade
+
+---
+
+## Execução complementar 2 em 29/03/2026
+
+### Latência operacional
+- cacheado o `StorageService` para reuso no processo
+- removido o `head_bucket` redundante em toda requisição após a primeira inicialização
+- adicionado warm-up de runtime no startup da API para:
+  - conexão simples com banco
+  - aquecimento de `bcrypt`/JWT
+  - inicialização do storage
+- criado threshold de latência por rota em `app/core/config.py`
+- login passou a usar lookup indexado por e-mail antes do fallback normalizado
+
+### Resultado medido após os ajustes
+- primeiro `POST /api/v1/auth/login` após restart: `1208,64 ms`
+- primeiro `POST /api/v1/documents/upload-url` após restart: `54,09 ms`
+- leitura final dos logs:
+  - `POST /api/v1/auth/login` concluído em `704,34 ms`
+  - `POST /api/v1/documents/upload-url` concluído em `42,58 ms`
+  - sem alerta `operational.alert` remanescente nessas rotas após os ajustes finais
+
+### SMTP
+- criado o script `ops/check_smtp.py` para validar autenticação SMTP real sem disparar e-mail
+- `EmailService` ganhou `check_connection()`
+- ambiente atual continua sem credenciais SMTP reais configuradas
+- execução local do check retornou: `SMTP não configurado no ambiente atual.`
+
+### Pendência objetiva para fechar SMTP real
+- preencher no ambiente real:
+  - `SMTP_HOST`
+  - `SMTP_USER`
+  - `SMTP_PASSWORD`
+  - `EMAILS_FROM_EMAIL`
+  - `EMAILS_FROM_NAME`
+- após preencher, rodar `python ops/check_smtp.py`
+
+---
+
+## Execução complementar 3 em 29/03/2026
+
+### SMTP real homologado
+- `.env` local ignorado pelo Git atualizado para usar SMTP Gmail com TLS na porta `587`
+- remetente alinhado com a conta autenticada para evitar rejeição de envio por política do provedor
+- `ops/check_smtp.py` executado com sucesso contra o servidor real
+
+### Aplicação da configuração na stack
+- `docker compose up -d api worker` executado para recarregar as variáveis de ambiente
+- `api` e `worker` recriados sem erro
+- `GET /health` validado com `200` após estabilização do restart
+
+### Situação atual
+- autenticação SMTP real validada
+- stack integrada em execução com a configuração nova carregada
+- próxima frente natural: observabilidade operacional e teste funcional de envio real de notificação por e-mail

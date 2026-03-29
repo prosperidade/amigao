@@ -64,3 +64,26 @@ def test_storage_service_reuses_internal_endpoint_when_public_url_is_not_set(mon
     assert len(created_clients) == 1
     assert created_clients[0].endpoint_url == "http://localhost:9000"
     assert response.startswith("http://localhost:9000/")
+
+
+def test_get_storage_service_returns_cached_instance(monkeypatch) -> None:
+    created_clients: list[FakeS3Client] = []
+
+    def fake_boto3_client(*args, **kwargs):
+        client = FakeS3Client(kwargs["endpoint_url"])
+        created_clients.append(client)
+        return client
+
+    storage.get_storage_service.cache_clear()
+    monkeypatch.setattr(storage.StorageService, "_bucket_ready", False)
+    monkeypatch.setattr(storage, "boto3", type("FakeBoto3", (), {"client": staticmethod(fake_boto3_client)}))
+    monkeypatch.setattr(storage.settings, "MINIO_SERVER", "localhost:9000")
+    monkeypatch.setattr(storage.settings, "MINIO_PUBLIC_URL", "")
+    monkeypatch.setattr(storage.settings, "MINIO_ACCESS_KEY", "minio")
+    monkeypatch.setattr(storage.settings, "MINIO_SECRET_KEY", "secret")
+
+    service_a = storage.get_storage_service()
+    service_b = storage.get_storage_service()
+
+    assert service_a is service_b
+    assert len(created_clients) == 1

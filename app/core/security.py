@@ -16,6 +16,13 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
+def warm_up_security() -> None:
+    probe_password = b"warmup-password"
+    hashed = bcrypt.hashpw(probe_password, bcrypt.gensalt())
+    bcrypt.checkpw(probe_password, hashed)
+    jwt.encode({"sub": "warmup"}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def create_access_token(
     subject: str | int,
     tenant_id: int,

@@ -12,7 +12,7 @@ from app.models.document import Document, OcrStatus
 from app.models.tenant import Tenant
 from app.models.process import Process
 from app.models.task import Task, TaskStatus
-from app.services.storage import StorageService
+from app.services.storage import StorageService, get_storage_service
 
 logger = get_logger(__name__)
 
@@ -128,7 +128,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> Dict[str, 
         tasks = db.query(Task).filter(Task.process_id == process_id, Task.tenant_id == tenant_id).all()
 
         # Busca Logo no MinIO
-        storage = StorageService()
+        storage = get_storage_service()
         logo_bytes = _load_tenant_logo(storage, tenant_id)
 
         total_tasks = len(tasks)
@@ -194,7 +194,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> Dict[str, 
         pdf_bytes = raw_output.encode("latin1") if isinstance(raw_output, str) else bytes(raw_output)
 
         # Upload to MinIO
-        storage = StorageService()
+        storage = get_storage_service()
         filename = f"Relatorio_Visita_{process.id}.pdf"
         
         upload_result = storage.upload_bytes(

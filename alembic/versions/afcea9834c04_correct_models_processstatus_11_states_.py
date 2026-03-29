@@ -132,4 +132,125 @@ def upgrade() -> None:
     op.create_foreign_key(None, 'processes', 'users', ['responsible_user_id'], ['id'])
 
 def downgrade() -> None:
-    pass
+    op.drop_index(op.f('ix_processes_property_id'), table_name='processes')
+    op.alter_column('processes', 'description', existing_type=sa.Text(), type_=sa.VARCHAR(), existing_nullable=True)
+    op.drop_column('processes', 'deleted_at')
+    op.drop_column('processes', 'risk_score')
+    op.drop_column('processes', 'ai_summary')
+    op.drop_column('processes', 'closed_at')
+    op.drop_column('processes', 'due_date')
+    op.drop_column('processes', 'opened_at')
+    op.drop_column('processes', 'external_protocol_number')
+    op.drop_column('processes', 'destination_agency')
+    op.drop_column('processes', 'responsible_user_id')
+    op.drop_column('processes', 'urgency')
+    op.drop_column('processes', 'priority')
+    op.drop_column('processes', 'property_id')
+
+    op.drop_index(op.f('ix_documents_property_id'), table_name='documents')
+    op.drop_index(op.f('ix_documents_client_id'), table_name='documents')
+    op.execute("UPDATE documents SET s3_key = COALESCE(NULLIF(s3_key, ''), storage_key)")
+    op.drop_constraint('documents_storage_key_key', 'documents', type_='unique')
+    op.create_unique_constraint('documents_s3_key_key', 'documents', ['s3_key'])
+    op.alter_column('documents', 's3_key', existing_type=sa.VARCHAR(), nullable=False)
+    op.alter_column('documents', 'process_id', existing_type=sa.INTEGER(), nullable=False)
+    op.drop_column('documents', 'uploaded_by_user_id')
+    op.drop_column('documents', 'review_required')
+    op.drop_column('documents', 'confidence_score')
+    op.drop_column('documents', 'extraction_status')
+    op.drop_column('documents', 'ocr_status')
+    op.drop_column('documents', 'source')
+    op.drop_column('documents', 'version_number')
+    op.drop_column('documents', 'document_category')
+    op.drop_column('documents', 'document_type')
+    op.drop_column('documents', 'checksum_sha256')
+    op.drop_column('documents', 'file_size_bytes')
+    op.drop_column('documents', 'storage_provider')
+    op.drop_column('documents', 'storage_key')
+    op.drop_column('documents', 'extension')
+    op.drop_column('documents', 'mime_type')
+    op.drop_column('documents', 'original_file_name')
+    op.drop_column('documents', 'property_id')
+    op.drop_column('documents', 'client_id')
+
+    op.drop_column('clients', 'deleted_at')
+    op.drop_column('clients', 'extra_json')
+    op.drop_column('clients', 'notes')
+    op.drop_column('clients', 'source_channel')
+    op.drop_column('clients', 'status')
+    op.drop_column('clients', 'birth_date')
+    op.drop_column('clients', 'secondary_phone')
+    op.drop_column('clients', 'legal_name')
+    op.drop_column('clients', 'client_type')
+
+    op.drop_index(op.f('ix_properties_tenant_id'), table_name='properties')
+    op.drop_index(op.f('ix_properties_id'), table_name='properties')
+    op.drop_index(op.f('ix_properties_client_id'), table_name='properties')
+    op.drop_table('properties')
+
+    old_processstatus = postgresql.ENUM(
+        'lead',
+        'triagem',
+        'diagnostico',
+        'planejamento',
+        'execucao',
+        'protocolo',
+        'aguardando_orgao',
+        'pendencia_orgao',
+        'arquivado',
+        'cancelado',
+        'iniciado',
+        'em_analise',
+        'aguardando_documentos',
+        'em_protocolo',
+        'aprovado',
+        'pendente',
+        'concluido',
+        name='processstatus_old',
+    )
+    restored_processstatus = postgresql.ENUM(
+        'iniciado',
+        'em_analise',
+        'aguardando_documentos',
+        'em_protocolo',
+        'aprovado',
+        'pendente',
+        'concluido',
+        name='processstatus',
+    )
+    op.execute("ALTER TYPE processstatus RENAME TO processstatus_old")
+    restored_processstatus.create(op.get_bind(), checkfirst=False)
+    op.execute(
+        """
+        ALTER TABLE processes
+        ALTER COLUMN status TYPE processstatus
+        USING (
+            CASE status::text
+                WHEN 'lead' THEN 'iniciado'
+                WHEN 'triagem' THEN 'em_analise'
+                WHEN 'diagnostico' THEN 'em_analise'
+                WHEN 'planejamento' THEN 'em_analise'
+                WHEN 'execucao' THEN 'em_analise'
+                WHEN 'protocolo' THEN 'em_protocolo'
+                WHEN 'aguardando_orgao' THEN 'pendente'
+                WHEN 'pendencia_orgao' THEN 'pendente'
+                WHEN 'arquivado' THEN 'concluido'
+                WHEN 'cancelado' THEN 'pendente'
+                ELSE status::text
+            END
+        )::processstatus
+        """
+    )
+    old_processstatus.drop(op.get_bind(), checkfirst=False)
+
+    process_priority_enum = postgresql.ENUM('baixa', 'media', 'alta', 'critica', name='processpriority')
+    ocr_status_enum = postgresql.ENUM('pending', 'processing', 'done', 'failed', 'not_required', name='ocrstatus')
+    document_source_enum = postgresql.ENUM('upload_manual', 'email', 'whatsapp', 'integration', 'generated_ai', 'field_app', name='documentsource')
+    client_status_enum = postgresql.ENUM('lead', 'active', 'inactive', 'delinquent', name='clientstatus')
+    client_type_enum = postgresql.ENUM('pf', 'pj', name='clienttype')
+
+    process_priority_enum.drop(op.get_bind(), checkfirst=True)
+    ocr_status_enum.drop(op.get_bind(), checkfirst=True)
+    document_source_enum.drop(op.get_bind(), checkfirst=True)
+    client_status_enum.drop(op.get_bind(), checkfirst=True)
+    client_type_enum.drop(op.get_bind(), checkfirst=True)

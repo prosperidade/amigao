@@ -17,6 +17,39 @@ from app.schemas.user import User as UserSchema
 router = APIRouter()
 
 
+def _get_user_by_email(db: Session, normalized_email: str) -> User | None:
+    user = db.query(User).filter(User.email == normalized_email).first()
+    if user:
+        return user
+    return (
+        db.query(User)
+        .filter(func.lower(func.trim(User.email)) == normalized_email)
+        .first()
+    )
+
+
+def _get_portal_client_by_email(db: Session, tenant_id: int, normalized_email: str) -> Client | None:
+    portal_client = (
+        db.query(Client)
+        .filter(
+            Client.tenant_id == tenant_id,
+            Client.email == normalized_email,
+        )
+        .first()
+    )
+    if portal_client:
+        return portal_client
+    return (
+        db.query(Client)
+        .filter(
+            Client.tenant_id == tenant_id,
+            Client.email.isnot(None),
+            func.lower(func.trim(Client.email)) == normalized_email,
+        )
+        .first()
+    )
+
+
 @router.post("/login", response_model=Token)
 def login_access_token(
     db: Session = Depends(get_db),
@@ -26,11 +59,7 @@ def login_access_token(
     Login com email e senha. Retorna um token JWT.
     """
     normalized_email = form_data.username.strip().lower()
-    user = (
-        db.query(User)
-        .filter(func.lower(func.trim(User.email)) == normalized_email)
-        .first()
-    )
+    user = _get_user_by_email(db, normalized_email)
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -45,15 +74,7 @@ def login_access_token(
     portal_client_id = None
     access_profile = "internal"
     if not user.is_superuser:
-        portal_client = (
-            db.query(Client)
-            .filter(
-                Client.tenant_id == user.tenant_id,
-                Client.email.isnot(None),
-                func.lower(func.trim(Client.email)) == normalized_email,
-            )
-            .first()
-        )
+        portal_client = _get_portal_client_by_email(db, user.tenant_id, normalized_email)
         if portal_client:
             portal_client_id = portal_client.id
             access_profile = "client_portal"
