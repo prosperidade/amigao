@@ -18,13 +18,19 @@
 - `ALERT_WEBHOOK_URL`: webhook opcional para alertas
 - `ALERT_WEBHOOK_MIN_SEVERITY`: severidade minima enviada ao webhook
 - `ALERT_WEBHOOK_TIMEOUT_SECONDS`: timeout do webhook
+- `ALERT_WEBHOOK_AUTH_HEADER`: header opcional para autenticacao do destino
+- `ALERT_WEBHOOK_AUTH_TOKEN`: valor integral enviado no header configurado
+- `ALERT_WEBHOOK_SIGNING_SECRET`: segredo opcional para assinatura HMAC SHA-256 do corpo
 
 ## Smoke local de webhook
 
-- subir `python ops/alert_webhook_sink.py --host 0.0.0.0 --port 8011`
+- subir `python ops/alert_webhook_sink.py --host 0.0.0.0 --port 8011 --auth-header Authorization --auth-token "Bearer seu-token" --signing-secret "seu-segredo"`
 - apontar `ALERT_WEBHOOK_URL` para `http://host.docker.internal:8011/alerts`
+- configurar `ALERT_WEBHOOK_AUTH_HEADER=Authorization`
+- configurar `ALERT_WEBHOOK_AUTH_TOKEN=Bearer seu-token`
+- configurar `ALERT_WEBHOOK_SIGNING_SECRET=seu-segredo`
 - recrear `api` e `worker`
-- disparar um alerta controlado para validar entrega do payload
+- disparar um alerta controlado para validar entrega, autenticacao, assinatura e `traceparent`
 
 ## SLOs minimos sugeridos
 

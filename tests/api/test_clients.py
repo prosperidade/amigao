@@ -60,3 +60,50 @@ def test_client_portal_cannot_list_clients(client: TestClient, db_session):
     response = client.get("/api/v1/clients/", headers=headers)
 
     assert response.status_code == 403
+
+
+def test_update_client_accepts_patch_and_persists_supported_fields(client: TestClient, db_session):
+    tenant = Tenant(name="Tenant Interno")
+    db_session.add(tenant)
+    db_session.flush()
+
+    internal_user = User(
+        email="interno@example.com",
+        full_name="Usuario Interno",
+        hashed_password=get_password_hash("interno123"),
+        tenant_id=tenant.id,
+        is_active=True,
+        is_superuser=True,
+    )
+    db_session.add(internal_user)
+    db_session.flush()
+
+    client_record = Client(
+        tenant_id=tenant.id,
+        full_name="Cliente Original",
+        email="cliente@example.com",
+        cpf_cnpj="12345678901",
+        client_type=ClientType.pf,
+        status=ClientStatus.lead,
+    )
+    db_session.add(client_record)
+    db_session.commit()
+
+    headers = _login(client, "interno@example.com", "interno123")
+    response = client.patch(
+        f"/api/v1/clients/{client_record.id}",
+        headers=headers,
+        json={
+            "full_name": "Cliente Editado",
+            "cpf_cnpj": "11222333000144",
+            "client_type": "pj",
+            "status": "active",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["full_name"] == "Cliente Editado"
+    assert payload["cpf_cnpj"] == "11222333000144"
+    assert payload["client_type"] == "pj"
+    assert payload["status"] == "active"

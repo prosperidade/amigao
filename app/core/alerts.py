@@ -1,15 +1,24 @@
 import logging
+import hashlib
+import hmac
+import json
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import httpx
 
 from app.core.config import settings
 from app.core.metrics import record_alert
 from app.core.logging import request_id_ctx
-from app.core.tracing import current_trace_context
+from app.core.tracing import build_traceparent, current_trace_context, parse_traceparent
 
 
 logger = logging.getLogger(__name__)
+
+_WEBHOOK_ALERT_ID_HEADER = "X-Amigao-Alert-Id"
+_WEBHOOK_SERVICE_HEADER = "X-Amigao-Service"
+_WEBHOOK_ENVIRONMENT_HEADER = "X-Amigao-Environment"
+_WEBHOOK_SIGNATURE_HEADER = "X-Amigao-Signature-256"
 
 _SEVERITY_TO_LEVEL = {
     "info": logging.INFO,
@@ -32,12 +41,12 @@ def _should_dispatch_webhook(severity: str) -> bool:
     return _SEVERITY_RANK.get(severity, 20) >= _SEVERITY_RANK.get(settings.ALERT_WEBHOOK_MIN_SEVERITY, 30)
 
 
-def _dispatch_webhook(*, category: str, severity: str, message: str, metadata: dict | None) -> None:
-    if not _should_dispatch_webhook(severity):
-        return
-
+def _build_webhook_payload(*, category: str, severity: str, message: str, metadata: dict | None) -> tuple[dict, str]:
     trace_context = current_trace_context()
+    traceparent = build_traceparent(trace_context["trace_id"], trace_context["span_id"])
+    normalized_trace_id, normalized_span_id = parse_traceparent(traceparent)
     payload = {
+        "alert_id": str(uuid4()),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "service": settings.SERVICE_NAME,
         "environment": settings.ENVIRONMENT,
@@ -45,24 +54,74 @@ def _dispatch_webhook(*, category: str, severity: str, message: str, metadata: d
         "severity": severity,
         "message": message,
         "request_id": request_id_ctx.get("-"),
-        "trace_id": trace_context["trace_id"],
-        "span_id": trace_context["span_id"],
+        "trace_id": normalized_trace_id or trace_context["trace_id"],
+        "span_id": normalized_span_id or trace_context["span_id"],
         "metadata": metadata or {},
     }
+    return payload, traceparent
+
+
+def _serialize_webhook_payload(payload: dict) -> bytes:
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+
+
+def _build_webhook_signature(raw_payload: bytes) -> str:
+    secret = settings.alert_webhook_signing_secret
+    if not secret:
+        return ""
+    digest = hmac.new(secret.encode("utf-8"), raw_payload, hashlib.sha256).hexdigest()
+    return f"sha256={digest}"
+
+
+def _build_webhook_headers(*, payload: dict, raw_payload: bytes, traceparent: str) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        _WEBHOOK_ALERT_ID_HEADER: payload["alert_id"],
+        _WEBHOOK_SERVICE_HEADER: payload["service"],
+        _WEBHOOK_ENVIRONMENT_HEADER: payload["environment"],
+        "traceparent": traceparent,
+    }
+    if settings.alert_webhook_auth_token:
+        headers[settings.alert_webhook_auth_header] = settings.alert_webhook_auth_token
+    signature = _build_webhook_signature(raw_payload)
+    if signature:
+        headers[_WEBHOOK_SIGNATURE_HEADER] = signature
+    return headers
+
+
+def _dispatch_webhook(*, category: str, severity: str, message: str, metadata: dict | None) -> None:
+    if not _should_dispatch_webhook(severity):
+        return
+
+    payload, traceparent = _build_webhook_payload(
+        category=category,
+        severity=severity,
+        message=message,
+        metadata=metadata,
+    )
+    raw_payload = _serialize_webhook_payload(payload)
+    headers = _build_webhook_headers(payload=payload, raw_payload=raw_payload, traceparent=traceparent)
     try:
         with httpx.Client(timeout=settings.ALERT_WEBHOOK_TIMEOUT_SECONDS) as client:
-            response = client.post(settings.ALERT_WEBHOOK_URL, json=payload)
+            response = client.post(settings.ALERT_WEBHOOK_URL, content=raw_payload, headers=headers)
             response.raise_for_status()
     except Exception as exc:
+        error_metadata = {
+            "category": category,
+            "severity": severity,
+            "alert_id": payload["alert_id"],
+            "error": str(exc),
+            "traceparent": traceparent,
+            "auth_enabled": bool(settings.alert_webhook_auth_token),
+            "signature_enabled": bool(settings.alert_webhook_signing_secret),
+        }
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+            error_metadata["status_code"] = exc.response.status_code
         logger.warning(
             "Falha ao disparar webhook de alerta",
             extra={
                 "action": "operational.alert.webhook_failed",
-                "metadata": {
-                    "category": category,
-                    "severity": severity,
-                    "error": str(exc),
-                },
+                "metadata": error_metadata,
             },
         )
 

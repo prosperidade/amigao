@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -54,6 +54,7 @@ def _get_portal_client_by_email(db: Session, tenant_id: int, normalized_email: s
 def login_access_token(
     db: Session = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends(),
+    auth_profile: str | None = Header(default=None, alias="X-Auth-Profile"),
 ) -> Any:
     """
     Login com email e senha. Retorna um token JWT.
@@ -71,9 +72,26 @@ def login_access_token(
             detail="Usuário inativo",
         )
 
+    requested_profile = auth_profile.strip().lower() if auth_profile else None
+    if requested_profile not in {None, "internal", "client_portal"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Perfil de autenticação inválido",
+        )
+
     portal_client_id = None
     access_profile = "internal"
-    if not user.is_superuser:
+
+    if requested_profile == "client_portal":
+        portal_client = _get_portal_client_by_email(db, user.tenant_id, normalized_email)
+        if not portal_client:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuário sem acesso ao portal do cliente",
+            )
+        portal_client_id = portal_client.id
+        access_profile = "client_portal"
+    elif requested_profile is None and not user.is_superuser:
         portal_client = _get_portal_client_by_email(db, user.tenant_id, normalized_email)
         if portal_client:
             portal_client_id = portal_client.id

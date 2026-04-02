@@ -1,21 +1,30 @@
+import { useEffect } from 'react';
 import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
-import { 
-  Briefcase, 
-  Users, 
-  MapPin, 
-  LayoutDashboard, 
-  KanbanSquare, 
-  LogOut, 
-  Leaf 
+import { isClientPortalToken } from '@/lib/auth';
+import {
+  Briefcase,
+  Users,
+  MapPin,
+  LayoutDashboard,
+  LogOut,
+  Leaf,
+  FileText,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
 export default function PrivateLayout() {
   const { token, user, logout } = useAuthStore();
   const location = useLocation();
+  const hasPortalToken = token ? isClientPortalToken(token) : false;
 
-  if (!token || !user) {
+  useEffect(() => {
+    if (hasPortalToken) {
+      logout();
+    }
+  }, [hasPortalToken, logout]);
+
+  if (!token || !user || hasPortalToken) {
     return <Navigate to="/login" replace />;
   }
 
@@ -34,6 +43,7 @@ export default function PrivateLayout() {
     { name: 'Processos', icon: Briefcase, path: '/processes' },
     { name: 'Clientes', icon: Users, path: '/clients' },
     { name: 'Imóveis', icon: MapPin, path: '/properties' },
+    { name: 'Propostas', icon: FileText, path: '/proposals' },
   ];
 
   return (

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Float, Boolean, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Float, Boolean, Text, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
@@ -25,6 +25,33 @@ class ProcessPriority(str, enum.Enum):
     media = "media"
     alta = "alta"
     critica = "critica"
+
+
+class DemandType(str, enum.Enum):
+    """Tipo de demanda ambiental identificado no intake."""
+    car = "car"
+    retificacao_car = "retificacao_car"
+    licenciamento = "licenciamento"
+    regularizacao_fundiaria = "regularizacao_fundiaria"
+    outorga = "outorga"
+    defesa = "defesa"
+    compensacao = "compensacao"
+    exigencia_bancaria = "exigencia_bancaria"
+    prad = "prad"
+    misto = "misto"
+    nao_identificado = "nao_identificado"
+
+
+class IntakeSource(str, enum.Enum):
+    """Canal de entrada da demanda."""
+    whatsapp = "whatsapp"
+    email = "email"
+    presencial = "presencial"
+    banco = "banco"
+    cooperativa = "cooperativa"
+    parceiro = "parceiro"
+    indicacao = "indicacao"
+    site = "site"
 
 
 # Transições válidas conforme Regras de Negócio
@@ -74,6 +101,13 @@ class Process(Base):
     opened_at = Column(DateTime(timezone=True), nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True)
     closed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Intake / classificação
+    intake_source = Column(Enum(IntakeSource), nullable=True)  # canal de entrada
+    demand_type = Column(Enum(DemandType), nullable=True)       # tipo de demanda classificado
+    initial_diagnosis = Column(Text, nullable=True)             # pré-diagnóstico por regras
+    suggested_checklist_template = Column(String, nullable=True) # demand_type do template sugerido
+    intake_notes = Column(Text, nullable=True)                  # observações do intake
 
     # IA / score
     ai_summary = Column(Text, nullable=True)

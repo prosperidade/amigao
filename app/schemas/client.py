@@ -21,6 +21,8 @@ class ClientUpdate(BaseModel):
     cpf_cnpj: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    client_type: Optional[str] = None
+    status: Optional[str] = None
 
 
 class Client(ClientBase):

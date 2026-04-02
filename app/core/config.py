@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     )
     ALERT_WEBHOOK_URL: str = ""
     ALERT_WEBHOOK_TIMEOUT_SECONDS: float = 2.0
+    ALERT_WEBHOOK_AUTH_HEADER: str = "Authorization"
+    ALERT_WEBHOOK_AUTH_TOKEN: str = ""
+    ALERT_WEBHOOK_SIGNING_SECRET: str = ""
     ALERT_WEBHOOK_MIN_SEVERITY: Literal["info", "warning", "error", "critical"] = "error"
     PROMETHEUS_QUEUE_NAMES: str = "celery"
     PROJECT_NAME: str = "Amigão do Meio Ambiente"
@@ -87,6 +90,19 @@ class Settings(BaseSettings):
     CLIENT_PORTAL_URL: str = "http://localhost:3000/dashboard"
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://172.31.32.1:3000"
 
+    # IA / LLM (Wave 2 — Sprint 5)
+    AI_ENABLED: bool = False
+    OPENAI_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    AI_DEFAULT_MODEL: str = "gpt-4o-mini"
+    AI_FALLBACK_MODEL: str = "gemini/gemini-1.5-flash"
+    AI_MAX_TOKENS: int = 2048
+    AI_TEMPERATURE: float = 0.2
+    AI_TIMEOUT_SECONDS: float = 30.0
+    # Custo máximo por job (USD) — proteção contra prompt injection gigante
+    AI_MAX_COST_PER_JOB_USD: float = 0.10
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
@@ -128,8 +144,26 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production"
 
     @property
+    def ai_configured(self) -> bool:
+        return self.AI_ENABLED and bool(
+            self.OPENAI_API_KEY or self.GEMINI_API_KEY or self.ANTHROPIC_API_KEY
+        )
+
+    @property
     def smtp_configured(self) -> bool:
         return bool(self.SMTP_HOST and self.SMTP_USER and self.SMTP_PASSWORD)
+
+    @property
+    def alert_webhook_auth_header(self) -> str:
+        return self.ALERT_WEBHOOK_AUTH_HEADER.strip()
+
+    @property
+    def alert_webhook_auth_token(self) -> str:
+        return self.ALERT_WEBHOOK_AUTH_TOKEN.strip()
+
+    @property
+    def alert_webhook_signing_secret(self) -> str:
+        return self.ALERT_WEBHOOK_SIGNING_SECRET.strip()
 
     @model_validator(mode="after")
     def validate_security(self) -> "Settings":
@@ -161,11 +195,19 @@ class Settings(BaseSettings):
         if self.is_production and local_origins:
             raise ValueError("BACKEND_CORS_ORIGINS não pode conter endereços locais em produção.")
 
+        if self.is_production and self.ALERT_WEBHOOK_URL and _is_local_address(self.ALERT_WEBHOOK_URL):
+            raise ValueError("ALERT_WEBHOOK_URL não pode apontar para endereço local em produção.")
+
         if self.is_production and not self.smtp_configured:
             raise ValueError("SMTP deve estar configurado em produção.")
 
         if self.is_production and not self.EMAILS_FROM_NAME.strip():
             raise ValueError("EMAILS_FROM_NAME não pode ser vazio em produção.")
+
+        if self.alert_webhook_auth_token and not self.alert_webhook_auth_header:
+            raise ValueError(
+                "ALERT_WEBHOOK_AUTH_HEADER deve ser informado quando ALERT_WEBHOOK_AUTH_TOKEN estiver configurado."
+            )
 
         return self
 

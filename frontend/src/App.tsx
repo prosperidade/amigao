@@ -5,7 +5,12 @@ import PrivateLayout from './layouts/PrivateLayout';
 import Dashboard from './pages/Dashboard';
 import ClientsPage from './pages/Clients';
 import ProcessesPage from './pages/Processes';
+import ProcessDetail from './pages/Processes/ProcessDetail';
 import PropertiesPage from './pages/Properties';
+import IntakeWizard from './pages/Intake/IntakeWizard';
+import ProposalList from './pages/Proposals/ProposalList';
+import ProposalEditor from './pages/Proposals/ProposalEditor';
+import ContractEditor from './pages/Contracts/ContractEditor';
 
 // Query Client para gerenciar cache das requisições
 const queryClient = new QueryClient({
@@ -32,8 +37,14 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             {/* Telas que serão implementadas a seguir */}
             <Route path="/processes" element={<ProcessesPage />} />
+            <Route path="/processes/:id" element={<ProcessDetail />} />
             <Route path="/clients" element={<ClientsPage />} />
             <Route path="/properties" element={<PropertiesPage />} />
+            <Route path="/intake" element={<IntakeWizard />} />
+            <Route path="/proposals" element={<ProposalList />} />
+            <Route path="/proposals/new" element={<ProposalEditor />} />
+            <Route path="/proposals/:id" element={<ProposalEditor />} />
+            <Route path="/contracts/:id" element={<ContractEditor />} />
           </Route>
           
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

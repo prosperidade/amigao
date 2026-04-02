@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.metrics import metrics_response
 from app.core.security import warm_up_security
-from app.api.v1 import auth, clients, processes, documents, properties, tasks, threads
+from app.api.v1 import auth, clients, processes, documents, properties, tasks, threads, intake, checklists, workflows, dossier, proposals, contracts, ai
 from app.api.websockets import manager as websocket_manager
 from app.api.websockets import router as websocket_router
 from app.api.middleware import RequestContextMiddleware
@@ -81,6 +81,14 @@ app.include_router(documents.router, prefix=f"{settings.API_V1_STR}/documents", 
 app.include_router(properties.router, prefix=f"{settings.API_V1_STR}/properties", tags=["Propriedades Rurais"])
 app.include_router(tasks.router, prefix=f"{settings.API_V1_STR}/tasks", tags=["Tarefas e Kanban"])
 app.include_router(threads.router, prefix=f"{settings.API_V1_STR}/threads", tags=["Comunicação"])
+app.include_router(intake.router, prefix=f"{settings.API_V1_STR}/intake", tags=["Intake / Entrada de Demanda"])
+app.include_router(checklists.router, prefix=f"{settings.API_V1_STR}/processes", tags=["Checklists Documentais"])
+app.include_router(workflows.router, prefix=f"{settings.API_V1_STR}/workflows", tags=["Trilha Regulatória"])
+app.include_router(workflows.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Trilha Regulatória"])
+app.include_router(dossier.router, prefix=f"{settings.API_V1_STR}/processes", tags=["Dossiê Técnico"])
+app.include_router(proposals.router, prefix=f"{settings.API_V1_STR}/proposals", tags=["Propostas Comerciais"])
+app.include_router(contracts.router, prefix=f"{settings.API_V1_STR}/contracts", tags=["Contratos"])
+app.include_router(ai.router, prefix=f"{settings.API_V1_STR}", tags=["IA"])
 app.include_router(websocket_router, tags=["Tempo Real"])
 
 

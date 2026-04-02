@@ -12,12 +12,12 @@ from app.models.tenant import Tenant
 from app.models.user import User
 
 
-def _seed_password(env_name: str, fallback: str) -> str:
+def _seed_password(env_name: str, fallback: str) -> tuple[str, bool]:
     value = os.getenv(env_name)
     if value:
-        return value
+        return value, True
     digest = hashlib.sha256(f"{settings.SECRET_KEY}:{env_name}".encode("utf-8")).hexdigest()
-    return f"{fallback[:4]}!{digest[:10]}"
+    return f"{fallback[:4]}!{digest[:10]}", False
 
 
 def _seed_reset_passwords() -> bool:
@@ -32,7 +32,8 @@ def _ensure_user(
     full_name: str,
     password: str,
     credentials_summary: list[str],
-    reset_passwords: bool,
+    sync_passwords: bool,
+    sync_label: str,
     is_superuser: bool = False,
 ) -> User:
     user = db.query(User).filter(User.email == email).first()
@@ -52,7 +53,7 @@ def _ensure_user(
         credentials_summary.append(f"{email} / {password} (created)")
         return user
 
-    if reset_passwords:
+    if sync_passwords:
         user.full_name = full_name
         user.hashed_password = get_password_hash(password)
         user.tenant_id = tenant_id
@@ -61,8 +62,8 @@ def _ensure_user(
         db.add(user)
         db.commit()
         db.refresh(user)
-        print(f"User {email} password rotated!")
-        credentials_summary.append(f"{email} / {password} (rotated)")
+        print(f"User {email} password {sync_label}!")
+        credentials_summary.append(f"{email} / {password} ({sync_label})")
         return user
 
     print(f"User {email} already exists.")
@@ -216,11 +217,19 @@ def seed() -> None:
     if settings.is_production:
         raise RuntimeError("seed.py e um seed de demonstracao e nao deve ser executado em producao.")
 
-    admin_password = _seed_password("SEED_ADMIN_PASSWORD", "admin123")
-    consultant_password = _seed_password("SEED_CONSULTANT_PASSWORD", "consultor123")
-    client_password = _seed_password("SEED_CLIENT_PASSWORD", "cliente123")
-    field_password = _seed_password("SEED_FIELD_PASSWORD", "campo123")
+    admin_password, admin_password_explicit = _seed_password("SEED_ADMIN_PASSWORD", "admin123")
+    consultant_password, consultant_password_explicit = _seed_password("SEED_CONSULTANT_PASSWORD", "consultor123")
+    client_password, client_password_explicit = _seed_password("SEED_CLIENT_PASSWORD", "cliente123")
+    field_password, field_password_explicit = _seed_password("SEED_FIELD_PASSWORD", "campo123")
     reset_passwords = _seed_reset_passwords()
+    explicit_seed_passwords = any(
+        [
+            admin_password_explicit,
+            consultant_password_explicit,
+            client_password_explicit,
+            field_password_explicit,
+        ]
+    )
     credentials_summary: list[str] = []
     now = datetime.now(timezone.utc)
 
@@ -240,7 +249,8 @@ def seed() -> None:
             full_name="Administrador Global",
             password=admin_password,
             credentials_summary=credentials_summary,
-            reset_passwords=reset_passwords,
+            sync_passwords=reset_passwords or admin_password_explicit,
+            sync_label="synced_from_env" if admin_password_explicit else "rotated",
             is_superuser=True,
         )
         consultant_user = _ensure_user(
@@ -250,7 +260,8 @@ def seed() -> None:
             full_name="Consultor Demo",
             password=consultant_password,
             credentials_summary=credentials_summary,
-            reset_passwords=reset_passwords,
+            sync_passwords=reset_passwords or consultant_password_explicit,
+            sync_label="synced_from_env" if consultant_password_explicit else "rotated",
         )
         client_user = _ensure_user(
             db=db,
@@ -259,7 +270,8 @@ def seed() -> None:
             full_name="Cliente Demo",
             password=client_password,
             credentials_summary=credentials_summary,
-            reset_passwords=reset_passwords,
+            sync_passwords=reset_passwords or client_password_explicit,
+            sync_label="synced_from_env" if client_password_explicit else "rotated",
         )
         field_user = _ensure_user(
             db=db,
@@ -268,7 +280,8 @@ def seed() -> None:
             full_name="Tecnico de Campo Demo",
             password=field_password,
             credentials_summary=credentials_summary,
-            reset_passwords=reset_passwords,
+            sync_passwords=reset_passwords or field_password_explicit,
+            sync_label="synced_from_env" if field_password_explicit else "rotated",
         )
 
         portal_client = _ensure_client(
@@ -548,7 +561,9 @@ def seed() -> None:
         print("Seed credential summary:")
         for line in credentials_summary:
             print(f"  - {line}")
-        if not reset_passwords:
+        if explicit_seed_passwords:
+            print("  - credenciais seed sincronizadas a partir de variaveis SEED_*_PASSWORD")
+        elif not reset_passwords:
             print("  - defina SEED_RESET_PASSWORDS=true para rotacionar as senhas derivadas do seed")
     finally:
         db.close()

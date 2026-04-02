@@ -1,5 +1,11 @@
 # Plano Executivo — Execução do Dia
 
+Padrão deste arquivo:
+
+- linguagem executiva e de histórico de execução
+- foco em resultado, decisão, validação, risco e pendência
+- evitar instruções operacionais detalhadas; isso pertence ao `RunbookOperacional.md`
+
 ## Projeto: Amigão do Meio Ambiente
 ## Referência: Auditoria + Continuidade da Sprint 5
 
@@ -320,3 +326,176 @@ Fechar os riscos operacionais mais críticos do ambiente atual antes de abrir no
 
 ### Higiene operacional
 - `.gitignore` atualizado para ignorar `ops/runtime/` e evitar versionamento acidental das capturas locais do webhook sink
+
+---
+
+## Execução complementar 6 em 29/03/2026
+
+### Credenciais seed determinísticas
+- `seed.py` ajustado para sincronizar senha de usuários seed quando `SEED_*_PASSWORD` estiver definido
+- `docker-compose.yml` ajustado para repassar `SEED_ADMIN_PASSWORD`, `SEED_CONSULTANT_PASSWORD`, `SEED_CLIENT_PASSWORD`, `SEED_FIELD_PASSWORD` e `SEED_RESET_PASSWORDS` para a API
+- `.env.example` alinhado com senha seed local de homologação `Seed@2026`
+- `.env` local atualizado para usar credenciais seed explícitas
+- API recriada e logins reais validados com sucesso para:
+  - `admin@amigao.com`
+  - `cliente@amigao.com`
+
+### Fluxo real de documentos homologado
+- criado tenant controlado `Homologacao Documentos SMTP`
+- provisionado usuário interno com alias Gmail para receber notificação interna real
+- provisionado usuário do portal com alias Gmail distinto e cliente vinculado ao mesmo tenant
+- fluxo validado de ponta a ponta:
+  - login portal
+  - `POST /api/v1/documents/upload-url`
+  - `PUT` real no MinIO
+  - `POST /api/v1/documents/confirm-upload`
+  - consumo da task `workers.notify_document_uploaded`
+  - envio de e-mail interno real com sucesso
+
+### Evidências da homologação do fluxo de documentos
+- documento real confirmado com `document_id=4` no `process_id=15`
+- logs do worker confirmaram:
+  - recebimento de `workers.notify_document_uploaded`
+  - `Email enviado com sucesso para vovoprogramador2024+interno@gmail.com`
+  - task concluída com `channels=['realtime_tenant', 'email_internal']`
+- auditoria do documento gravada com:
+  - `uploaded`
+  - `notification_document_uploaded`
+- `/metrics` confirmou:
+  - `amigao_celery_tasks_total{service="worker",task_name="workers.notify_document_uploaded",state="success"} 1.0`
+  - `amigao_document_uploads_total{service="api",source="client_portal",result="success"} 1.0`
+  - `amigao_email_delivery_total{service="worker",result="success"} 3.0`
+
+### Runbook operacional formalizado
+- criado `docs/RunbookOperacional.md` como documento vivo de operacao
+- a partir desta rodada, `RunbookOperacional.md` e `progresso3.md` passam a ser atualizados juntos ao final de cada passada relevante
+
+### Validação da rodada
+- `11 passed` em `tests/test_seed.py` e `tests/test_settings.py`
+- `25 passed` na suíte focada de seed, settings, storage, SMTP, observability, processes e documents
+- `docker compose config` válido
+- `GET /health` retornando `200`
+
+---
+
+## Execução complementar 7 em 29/03/2026
+
+### Seed e documentação alinhados
+- `docs/SeedDadosDev.md` atualizado para refletir o estado realmente implementado no repositório
+- removido o descompasso entre documentação aspiracional (`seed/main.py`, usuários `@seed.dev`) e a implementação real atual
+- documentado que o seed suportado hoje é:
+  - `python seed.py`
+  - startup da `api` no `docker compose`
+  - sincronização opcional via `SEED_*_PASSWORD`
+
+### Provisionamento operacional repetível
+- criado `ops/provision_homologation_tenant.py` para provisionar tenant controlado de homologação com:
+  - usuário interno real
+  - usuário do portal
+  - cliente vinculado
+  - processo inicial em `triagem`
+- script validado com `--help` e execução real idempotente no banco local
+- execução validada retornou:
+  - `tenant_id=3`
+  - `client_id=7`
+  - `process_id=15`
+
+### Runbook consolidado
+- `docs/RunbookOperacional.md` atualizado para incluir:
+  - comando oficial de provisionamento do tenant controlado
+  - validação do script operacional
+  - remoção da pendência antiga sobre alinhamento do seed
+
+### Situação atual
+- seed local, runbook e documentação operacional estão coerentes entre si
+- homologações reais de processo e documentos agora podem ser repetidas sem depender de comandos manuais ad hoc
+
+---
+
+## Execução complementar 8 em 29/03/2026
+
+### Padrão documental consolidado
+- `progresso3.md` passou a explicitar linguagem de histórico executivo
+- `RunbookOperacional.md` passou a explicitar linguagem operacional e prescritiva
+- a separação de função entre os dois documentos ficou formalizada no próprio conteúdo
+
+### Smoke operacional automatizado
+- criado `ops/run_homologation_smoke.py` para automatizar o smoke real fim a fim da stack
+- o script cobre em uma execução:
+  - `health`
+  - login interno e portal
+  - criação de processo real
+  - mudança de status com notificação ao cliente
+  - upload real de documento no MinIO
+  - confirmação de upload
+  - notificação interna por e-mail
+  - auditoria de processo e documento
+  - leitura de métricas no `/metrics`
+
+### Validação real do smoke automatizado
+- `ops/run_homologation_smoke.py --help` validado
+- execução real concluída com sucesso na stack local
+- evidências retornadas pelo smoke:
+  - `tenant_id=3`
+  - `process_id=16`
+  - `document_id=5`
+  - auditoria do processo com `created`, `status_changed` e `notification_process_status_changed`
+  - auditoria do documento com `uploaded` e `notification_document_uploaded`
+  - métricas confirmando sucesso para:
+    - `workers.notify_process_status_changed`
+    - `workers.notify_document_uploaded`
+    - `amigao_email_delivery_total`
+    - `amigao_document_uploads_total`
+
+### Runbook atualizado
+- `RunbookOperacional.md` atualizado para usar o smoke automatizado como caminho principal de validação operacional
+
+### Situação atual
+- a homologação crítica da stack agora está automatizada em script operacional reproduzível
+- próximas frentes ficam mais baratas de validar porque processo, documento, auditoria e métricas já têm smoke único
+
+---
+
+## Execução complementar 9 em 29/03/2026
+
+### Webhook operacional endurecido
+- o envio de alertas para webhook passou a usar contrato explícito de entrega
+- o payload agora inclui `alert_id` para rastreabilidade ponta a ponta
+- o envio agora propaga `traceparent`, além de manter `request_id`, `trace_id` e `span_id` no corpo
+- o destino pode exigir autenticação por header configurável via:
+  - `ALERT_WEBHOOK_AUTH_HEADER`
+  - `ALERT_WEBHOOK_AUTH_TOKEN`
+- o corpo pode sair assinado com HMAC SHA-256 via `ALERT_WEBHOOK_SIGNING_SECRET`
+
+### Validação operacional do sink local
+- `ops/alert_webhook_sink.py` passou a validar opcionalmente autenticação e assinatura
+- o artefato local agora registra:
+  - `status_code`
+  - `headers`
+  - `validation`
+  - `payload`
+- isso fecha um caminho de homologação local mais próximo do comportamento de um destino externo real
+
+### Cobertura e hardening de configuração
+- criada a suíte `tests/test_alerts.py` para validar:
+  - filtro por severidade
+  - envio de `traceparent`
+  - envio de autenticação por header
+  - assinatura HMAC SHA-256
+  - log estruturado de falha em `operational.alert.webhook_failed`
+- `tests/test_settings.py` ampliado para cobrir:
+  - bloqueio de `ALERT_WEBHOOK_URL` local em produção
+  - consistência entre `ALERT_WEBHOOK_AUTH_TOKEN` e `ALERT_WEBHOOK_AUTH_HEADER`
+- `.env.example`, `.env.production.example`, `docker-compose.yml` e `docs/ObservabilidadeOperacional.md` foram alinhados ao novo contrato
+
+### Validações executadas
+- `python ops/alert_webhook_sink.py --help` validado com os novos parâmetros
+- `docker compose config` validado após inclusão das variáveis de autenticação e assinatura do webhook
+- `.\venv\Scripts\python.exe -m pytest -p no:cacheprovider tests\test_alerts.py tests\test_settings.py tests\api\test_observability.py -q` -> `16 passed`
+- `docker compose up --build -d api worker client-portal` executado com sucesso para preparar a demonstração
+- `GET /health` retornando `200` após estabilização do rebuild
+- `http://localhost:3000/login` retornando `200` após estabilização do rebuild
+
+### Situação atual
+- a stack já suporta um webhook externo de alertas com autenticação, assinatura e correlação distribuída
+- o destino externo definitivo ainda depende apenas do endpoint real para substituir o sink local

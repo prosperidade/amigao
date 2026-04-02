@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Plus, Search, Edit2, Trash2, User as UserIcon, Building2, Building, Mail, Phone } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, User as UserIcon, Building2, Mail, Phone } from 'lucide-react';
 
 interface Client {
   id: number;
@@ -18,6 +18,7 @@ export default function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState<Client | null>(null);
+  const [formError, setFormError] = useState('');
   
   // Form State
   const [formData, setFormData] = useState({
@@ -42,15 +43,23 @@ export default function ClientsPage() {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setIsModalOpen(false);
       resetForm();
+      setFormError('');
+    },
+    onError: (error: any) => {
+      setFormError(error.response?.data?.detail || 'Não foi possível criar o cliente.');
     }
   });
 
   const updateMutation = useMutation({
-    mutationFn: (client: {id: number, data: any}) => api.patch(`/clients/${client.id}`, client.data),
+    mutationFn: (client: {id: number, data: any}) => api.put(`/clients/${client.id}`, client.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setIsModalOpen(false);
       resetForm();
+      setFormError('');
+    },
+    onError: (error: any) => {
+      setFormError(error.response?.data?.detail || 'Não foi possível salvar as alterações do cliente.');
     }
   });
 
@@ -74,6 +83,7 @@ export default function ClientsPage() {
   const handleCreate = () => {
     setCurrentClient(null);
     resetForm();
+    setFormError('');
     setIsModalOpen(true);
   };
 
@@ -83,6 +93,7 @@ export default function ClientsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (currentClient) {
       updateMutation.mutate({ id: currentClient.id, data: formData });
     } else {
@@ -207,6 +218,11 @@ export default function ClientsPage() {
             </div>
             
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {formError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome Completo / Razão Social</label>

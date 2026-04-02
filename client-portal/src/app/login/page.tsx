@@ -31,6 +31,7 @@ export default function LoginPage() {
       const res = await api.post('/auth/login', formData, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Auth-Profile': 'client_portal',
         },
       });
 

@@ -23,6 +23,33 @@ Sem seed padronizado, cada sessão começa do zero. Testes ficam inconsistentes.
 
 ---
 
+## 2.1 Estado implementado hoje no repositório
+
+O estado atual do checkout **não** usa uma pasta `seed/` modularizada. Hoje o seed implementado e suportado pela stack local e:
+
+- `python seed.py` para execucao manual
+- `python seed.py` no startup da `api` via Docker Compose
+
+O comportamento implementado hoje:
+
+- seed idempotente em arquivo unico `seed.py`
+- tenant principal `Amigao Headquarters`
+- 4 usuarios seed reais no banco local
+- 3 clientes seed
+- processos seed cobrindo todos os status da maquina atual
+- tarefas encadeadas para o processo em `execucao`
+- sincronizacao opcional de senhas quando `SEED_*_PASSWORD` estiver definido
+
+Variaveis de ambiente relevantes no estado atual:
+
+- `SEED_ADMIN_PASSWORD`
+- `SEED_CONSULTANT_PASSWORD`
+- `SEED_CLIENT_PASSWORD`
+- `SEED_FIELD_PASSWORD`
+- `SEED_RESET_PASSWORDS`
+
+---
+
 ## 3. Estrutura do seed
 
 ### 3.1 Tenant principal (escritório fictício)
@@ -46,14 +73,14 @@ TENANT_SEED = {
 
 | Perfil | Nome | E-mail | Senha (dev) | Propósito |
 |--------|------|--------|-------------|-----------|
-| admin | Admin Sistema | admin@seed.dev | Seed@2026 | Testar configurações e RBAC |
-| gestor | Ana Ferreira | gestor@seed.dev | Seed@2026 | Testar visão gerencial |
-| consultor | Carlos Mendes | consultor@seed.dev | Seed@2026 | Testar fluxo principal |
-| tecnico_campo | João Silva | campo@seed.dev | Seed@2026 | Testar app mobile e sync |
-| parceiro | Geo Topografia | parceiro@seed.dev | Seed@2026 | Testar escopo isolado |
-| cliente_portal | Maria Donos | cliente@seed.dev | Seed@2026 | Testar portal do cliente |
+| admin | Administrador Global | admin@amigao.com | Seed@2026 | Testar configurações, observabilidade e RBAC |
+| consultor | Consultor Demo | consultor@amigao.com | Seed@2026 | Testar fluxo principal interno |
+| tecnico_campo | Tecnico de Campo Demo | campo@amigao.com | Seed@2026 | Testar tarefas e fluxo operacional |
+| cliente_portal | Cliente Demo | cliente@amigao.com | Seed@2026 | Testar login e fluxos do portal do cliente |
 
 > **Importante:** senhas do seed são apenas para desenvolvimento local. Nunca aplicar em staging ou produção.
+>
+> Na stack Docker local, a senha fica determinística quando `SEED_*_PASSWORD` estiver definido. O template `.env.example` atual usa `Seed@2026`.
 
 ---
 
@@ -238,60 +265,73 @@ PRECEDENTE-001:
 
 ---
 
-## 4. Arquivos do seed
+## 4. Arquivos e execução do seed
 
-### Estrutura de diretórios
+### Estrutura implementada hoje
 
 ```
-seed/
-├── main.py               # executa todos os seeds na ordem correta
-├── 00_tenant.py          # tenant e settings
-├── 01_users.py           # usuários por perfil
-├── 02_clients.py         # clientes fictícios
-├── 03_properties.py      # imóveis com geometria PostGIS
-├── 04_processes.py       # processos em cada status
-├── 05_tasks.py           # tarefas do processo P004
-├── 06_documents.py       # documentos de exemplo
-├── 07_regulatory_base.py # base regulatória mínima
-├── docs/
-│   ├── matricula_exemplo.pdf
-│   ├── ccir_exemplo.pdf
-│   └── car_baixa_qualidade.pdf  # para testar OCR com baixa confiança
-└── geometries/
-    ├── fazenda_boa_vista.geojson
-    └── sitio_sao_joao.geojson
+seed.py                              # seed idempotente atual
+docker-compose.yml                   # startup da api executa init_db + seed.py
+.env.example                         # expõe SEED_*_PASSWORD para credenciais previsíveis
+ops/provision_homologation_tenant.py # cria tenant controlado para homologações reais
 ```
 
-### Comando de execução
+### Comandos suportados hoje
 
 ```bash
-# Limpar e recriar seed (desenvolvimento)
-python seed/main.py --reset
+# Seed manual no ambiente local
+python seed.py
 
-# Apenas adicionar se não existir (idempotente)
-python seed/main.py
-
-# Seed específico
-python seed/main.py --only regulatory_base
+# Stack local com seed no startup da API
+docker compose up --build
 ```
+
+### Comandos operacionais úteis
+
+```bash
+# Provisionar tenant controlado para homologacao de fluxos reais
+python ops/provision_homologation_tenant.py \
+  --internal-email seu+interno@gmail.com \
+  --portal-email seu+portal@gmail.com \
+  --password Seed@2026
+```
+
+### Backlog estrutural
+
+Continuam como evolucao desejada, mas **ainda nao implementada neste checkout**:
+
+- modularizacao do seed em `seed/main.py`
+- seeds especializados por dominio
+- seed dedicado de base regulatoria
+- seed de homologacao separado por ambiente
 
 ---
 
 ## 5. Seed de homologação com a cliente
 
-Antes de apresentar o sistema para a sócia consultora, usar um seed diferente:
+O comando dedicado `python seed/main.py --env homologacao` **ainda nao existe** neste checkout.
+
+Hoje, para homologacao controlada com a cliente, existem dois caminhos:
+
+- usar o seed local padrao com credenciais deterministicas
+- provisionar um tenant isolado de homologacao via `ops/provision_homologation_tenant.py`
+
+Exemplo atual:
 
 ```bash
-python seed/main.py --env homologacao
+python ops/provision_homologation_tenant.py \
+  --internal-email seu+interno@gmail.com \
+  --portal-email seu+portal@gmail.com \
+  --password Seed@2026
 ```
 
-Esse seed usa:
+Esse tenant controlado deve usar:
 - Dados mais próximos da realidade da cliente (municípios que ela atende, tipos de processo que ela lida)
 - PDFs reais de documentos anonimizados (com permissão)
 - Pelo menos 5 precedentes do escritório registrados
 - Base regulatória com normas que ela usa no dia a dia
 
-**Esse seed não vai para o repositório Git.** Fica em pasta segura compartilhada apenas com o time.
+Quando existir um seed separado de homologacao, ele nao deve ir para o repositório Git. Deve ficar em pasta segura compartilhada apenas com o time.
 
 ---
 
@@ -306,4 +346,4 @@ Esse seed usa:
 
 ---
 
-*Documento criado em 26/03/2026. Responsável pela manutenção: Dev Lead.*
+*Documento criado em 26/03/2026 e atualizado em 29/03/2026. Responsável pela manutenção: Dev Lead.*

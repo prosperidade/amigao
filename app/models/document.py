@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Text, Enum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Enum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
@@ -57,6 +57,10 @@ class Document(Base):
     review_required = Column(Boolean, default=False)
 
     uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Sprint 2 — vínculo com item de checklist e validade documental
+    checklist_item_id = Column(String, nullable=True)   # id do item no ProcessChecklist.items[]
+    expires_at = Column(DateTime(timezone=True), nullable=True)  # data de validade do documento
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

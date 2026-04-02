@@ -1,8 +1,10 @@
-import { Users, Briefcase, Frame, AlertCircle, FileText, Activity } from 'lucide-react';
+import { Users, Briefcase, Frame, AlertCircle, FileText, Activity, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   
   // Buscaríamos da API os totais reais (Placeholder Data para visualização inicial)
   const stats = [
@@ -19,9 +21,12 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Olá, {user?.full_name?.split(' ')[0] ?? 'Administrador'} 👋</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">Bem-vindo(a) ao painel de gestão ambiental.</p>
         </div>
-        <button className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium transition-colors outline-none ring-2 ring-transparent focus:ring-primary/50 shadow-sm flex items-center">
-          <Activity className="w-4 h-4 mr-2" />
-          Gerar Relatório Geral
+        <button
+          onClick={() => navigate('/intake')}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Nova Demanda
         </button>
       </div>
 

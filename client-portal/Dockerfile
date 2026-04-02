@@ -10,6 +10,8 @@ RUN npm ci
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
+ARG API_BACKEND_URL=http://api:8000
+ENV API_BACKEND_URL=$API_BACKEND_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Standalone build will be configured in next.config.ts
@@ -21,6 +23,8 @@ WORKDIR /app
 
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
+ARG API_BACKEND_URL=http://api:8000
+ENV API_BACKEND_URL=$API_BACKEND_URL
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

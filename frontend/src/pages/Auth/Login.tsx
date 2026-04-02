@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { api } from '@/lib/api';
+import { isClientPortalToken } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { Leaf } from 'lucide-react';
 
@@ -27,10 +28,15 @@ export default function Login() {
       const tokenRes = await api.post('/auth/login', formData, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Auth-Profile': 'internal',
         },
       });
 
       const token = tokenRes.data.access_token;
+
+      if (isClientPortalToken(token)) {
+        throw new Error('Este usuário pertence ao portal do cliente. Use o portal em http://localhost:3000/login.');
+      }
       
       // Chamada para pegar dados do User com o novo token
       const userRes = await api.get('/auth/me', {
@@ -46,7 +52,7 @@ export default function Login() {
       navigate('/dashboard');
       
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erro ao realizar login.');
+      setError(err.response?.data?.detail || err.message || 'Erro ao realizar login.');
     } finally {
       setLoading(false);
     }

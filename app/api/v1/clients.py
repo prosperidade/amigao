@@ -37,7 +37,7 @@ def create_client(
 ) -> Any:
     """Cria um novo cliente para o tenant autenticado."""
     client = ClientModel(
-        **client_in.dict(exclude={"tenant_id"}),
+        **client_in.model_dump(),
         tenant_id=current_user.tenant_id,
     )
     db.add(client)
@@ -64,6 +64,7 @@ def get_client(
 
 
 @router.put("/{client_id}", response_model=Client)
+@router.patch("/{client_id}", response_model=Client)
 def update_client(
     client_id: int,
     *,
@@ -79,7 +80,7 @@ def update_client(
     )
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente não encontrado")
-    update_data = client_in.dict(exclude_unset=True)
+    update_data = client_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(client, field, value)
     db.add(client)

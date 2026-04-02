@@ -63,6 +63,22 @@ def test_rejects_local_minio_public_url_in_production() -> None:
         )
 
 
+def test_rejects_local_alert_webhook_in_production() -> None:
+    with pytest.raises(ValueError, match="ALERT_WEBHOOK_URL"):
+        build_settings(
+            ENVIRONMENT="production",
+            ALERT_WEBHOOK_URL="http://127.0.0.1:8011/alerts",
+        )
+
+
+def test_requires_alert_webhook_auth_header_when_token_is_configured() -> None:
+    with pytest.raises(ValueError, match="ALERT_WEBHOOK_AUTH_HEADER"):
+        build_settings(
+            ALERT_WEBHOOK_AUTH_HEADER="   ",
+            ALERT_WEBHOOK_AUTH_TOKEN="Bearer token",
+        )
+
+
 def test_accepts_hardened_production_settings() -> None:
     settings = build_settings(ENVIRONMENT="production")
 
