@@ -1,8 +1,8 @@
 import json
 import logging
 import sys
-from datetime import datetime, timezone
 from contextvars import ContextVar
+from datetime import UTC, datetime
 
 from app.core.config import settings
 from app.core.tracing import span_id_ctx, trace_id_ctx
@@ -35,7 +35,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         metadata = getattr(record, "metadata", None)
         payload = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname.lower(),
             "service": settings.SERVICE_NAME,
             "logger": record.name,

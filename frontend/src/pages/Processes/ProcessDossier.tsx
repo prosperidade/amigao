@@ -6,6 +6,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AlertTriangle, CheckCircle2, Info, MapPin, User, FileText, RefreshCw } from 'lucide-react';
 
+interface Inconsistency {
+  severity: string;
+  title: string;
+  description: string;
+}
+
+interface DossierDocument {
+  id: number;
+  filename: string;
+  document_type?: string;
+}
+
+interface PreviousProcess {
+  id: number;
+  title: string;
+  demand_type?: string;
+  status: string;
+}
+
 interface ProcessDossierProps {
   processId: number;
 }
@@ -45,8 +64,8 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
   if (!dossier) return null;
 
   const { property, client, documents, checklist_summary, previous_processes, inconsistencies } = dossier;
-  const errors = inconsistencies?.filter((i: any) => i.severity === 'error') ?? [];
-  const warnings = inconsistencies?.filter((i: any) => i.severity === 'warning') ?? [];
+  const errors = inconsistencies?.filter((i: Inconsistency) => i.severity === 'error') ?? [];
+  const warnings = inconsistencies?.filter((i: Inconsistency) => i.severity === 'warning') ?? [];
 
   return (
     <div className="space-y-5">
@@ -86,7 +105,7 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
           <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider px-1">
             Inconsistências Detectadas
           </p>
-          {inconsistencies.map((issue: any, idx: number) => {
+          {inconsistencies.map((issue: Inconsistency, idx: number) => {
             const cfg = SEVERITY_CONFIG[issue.severity as keyof typeof SEVERITY_CONFIG] ?? SEVERITY_CONFIG.info;
             const Icon = cfg.icon;
             return (
@@ -186,7 +205,7 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
           </div>
           {documents?.length > 0 ? (
             <div className="space-y-1.5">
-              {documents.slice(0, 6).map((doc: any) => (
+              {documents.slice(0, 6).map((doc: DossierDocument) => (
                 <div key={doc.id} className="flex items-center justify-between text-xs">
                   <span className="text-gray-600 dark:text-slate-300 truncate flex-1">{doc.filename}</span>
                   {doc.document_type && (
@@ -243,7 +262,7 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
         <div className="rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-200 mb-3">Histórico do Cliente</h3>
           <div className="space-y-2">
-            {previous_processes.map((p: any) => (
+            {previous_processes.map((p: PreviousProcess) => (
               <div key={p.id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 dark:border-white/5 last:border-0">
                 <span className="text-gray-700 dark:text-slate-300">{p.title}</span>
                 <div className="flex items-center gap-2">

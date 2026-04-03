@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from typing import List, Optional
 
 from app.api import deps
-from app.models.property import Property as PropertyModel
 from app.models.user import User
-from app.schemas.property import PropertyCreate, PropertyUpdate, Property
+from app.repositories import PropertyRepository
+from app.schemas.property import Property, PropertyCreate, PropertyUpdate
 
 router = APIRouter()
+
 
 @router.post("/", response_model=Property)
 def create_property(
@@ -16,13 +18,14 @@ def create_property(
     property_in: PropertyCreate,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    db_obj = PropertyModel(**property_in.dict(), tenant_id=current_user.tenant_id)
-    db.add(db_obj)
+    repo = PropertyRepository(db, current_user.tenant_id)
+    db_obj = repo.create(property_in.model_dump())
     db.commit()
     db.refresh(db_obj)
     return db_obj
 
-@router.get("/", response_model=List[Property])
+
+@router.get("/", response_model=list[Property])
 def get_properties(
     db: Session = Depends(deps.get_db),
     skip: int = 0,
@@ -30,24 +33,21 @@ def get_properties(
     client_id: Optional[int] = None,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    query = db.query(PropertyModel).filter(PropertyModel.tenant_id == current_user.tenant_id)
+    repo = PropertyRepository(db, current_user.tenant_id)
     if client_id:
-        query = query.filter(PropertyModel.client_id == client_id)
-    return query.offset(skip).limit(limit).all()
+        return repo.list_by_client(client_id, skip=skip, limit=limit)
+    return repo.list(skip=skip, limit=limit)
+
 
 @router.get("/{id}", response_model=Property)
 def get_property(
-    id: int, 
+    id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    property_obj = db.query(PropertyModel).filter(
-        PropertyModel.id == id,
-        PropertyModel.tenant_id == current_user.tenant_id
-    ).first()
-    if not property_obj:
-        raise HTTPException(status_code=404, detail="Property not found")
-    return property_obj
+    repo = PropertyRepository(db, current_user.tenant_id)
+    return repo.get_or_404(id, detail="Property not found")
+
 
 @router.patch("/{id}", response_model=Property)
 def update_property(
@@ -57,17 +57,8 @@ def update_property(
     property_in: PropertyUpdate,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    property_obj = db.query(PropertyModel).filter(
-        PropertyModel.id == id,
-        PropertyModel.tenant_id == current_user.tenant_id
-    ).first()
-    if not property_obj:
-        raise HTTPException(status_code=404, detail="Property not found")
-        
-    update_data = property_in.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(property_obj, field, value)
-        
+    repo = PropertyRepository(db, current_user.tenant_id)
+    property_obj = repo.update(id, property_in.model_dump(exclude_unset=True), detail="Property not found")
     db.commit()
     db.refresh(property_obj)
     return property_obj

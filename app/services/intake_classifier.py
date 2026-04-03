@@ -10,9 +10,9 @@ LLM entra na Wave 2 (Sprint 5+).
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Optional
 
+from dataclasses import dataclass
+from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Estruturas de resposta
@@ -24,11 +24,11 @@ class DemandClassification:
     demand_label: str
     confidence: str                    # "high" | "medium" | "low"
     initial_diagnosis: str             # texto estruturado legível pelo consultor
-    required_documents: List[dict]     # [{id, label, doc_type, category, required}]
-    suggested_next_steps: List[str]    # ações recomendadas ao consultor
+    required_documents: list[dict]     # [{id, label, doc_type, category, required}]
+    suggested_next_steps: list[str]    # ações recomendadas ao consultor
     checklist_template_demand_type: str  # chave para buscar template no BD
     urgency_flag: Optional[str]        # None | "alta" | "critica"
-    relevant_agencies: List[str]       # órgãos ambientais relevantes
+    relevant_agencies: list[str]       # órgãos ambientais relevantes
 
 
 # ---------------------------------------------------------------------------

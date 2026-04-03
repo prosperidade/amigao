@@ -1,0 +1,65 @@
+[project]
+name = "amigao-do-meio-ambiente"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults (FastAPI Depends)
+    "B904",   # raise from (too noisy on existing code)
+    "UP035",  # import from collections.abc (gradual migration)
+    "UP045",  # X | None syntax (gradual migration)
+    "F841",   # local variable assigned but never used (some test patterns)
+    "UP042",  # __all__ format (cosmetic)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Legacy files not yet cleaned — avoid noise until dedicated cleanup PR
+"app/api/v1/intake.py" = ["F401", "E711", "E712"]
+"app/api/v1/checklists.py" = ["F401"]
+"app/api/v1/contracts.py" = ["F401"]
+"app/api/v1/proposals.py" = ["F401"]
+"app/api/v1/dossier.py" = ["F401"]
+"app/api/v1/threads.py" = ["F401"]
+"app/api/v1/workflows.py" = ["F401", "E711", "E712"]
+"app/api/v1/auth.py" = ["F401", "W291"]
+"app/workers/*" = ["F401", "E711", "E712", "E741"]
+"app/services/*" = ["E711", "E712", "SIM102", "SIM105"]
+"app/core/*" = ["F401", "E711", "E712", "SIM105", "B905"]
+"app/api/websockets.py" = ["F401", "SIM105", "SIM102"]
+"app/models/__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "app.workers.*"
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

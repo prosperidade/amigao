@@ -1,9 +1,10 @@
-from typing import Literal
+from contextlib import contextmanager
+from functools import lru_cache
+from typing import Iterator, Literal
 from urllib.parse import urlparse
 
 from pydantic import EmailStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "172.31.32.1"}
 
@@ -51,34 +52,34 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Amigão do Meio Ambiente"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
-    
+
     # DATABASE
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "password"
     POSTGRES_DB: str = "amigao_db"
     POSTGRES_PORT: str = "5432"
-    
+
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-    
+
     # REDIS
     REDIS_URL: str = "redis://localhost:6379/0"
     REALTIME_EVENTS_CHANNEL: str = "amigao_events"
-    
+
     # STORAGE (MinIO)
     MINIO_SERVER: str = "localhost:9000"
     MINIO_PUBLIC_URL: str = ""
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_SECURE: bool = False
-    
+
     # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
+
     # EMAIL / SMTP (Mailtrap defaults for dev)
     SMTP_TLS: bool = True
     SMTP_PORT: int = 587
@@ -213,4 +214,48 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
-settings = Settings()
+
+@lru_cache
+def get_settings() -> Settings:
+    """Cached settings factory.  Call ``get_settings.cache_clear()`` to reload."""
+    return Settings()
+
+
+@contextmanager
+def override_settings(**kwargs: object) -> Iterator[Settings]:
+    """Temporarily replace settings with overridden values.
+
+    Usage::
+
+        with override_settings(ENVIRONMENT="test", AI_ENABLED=True) as s:
+            assert s.ENVIRONMENT == "test"
+    """
+    get_settings.cache_clear()
+    try:
+        overridden = Settings(**kwargs)  # type: ignore[arg-type]
+        get_settings.cache_clear()
+        # Patch the cache so get_settings() returns the overridden instance
+        get_settings()  # prime the cache with default first
+        get_settings.cache_clear()
+
+        # Temporarily replace the cached value
+        _original = get_settings
+        @lru_cache
+        def _patched() -> Settings:
+            return overridden
+
+        import app.core.config as _self
+        _self.get_settings = _patched  # type: ignore[assignment]
+        _self.settings = overridden
+        yield overridden
+    finally:
+        import app.core.config as _self
+        _self.get_settings = _original
+        _self.get_settings.cache_clear()
+        _self.settings = _self.get_settings()
+
+
+# Backward-compatible module-level singleton.
+# Code that does ``from app.core.config import settings`` keeps working.
+# For testability, prefer ``get_settings()`` in new code.
+settings = get_settings()

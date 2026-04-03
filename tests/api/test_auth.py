@@ -7,6 +7,7 @@ from app.models.client import Client, ClientStatus, ClientType
 from app.models.tenant import Tenant
 from app.models.user import User
 
+
 def test_login_access_token(client: TestClient, db_session):
     tenant = Tenant(name="Tenant Teste")
     db_session.add(tenant)

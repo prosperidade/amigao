@@ -2,7 +2,7 @@
  * ProposalEditor — Criar / editar proposta comercial (Sprint 4)
  * Suporta geração automática de rascunho via process_id.
  */
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -49,7 +49,12 @@ export default function ProposalEditor() {
   const [validityDays, setValidityDays] = useState('30');
   const [paymentTerms, setPaymentTerms] = useState('');
   const [notes, setNotes] = useState('');
-  const [draftBanner, setDraftBanner] = useState<any>(null);
+  const [draftBanner, setDraftBanner] = useState<{
+    complexity: string;
+    suggested_value_min: number | null;
+    suggested_value_max: number | null;
+    estimated_days: number | null;
+  } | null>(null);
   const [saved, setSaved] = useState(false);
 
   // Buscar dados do cliente para exibir nome/email ao usuário
@@ -71,7 +76,8 @@ export default function ProposalEditor() {
   });
 
   // Preencher form quando carregar
-  useEffect(() => {
+  const proposalKey = proposal?.id;
+  useMemo(() => {
     if (proposal) {
       setTitle(proposal.title ?? '');
       setClientId(String(proposal.client_id ?? ''));
@@ -82,7 +88,8 @@ export default function ProposalEditor() {
       setPaymentTerms(proposal.payment_terms ?? '');
       setNotes(proposal.notes ?? '');
     }
-  }, [proposal]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposalKey]);
 
   // Auto-draft ao montar se process_id passado na URL
   const { data: draftData, isLoading: draftLoading } = useQuery({
@@ -94,7 +101,8 @@ export default function ProposalEditor() {
     enabled: isNew && !!processId,
   });
 
-  useEffect(() => {
+  const draftDataKey = draftData ? JSON.stringify(draftData) : null;
+  useMemo(() => {
     if (draftData && isNew) {
       setTitle(draftData.title ?? '');
       setScopeItems(draftData.scope_items ?? []);
@@ -102,9 +110,16 @@ export default function ProposalEditor() {
       setValidityDays(String(30));
       setPaymentTerms(draftData.payment_terms ?? '');
       setNotes(draftData.notes ?? '');
-      setDraftBanner(draftData);
+      const d = draftData as Record<string, unknown>;
+      setDraftBanner({
+        complexity: String(d.complexity ?? ''),
+        suggested_value_min: typeof d.suggested_value_min === 'number' ? d.suggested_value_min : null,
+        suggested_value_max: typeof d.suggested_value_max === 'number' ? d.suggested_value_max : null,
+        estimated_days: typeof d.estimated_days === 'number' ? d.estimated_days : null,
+      });
     }
-  }, [draftData, isNew]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftDataKey, isNew]);
 
   // Mutations
   const saveMutation = useMutation({
@@ -156,7 +171,7 @@ export default function ProposalEditor() {
 
   const updateScopeItem = (idx: number, field: keyof ScopeItem, value: string | number) => {
     const items = [...scopeItems];
-    (items[idx] as any)[field] = value;
+    items[idx] = { ...items[idx], [field]: value };
     if (field === 'qty' || field === 'unit_price') {
       items[idx].total = items[idx].qty * items[idx].unit_price;
     }

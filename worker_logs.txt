@@ -1,0 +1,29 @@
+worker-1  |  
+worker-1  |  -------------- celery@c9a7b62c5f04 v5.6.3 (recovery)
+worker-1  | --- ***** ----- 
+worker-1  | -- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.41 2026-04-03 20:08:27
+worker-1  | - *** --- * --- 
+worker-1  | - ** ---------- [config]
+worker-1  | - ** ---------- .> app:         amigao_worker:0x7760c69605d0
+worker-1  | - ** ---------- .> transport:   redis://redis:6379/0
+worker-1  | - ** ---------- .> results:     redis://redis:6379/0
+worker-1  | - *** --- * --- .> concurrency: 4 (solo)
+worker-1  | -- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+worker-1  | --- ***** ----- 
+worker-1  |  -------------- [queues]
+worker-1  |                 .> celery           exchange=celery(direct) key=celery
+worker-1  |                 
+worker-1  | 
+worker-1  | [tasks]
+worker-1  |   . workers.generate_ai_weekly_summary
+worker-1  |   . workers.generate_pdf_report
+worker-1  |   . workers.log_document_uploaded
+worker-1  |   . workers.notify_document_uploaded
+worker-1  |   . workers.notify_process_status_changed
+worker-1  |   . workers.send_email_notification
+worker-1  |   . workers.test_job
+worker-1  | 
+worker-1  | [2026-04-03 20:08:27,811: INFO/MainProcess] Connected to redis://redis:6379/0
+worker-1  | [2026-04-03 20:08:27,820: INFO/MainProcess] mingle: searching for neighbors
+worker-1  | [2026-04-03 20:08:28,853: INFO/MainProcess] mingle: all alone
+worker-1  | [2026-04-03 20:08:28,906: INFO/MainProcess] celery@c9a7b62c5f04 ready.

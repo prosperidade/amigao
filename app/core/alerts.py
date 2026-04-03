@@ -1,17 +1,16 @@
-import logging
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone
+import logging
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import httpx
 
 from app.core.config import settings
-from app.core.metrics import record_alert
 from app.core.logging import request_id_ctx
+from app.core.metrics import record_alert
 from app.core.tracing import build_traceparent, current_trace_context, parse_traceparent
-
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ def _build_webhook_payload(*, category: str, severity: str, message: str, metada
     normalized_trace_id, normalized_span_id = parse_traceparent(traceparent)
     payload = {
         "alert_id": str(uuid4()),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "service": settings.SERVICE_NAME,
         "environment": settings.ENVIRONMENT,
         "category": category,

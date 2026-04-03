@@ -5,9 +5,10 @@ ChecklistTemplate  : template de documentos necessários por tipo de demanda (gl
 ProcessChecklist   : instância do checklist gerada para um processo específico
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, JSON
-from sqlalchemy.sql import func
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from app.models.base import Base
 
 

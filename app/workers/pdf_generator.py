@@ -1,6 +1,6 @@
 import io
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.models.document import Document, OcrStatus
-from app.models.tenant import Tenant
 from app.models.process import Process
 from app.models.task import Task, TaskStatus
+from app.models.tenant import Tenant
 from app.services.storage import StorageService, get_storage_service
 
 logger = get_logger(__name__)
@@ -115,12 +115,12 @@ def _load_tenant_logo(storage: StorageService, tenant_id: int) -> bytes:
             return logo_bytes
     return b""
 
-def generate_process_visit_report(tenant_id: int, process_id: int) -> Dict[str, Any]:
+def generate_process_visit_report(tenant_id: int, process_id: int) -> dict[str, Any]:
     db: Session = SessionLocal()
     try:
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         process = db.query(Process).filter(Process.id == process_id, Process.tenant_id == tenant_id).first()
-        
+
         if not process:
             logger.error(f"Process {process_id} not found for PDF generation.")
             return {"error": "Process not found"}
@@ -143,7 +143,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> Dict[str, 
         )
         pdf.alias_nb_pages()
         pdf.add_page()
-        
+
         pdf.section_title("Resumo do Processo")
         pdf.info_row("Cliente", process.client.full_name if process.client else "N/A")
         pdf.info_row("Status atual", process.status.value.upper())
@@ -196,7 +196,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> Dict[str, 
         # Upload to MinIO
         storage = get_storage_service()
         filename = f"Relatorio_Visita_{process.id}.pdf"
-        
+
         upload_result = storage.upload_bytes(
             content=pdf_bytes,
             filename=filename,

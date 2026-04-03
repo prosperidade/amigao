@@ -9,23 +9,23 @@ Endpoints montados sob /processes/{process_id}/checklist:
   GET    /processes/{id}/checklist/gaps         — retorna apenas itens pendentes (gaps)
 """
 
-from typing import Any, List, Optional
 import logging
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.user import User
-from app.models.process import Process
 from app.models.checklist_template import ProcessChecklist
+from app.models.process import Process
+from app.models.user import User
 from app.services.checklist_engine import (
-    get_or_create_checklist,
-    regenerate_checklist,
     get_checklist_status,
+    get_or_create_checklist,
+    mark_item_pending,
     mark_item_received,
     mark_item_waived,
-    mark_item_pending,
+    regenerate_checklist,
 )
 
 router = APIRouter()

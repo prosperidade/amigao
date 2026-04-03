@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Plus, Search, MapPin, User as UserIcon, AlertTriangle, FileText } from 'lucide-react';
+import { Plus, Search, MapPin, User as UserIcon, AlertTriangle } from 'lucide-react';
 
 interface Property {
   id: number;
@@ -42,12 +42,12 @@ export default function PropertiesPage() {
     queryKey: ['clients'],
     queryFn: async () => {
       const res = await api.get('/clients/');
-      return res.data as any[];
+      return res.data as { id: number; full_name: string; cpf_cnpj: string | null }[];
     }
   });
 
   const createMutation = useMutation({
-    mutationFn: (newProp: any) => api.post('/properties/', {
+    mutationFn: (newProp: typeof formData) => api.post('/properties/', {
       ...newProp,
       client_id: parseInt(newProp.client_id),
       total_area_ha: newProp.total_area_ha ? parseFloat(newProp.total_area_ha) : null
@@ -57,9 +57,10 @@ export default function PropertiesPage() {
       setIsModalOpen(false);
       resetForm();
     },
-    onError: (err: any) => {
-      alert(err.response?.data?.detail || 'Erro ao salvar o Pydantic / Banco de Dados.');
-      console.error(err.response?.data);
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      alert(axiosErr.response?.data?.detail || 'Erro ao salvar o Pydantic / Banco de Dados.');
+      console.error(axiosErr.response?.data);
     }
   });
 
@@ -194,7 +195,7 @@ export default function PropertiesPage() {
                     className="w-full px-3 py-2 border border-gray-200 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   >
                     <option value="">Selecione um cliente dono...</option>
-                    {clients?.map((c: any) => (
+                    {clients?.map((c) => (
                       <option key={c.id} value={c.id}>{c.full_name} ({c.cpf_cnpj || 'Sem doc'})</option>
                     ))}
                   </select>

@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
 
 from app.api import deps
-from app.models.communication import CommunicationThread as ThreadModel, Message as MessageModel
+from app.models.communication import CommunicationThread as ThreadModel
+from app.models.communication import Message as MessageModel
 from app.models.user import User
-from app.schemas.communication import CommunicationThreadCreate, CommunicationThread, MessageCreate, Message
+from app.schemas.communication import CommunicationThread, CommunicationThreadCreate, Message, MessageCreate
 
 router = APIRouter()
 
@@ -17,7 +19,7 @@ def create_thread(
     current_user: User = Depends(deps.get_current_internal_user),
 ):
     db_obj = ThreadModel(
-        **thread_in.model_dump(), 
+        **thread_in.model_dump(),
         tenant_id=current_user.tenant_id
     )
     db.add(db_obj)
@@ -25,7 +27,7 @@ def create_thread(
     db.refresh(db_obj)
     return db_obj
 
-@router.get("/", response_model=List[CommunicationThread])
+@router.get("/", response_model=list[CommunicationThread])
 def get_threads(
     db: Session = Depends(deps.get_db),
     skip: int = 0,

@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
-from app.api.deps import get_db, get_current_active_user
+from app.api.deps import get_current_active_user, get_db
 from app.core import security
 from app.core.config import settings
 from app.models.client import Client

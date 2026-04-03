@@ -1,7 +1,8 @@
 import os
 from time import perf_counter
-from typing import Dict, Any
+from typing import Any
 
+from litellm import completion
 from sqlalchemy.orm import Session
 
 from app.core.alerts import emit_operational_alert
@@ -11,11 +12,10 @@ from app.db.session import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.process import Process
 from app.models.task import Task, TaskStatus
-from litellm import completion
 
 logger = get_logger(__name__)
 
-def generate_weekly_summary(tenant_id: int, process_id: int) -> Dict[str, Any]:
+def generate_weekly_summary(tenant_id: int, process_id: int) -> dict[str, Any]:
     db: Session = SessionLocal()
     started_at = perf_counter()
     try:
@@ -86,7 +86,7 @@ def generate_weekly_summary(tenant_id: int, process_id: int) -> Dict[str, Any]:
         )
         db.add(audit)
         db.commit()
-        
+
         logger.info(f"✨ Resumo de IA gerado para Processo #{process_id}")
         record_ai_summary("success", perf_counter() - started_at)
         db.close()

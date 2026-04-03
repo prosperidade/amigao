@@ -1,21 +1,36 @@
-from contextlib import asynccontextmanager
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.api.middleware import RequestContextMiddleware
+from app.api.v1 import (
+    ai,
+    auth,
+    checklists,
+    clients,
+    contracts,
+    dashboard,
+    documents,
+    dossier,
+    intake,
+    processes,
+    properties,
+    proposals,
+    tasks,
+    threads,
+    workflows,
+)
+from app.api.websockets import manager as websocket_manager
+from app.api.websockets import router as websocket_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.metrics import metrics_response
 from app.core.security import warm_up_security
-from app.api.v1 import auth, clients, processes, documents, properties, tasks, threads, intake, checklists, workflows, dossier, proposals, contracts, ai, dashboard
-from app.api.websockets import manager as websocket_manager
-from app.api.websockets import router as websocket_router
-from app.api.middleware import RequestContextMiddleware
 from app.db.session import SessionLocal
 from app.services.storage import get_storage_service
-
 
 logger = logging.getLogger(__name__)
 

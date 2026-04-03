@@ -30,11 +30,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Interceptor para capturar 401 (Não Autorizado) e limpar o state logando out automaticamente
+// Interceptor para capturar 401/403 e limpar o state logando out automaticamente
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
       useAuthStore.getState().logout();
       window.location.href = '/login';
     }

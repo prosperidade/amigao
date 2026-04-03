@@ -1,14 +1,10 @@
 """
-Document Extractor — Sprint 5 (Wave 2)
+Document Extractor — Sprint 5 (Wave 2) + Sprint IA-1
 
-Extrai campos estruturados de documentos ambientais/fundiários via LLM.
-Suporta: matrícula, CAR, CCIR, auto de infração, outorga, licença.
+Extrai campos estruturados de documentos ambientais/fundiarios via LLM.
+Suporta: matricula, CAR, CCIR, auto de infracao, outorga, licenca.
 
-Workflow:
-  1. Recebe texto do documento (via OCR futuro ou paste manual)
-  2. Envia ao LLM com prompt específico por tipo de documento
-  3. Retorna dict com campos extraídos + confiança por campo
-  4. Persiste AIJob para auditoria e custo
+Prompts carregados do banco via prompt_service (com fallback hardcoded).
 """
 
 from __future__ import annotations
@@ -23,17 +19,17 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Prompts por tipo de documento
+# Fallback hardcoded (usado quando DB nao retorna prompt)
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT_EXTRACTOR = """Você é um especialista em documentos fundiários e ambientais brasileiros.
-Extraia os campos solicitados do texto do documento e retorne APENAS um JSON válido.
-Para campos não encontrados, use null.
-Inclua um campo "confidence" por campo extraído: "high" | "medium" | "low".
+_FALLBACK_SYSTEM_PROMPT = """Voce e um especialista em documentos fundiarios e ambientais brasileiros.
+Extraia os campos solicitados do texto do documento e retorne APENAS um JSON valido.
+Para campos nao encontrados, use null.
+Inclua um campo "confidence" por campo extraido: "high" | "medium" | "low".
 """
 
-_DOC_PROMPTS: dict[str, str] = {
-    "matricula": """Extraia do texto desta matrícula de imóvel:
+_FALLBACK_DOC_PROMPTS: dict[str, str] = {
+    "matricula": """Extraia do texto desta matricula de imovel:
 {
   "numero_matricula": null,
   "cartorio": null,
@@ -70,7 +66,7 @@ TEXTO DO DOCUMENTO:
 TEXTO DO DOCUMENTO:
 {text}""",
 
-    "ccir": """Extraia do texto deste CCIR (Certificado de Cadastro de Imóvel Rural):
+    "ccir": """Extraia do texto deste CCIR (Certificado de Cadastro de Imovel Rural):
 {
   "numero_ccir": null,
   "nirf": null,
@@ -87,7 +83,7 @@ TEXTO DO DOCUMENTO:
 TEXTO DO DOCUMENTO:
 {text}""",
 
-    "auto_infracao": """Extraia do texto deste auto de infração ambiental:
+    "auto_infracao": """Extraia do texto deste auto de infracao ambiental:
 {
   "numero_auto": null,
   "orgao_autuante": null,
@@ -106,7 +102,7 @@ TEXTO DO DOCUMENTO:
 TEXTO DO DOCUMENTO:
 {text}""",
 
-    "licenca": """Extraia do texto desta licença ambiental:
+    "licenca": """Extraia do texto desta licenca ambiental:
 {
   "numero_licenca": null,
   "tipo_licenca": null,
@@ -125,14 +121,27 @@ TEXTO DO DOCUMENTO:
 {text}""",
 }
 
-_DEFAULT_PROMPT = """Extraia os principais campos identificáveis deste documento ambiental/fundiário.
+_FALLBACK_DEFAULT_PROMPT = """Extraia os principais campos identificaveis deste documento ambiental/fundiario.
 Retorne um JSON com os campos encontrados e um campo "confidence" por campo.
 TEXTO DO DOCUMENTO:
 {text}"""
 
 
+def _load_prompt(slug: str, db_session=None, tenant_id: Optional[int] = None) -> Optional[str]:
+    """Tenta carregar prompt do banco. Retorna None se indisponivel."""
+    if db_session is None:
+        return None
+    try:
+        from app.services.prompt_service import get_active_prompt  # noqa: PLC0415
+        tpl = get_active_prompt(slug, db_session, tenant_id=tenant_id)
+        return tpl.content if tpl else None
+    except Exception as exc:
+        logger.debug("document_extractor: falha ao carregar prompt '%s' do banco: %s", slug, exc)
+        return None
+
+
 # ---------------------------------------------------------------------------
-# Função principal
+# Funcao principal
 # ---------------------------------------------------------------------------
 
 def extract_document_fields(
@@ -142,19 +151,13 @@ def extract_document_fields(
     document_id: Optional[int] = None,
     tenant_id: Optional[int] = None,
     save_job: bool = True,
+    db_session=None,
 ) -> tuple[dict, Optional[int]]:
     """
     Extrai campos estruturados de um documento via LLM.
 
-    Parâmetros:
-        text        : texto do documento (OCR ou digitado)
-        doc_type    : tipo do documento (matricula, car, ccir, auto_infracao, licenca, ...)
-        document_id : ID do documento no banco para vincular o job
-        tenant_id   : tenant para auditoria de custo
-        save_job    : se deve persistir o AIJob no banco
-
-    Retorna (campos_extraídos, ai_job_id | None).
-    Retorna ({}, None) se IA não estiver configurada.
+    Retorna (campos_extraidos, ai_job_id | None).
+    Retorna ({}, None) se IA nao estiver configurada.
     """
     if not settings.ai_configured:
         logger.info("document_extractor: AI desabilitada, retornando vazio")
@@ -163,13 +166,24 @@ def extract_document_fields(
     if not text or not text.strip():
         return {}, None
 
-    from app.core.ai_gateway import complete, AIGatewayError  # noqa: PLC0415
+    from app.core.ai_gateway import AIGatewayError, complete  # noqa: PLC0415
 
-    prompt_template = _DOC_PROMPTS.get(doc_type, _DEFAULT_PROMPT)
-    prompt = prompt_template.format(text=text[:3000])  # trunca para controle de custo
+    # Carrega prompts do banco com fallback hardcoded
+    system_prompt = (
+        _load_prompt("extract_document_system", db_session, tenant_id)
+        or _FALLBACK_SYSTEM_PROMPT
+    )
+
+    db_user_prompt = _load_prompt(f"extract_{doc_type}", db_session, tenant_id)
+    if db_user_prompt is not None:
+        prompt_template = db_user_prompt
+    else:
+        prompt_template = _FALLBACK_DOC_PROMPTS.get(doc_type, _FALLBACK_DEFAULT_PROMPT)
+
+    prompt = prompt_template.replace("{text}", text[:3000])
 
     try:
-        response = complete(prompt, system=_SYSTEM_PROMPT_EXTRACTOR)
+        response = complete(prompt, system=system_prompt)
         parsed = _parse_json(response.content)
 
         if parsed is None:
@@ -178,13 +192,23 @@ def extract_document_fields(
 
         ai_job_id = None
         if save_job and tenant_id:
-            ai_job_id = _persist_job(
+            from app.models.ai_job import AIJobType  # noqa: PLC0415
+            from app.services.ai_job_persistence import persist_ai_job  # noqa: PLC0415
+
+            ai_job_id = persist_ai_job(
                 tenant_id=tenant_id,
-                document_id=document_id,
-                doc_type=doc_type,
-                input_text=text[:500],
+                job_type=AIJobType.extract_document,
+                entity_type="document",
+                entity_id=document_id,
+                input_payload={"doc_type": doc_type, "text_preview": text[:500]},
                 result=parsed,
-                response=response,
+                raw_output=response.content,
+                model_used=response.model_used,
+                provider=response.provider,
+                tokens_in=response.tokens_in,
+                tokens_out=response.tokens_out,
+                cost_usd=response.cost_usd,
+                duration_ms=response.duration_ms,
             )
 
         logger.info(
@@ -221,50 +245,5 @@ def _parse_json(content: str) -> Optional[dict]:
     return None
 
 
-def _persist_job(
-    *,
-    tenant_id: int,
-    document_id: Optional[int],
-    doc_type: str,
-    input_text: str,
-    result: dict,
-    response,
-) -> Optional[int]:
-    try:
-        from datetime import datetime, timezone  # noqa: PLC0415
-        from app.db.session import SessionLocal  # noqa: PLC0415
-        from app.models.ai_job import AIJob, AIJobStatus, AIJobType  # noqa: PLC0415
-
-        db = SessionLocal()
-        try:
-            job = AIJob(
-                tenant_id=tenant_id,
-                entity_type="document",
-                entity_id=document_id,
-                job_type=AIJobType.extract_document,
-                status=AIJobStatus.completed,
-                model_used=response.model_used,
-                provider=response.provider,
-                tokens_in=response.tokens_in,
-                tokens_out=response.tokens_out,
-                cost_usd=response.cost_usd,
-                duration_ms=response.duration_ms,
-                input_payload={"doc_type": doc_type, "text_preview": input_text},
-                result=result,
-                raw_output=response.content,
-                started_at=datetime.now(timezone.utc),
-                finished_at=datetime.now(timezone.utc),
-            )
-            db.add(job)
-            db.commit()
-            db.refresh(job)
-            return job.id
-        finally:
-            db.close()
-    except Exception as exc:
-        logger.warning("document_extractor: falha ao persistir AIJob: %s", exc)
-        return None
-
-
 def supported_doc_types() -> list[str]:
-    return list(_DOC_PROMPTS.keys())
+    return list(_FALLBACK_DOC_PROMPTS.keys())

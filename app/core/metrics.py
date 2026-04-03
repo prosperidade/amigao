@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from threading import Lock
 from typing import Iterable, Sequence
 
+import redis
 from fastapi import Request
 from fastapi.responses import PlainTextResponse
-import redis
 
 from app.core.config import settings
-
 
 PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
@@ -28,7 +27,7 @@ def _format_labels(label_names: Sequence[str], label_values: Sequence[object]) -
 
 
 class _BoundCounter:
-    def __init__(self, metric: "CounterMetric", label_values: tuple[object, ...]):
+    def __init__(self, metric: CounterMetric, label_values: tuple[object, ...]):
         self.metric = metric
         self.label_values = label_values
 
@@ -37,7 +36,7 @@ class _BoundCounter:
 
 
 class _BoundGauge:
-    def __init__(self, metric: "GaugeMetric", label_values: tuple[object, ...]):
+    def __init__(self, metric: GaugeMetric, label_values: tuple[object, ...]):
         self.metric = metric
         self.label_values = label_values
 
@@ -52,7 +51,7 @@ class _BoundGauge:
 
 
 class _BoundHistogram:
-    def __init__(self, metric: "HistogramMetric", label_values: tuple[object, ...]):
+    def __init__(self, metric: HistogramMetric, label_values: tuple[object, ...]):
         self.metric = metric
         self.label_values = label_values
 

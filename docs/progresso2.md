@@ -217,4 +217,110 @@ docs/
 - [ ] Parametrização de segredos reais de produção (`SECRET_KEY`, SMTP e domínios finais do portal/API).
 
 ---
-*Documento criado em 27/03/2026 e atualizado em 01/04/2026 — Status: Fase 3 (Portal do Cliente) funcional, com recorte de segurança por cliente validado, notificações reais entregues, PDF homologado, stack containerizada e limpeza técnica concluída para a próxima homologação integrada.*
+
+### Sessao — Auditoria Completa + Plano Mestre de Correcoes (03/04/2026)
+
+Realizada auditoria profunda da plataforma com 5 agentes especializados (IA, Frontend, Arquitetura, Backend, Fullstack). Gerado `docs/PLANO_MESTRE_CORRECOES.md` com roadmap de 12 semanas.
+
+| Item | Status |
+|------|--------|
+| Auditoria completa registrada em `docs/auditoria1.md` e `docs/auditoria2.md` | Concluido |
+| Plano mestre com 7 secoes e roadmap de 12 sprints | Concluido |
+| Diagnostico de 6 agentes de IA a implementar | Concluido |
+
+### Sessao — Sprint P0 Frontend MVP1 (03/04/2026)
+
+Todas as correcoes emergenciais do frontend executadas. **Build verde em ambos os frontends.**
+
+| Item | Status |
+|------|--------|
+| Fix interceptor 403 no frontend (usuario preso com token invalido) | Concluido |
+| Remover import `axios` nao usado em `DocumentUpload.tsx` | Concluido |
+| Remover import `useMutation` nao usado em `DocumentUpload.tsx` e `DocumentUploadZone.tsx` | Concluido |
+| Remover `useQueryClient()` orfao em `ProcessDetail.tsx` | Concluido |
+| Remover import `useQueryClient` nao usado em `ProcessDetail.tsx` | Concluido |
+| Corrigir typo "Caregando" -> "Carregando" em `Clients/index.tsx` | Concluido |
+| Tipar `icon: any` -> `typeof FileText` em `ProcessCommercial.tsx` | Concluido |
+| Tipar `query: any` -> inferencia automatica em `AIPanel.tsx` | Concluido |
+| Remover import `AlertCircle` nao usado em `Processes/index.tsx` | Concluido |
+| Remover import `FileText` nao usado em `Properties/index.tsx` | Concluido |
+| Fix `mutationFn` retorno inconsistente (void vs AxiosResponse) em `Processes/index.tsx` | Concluido |
+| Fix `boolean` vs `void` em `generateMutation` de `ProcessChecklist.tsx` | Concluido |
+| Google Fonts -> fonte local (Inter self-hosted via `@fontsource-variable/inter`) no client-portal | Concluido |
+| `axios.put` direto -> `fetch` no upload do client-portal `process/[id]/page.tsx` | Concluido |
+| Remover import `axios` do client-portal `process/[id]/page.tsx` | Concluido |
+| Criacao do `CLAUDE.md` raiz com regras e padroes do projeto | Concluido |
+| Atualizacao do `docs/RunbookOperacional.md` com estado pos-sprint P0 | Concluido |
+
+### Arquivos modificados (Sprint P0 Frontend)
+
+```typescript
+// frontend/src/lib/api.ts [MODIFICADO]
+// - Interceptor de response agora trata 401 E 403 (antes so 401)
+// - Usuario com token invalido/expirado e redirecionado ao login
+
+// frontend/src/components/DocumentUpload.tsx [MODIFICADO]
+// - Removidos imports nao usados: axios, useMutation, File, X
+
+// frontend/src/components/DocumentUploadZone.tsx [MODIFICADO]
+// - Removido import nao usado: useMutation
+
+// frontend/src/pages/Processes/ProcessDetail.tsx [MODIFICADO]
+// - Removida chamada orfao useQueryClient()
+// - Removido import useQueryClient
+
+// frontend/src/pages/Processes/index.tsx [MODIFICADO]
+// - Removido import nao usado: AlertCircle
+// - toggleTaskMutation agora usa async/await (retorno uniforme void)
+
+// frontend/src/pages/Processes/ProcessChecklist.tsx [MODIFICADO]
+// - generateMutation.mutationFn tipada com boolean explicito
+
+// frontend/src/pages/Processes/ProcessCommercial.tsx [MODIFICADO]
+// - icon: any -> icon: typeof FileText
+
+// frontend/src/pages/AI/AIPanel.tsx [MODIFICADO]
+// - query: any -> inferencia automatica (removido type annotation)
+
+// frontend/src/pages/Clients/index.tsx [MODIFICADO]
+// - Corrigido typo "Caregando" -> "Carregando"
+
+// frontend/src/pages/Properties/index.tsx [MODIFICADO]
+// - Removido import nao usado: FileText
+```
+
+```typescript
+// client-portal/src/app/layout.tsx [MODIFICADO]
+// - Inter de next/font/google -> next/font/local com woff2 em public/fonts/
+// - Build agora funciona offline (sem dependencia do Google Fonts)
+
+// client-portal/src/app/dashboard/process/[id]/page.tsx [MODIFICADO]
+// - Upload MinIO: axios.put -> fetch (respeita interceptor, sem bypass de auth)
+// - Removido import axios
+```
+
+```
+// client-portal/public/fonts/Inter-Variable.woff2 [NOVO]
+// client-portal/public/fonts/Inter-Variable-LatinExt.woff2 [NOVO]
+// - Fonte Inter self-hosted para build offline
+```
+
+```markdown
+<!-- CLAUDE.md [NOVO] -->
+<!-- Regras, padroes e convencoes do projeto para Claude Code -->
+
+<!-- docs/PLANO_MESTRE_CORRECOES.md [NOVO] -->
+<!-- Plano mestre com diagnostico completo e roadmap de 12 semanas -->
+```
+
+### Validacao executada nesta sessao
+
+```
+npx tsc --noEmit (frontend)       -> 0 errors
+npm run build (frontend)          -> built in 17.34s (498 KB / 139 KB gzip)
+npx tsc --noEmit (client-portal)  -> 0 errors
+npm run build (client-portal)     -> Compiled successfully in 11.9s (6 routes)
+```
+
+---
+*Documento criado em 27/03/2026 e atualizado em 03/04/2026 — Status: Sprint P0 Frontend concluido. Ambos os frontends com build verde. CLAUDE.md criado. Plano mestre de 12 semanas gerado.*

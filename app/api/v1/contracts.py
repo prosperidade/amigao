@@ -8,23 +8,23 @@ Contracts API — Sprint 4
   GET  /contracts/{id}/download              — URL de download do PDF
 """
 
-from datetime import datetime, timezone
-from typing import Any, Optional
 import logging
+from datetime import UTC, datetime
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.user import User
-from app.models.contract import Contract, ContractStatus
-from app.models.proposal import Proposal
+from app.models.contract import Contract
 from app.models.process import Process
+from app.models.proposal import Proposal
+from app.models.user import User
 from app.services.contract_generator import (
     fill_contract_template,
-    render_pdf,
     find_template_for_demand,
+    render_pdf,
 )
 from app.services.storage import get_storage_service
 
@@ -226,7 +226,7 @@ def generate_pdf(
     # Upload no MinIO (não-fatal: salva o conteúdo mesmo se o storage estiver indisponível)
     storage_warning: Optional[str] = None
     if pdf_bytes:
-        filename = f"contrato_{contract_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.pdf"
+        filename = f"contrato_{contract_id}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.pdf"
         try:
             storage = get_storage_service()
             result = storage.upload_bytes(

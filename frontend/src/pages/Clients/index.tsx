@@ -38,28 +38,30 @@ export default function ClientsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (newClient: any) => api.post('/clients/', newClient),
+    mutationFn: (newClient: typeof formData) => api.post('/clients/', newClient),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setIsModalOpen(false);
       resetForm();
       setFormError('');
     },
-    onError: (error: any) => {
-      setFormError(error.response?.data?.detail || 'Não foi possível criar o cliente.');
+    onError: (error: unknown) => {
+      const axiosErr = error as { response?: { data?: { detail?: string } } };
+      setFormError(axiosErr.response?.data?.detail || 'Não foi possível criar o cliente.');
     }
   });
 
   const updateMutation = useMutation({
-    mutationFn: (client: {id: number, data: any}) => api.put(`/clients/${client.id}`, client.data),
+    mutationFn: (client: {id: number, data: typeof formData}) => api.put(`/clients/${client.id}`, client.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setIsModalOpen(false);
       resetForm();
       setFormError('');
     },
-    onError: (error: any) => {
-      setFormError(error.response?.data?.detail || 'Não foi possível salvar as alterações do cliente.');
+    onError: (error: unknown) => {
+      const axiosErr = error as { response?: { data?: { detail?: string } } };
+      setFormError(axiosErr.response?.data?.detail || 'Não foi possível salvar as alterações do cliente.');
     }
   });
 
@@ -147,7 +149,7 @@ export default function ClientsPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">Caregando clientes...</td>
+                  <td colSpan={5} className="p-8 text-center text-gray-500">Carregando clientes...</td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>

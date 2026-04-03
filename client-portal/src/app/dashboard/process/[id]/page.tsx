@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ArrowLeft, CheckCircle2, Circle, Clock, Download, FileText, Loader2, PlayCircle, MapPin, Upload } from 'lucide-react';
-import axios from 'axios';
 import clsx from 'clsx';
 import { getProcessStatusClass, getProcessStatusLabel } from '@/lib/process-status';
 
@@ -96,12 +95,13 @@ export default function ProcessDetailsClient() {
       
       const { upload_url, storage_key } = resParams.data;
 
-      // 2. Faz Upload Direto Pro MinIO
-      await axios.put(upload_url, file, {
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream'
-        }
+      // 2. Faz Upload Direto Pro MinIO (fetch para evitar interceptor de auth)
+      const uploadRes = await fetch(upload_url, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
       });
+      if (!uploadRes.ok) throw new Error('Falha no upload para o Storage');
 
       // 3. Confirma pro Backend
       await api.post('/documents/confirm-upload', {

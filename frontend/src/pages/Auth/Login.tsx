@@ -51,8 +51,9 @@ export default function Login() {
       // Redireciona pro App
       navigate('/dashboard');
       
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Erro ao realizar login.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: string } }; message?: string };
+      setError(axiosErr.response?.data?.detail || axiosErr.message || 'Erro ao realizar login.');
     } finally {
       setLoading(false);
     }

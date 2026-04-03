@@ -2,7 +2,6 @@ import secrets
 from contextvars import ContextVar
 from typing import Optional
 
-
 trace_id_ctx: ContextVar[str] = ContextVar("trace_id", default="-")
 span_id_ctx: ContextVar[str] = ContextVar("span_id", default="-")
 

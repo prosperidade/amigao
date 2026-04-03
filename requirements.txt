@@ -18,3 +18,7 @@ fpdf2
 litellm
 httpx
 pytest
+pytest-cov
+testcontainers[postgres]
+ruff
+mypy

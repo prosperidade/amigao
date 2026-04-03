@@ -1,9 +1,11 @@
-from time import perf_counter
-import uuid
 import logging
+import uuid
+from time import perf_counter
+
 from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+
 from app.core.alerts import emit_operational_alert
 from app.core.config import settings
 from app.core.logging import request_id_ctx, tenant_id_ctx, user_id_ctx

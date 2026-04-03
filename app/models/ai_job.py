@@ -8,14 +8,12 @@ Usado para auditoria, controle de custo por tenant e billing futuro.
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import (
-    Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
-)
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 
 from app.models.base import Base
+from app.models.types import PortableJSON
 
 
 class AIJobStatus(str, enum.Enum):
@@ -55,11 +53,11 @@ class AIJob(Base):
     duration_ms = Column(Integer, nullable=True)
 
     # Payload
-    input_payload = Column(JSONB, nullable=True)   # prompt / dados de entrada
-    result = Column(JSONB, nullable=True)           # saída estruturada
+    input_payload = Column(PortableJSON, nullable=True)   # prompt / dados de entrada
+    result = Column(PortableJSON, nullable=True)           # saída estruturada
     raw_output = Column(Text, nullable=True)        # texto bruto retornado pelo LLM
     error = Column(Text, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)

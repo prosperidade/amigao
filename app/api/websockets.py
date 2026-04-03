@@ -1,15 +1,16 @@
 import asyncio
 import json
+import logging
+from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict, List, Optional
 import redis.asyncio as aioredis
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from jose import JWTError, jwt
+
 from app.core.alerts import emit_operational_alert
 from app.core.config import settings
 from app.core.metrics import update_websocket_connections
 from app.schemas.token import TokenPayload
-from jose import jwt, JWTError
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ router = APIRouter()
 class ConnectionManager:
     def __init__(self):
         # Maps scoped channel key -> [WebSockets]
-        self.active_connections: Dict[str, List[WebSocket]] = {}
+        self.active_connections: dict[str, list[WebSocket]] = {}
         self.redis: aioredis.Redis | None = None
         self.pubsub: aioredis.client.PubSub | None = None
         self.listener_task: asyncio.Task | None = None
@@ -109,7 +110,7 @@ class ConnectionManager:
     ):
         if not self.redis:
             await self.connect_redis()
-        
+
         message = {
             "tenant_id": tenant_id,
             "client_id": client_id,
@@ -129,7 +130,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         )
         token_data = TokenPayload(**payload)
         user_id = int(token_data.sub)
-        
+
         # We should ideally hit the DB to get the tenant_id, but the token payload can include it eventually
         # For MVP, we extract tenant directly from DB (can't use Depends in WebSockets easily without extra auth layers)
         from app.db.session import SessionLocal
@@ -137,7 +138,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         db = SessionLocal()
         user = db.query(User).filter(User.id == user_id).first()
         db.close()
-        
+
         if not user:
             await websocket.close(code=1008)
             return
@@ -148,7 +149,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             await websocket.close(code=1008)
             return
         await manager.connect(websocket, tenant_id, client_id)
-        
+
         try:
             while True:
                 # Wait for messages (can be used for pings)
@@ -156,7 +157,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 await websocket.send_text(f"Message text was: {data}")
         except WebSocketDisconnect:
             manager.disconnect(websocket, tenant_id, client_id)
-            
+
     except JWTError:
         emit_operational_alert(
             category="websocket_auth",

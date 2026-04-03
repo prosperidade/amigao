@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 import enum
+
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from app.models.base import Base
-from sqlalchemy import Table
 
 task_dependencies = Table(
     "task_dependencies",
@@ -60,10 +61,10 @@ class Task(Base):
 
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    
+
     status = Column(Enum(TaskStatus), default=TaskStatus.a_fazer, nullable=False)
     priority = Column(Enum(TaskPriority), default=TaskPriority.medium, nullable=False)
-    
+
     assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 

@@ -1,8 +1,7 @@
 import { useState, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import axios from 'axios';
-import { UploadCloud, File, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface DocumentUploadProps {
   processId: number;
@@ -67,10 +66,10 @@ export default function DocumentUpload({ processId }: DocumentUploadProps) {
       
       setTimeout(() => setUploadStatus(null), 3000); // clear success msg
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setUploadStatus('error');
-      setErrorMessage(err.message || 'Erro desconhecido ao enviar arquivo');
+      setErrorMessage(err instanceof Error ? err.message : 'Erro desconhecido ao enviar arquivo');
     }
     
     // reset input

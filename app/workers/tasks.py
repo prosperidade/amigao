@@ -62,7 +62,7 @@ def generate_pdf_report(self, tenant_id: int, process_id: int):
     """Gera um relatório de visita em PDF para o processo."""
     from app.workers.pdf_generator import generate_process_visit_report
     logger.info(f"⚙️ Iniciando geração de PDF de visita para Processo #{process_id} (Tenant {tenant_id})")
-    
+
     result = generate_process_visit_report(tenant_id=tenant_id, process_id=process_id)
     return result
 
@@ -274,7 +274,7 @@ def notify_document_uploaded(
 def send_email_notification(self, email_to: str, subject: str, html_content: str):
     """Envia um email assincronamente pelo serviço SMTP."""
     logger.info(f"✉️ Iniciando disparo de email para {email_to}")
-    
+
     service = EmailService()
     try:
         success = service.send_email(email_to=email_to, subject=subject, html_content=html_content)

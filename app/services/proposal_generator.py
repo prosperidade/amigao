@@ -10,15 +10,15 @@ Implementação: regras estáticas (sem LLM — Wave 2).
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Optional
+
+from dataclasses import dataclass
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.process import Process
 from app.models.checklist_template import ProcessChecklist
+from app.models.process import Process
 from app.models.task import Task
-
 
 # ---------------------------------------------------------------------------
 # Tabela de preços base por tipo de demanda (valores em R$)
@@ -155,7 +155,7 @@ class ProposalDraft:
     title: str
     demand_type: Optional[str]
     complexity: str              # "baixa" | "media" | "alta"
-    scope_items: List[dict]
+    scope_items: list[dict]
     suggested_value_min: float
     suggested_value_max: float
     suggested_value: float       # ponto médio arredondado

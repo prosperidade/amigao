@@ -92,7 +92,7 @@ export default function AIPanel({ processId, processDemandType, processDescripti
       api.get('/ai/jobs', {
         params: { entity_type: 'process', entity_id: processId },
       }).then(r => r.data),
-    refetchInterval: (query: any) => {
+    refetchInterval: (query) => {
       const d = query?.state?.data as AIJob[] | undefined;
       const hasRunning = Array.isArray(d) && d.some(j => j.status === 'running' || j.status === 'pending');
       return hasRunning ? 3000 : false;

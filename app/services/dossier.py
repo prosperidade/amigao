@@ -7,18 +7,18 @@ Lógica pura (sem dependência de request/response HTTP).
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+
+from dataclasses import dataclass
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.process import Process
-from app.models.client import Client
-from app.models.property import Property
-from app.models.document import Document
 from app.models.checklist_template import ProcessChecklist
-from app.models.task import Task, TaskStatus
-
+from app.models.client import Client
+from app.models.document import Document
+from app.models.process import Process
+from app.models.property import Property
+from app.models.task import Task
 
 # ---------------------------------------------------------------------------
 # Estruturas de retorno
@@ -36,14 +36,14 @@ class Inconsistency:
 @dataclass
 class ProcessDossier:
     process_id: int
-    process: Dict[str, Any]
-    client: Optional[Dict[str, Any]]
-    property: Optional[Dict[str, Any]]
-    documents: List[Dict[str, Any]]
-    checklist_summary: Optional[Dict[str, Any]]
-    tasks_summary: Dict[str, Any]
-    previous_processes: List[Dict[str, Any]]
-    inconsistencies: List[Inconsistency]
+    process: dict[str, Any]
+    client: Optional[dict[str, Any]]
+    property: Optional[dict[str, Any]]
+    documents: list[dict[str, Any]]
+    checklist_summary: Optional[dict[str, Any]]
+    tasks_summary: dict[str, Any]
+    previous_processes: list[dict[str, Any]]
+    inconsistencies: list[Inconsistency]
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
         )
 
     # Cliente
-    client_data: Optional[Dict[str, Any]] = None
+    client_data: Optional[dict[str, Any]] = None
     if process.client_id:
         client = db.query(Client).filter(Client.id == process.client_id).first()
         if client:
@@ -87,7 +87,7 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
             }
 
     # Imóvel
-    property_data: Optional[Dict[str, Any]] = None
+    property_data: Optional[dict[str, Any]] = None
     if process.property_id:
         prop = db.query(Property).filter(Property.id == process.property_id).first()
         if prop:
@@ -133,7 +133,7 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
         .filter(ProcessChecklist.process_id == process_id)
         .first()
     )
-    checklist_summary: Optional[Dict[str, Any]] = None
+    checklist_summary: Optional[dict[str, Any]] = None
     if checklist:
         items = checklist.items or []
         received = sum(1 for i in items if i.get("status") == "received")
@@ -154,7 +154,7 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
         .filter(Task.process_id == process_id, Task.tenant_id == tenant_id)
         .all()
     )
-    tasks_by_status: Dict[str, int] = {}
+    tasks_by_status: dict[str, int] = {}
     for t in tasks:
         key = t.status.value
         tasks_by_status[key] = tasks_by_status.get(key, 0) + 1
@@ -228,14 +228,14 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
 def validate_technical_consistency(
     process: Process,
     prop: Optional[Property],
-    documents: List[Document],
+    documents: list[Document],
     checklist: Optional[ProcessChecklist],
-) -> List[Inconsistency]:
+) -> list[Inconsistency]:
     """
     Aplica regras de consistência técnica por tipo de demanda.
     Retorna lista de inconsistências detectadas.
     """
-    issues: List[Inconsistency] = []
+    issues: list[Inconsistency] = []
     demand = process.demand_type.value if process.demand_type else None
     doc_types = {d.document_type for d in documents if d.document_type}
 

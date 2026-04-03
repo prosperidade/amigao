@@ -7,16 +7,16 @@ Lógica pura (sem dependência de request/response HTTP).
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.workflow_template import WorkflowTemplate
-from app.models.task import Task, TaskStatus, TaskPriority
 from app.models.process import Process
-
+from app.models.task import Task, TaskPriority, TaskStatus
+from app.models.workflow_template import WorkflowTemplate
 
 # ---------------------------------------------------------------------------
 # Estruturas de retorno
@@ -29,7 +29,7 @@ class WorkflowStep:
     description: str
     task_type: str
     estimated_days: int
-    depends_on: List[int]
+    depends_on: list[int]
     task_id: Optional[int]
     task_status: Optional[str]
     completed_at: Optional[datetime]
@@ -45,8 +45,8 @@ class WorkflowStatus:
     total_steps: int
     completed_steps: int
     current_step: Optional[WorkflowStep]
-    next_steps: List[WorkflowStep]
-    all_steps: List[WorkflowStep]
+    next_steps: list[WorkflowStep]
+    all_steps: list[WorkflowStep]
     completion_pct: float
     is_applied: bool  # se já existe ao menos uma tarefa de workflow neste processo
 
@@ -61,7 +61,7 @@ def apply_workflow_template(
     tenant_id: int,
     demand_type: Optional[str],
     created_by_user_id: int,
-) -> List[Task]:
+) -> list[Task]:
     """
     Aplica o template de trilha regulatória ao processo, criando tarefas
     na ordem correta. As tarefas são criadas em status 'backlog'.
@@ -72,11 +72,11 @@ def apply_workflow_template(
         return []
 
     steps = template.steps or []
-    created_tasks: List[Task] = []
+    created_tasks: list[Task] = []
     order_to_task_id: dict[int, int] = {}
 
     # Calcular data de início estimada (hoje)
-    base_date = datetime.now(timezone.utc)
+    base_date = datetime.now(UTC)
     accumulated_days = 0
 
     for step in sorted(steps, key=lambda s: s["order"]):
@@ -131,7 +131,7 @@ def get_workflow_status(
     # Montar mapa título → task para cruzamento
     title_to_task: dict[str, Task] = {t.title: t for t in tasks}
 
-    steps_data: List[WorkflowStep] = []
+    steps_data: list[WorkflowStep] = []
     template_id = None
     template_name = None
 
@@ -173,7 +173,7 @@ def get_workflow_status(
     completion_pct = round(completed / total * 100, 1) if total > 0 else 0.0
 
     current_step: Optional[WorkflowStep] = None
-    next_steps: List[WorkflowStep] = []
+    next_steps: list[WorkflowStep] = []
     for step in steps_data:
         if step.task_status not in ("concluida", "cancelada", None):
             if current_step is None:
@@ -200,7 +200,7 @@ def get_workflow_status(
     )
 
 
-def list_templates(db: Session, tenant_id: int) -> List[WorkflowTemplate]:
+def list_templates(db: Session, tenant_id: int) -> list[WorkflowTemplate]:
     """Lista todos os templates disponíveis para o tenant (globais + próprios)."""
     return (
         db.query(WorkflowTemplate)
@@ -238,7 +238,7 @@ def _find_template(
     )
 
 
-def _build_task_description(step: dict, depends_on_orders: List[int]) -> str:
+def _build_task_description(step: dict, depends_on_orders: list[int]) -> str:
     desc = step.get("description", "")
     if depends_on_orders:
         dep_str = ", ".join(f"etapa {o}" for o in depends_on_orders)

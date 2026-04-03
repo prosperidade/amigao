@@ -12,8 +12,8 @@ AI Jobs API — Sprint 5
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Optional
 import logging
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
 from app.core.config import settings
-from app.models.ai_job import AIJob, AIJobStatus, AIJobType
+from app.models.ai_job import AIJob
 from app.models.user import User
 
 router = APIRouter(prefix="/ai", tags=["IA"])
@@ -81,7 +81,6 @@ def ai_status(current_user: UserDep) -> dict[str, Any]:
 @router.post("/classify")
 def classify_demand(
     body: ClassifyRequest,
-    db: DbDep,
     current_user: UserDep,
 ) -> dict[str, Any]:
     """
@@ -120,7 +119,6 @@ def classify_demand(
 @router.post("/extract")
 def extract_document(
     body: ExtractRequest,
-    db: DbDep,
     current_user: UserDep,
 ) -> dict[str, Any]:
     """
@@ -163,7 +161,6 @@ def extract_document(
 @router.post("/jobs/classify-async", status_code=202)
 def classify_async(
     body: ClassifyAsyncRequest,
-    db: DbDep,
     current_user: UserDep,
 ) -> dict[str, Any]:
     """Dispara classificação LLM assíncrona via Celery para um processo existente."""
@@ -187,7 +184,6 @@ def classify_async(
 @router.post("/jobs/extract-async", status_code=202)
 def extract_async(
     body: ExtractAsyncRequest,
-    db: DbDep,
     current_user: UserDep,
 ) -> dict[str, Any]:
     """Dispara extração de documento LLM assíncrona via Celery."""

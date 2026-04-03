@@ -6,19 +6,19 @@ e gera PDF usando fpdf2.
 """
 
 from __future__ import annotations
-import io
+
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.models.client import Client
 from app.models.contract import Contract
 from app.models.contract_template import ContractTemplate
-from app.models.proposal import Proposal
 from app.models.process import Process
-from app.models.client import Client
 from app.models.property import Property
+from app.models.proposal import Proposal
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ def fill_contract_template(
             raw = raw.replace(v, "—")
 
     # Data de emissão
-    hoje = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+    hoje = datetime.now(UTC).strftime("%d/%m/%Y")
     raw = raw.replace("{{contrato.data_emissao}}", hoje)
 
     return raw
@@ -164,11 +164,7 @@ def render_pdf(contract: Contract, filled_content: str) -> bytes:
         # posição final do texto, não no LMARGIN, causando w=0 na próxima chamada
         pdf.set_x(pdf.l_margin)
         # Títulos em negrito (linhas em CAPS ou que terminam com ':')
-        if line.isupper() and len(line) > 4:
-            pdf.set_font("Helvetica", style="B", size=10)
-            pdf.cell(content_w, 6, line, new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("Helvetica", size=10)
-        elif line.endswith(":") and len(line) < 60:
+        if line.isupper() and len(line) > 4 or line.endswith(":") and len(line) < 60:
             pdf.set_font("Helvetica", style="B", size=10)
             pdf.cell(content_w, 6, line, new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", size=10)
@@ -187,7 +183,7 @@ def render_pdf(contract: Contract, filled_content: str) -> bytes:
     pdf.set_font("Helvetica", size=8)
     pdf.set_text_color(150, 150, 150)
     footer_text = _latin1_safe(
-        f"Documento gerado em {datetime.now(timezone.utc).strftime('%d/%m/%Y as %H:%M')} UTC - Amigao do Meio Ambiente"
+        f"Documento gerado em {datetime.now(UTC).strftime('%d/%m/%Y as %H:%M')} UTC - Amigao do Meio Ambiente"
     )
     pdf.cell(content_w, 5, footer_text, align="C", new_x="LMARGIN", new_y="NEXT")
 

@@ -6,6 +6,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { CheckCircle2, Circle, Clock, Play, Loader2, AlertCircle } from 'lucide-react';
 
+interface WorkflowStep {
+  order: number;
+  title: string;
+  description?: string;
+  task_type?: string;
+  task_status?: string;
+  estimated_days?: number;
+  due_date?: string;
+}
+
 interface WorkflowTimelineProps {
   processId: number;
 }
@@ -62,7 +72,7 @@ export default function WorkflowTimeline({ processId }: WorkflowTimelineProps) {
 
   if (!ws) return null;
 
-  const allSteps: any[] = ws.all_steps ?? [];
+  const allSteps: WorkflowStep[] = ws.all_steps ?? [];
   const hasTemplate = !!ws.template_name;
   const isApplied = ws.is_applied;
 
@@ -148,7 +158,7 @@ export default function WorkflowTimeline({ processId }: WorkflowTimelineProps) {
         </div>
       ) : (
         <div className="relative pl-6 border-l-2 border-gray-100 dark:border-white/10 space-y-0">
-          {allSteps.map((step: any, idx: number) => {
+          {allSteps.map((step, idx) => {
             const isDone = step.task_status === 'concluida';
             const isActive = step.task_status && step.task_status !== 'concluida' && step.task_status !== 'cancelada';
             const statusCfg = step.task_status ? (STATUS_CONFIG[step.task_status] ?? STATUS_CONFIG.backlog) : STATUS_CONFIG.backlog;
@@ -202,7 +212,7 @@ export default function WorkflowTimeline({ processId }: WorkflowTimelineProps) {
                           {statusCfg.label}
                         </span>
                       )}
-                      {step.estimated_days > 0 && !isDone && (
+                      {(step.estimated_days ?? 0) > 0 && !isDone && (
                         <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-slate-500">
                           <Clock className="w-3 h-3" /> ~{step.estimated_days}d
                         </span>

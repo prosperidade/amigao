@@ -7,11 +7,29 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Plus, FileText, ExternalLink, Send, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 
+interface Proposal {
+  id: number;
+  title: string;
+  status: string;
+  created_at: string;
+  complexity?: string;
+  total_value?: number | null;
+}
+
+interface Contract {
+  id: number;
+  title: string;
+  status: string;
+  created_at: string;
+  proposal_id?: number | null;
+  has_pdf?: boolean;
+}
+
 interface ProcessCommercialProps {
   processId: number;
 }
 
-const PROPOSAL_STATUS: Record<string, { label: string; cls: string; icon: any }> = {
+const PROPOSAL_STATUS: Record<string, { label: string; cls: string; icon: typeof FileText }> = {
   draft:    { label: 'Rascunho',  cls: 'text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-500/10 border-gray-300 dark:border-slate-500/20',       icon: FileText },
   sent:     { label: 'Enviada',   cls: 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20',           icon: Send },
   accepted: { label: 'Aceita',    cls: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20', icon: CheckCircle2 },
@@ -38,7 +56,7 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
     queryKey: ['proposals', processId],
     queryFn: async () => {
       const res = await api.get(`/proposals/?process_id=${processId}`);
-      return res.data as any[];
+      return res.data as Proposal[];
     },
   });
 
@@ -46,7 +64,7 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
     queryKey: ['contracts', processId],
     queryFn: async () => {
       const res = await api.get(`/contracts/?process_id=${processId}`);
-      return res.data as any[];
+      return res.data as Contract[];
     },
   });
 
@@ -90,7 +108,7 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
           </div>
         ) : (
           <div className="space-y-2">
-            {proposals.map((p: any) => {
+            {proposals.map((p) => {
               const cfg = PROPOSAL_STATUS[p.status] ?? PROPOSAL_STATUS.draft;
               const Icon = cfg.icon;
               return (
@@ -137,7 +155,7 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
           </div>
         ) : (
           <div className="space-y-2">
-            {contracts.map((c: any) => {
+            {contracts.map((c) => {
               const cfg = CONTRACT_STATUS[c.status] ?? CONTRACT_STATUS.draft;
               return (
                 <div

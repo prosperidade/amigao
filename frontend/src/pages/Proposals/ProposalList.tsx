@@ -4,9 +4,10 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import type { LucideIcon } from 'lucide-react';
 import { Plus, FileText, CheckCircle2, XCircle, Send, AlertCircle } from 'lucide-react';
 
-const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: any }> = {
+const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: LucideIcon }> = {
   draft:    { label: 'Rascunho',  cls: 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-500/10 border-slate-300 dark:border-slate-500/20', icon: FileText },
   sent:     { label: 'Enviada',   cls: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20', icon: Send },
   accepted: { label: 'Aceita',    cls: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20', icon: CheckCircle2 },
@@ -26,7 +27,7 @@ export default function ProposalList() {
     queryKey: ['proposals'],
     queryFn: async () => {
       const res = await api.get('/proposals/?limit=100');
-      return res.data as any[];
+      return res.data as { id: number; title: string; status: string; process_id?: number; total_value?: number; created_at: string }[];
     },
   });
 
@@ -90,7 +91,7 @@ export default function ProposalList() {
         </div>
       ) : (
         <div className="space-y-2">
-          {proposals.map((p: any) => {
+          {proposals.map((p) => {
             const cfg = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.draft;
             const Icon = cfg.icon;
             return (

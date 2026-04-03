@@ -1,7 +1,6 @@
-import smtplib
-import socket
-from email.message import EmailMessage
 import logging
+import smtplib
+from email.message import EmailMessage
 
 from app.core.alerts import emit_operational_alert
 from app.core.config import settings
@@ -76,7 +75,7 @@ class EmailService:
                     server.ehlo()
                 server.login(self.user, self.password)
             return True, "Conexão SMTP validada com sucesso."
-        except (OSError, smtplib.SMTPException, socket.error) as exc:
+        except (OSError, smtplib.SMTPException) as exc:
             return False, f"Falha na validação SMTP: {exc}"
 
 

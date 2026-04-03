@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Float, Boolean, Text, JSON
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 import enum
+
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from app.models.base import Base
 
 
@@ -68,6 +70,9 @@ VALID_TRANSITIONS = {
     ProcessStatus.cancelado: [ProcessStatus.arquivado],
     ProcessStatus.arquivado: [],
 }
+
+
+TERMINAL_PROCESS_STATUSES = {ProcessStatus.arquivado}
 
 
 def is_valid_transition(from_status: ProcessStatus, to_status: ProcessStatus) -> bool:

@@ -32,14 +32,15 @@ export default function ContractEditor() {
 
   const generatePdfMutation = useMutation({
     mutationFn: () => api.post(`/contracts/${id}/generate-pdf`),
-    onSuccess: (res: any) => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['contract', id] });
       setPdfError('');
-      setPdfWarning(res?.data?.warning ?? '');
+      setPdfWarning((res?.data as Record<string, unknown>)?.warning as string ?? '');
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
       setPdfWarning('');
-      setPdfError(err?.response?.data?.detail ?? 'Erro ao gerar PDF.');
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      setPdfError(axiosErr?.response?.data?.detail ?? 'Erro ao gerar PDF.');
     },
   });
 

@@ -4,9 +4,9 @@ Modelos de Trilha Regulatória — Sprint 3
 WorkflowTemplate  : template de etapas regulatórias por tipo de demanda (global ou por tenant)
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, JSON
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+
 from app.models.base import Base
 
 

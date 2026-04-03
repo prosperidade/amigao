@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Plus, Search, FileText, Clock, AlertCircle, X, CheckCircle2, Circle, Download } from 'lucide-react';
+import { Plus, Search, FileText, Clock, X, CheckCircle2, Circle, Download } from 'lucide-react';
+import { AxiosError } from 'axios';
 import DocumentUpload from '@/components/DocumentUpload';
 
 interface Process {
@@ -12,6 +13,42 @@ interface Process {
   status: string;
   step: number;
   created_at: string;
+}
+
+interface Client {
+  id: number;
+  full_name: string;
+  cpf_cnpj?: string;
+}
+
+interface Task {
+  id: number;
+  title: string;
+  status: string;
+  allowed_transitions?: string[];
+}
+
+interface TimelineEntry {
+  id: number;
+  action: string;
+  details?: string;
+  old_value?: string;
+  new_value?: string;
+  created_at: string;
+}
+
+interface ProcessDocument {
+  id: number;
+  filename: string;
+  file_size_bytes: number;
+  created_at: string;
+}
+
+interface CreateProcessPayload {
+  title: string;
+  description: string;
+  client_id: string;
+  process_type: string;
 }
 
 const COLUMNS = [
@@ -54,12 +91,12 @@ export default function ProcessesPage() {
     queryKey: ['clients'],
     queryFn: async () => {
       const res = await api.get('/clients/');
-      return res.data as any[];
+      return res.data as Client[];
     }
   });
 
   const createMutation = useMutation({
-    mutationFn: (newProcess: any) => api.post('/processes/', {
+    mutationFn: (newProcess: CreateProcessPayload) => api.post('/processes/', {
       ...newProcess,
       client_id: parseInt(newProcess.client_id)
     }),
@@ -75,7 +112,7 @@ export default function ProcessesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['processes'] });
     },
-    onError: (err: any) => {
+    onError: (err: AxiosError<{ detail?: string }>) => {
       alert(err.response?.data?.detail || 'Erro ao alterar o status do processo. Verifique dependências.');
     }
   });
@@ -84,7 +121,7 @@ export default function ProcessesPage() {
     queryKey: ['tasks', selectedProcess?.id],
     queryFn: async () => {
       const res = await api.get(`/tasks/?process_id=${selectedProcess?.id}`);
-      return res.data as any[];
+      return res.data as Task[];
     },
     enabled: !!selectedProcess,
   });
@@ -93,7 +130,7 @@ export default function ProcessesPage() {
     queryKey: ['timeline', selectedProcess?.id],
     queryFn: async () => {
       const res = await api.get(`/processes/${selectedProcess?.id}/timeline`);
-      return res.data as any[];
+      return res.data as TimelineEntry[];
     },
     enabled: !!selectedProcess,
   });
@@ -102,7 +139,7 @@ export default function ProcessesPage() {
     queryKey: ['documents', selectedProcess?.id],
     queryFn: async () => {
       const res = await api.get(`/documents/?process_id=${selectedProcess?.id}`);
-      return res.data as any[];
+      return res.data as ProcessDocument[];
     },
     enabled: !!selectedProcess,
   });
@@ -117,7 +154,7 @@ export default function ProcessesPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (err) {
+    } catch {
       alert('Erro ao gerar link de download seguro.');
     }
   };
@@ -142,18 +179,16 @@ export default function ProcessesPage() {
     cancelada: 'Cancelada',
     done: 'Concluída',
   };
-  const getNextTaskStatus = (task: any) => {
+  const getNextTaskStatus = (task: Task) => {
     const allowedTransitions = Array.isArray(task.allowed_transitions) ? task.allowed_transitions : [];
     return TASK_PROGRESS_ORDER.find(status => allowedTransitions.includes(status)) ?? null;
   };
 
   const toggleTaskMutation = useMutation({
-    mutationFn: (task: any) => {
+    mutationFn: async (task: Task) => {
       const nextStatus = getNextTaskStatus(task);
-      if (!nextStatus) {
-        return Promise.resolve();
-      }
-      return api.patch(`/tasks/${task.id}/status`, { status: nextStatus });
+      if (!nextStatus) return;
+      await api.patch(`/tasks/${task.id}/status`, { status: nextStatus });
     },
     onSuccess: () => {
       refetchTasks();
@@ -284,7 +319,7 @@ export default function ProcessesPage() {
                   className="w-full px-3 py-2 border border-gray-200 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 >
                   <option value="">Selecione um cliente...</option>
-                  {clients?.map((c: any) => (
+                  {clients?.map((c) => (
                     <option key={c.id} value={c.id}>{c.full_name} ({c.cpf_cnpj || 'Sem doc'})</option>
                   ))}
                 </select>
@@ -392,7 +427,7 @@ export default function ProcessesPage() {
                   {processTimeline?.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center">Nenhum evento registrado.</p>
                   ) : (
-                    processTimeline?.map((log: any) => (
+                    processTimeline?.map((log) => (
                       <div key={log.id} className="relative">
                         <div className="absolute -left-[31px] bg-white dark:bg-zinc-900 p-1">
                           <div className="w-3 h-3 bg-primary rounded-full ring-4 ring-white dark:ring-zinc-900" />

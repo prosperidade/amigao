@@ -7,21 +7,21 @@ Workflows API — Sprint 3
   GET  /processes/{id}/workflow-status   — status da trilha atual
 """
 
-from typing import Any
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.user import User
 from app.models.process import Process
+from app.models.user import User
 from app.services.workflow_engine import (
+    WorkflowStatus,
+    WorkflowStep,
     apply_workflow_template,
     get_workflow_status,
     list_templates,
-    WorkflowStatus,
-    WorkflowStep,
 )
 
 router = APIRouter()          # montado em /workflows

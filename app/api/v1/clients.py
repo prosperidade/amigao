@@ -1,16 +1,17 @@
-from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Any
+
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.client import Client as ClientModel
 from app.models.user import User
+from app.repositories import ClientRepository
 from app.schemas.client import Client, ClientCreate, ClientUpdate
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[Client])
+@router.get("/", response_model=list[Client])
 def list_clients(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -18,14 +19,8 @@ def list_clients(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     """Lista todos os clientes do tenant autenticado."""
-    clients = (
-        db.query(ClientModel)
-        .filter(ClientModel.tenant_id == current_user.tenant_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return clients
+    repo = ClientRepository(db, current_user.tenant_id)
+    return repo.list(skip=skip, limit=limit)
 
 
 @router.post("/", response_model=Client, status_code=status.HTTP_201_CREATED)
@@ -36,11 +31,8 @@ def create_client(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     """Cria um novo cliente para o tenant autenticado."""
-    client = ClientModel(
-        **client_in.model_dump(),
-        tenant_id=current_user.tenant_id,
-    )
-    db.add(client)
+    repo = ClientRepository(db, current_user.tenant_id)
+    client = repo.create(client_in.model_dump())
     db.commit()
     db.refresh(client)
     return client
@@ -53,14 +45,8 @@ def get_client(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     """Retorna um cliente pelo ID."""
-    client = (
-        db.query(ClientModel)
-        .filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id)
-        .first()
-    )
-    if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente não encontrado")
-    return client
+    repo = ClientRepository(db, current_user.tenant_id)
+    return repo.get_or_404(client_id, detail="Cliente não encontrado")
 
 
 @router.put("/{client_id}", response_model=Client)
@@ -73,17 +59,8 @@ def update_client(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     """Atualiza os dados de um cliente."""
-    client = (
-        db.query(ClientModel)
-        .filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id)
-        .first()
-    )
-    if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente não encontrado")
-    update_data = client_in.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(client, field, value)
-    db.add(client)
+    repo = ClientRepository(db, current_user.tenant_id)
+    client = repo.update(client_id, client_in.model_dump(exclude_unset=True), detail="Cliente não encontrado")
     db.commit()
     db.refresh(client)
     return client
@@ -96,12 +73,6 @@ def delete_client(
     current_user: User = Depends(get_current_internal_user),
 ) -> None:
     """Remove um cliente."""
-    client = (
-        db.query(ClientModel)
-        .filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id)
-        .first()
-    )
-    if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente não encontrado")
-    db.delete(client)
+    repo = ClientRepository(db, current_user.tenant_id)
+    repo.delete(client_id, detail="Cliente não encontrado")
     db.commit()

@@ -1,34 +1,27 @@
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.alerts import emit_operational_alert
 from app.core.metrics import record_task_transition
-from app.models.audit_log import AuditLog
 from app.models.task import (
     TERMINAL_TASK_STATUSES,
-    Task as TaskModel,
-    TaskStatus,
     VALID_TASK_TRANSITIONS,
+    TaskStatus,
     is_valid_task_transition,
 )
+from app.models.task import (
+    Task as TaskModel,
+)
 from app.models.user import User
+from app.repositories import TaskRepository
 from app.schemas.task import Task, TaskCreate, TaskStatusUpdate, TaskUpdate
 from app.services.notifications import publish_realtime_event
 
 router = APIRouter()
-
-
-def _get_scoped_task_or_404(db: Session, task_id: int, tenant_id: int) -> TaskModel:
-    task_obj = db.query(TaskModel).filter(
-        TaskModel.id == task_id,
-        TaskModel.tenant_id == tenant_id,
-    ).first()
-    if not task_obj:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task_obj
 
 
 def _serialize_task(task_obj: TaskModel) -> Task:
@@ -43,9 +36,9 @@ def _emit_task_deadline_alert(task_obj: TaskModel) -> None:
 
     due_date = task_obj.due_date
     if due_date.tzinfo is None:
-        due_date = due_date.replace(tzinfo=timezone.utc)
+        due_date = due_date.replace(tzinfo=UTC)
 
-    if due_date < datetime.now(timezone.utc):
+    if due_date < datetime.now(UTC):
         emit_operational_alert(
             category="deadline_alert",
             severity="warning",
@@ -87,32 +80,8 @@ def _validate_task_status_transition(task_obj: TaskModel, new_status: TaskStatus
             )
 
 
-def _create_task_audit(
-    *,
-    db: Session,
-    current_user: User,
-    task_obj: TaskModel,
-    action: str,
-    details: str,
-    old_value: Optional[str] = None,
-    new_value: Optional[str] = None,
-) -> None:
-    db.add(
-        AuditLog(
-            tenant_id=current_user.tenant_id,
-            user_id=current_user.id,
-            entity_type="task",
-            entity_id=task_obj.id,
-            action=action,
-            details=details,
-            old_value=old_value,
-            new_value=new_value,
-        )
-    )
-
-
 def _apply_task_update(
-    db: Session,
+    repo: TaskRepository,
     task_obj: TaskModel,
     task_in: TaskUpdate,
     current_user: User,
@@ -129,22 +98,21 @@ def _apply_task_update(
     if "status" in update_data and update_data["status"] is not None:
         new_status = update_data["status"]
         if new_status == TaskStatus.concluida:
-            task_obj.completed_at = datetime.now(timezone.utc)
+            task_obj.completed_at = datetime.now(UTC)
         elif previous_status == TaskStatus.concluida and new_status != TaskStatus.concluida:
             task_obj.completed_at = None
 
-        _create_task_audit(
-            db=db,
-            current_user=current_user,
-            task_obj=task_obj,
+        repo.add_audit(
+            user_id=current_user.id,
+            task=task_obj,
             action="status_changed",
             details="Status da tarefa alterado via API",
             old_value=previous_status.value,
             new_value=new_status.value,
         )
 
-    db.commit()
-    db.refresh(task_obj)
+    repo.db.commit()
+    repo.db.refresh(task_obj)
     _emit_task_deadline_alert(task_obj)
 
     if "status" in update_data and update_data["status"] is not None:
@@ -171,17 +139,11 @@ def create_task(
     task_in: TaskCreate,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    db_obj = TaskModel(
-        **task_in.model_dump(),
-        tenant_id=current_user.tenant_id,
-        created_by_user_id=current_user.id,
-    )
-    db.add(db_obj)
-    db.flush()
-    _create_task_audit(
-        db=db,
-        current_user=current_user,
-        task_obj=db_obj,
+    repo = TaskRepository(db, current_user.tenant_id)
+    db_obj = repo.create({**task_in.model_dump(), "created_by_user_id": current_user.id})
+    repo.add_audit(
+        user_id=current_user.id,
+        task=db_obj,
         action="created",
         details="Tarefa criada via API",
     )
@@ -196,7 +158,7 @@ def create_task(
     return _serialize_task(db_obj)
 
 
-@router.get("/", response_model=List[Task])
+@router.get("/", response_model=list[Task])
 def get_tasks(
     db: Session = Depends(deps.get_db),
     skip: int = 0,
@@ -204,10 +166,12 @@ def get_tasks(
     process_id: Optional[int] = None,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    query = db.query(TaskModel).filter(TaskModel.tenant_id == current_user.tenant_id)
+    repo = TaskRepository(db, current_user.tenant_id)
     if process_id:
-        query = query.filter(TaskModel.process_id == process_id)
-    return [_serialize_task(task_obj) for task_obj in query.offset(skip).limit(limit).all()]
+        tasks = repo.list_by_process(process_id, skip=skip, limit=limit)
+    else:
+        tasks = repo.list(skip=skip, limit=limit)
+    return [_serialize_task(t) for t in tasks]
 
 
 @router.get("/{id}", response_model=Task)
@@ -216,7 +180,8 @@ def get_task(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    return _serialize_task(_get_scoped_task_or_404(db, id, current_user.tenant_id))
+    repo = TaskRepository(db, current_user.tenant_id)
+    return _serialize_task(repo.get_or_404(id, detail="Task not found"))
 
 
 @router.patch("/{id}", response_model=Task)
@@ -227,8 +192,9 @@ def update_task(
     task_in: TaskUpdate,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    task_obj = _get_scoped_task_or_404(db, id, current_user.tenant_id)
-    return _apply_task_update(db, task_obj, task_in, current_user)
+    repo = TaskRepository(db, current_user.tenant_id)
+    task_obj = repo.get_or_404(id, detail="Task not found")
+    return _apply_task_update(repo, task_obj, task_in, current_user)
 
 
 @router.patch("/{id}/status", response_model=Task)
@@ -240,5 +206,6 @@ def update_task_status(
     status_in: TaskStatusUpdate,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
-    task_obj = _get_scoped_task_or_404(db, id, current_user.tenant_id)
-    return _apply_task_update(db, task_obj, TaskUpdate(status=status_in.status), current_user)
+    repo = TaskRepository(db, current_user.tenant_id)
+    task_obj = repo.get_or_404(id, detail="Task not found")
+    return _apply_task_update(repo, task_obj, TaskUpdate(status=status_in.status), current_user)

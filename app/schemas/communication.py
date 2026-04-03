@@ -1,6 +1,8 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict
+
 
 class MessageBase(BaseModel):
     content: str
@@ -34,6 +36,6 @@ class CommunicationThread(CommunicationThreadBase):
     tenant_id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-    messages: List[Message] = []
+    messages: list[Message] = []
 
     model_config = ConfigDict(from_attributes=True)

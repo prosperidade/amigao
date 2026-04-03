@@ -11,20 +11,20 @@ Proposals API — Sprint 4
   GET    /proposals/generate-draft          — gera rascunho automático
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional
 import logging
+from datetime import UTC, datetime, timedelta
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.user import User
-from app.models.proposal import Proposal, ProposalStatus
 from app.models.process import Process
-from app.services.proposal_generator import generate_proposal_draft
+from app.models.proposal import Proposal, ProposalStatus
+from app.models.user import User
 from app.services.email import EmailService
+from app.services.proposal_generator import generate_proposal_draft
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class ProposalCreate(BaseModel):
     client_id: int
     process_id: Optional[int] = None
     title: str
-    scope_items: List[dict] = []
+    scope_items: list[dict] = []
     total_value: Optional[float] = None
     validity_days: int = 30
     payment_terms: Optional[str] = None
@@ -48,7 +48,7 @@ class ProposalCreate(BaseModel):
 
 class ProposalUpdate(BaseModel):
     title: Optional[str] = None
-    scope_items: Optional[List[dict]] = None
+    scope_items: Optional[list[dict]] = None
     total_value: Optional[float] = None
     validity_days: Optional[int] = None
     payment_terms: Optional[str] = None
@@ -158,7 +158,7 @@ def create_proposal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
-    expires = datetime.now(timezone.utc) + timedelta(days=body.validity_days)
+    expires = datetime.now(UTC) + timedelta(days=body.validity_days)
     proposal = Proposal(
         tenant_id=current_user.tenant_id,
         client_id=body.client_id,
@@ -233,7 +233,7 @@ def send_proposal(
         raise HTTPException(status_code=422, detail="Proposta já foi enviada ou finalizada.")
 
     proposal.status = ProposalStatus.sent
-    proposal.sent_at = datetime.now(timezone.utc)
+    proposal.sent_at = datetime.now(UTC)
     db.add(proposal)
     db.commit()
     db.refresh(proposal)
@@ -268,7 +268,7 @@ def accept_proposal(
     if proposal.status not in (ProposalStatus.sent, ProposalStatus.draft):
         raise HTTPException(status_code=422, detail="Proposta não pode ser aceita neste estado.")
     proposal.status = ProposalStatus.accepted
-    proposal.accepted_at = datetime.now(timezone.utc)
+    proposal.accepted_at = datetime.now(UTC)
     db.add(proposal)
     db.commit()
     db.refresh(proposal)
@@ -290,7 +290,7 @@ def reject_proposal(
     if proposal.status not in (ProposalStatus.sent, ProposalStatus.draft):
         raise HTTPException(status_code=422, detail="Proposta não pode ser recusada neste estado.")
     proposal.status = ProposalStatus.rejected
-    proposal.rejected_at = datetime.now(timezone.utc)
+    proposal.rejected_at = datetime.now(UTC)
     if reason:
         proposal.notes = f"{proposal.notes or ''}\n\nMotivo da recusa: {reason}".strip()
     db.add(proposal)

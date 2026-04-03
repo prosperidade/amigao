@@ -2,8 +2,9 @@ from time import perf_counter
 
 from celery import Celery
 from celery.signals import before_task_publish, task_failure, task_postrun, task_prerun
-from app.core.config import settings
+
 from app.core.alerts import emit_operational_alert
+from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.metrics import record_celery_task
 from app.core.tracing import current_trace_context, reset_trace_context, set_trace_context
@@ -48,7 +49,7 @@ def observe_task_prerun(task_id=None, task=None, **kwargs):
     headers = getattr(getattr(task, "request", None), "headers", None) or {}
     trace_id = headers.get("trace_id")
     trace_token, span_token, _, _ = set_trace_context(trace_id=trace_id)
-    setattr(task.request, "_trace_tokens", (trace_token, span_token))
+    task.request._trace_tokens = trace_token, span_token
     if task_id is not None:
         _task_started_at[task_id] = perf_counter()
     record_celery_task(task.name, "started")

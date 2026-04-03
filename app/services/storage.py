@@ -1,11 +1,13 @@
+import hashlib
+import logging
+import uuid
+from functools import lru_cache
+from threading import Lock
+
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import UploadFile
-from functools import lru_cache
-import uuid
-import hashlib
-import logging
-from threading import Lock
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -80,7 +82,6 @@ class StorageService:
 
     def upload_file(self, file: UploadFile, tenant_id: int, process_id: int) -> dict:
         """Upload direto (mantido como fallback interno)."""
-        import os
         key = self._build_key(tenant_id, process_id, file.filename)
 
         file.file.seek(0)

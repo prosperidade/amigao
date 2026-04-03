@@ -11,10 +11,9 @@ Ambas as tasks persistem AIJob e atualizam os campos relevantes no processo/docu
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.celery_app import celery_app
-from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.ai_job import AIJob, AIJobStatus, AIJobType
 from app.models.document import Document
@@ -53,7 +52,7 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
             entity_id=process_id,
             job_type=AIJobType.classify_demand,
             status=AIJobStatus.running,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         db.add(job)
         db.commit()
@@ -80,7 +79,7 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
 
         # Fecha job como completed
         job.status = AIJobStatus.completed
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = datetime.now(UTC)
         job.result = {
             "demand_type": result.demand_type,
             "confidence": result.confidence,
@@ -104,7 +103,7 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
             try:
                 job.status = AIJobStatus.failed
                 job.error = str(exc)
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.now(UTC)
                 db.add(job)
                 db.commit()
             except Exception:
@@ -156,7 +155,7 @@ def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: 
             entity_id=document_id,
             job_type=AIJobType.extract_document,
             status=AIJobStatus.running,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         db.add(job)
         db.commit()
@@ -177,7 +176,7 @@ def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: 
             document.extracted_fields = fields
 
         job.status = AIJobStatus.completed
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = datetime.now(UTC)
         job.result = fields
 
         db.add(job)
@@ -197,7 +196,7 @@ def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: 
             try:
                 job.status = AIJobStatus.failed
                 job.error = str(exc)
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.now(UTC)
                 db.add(job)
                 db.commit()
             except Exception:

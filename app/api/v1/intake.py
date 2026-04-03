@@ -7,25 +7,26 @@ Endpoints:
   GET  /intake/templates     — lista templates de checklist por tipo de demanda
   GET  /intake/demand-types  — lista tipos de demanda disponíveis
 """
-from typing import Any, List, Optional
 import logging
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.user import User
-from app.models.client import Client as ClientModel
-from app.models.property import Property as PropertyModel
-from app.models.process import Process as ProcessModel, DemandType, IntakeSource
 from app.models.audit_log import AuditLog
 from app.models.checklist_template import ChecklistTemplate, ProcessChecklist
+from app.models.client import Client as ClientModel
+from app.models.process import DemandType, IntakeSource
+from app.models.process import Process as ProcessModel
+from app.models.property import Property as PropertyModel
+from app.models.user import User
 from app.schemas.intake import (
+    DocumentRequirement,
+    IntakeCaseCreatedResponse,
     IntakeClassifyRequest,
     IntakeClassifyResponse,
     IntakeCreateCaseRequest,
-    IntakeCaseCreatedResponse,
-    DocumentRequirement,
 )
 from app.services.intake_classifier import classify_demand, get_demand_rules
 

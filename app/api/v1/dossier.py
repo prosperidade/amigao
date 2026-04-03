@@ -6,19 +6,19 @@ Dossier API — Sprint 3
   POST /processes/{id}/dossier/refresh  — força re-análise (alias GET)
 """
 
-from typing import Any
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.user import User
+from app.models.checklist_template import ProcessChecklist
+from app.models.document import Document
 from app.models.process import Process
 from app.models.property import Property
-from app.models.document import Document
-from app.models.checklist_template import ProcessChecklist
-from app.services.dossier import generate_dossier, validate_technical_consistency, ProcessDossier
+from app.models.user import User
+from app.services.dossier import ProcessDossier, generate_dossier, validate_technical_consistency
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

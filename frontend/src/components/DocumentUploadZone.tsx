@@ -4,7 +4,7 @@
  * ao item de checklist correspondente.
  */
 import { useState, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { UploadCloud, CheckCircle2, AlertCircle, Tag } from 'lucide-react';
 
@@ -101,10 +101,10 @@ export default function DocumentUploadZone({
       onUploadSuccess?.();
 
       setTimeout(() => setUploadState('idle'), 3500);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setUploadState('error');
-      setErrorMessage(err.message || 'Erro desconhecido.');
+      setErrorMessage(err instanceof Error ? err.message : 'Erro desconhecido.');
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };

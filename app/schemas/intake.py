@@ -1,8 +1,9 @@
 """
 Schemas de Intake — Sprint 1
 """
+from typing import Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional, List
 
 
 class IntakeClassifyRequest(BaseModel):
@@ -25,11 +26,11 @@ class IntakeClassifyResponse(BaseModel):
     demand_label: str
     confidence: str
     initial_diagnosis: str
-    required_documents: List[DocumentRequirement]
-    suggested_next_steps: List[str]
+    required_documents: list[DocumentRequirement]
+    suggested_next_steps: list[str]
     checklist_template_demand_type: str
     urgency_flag: Optional[str]
-    relevant_agencies: List[str]
+    relevant_agencies: list[str]
 
 
 class IntakeClientCreate(BaseModel):
@@ -78,5 +79,5 @@ class IntakeCaseCreatedResponse(BaseModel):
     demand_label: str
     initial_diagnosis: str
     checklist_generated: bool
-    suggested_next_steps: List[str]
+    suggested_next_steps: list[str]
     process_title: str

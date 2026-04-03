@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
@@ -10,7 +10,7 @@ from app.models.audit_log import AuditLog
 from app.models.client import Client
 from app.models.process import Process, ProcessStatus
 from app.models.property import Property
-from app.models.task import TERMINAL_TASK_STATUSES, Task, TaskStatus
+from app.models.task import TERMINAL_TASK_STATUSES, Task
 from app.models.user import User
 
 router = APIRouter()
@@ -32,8 +32,7 @@ class RecentActivity(BaseModel):
     actor_name: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PendingTask(BaseModel):
@@ -44,8 +43,7 @@ class PendingTask(BaseModel):
     process_id: Optional[int]
     due_date: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DashboardSummary(BaseModel):
@@ -53,8 +51,8 @@ class DashboardSummary(BaseModel):
     overdue_tasks: int
     total_clients: int
     total_properties: int
-    recent_activities: List[RecentActivity]
-    my_pending_tasks: List[PendingTask]
+    recent_activities: list[RecentActivity]
+    my_pending_tasks: list[PendingTask]
 
 
 @router.get("/summary", response_model=DashboardSummary)
@@ -64,7 +62,7 @@ def get_dashboard_summary(
 ) -> DashboardSummary:
     """Retorna os dados agregados da dashboard para o tenant do usuário autenticado."""
     tenant_id = current_user.tenant_id
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     active_processes = (
         db.query(Process)
@@ -101,7 +99,10 @@ def get_dashboard_summary(
     recent_log_rows = (
         db.query(AuditLog, User)
         .outerjoin(User, AuditLog.user_id == User.id)
-        .filter(AuditLog.tenant_id == tenant_id)
+        .filter(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.entity_type == "process",
+        )
         .order_by(AuditLog.created_at.desc())
         .limit(8)
         .all()

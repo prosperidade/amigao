@@ -99,7 +99,7 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
   });
 
   const generateMutation = useMutation({
-    mutationFn: (force = false) =>
+    mutationFn: (force: boolean = false) =>
       api.post(`/processes/${processId}/checklist/generate?force=${force}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checklist', processId] });
@@ -135,7 +135,7 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
   const toggleCategory = (cat: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
+      if (next.has(cat)) { next.delete(cat); } else { next.add(cat); }
       return next;
     });
   };

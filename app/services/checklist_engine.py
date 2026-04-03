@@ -6,15 +6,14 @@ Lógica pura (sem dependência de request/response HTTP).
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Optional
-from datetime import datetime, timezone
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.checklist_template import ChecklistTemplate, ProcessChecklist
-from app.models.document import Document
-
 
 # ---------------------------------------------------------------------------
 # Estruturas de retorno
@@ -40,7 +39,7 @@ class ChecklistStatus:
     waived: int
     completion_pct: float
     has_required_gaps: bool
-    gaps: List[ChecklistGap]
+    gaps: list[ChecklistGap]
 
 
 # ---------------------------------------------------------------------------
@@ -105,11 +104,11 @@ def get_checklist_status(checklist: ProcessChecklist) -> ChecklistStatus:
     # Calcular dias pendentes desde a criação do checklist
     created_at = checklist.created_at
     if created_at and created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    now = datetime.now(timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
+    now = datetime.now(UTC)
     days_since_creation = (now - created_at).days if created_at else None
 
-    gaps: List[ChecklistGap] = []
+    gaps: list[ChecklistGap] = []
     for item in items:
         if item.get("status") == "pending":
             gaps.append(ChecklistGap(

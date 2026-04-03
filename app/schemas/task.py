@@ -1,7 +1,9 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
 from datetime import datetime
-from app.models.task import TaskStatus, TaskPriority
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.task import TaskPriority, TaskStatus
 
 
 class TaskBase(BaseModel):
@@ -10,7 +12,7 @@ class TaskBase(BaseModel):
     process_id: Optional[int] = None
     property_id: Optional[int] = None
     document_id: Optional[int] = None
-    
+
     status: TaskStatus = TaskStatus.a_fazer
     priority: TaskPriority = TaskPriority.medium
 
@@ -28,7 +30,7 @@ class TaskUpdate(BaseModel):
     process_id: Optional[int] = None
     property_id: Optional[int] = None
     document_id: Optional[int] = None
-    
+
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
 
