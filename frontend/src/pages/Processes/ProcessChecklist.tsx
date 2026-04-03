@@ -51,19 +51,19 @@ interface ProcessChecklistProps {
 
 const ITEM_STATUS: Record<string, { icon: React.ReactNode; label: string; cls: string }> = {
   received: {
-    icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
+    icon: <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
     label: 'Recebido',
-    cls: 'border-emerald-500/20 bg-emerald-500/5',
+    cls: 'border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/5',
   },
   pending: {
-    icon: <Clock className="w-4 h-4 text-yellow-400" />,
+    icon: <Clock className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />,
     label: 'Pendente',
-    cls: 'border-yellow-500/20 bg-yellow-500/5',
+    cls: 'border-yellow-200 dark:border-yellow-500/20 bg-yellow-50 dark:bg-yellow-500/5',
   },
   waived: {
-    icon: <XCircle className="w-4 h-4 text-slate-500" />,
+    icon: <XCircle className="w-4 h-4 text-gray-400 dark:text-slate-500" />,
     label: 'Dispensado',
-    cls: 'border-white/5 bg-white/3',
+    cls: 'border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/3',
   },
 };
 
@@ -85,12 +85,10 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
   const [waiverReason, setWaiverReason] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['ambiental', 'fundiario', 'pessoal']));
 
-  // ── Buscar checklist ────────────────────────────────────────────────────────
   const {
     data: checklist,
     isLoading,
     error,
-    refetch,
   } = useQuery<Checklist>({
     queryKey: ['checklist', processId],
     queryFn: async () => {
@@ -100,7 +98,6 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
     retry: false,
   });
 
-  // ── Gerar checklist ─────────────────────────────────────────────────────────
   const generateMutation = useMutation({
     mutationFn: (force = false) =>
       api.post(`/processes/${processId}/checklist/generate?force=${force}`),
@@ -109,7 +106,6 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
     },
   });
 
-  // ── Atualizar item ──────────────────────────────────────────────────────────
   const updateItemMutation = useMutation({
     mutationFn: (payload: { item_id: string; action: string; waiver_reason?: string }) =>
       api.patch(`/processes/${processId}/checklist/items/${payload.item_id}`, {
@@ -122,8 +118,6 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
       setWaiverReason('');
     },
   });
-
-  // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleReceived = (itemId: string) => {
     updateItemMutation.mutate({ item_id: itemId, action: 'received' });
@@ -146,25 +140,22 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
     });
   };
 
-  // ── Estado de carregamento ──────────────────────────────────────────────────
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12 text-slate-500 gap-2 text-sm">
-        <div className="w-4 h-4 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center py-12 text-gray-400 dark:text-slate-500 gap-2 text-sm">
+        <div className="w-4 h-4 border-2 border-gray-300 dark:border-slate-500 border-t-emerald-500 rounded-full animate-spin" />
         Carregando checklist...
       </div>
     );
   }
 
-  // Checklist ainda não foi gerado
   if (error || !checklist) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 p-10 text-center space-y-4">
-        <FileCheck className="w-10 h-10 text-slate-600 mx-auto" />
+      <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/10 p-10 text-center space-y-4">
+        <FileCheck className="w-10 h-10 text-gray-300 dark:text-slate-600 mx-auto" />
         <div>
-          <p className="text-slate-300 font-medium">Nenhum checklist gerado</p>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-gray-700 dark:text-slate-300 font-medium">Nenhum checklist gerado</p>
+          <p className="text-gray-400 dark:text-slate-500 text-sm mt-1">
             Gere o checklist baseado no tipo de demanda do processo.
           </p>
         </div>
@@ -180,7 +171,6 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
     );
   }
 
-  // ── Agrupar itens por categoria ─────────────────────────────────────────────
   const byCategory: Record<string, ChecklistItem[]> = {};
   for (const item of checklist.items) {
     const cat = item.category || 'outros';
@@ -194,18 +184,18 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
     <div className="space-y-4">
 
       {/* Header com progresso */}
-      <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
+      <div className="rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-sm font-semibold text-white">Checklist Documental</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Checklist Documental</h3>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
               {summary.received} de {summary.total} documentos recebidos
               {summary.waived > 0 && ` · ${summary.waived} dispensado(s)`}
             </p>
           </div>
           <div className="flex items-center gap-2">
             {summary.has_required_gaps && (
-              <span className="flex items-center gap-1 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-full">
+              <span className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-2 py-1 rounded-full">
                 <AlertTriangle className="w-3 h-3" />
                 Docs obrigatórios pendentes
               </span>
@@ -214,49 +204,46 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
               onClick={() => generateMutation.mutate(true)}
               disabled={generateMutation.isPending}
               title="Regenerar checklist do zero"
-              className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/10 transition-all"
+              className="p-1.5 rounded-lg text-gray-400 dark:text-slate-500 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* Barra de progresso */}
-        <div className="w-full bg-white/10 rounded-full h-2">
+        <div className="w-full bg-gray-100 dark:bg-white/10 rounded-full h-2">
           <div
             className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
             style={{ width: `${summary.completion_pct}%` }}
           />
         </div>
-        <p className="text-xs text-slate-500 text-right mt-1">{summary.completion_pct}% completo</p>
+        <p className="text-xs text-gray-400 dark:text-slate-500 text-right mt-1">{summary.completion_pct}% completo</p>
       </div>
 
       {/* Itens agrupados por categoria */}
       {Object.entries(byCategory).map(([category, items]) => (
-        <div key={category} className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+        <div key={category} className="rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 overflow-hidden">
 
-          {/* Header da categoria */}
           <button
             onClick={() => toggleCategory(category)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-white/5 transition-colors"
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
           >
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
               {CATEGORY_LABELS[category] ?? category}
             </span>
             <span className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-gray-400 dark:text-slate-500">
                 {items.filter(i => i.status === 'received').length}/{items.length}
               </span>
               {expandedCategories.has(category)
-                ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
-                : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
+                : <ChevronDown className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
               }
             </span>
           </button>
 
-          {/* Lista de itens */}
           {expandedCategories.has(category) && (
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-gray-100 dark:divide-white/5">
               {items.map(item => {
                 const cfg = ITEM_STATUS[item.status];
                 const isWaiving = waiverItemId === item.id;
@@ -268,21 +255,20 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className={`text-sm font-medium ${item.status === 'waived' ? 'text-slate-500 line-through' : 'text-white'}`}>
+                          <p className={`text-sm font-medium ${item.status === 'waived' ? 'text-gray-400 dark:text-slate-500 line-through' : 'text-gray-800 dark:text-white'}`}>
                             {item.label}
                           </p>
                           {item.required && item.status === 'pending' && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400">
                               obrigatório
                             </span>
                           )}
                         </div>
 
                         {item.status === 'waived' && item.waiver_reason && (
-                          <p className="text-xs text-slate-600 mt-0.5">Dispensado: {item.waiver_reason}</p>
+                          <p className="text-xs text-gray-400 dark:text-slate-600 mt-0.5">Dispensado: {item.waiver_reason}</p>
                         )}
 
-                        {/* Formulário de dispensa inline */}
                         {isWaiving && (
                           <div className="mt-2 flex gap-2">
                             <input
@@ -291,18 +277,18 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
                               placeholder="Motivo da dispensa..."
                               value={waiverReason}
                               onChange={e => setWaiverReason(e.target.value)}
-                              className="flex-1 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 px-3 py-1.5 text-xs focus:outline-none focus:border-yellow-400"
+                              className="flex-1 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 px-3 py-1.5 text-xs focus:outline-none focus:border-yellow-500 dark:focus:border-yellow-400"
                             />
                             <button
                               onClick={() => handleWaive(item.id)}
                               disabled={!waiverReason.trim() || updateItemMutation.isPending}
-                              className="px-3 py-1.5 rounded-lg bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 text-xs font-medium disabled:opacity-40 hover:bg-yellow-500/30 transition-all"
+                              className="px-3 py-1.5 rounded-lg bg-yellow-50 dark:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-300 text-xs font-medium disabled:opacity-40 hover:bg-yellow-100 dark:hover:bg-yellow-500/30 transition-all"
                             >
                               Confirmar
                             </button>
                             <button
                               onClick={() => { setWaiverItemId(null); setWaiverReason(''); }}
-                              className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 text-xs hover:text-white transition-all"
+                              className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 text-xs hover:text-gray-900 dark:hover:text-white transition-all"
                             >
                               Cancelar
                             </button>
@@ -310,7 +296,6 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
                         )}
                       </div>
 
-                      {/* Ações */}
                       {!isWaiving && (
                         <div className="flex items-center gap-1.5 shrink-0">
                           {item.status === 'pending' && (
@@ -318,13 +303,13 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
                               <button
                                 onClick={() => handleReceived(item.id)}
                                 disabled={updateItemMutation.isPending}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium hover:bg-emerald-500/20 disabled:opacity-40 transition-all"
+                                className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-500/20 disabled:opacity-40 transition-all"
                               >
                                 Recebido
                               </button>
                               <button
                                 onClick={() => { setWaiverItemId(item.id); setWaiverReason(''); }}
-                                className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-400 text-xs hover:text-white transition-all"
+                                className="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 text-xs hover:text-gray-800 dark:hover:text-white transition-all"
                               >
                                 Dispensar
                               </button>
@@ -334,7 +319,7 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
                             <button
                               onClick={() => handleRevertPending(item.id)}
                               disabled={updateItemMutation.isPending}
-                              className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-500 text-xs hover:text-slate-300 disabled:opacity-40 transition-all"
+                              className="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-400 dark:text-slate-500 text-xs hover:text-gray-700 dark:hover:text-slate-300 disabled:opacity-40 transition-all"
                             >
                               Reverter
                             </button>

@@ -100,6 +100,23 @@ def fill_contract_template(
     return raw
 
 
+def _latin1_safe(text: str) -> str:
+    """Converte string para Latin-1 seguro (fpdf2 Helvetica não aceita Unicode fora U+00FF)."""
+    replacements = {
+        "\u2014": "-",   # em dash  —
+        "\u2013": "-",   # en dash  –
+        "\u2019": "'",   # right single quotation mark
+        "\u2018": "'",   # left single quotation mark
+        "\u201c": '"',   # left double quotation mark
+        "\u201d": '"',   # right double quotation mark
+        "\u2026": "...", # ellipsis
+        "\u00b7": "-",   # middle dot
+    }
+    for char, repl in replacements.items():
+        text = text.replace(char, repl)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
 def render_pdf(contract: Contract, filled_content: str) -> bytes:
     """
     Gera PDF a partir do conteúdo preenchido usando fpdf2.
@@ -118,10 +135,10 @@ def render_pdf(contract: Contract, filled_content: str) -> bytes:
     # Cabeçalho
     pdf.set_font("Helvetica", style="B", size=14)
     pdf.set_text_color(30, 120, 60)
-    pdf.cell(0, 10, "AMIGÃO DO MEIO AMBIENTE", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 10, _latin1_safe("AMIGAO DO MEIO AMBIENTE"), align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", style="", size=9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 6, "Consultoria e Regularização Ambiental", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "Consultoria e Regularizacao Ambiental", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
     # Linha separadora
@@ -133,38 +150,46 @@ def render_pdf(contract: Contract, filled_content: str) -> bytes:
     # Título do contrato
     pdf.set_font("Helvetica", style="B", size=12)
     pdf.set_text_color(20, 20, 20)
-    pdf.cell(0, 8, contract.title.upper(), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, _latin1_safe(contract.title.upper()), align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(6)
 
     # Corpo do contrato
     pdf.set_font("Helvetica", size=10)
     pdf.set_text_color(40, 40, 40)
+    content_w = pdf.w - pdf.l_margin - pdf.r_margin  # largura fixa uma vez
 
     for line in filled_content.split("\n"):
-        line = line.strip()
+        line = _latin1_safe(line.strip())
+        # Sempre resetar x antes de renderizar — multi_cell deixa cursor na
+        # posição final do texto, não no LMARGIN, causando w=0 na próxima chamada
+        pdf.set_x(pdf.l_margin)
         # Títulos em negrito (linhas em CAPS ou que terminam com ':')
         if line.isupper() and len(line) > 4:
             pdf.set_font("Helvetica", style="B", size=10)
-            pdf.cell(0, 6, line, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(content_w, 6, line, new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", size=10)
         elif line.endswith(":") and len(line) < 60:
             pdf.set_font("Helvetica", style="B", size=10)
-            pdf.cell(0, 6, line, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(content_w, 6, line, new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", size=10)
         elif line == "":
             pdf.ln(3)
         else:
-            pdf.multi_cell(0, 5.5, line)
+            pdf.multi_cell(content_w, 5.5, line, new_x="LMARGIN", new_y="NEXT")
 
     # Rodapé
     pdf.ln(8)
+    pdf.set_x(pdf.l_margin)  # resetar x antes do separador
     pdf.set_draw_color(200, 200, 200)
-    pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + content_w, pdf.get_y())
     pdf.ln(3)
+    pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", size=8)
     pdf.set_text_color(150, 150, 150)
-    pdf.cell(0, 5, f"Documento gerado em {datetime.now(timezone.utc).strftime('%d/%m/%Y às %H:%M')} UTC — Amigão do Meio Ambiente",
-             align="C", new_x="LMARGIN", new_y="NEXT")
+    footer_text = _latin1_safe(
+        f"Documento gerado em {datetime.now(timezone.utc).strftime('%d/%m/%Y as %H:%M')} UTC - Amigao do Meio Ambiente"
+    )
+    pdf.cell(content_w, 5, footer_text, align="C", new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
 

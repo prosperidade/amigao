@@ -126,14 +126,14 @@ export default function DocumentUploadZone({
     <div className="space-y-3">
       {/* Seletor de tipo */}
       <div className="flex items-center gap-2">
-        <Tag className="w-4 h-4 text-slate-500 shrink-0" />
+        <Tag className="w-4 h-4 text-gray-400 dark:text-slate-500 shrink-0" />
         <select
           value={selectedDocType}
           onChange={e => setSelectedDocType(e.target.value)}
-          className="flex-1 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-sm px-3 py-2 focus:outline-none focus:border-emerald-400 transition-colors"
+          className="flex-1 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-300 text-sm px-3 py-2 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 transition-colors"
         >
           {DOC_TYPES.map(dt => (
-            <option key={dt.value} value={dt.value} className="bg-slate-900">
+            <option key={dt.value} value={dt.value} className="bg-white dark:bg-slate-900">
               {dt.label}
             </option>
           ))}
@@ -148,37 +148,37 @@ export default function DocumentUploadZone({
         onClick={() => uploadState === 'idle' && fileInputRef.current?.click()}
         className={`w-full border-2 border-dashed rounded-xl p-7 flex flex-col items-center justify-center transition-all cursor-pointer ${
           isDragging
-            ? 'border-emerald-400 bg-emerald-500/10'
+            ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'
             : uploadState === 'success'
-            ? 'border-emerald-500/40 bg-emerald-500/5 cursor-default'
+            ? 'border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/5 cursor-default'
             : uploadState === 'error'
-            ? 'border-red-500/40 bg-red-500/5 cursor-default'
-            : 'border-white/10 bg-white/3 hover:border-white/20 hover:bg-white/5'
+            ? 'border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/5 cursor-default'
+            : 'border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/3 hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-100 dark:hover:bg-white/5'
         }`}
       >
         {uploadState === 'success' ? (
           <>
-            <CheckCircle2 className="w-8 h-8 text-emerald-400 mb-2" />
-            <p className="text-sm font-medium text-emerald-300">Enviado com sucesso!</p>
-            <p className="text-xs text-slate-500 mt-0.5 truncate max-w-xs">{lastFileName}</p>
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
+            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Enviado com sucesso!</p>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate max-w-xs">{lastFileName}</p>
           </>
         ) : uploadState === 'error' ? (
           <>
-            <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
-            <p className="text-sm font-medium text-red-300">Falha no envio</p>
-            <p className="text-xs text-slate-500 mt-0.5">{errorMessage}</p>
+            <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
+            <p className="text-sm font-medium text-red-700 dark:text-red-300">Falha no envio</p>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{errorMessage}</p>
             <button
               onClick={e => { e.stopPropagation(); setUploadState('idle'); }}
-              className="mt-3 text-xs text-slate-400 underline hover:text-white"
+              className="mt-3 text-xs text-gray-500 dark:text-slate-400 underline hover:text-gray-800 dark:hover:text-white"
             >
               Tentar novamente
             </button>
           </>
         ) : uploadState === 'uploading' ? (
           <>
-            <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-sm text-slate-300 font-medium">Enviando {lastFileName}...</p>
-            <div className="w-48 bg-white/10 rounded-full h-1.5 mt-3">
+            <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
+            <p className="text-sm text-gray-700 dark:text-slate-300 font-medium">Enviando {lastFileName}...</p>
+            <div className="w-48 bg-gray-200 dark:bg-white/10 rounded-full h-1.5 mt-3">
               <div
                 className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
@@ -187,11 +187,11 @@ export default function DocumentUploadZone({
           </>
         ) : (
           <>
-            <UploadCloud className={`w-8 h-8 mb-2 ${isDragging ? 'text-emerald-400' : 'text-slate-500'}`} />
-            <p className="text-sm font-medium text-slate-300">
+            <UploadCloud className={`w-8 h-8 mb-2 ${isDragging ? 'text-emerald-500' : 'text-gray-400 dark:text-slate-500'}`} />
+            <p className="text-sm font-medium text-gray-600 dark:text-slate-300">
               {isDragging ? 'Solte o arquivo aqui' : 'Clique ou arraste um arquivo'}
             </p>
-            <p className="text-xs text-slate-600 mt-0.5">PDF, DOCX, JPG, PNG — até 50 MB</p>
+            <p className="text-xs text-gray-400 dark:text-slate-600 mt-0.5">PDF, DOCX, JPG, PNG — até 50 MB</p>
           </>
         )}
 

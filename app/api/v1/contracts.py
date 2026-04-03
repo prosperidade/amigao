@@ -197,38 +197,58 @@ def generate_pdf(
         db.add(contract)
         db.flush()
 
-    # Preencher template
-    filled_content = fill_contract_template(db, contract)
+    # Preencher template e salvar conteúdo no banco
+    try:
+        filled_content = fill_contract_template(db, contract)
+    except Exception as exc:
+        logger.error("Erro ao preencher template do contrato %s: %s", contract_id, exc)
+        raise HTTPException(status_code=500, detail=f"Erro ao processar template: {exc}")
+
     contract.content = filled_content
     db.add(contract)
-    db.flush()
 
-    # Gerar PDF
-    pdf_bytes = render_pdf(contract, filled_content)
-
-    # Upload no MinIO
-    filename = f"contrato_{contract_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.pdf"
+    # Gerar bytes do PDF
+    pdf_bytes: Optional[bytes] = None
     try:
-        storage = get_storage_service()
-        result = storage.upload_bytes(
-            content=pdf_bytes,
-            filename=filename,
-            content_type="application/pdf",
-            tenant_id=current_user.tenant_id,
-            process_id=contract.process_id or 0,
-        )
-        contract.pdf_storage_key = result["storage_key"]
+        pdf_bytes = render_pdf(contract, filled_content)
     except Exception as exc:
-        logger.error("Falha ao armazenar PDF do contrato %s: %s", contract_id, exc)
-        raise HTTPException(status_code=500, detail=f"Erro ao armazenar PDF: {exc}")
+        logger.error("Erro ao renderizar PDF do contrato %s: %s", contract_id, exc)
+        # Salva o conteúdo mesmo sem PDF e retorna aviso ao invés de 500
+        db.commit()
+        db.refresh(contract)
+        return {
+            "message": "Conteúdo gerado, mas o PDF não pôde ser renderizado.",
+            "warning": str(exc),
+            "pdf_storage_key": None,
+            "contract": _serialize(contract),
+        }
 
-    db.add(contract)
+    # Upload no MinIO (não-fatal: salva o conteúdo mesmo se o storage estiver indisponível)
+    storage_warning: Optional[str] = None
+    if pdf_bytes:
+        filename = f"contrato_{contract_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.pdf"
+        try:
+            storage = get_storage_service()
+            result = storage.upload_bytes(
+                content=pdf_bytes,
+                filename=filename,
+                content_type="application/pdf",
+                tenant_id=current_user.tenant_id,
+                process_id=contract.process_id or 0,
+            )
+            contract.pdf_storage_key = result["storage_key"]
+            db.add(contract)
+        except Exception as exc:
+            logger.warning("Falha ao armazenar PDF do contrato %s no storage: %s", contract_id, exc)
+            storage_warning = f"PDF gerado mas não armazenado (storage indisponível): {exc}"
+
     db.commit()
     db.refresh(contract)
 
-    logger.info("PDF gerado: contrato_id=%s key=%s", contract_id, contract.pdf_storage_key)
+    logger.info("Contrato %s processado. storage_key=%s warning=%s", contract_id, contract.pdf_storage_key, storage_warning)
     return {
-        "message": "PDF gerado com sucesso.",
+        "message": "PDF gerado com sucesso." if not storage_warning else "Conteúdo salvo. PDF gerado mas não armazenado.",
+        "warning": storage_warning,
         "pdf_storage_key": contract.pdf_storage_key,
         "contract": _serialize(contract),
     }
@@ -251,11 +271,7 @@ def download_contract(
 
     try:
         storage = get_storage_service()
-        url = storage.presign_client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": "amigao-docs", "Key": contract.pdf_storage_key},
-            ExpiresIn=3600,
-        )
+        url = storage.generate_presigned_get_url(contract.pdf_storage_key, expires_in=3600)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar URL: {exc}")
 

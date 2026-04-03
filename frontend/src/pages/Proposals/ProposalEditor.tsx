@@ -25,11 +25,11 @@ function fmt(v: number | null | undefined) {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  draft:    { label: 'Rascunho',  cls: 'text-slate-400 bg-slate-500/10 border-slate-500/20' },
-  sent:     { label: 'Enviada',   cls: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
-  accepted: { label: 'Aceita',    cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
-  rejected: { label: 'Recusada', cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
-  expired:  { label: 'Expirada', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' },
+  draft:    { label: 'Rascunho',  cls: 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-500/10 border-slate-300 dark:border-slate-500/20' },
+  sent:     { label: 'Enviada',   cls: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20' },
+  accepted: { label: 'Aceita',    cls: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' },
+  rejected: { label: 'Recusada', cls: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20' },
+  expired:  { label: 'Expirada', cls: 'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20' },
 };
 
 export default function ProposalEditor() {
@@ -51,6 +51,14 @@ export default function ProposalEditor() {
   const [notes, setNotes] = useState('');
   const [draftBanner, setDraftBanner] = useState<any>(null);
   const [saved, setSaved] = useState(false);
+
+  // Buscar dados do cliente para exibir nome/email ao usuário
+  const { data: clientInfo } = useQuery({
+    queryKey: ['client-info', clientId],
+    queryFn: () => api.get(`/clients/${clientId}`).then(r => r.data),
+    enabled: !!clientId && !isNaN(Number(clientId)) && Number(clientId) > 0,
+    staleTime: 60_000,
+  });
 
   // Buscar proposta existente
   const { data: proposal } = useQuery({
@@ -168,19 +176,23 @@ export default function ProposalEditor() {
   const statusCfg = proposal ? (STATUS_CONFIG[proposal.status] ?? STATUS_CONFIG.draft) : STATUS_CONFIG.draft;
   const isEditable = !proposal || proposal.status === 'draft';
 
+  // Classes reutilizáveis
+  const inputCls = "w-full rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50 transition-colors";
+  const cardCls = "rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5";
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <button
           onClick={() => navigate('/proposals')}
-          className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-all"
+          className="p-2 rounded-xl bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
               {isNew ? 'Nova Proposta' : `Proposta #${id}`}
             </h1>
             {proposal && (
@@ -192,14 +204,23 @@ export default function ProposalEditor() {
         </div>
         {/* Ações de status */}
         {proposal && proposal.status === 'draft' && (
-          <button
-            onClick={() => sendMutation.mutate()}
-            disabled={sendMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-medium transition-all disabled:opacity-50"
-          >
-            {sendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Enviar ao Cliente
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={() => sendMutation.mutate()}
+              disabled={sendMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-medium transition-all disabled:opacity-50"
+            >
+              {sendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Enviar ao Cliente
+            </button>
+            {clientInfo?.email ? (
+              <p className="text-xs text-gray-400 dark:text-slate-500">
+                Enviará e-mail para: <span className="font-medium text-gray-600 dark:text-slate-300">{clientInfo.email}</span>
+              </p>
+            ) : clientInfo && (
+              <p className="text-xs text-red-500">Cliente sem e-mail cadastrado — nenhum e-mail será enviado</p>
+            )}
+          </div>
         )}
         {proposal && proposal.status === 'sent' && (
           <div className="flex gap-2">
@@ -213,7 +234,7 @@ export default function ProposalEditor() {
             <button
               onClick={() => rejectMutation.mutate()}
               disabled={rejectMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 text-sm font-medium transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/30 text-sm font-medium transition-all disabled:opacity-50"
             >
               <XCircle className="w-4 h-4" /> Recusar
             </button>
@@ -233,11 +254,11 @@ export default function ProposalEditor() {
 
       {/* Banner rascunho automático */}
       {draftBanner && (
-        <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 flex items-start gap-3">
-          <Zap className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+        <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/25 p-4 flex items-start gap-3">
+          <Zap className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-emerald-300">Rascunho gerado automaticamente</p>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Rascunho gerado automaticamente</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
               Complexidade: <strong>{draftBanner.complexity}</strong> ·
               Faixa sugerida: <strong>{fmt(draftBanner.suggested_value_min)} — {fmt(draftBanner.suggested_value_max)}</strong> ·
               Prazo: <strong>~{draftBanner.estimated_days} dias</strong>
@@ -247,7 +268,7 @@ export default function ProposalEditor() {
       )}
 
       {draftLoading && isNew && processId && (
-        <div className="flex items-center gap-2 text-slate-400 text-sm">
+        <div className="flex items-center gap-2 text-gray-500 dark:text-slate-400 text-sm">
           <Loader2 className="w-4 h-4 animate-spin" /> Gerando rascunho automático...
         </div>
       )}
@@ -255,53 +276,61 @@ export default function ProposalEditor() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Coluna principal */}
         <div className="md:col-span-2 space-y-4">
-          {/* Título */}
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-200">Informações Gerais</h2>
+          {/* Informações Gerais */}
+          <div className={`${cardCls} space-y-4`}>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200">Informações Gerais</h2>
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">Título da Proposta</label>
+              <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">Título da Proposta</label>
               <input
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 disabled={!isEditable}
                 placeholder="Ex: Proposta — CAR Fazenda São João"
-                className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-400 disabled:opacity-50 transition-colors"
+                className={inputCls}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">ID do Cliente</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">ID do Cliente</label>
                 <input
                   value={clientId}
                   onChange={e => setClientId(e.target.value)}
                   disabled={!isEditable}
                   placeholder="client_id"
                   type="number"
-                  className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-400 disabled:opacity-50 transition-colors"
+                  className={inputCls}
                 />
+                {clientInfo && (
+                  <div className="mt-1.5 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-xs">
+                    <p className="font-medium text-emerald-700 dark:text-emerald-300">{clientInfo.full_name}</p>
+                    <p className="text-gray-500 dark:text-slate-400 mt-0.5">
+                      {clientInfo.email ? `✉ ${clientInfo.email}` : 'Sem e-mail cadastrado'}
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">ID do Processo (opcional)</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">ID do Processo (opcional)</label>
                 <input
                   value={processId}
                   onChange={e => setProcessId(e.target.value)}
                   disabled={!isEditable}
                   placeholder="process_id"
                   type="number"
-                  className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-400 disabled:opacity-50 transition-colors"
+                  className={inputCls}
                 />
               </div>
             </div>
           </div>
 
           {/* Escopo */}
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-5 space-y-3">
+          <div className={`${cardCls} space-y-3`}>
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-200">Itens de Escopo</h2>
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200">Itens de Escopo</h2>
               {isEditable && (
                 <button
                   onClick={addScopeItem}
-                  className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                  className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" /> Adicionar item
                 </button>
@@ -309,24 +338,24 @@ export default function ProposalEditor() {
             </div>
 
             {scopeItems.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">Nenhum item no escopo.</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500 py-4 text-center">Nenhum item no escopo.</p>
             ) : (
               <div className="space-y-2">
                 {/* Cabeçalho */}
-                <div className="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
+                <div className="grid grid-cols-12 gap-2 text-xs text-gray-400 dark:text-slate-500 px-1">
                   <span className="col-span-6">Descrição</span>
                   <span className="col-span-2 text-center">Qtd</span>
                   <span className="col-span-2 text-right">Vlr Unit.</span>
                   <span className="col-span-2 text-right">Total</span>
                 </div>
                 {scopeItems.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-white/3 rounded-xl p-2">
+                  <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-gray-50 dark:bg-white/5 rounded-xl p-2">
                     <input
                       value={item.description}
                       onChange={e => updateScopeItem(idx, 'description', e.target.value)}
                       disabled={!isEditable}
                       placeholder="Descrição do serviço"
-                      className="col-span-6 bg-transparent border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-400 disabled:opacity-50"
+                      className="col-span-6 bg-white dark:bg-transparent border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50"
                     />
                     <input
                       value={item.qty}
@@ -334,7 +363,7 @@ export default function ProposalEditor() {
                       disabled={!isEditable}
                       type="number"
                       min="0"
-                      className="col-span-2 bg-transparent border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white text-center focus:outline-none focus:border-emerald-400 disabled:opacity-50"
+                      className="col-span-2 bg-white dark:bg-transparent border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50"
                     />
                     <input
                       value={item.unit_price}
@@ -342,13 +371,13 @@ export default function ProposalEditor() {
                       disabled={!isEditable}
                       type="number"
                       min="0"
-                      className="col-span-2 bg-transparent border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white text-right focus:outline-none focus:border-emerald-400 disabled:opacity-50"
+                      className="col-span-2 bg-white dark:bg-transparent border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white text-right focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50"
                     />
-                    <div className="col-span-1 text-xs text-emerald-400 text-right font-medium">
+                    <div className="col-span-1 text-xs text-emerald-600 dark:text-emerald-400 text-right font-medium">
                       {item.total > 0 ? item.total.toLocaleString('pt-BR', { minimumFractionDigits: 0 }) : '—'}
                     </div>
                     {isEditable && (
-                      <button onClick={() => removeScopeItem(idx)} className="col-span-1 text-slate-600 hover:text-red-400 flex justify-center">
+                      <button onClick={() => removeScopeItem(idx)} className="col-span-1 text-gray-400 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 flex justify-center">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -359,26 +388,26 @@ export default function ProposalEditor() {
           </div>
 
           {/* Observações */}
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-            <h2 className="text-sm font-semibold text-slate-200 mb-3">Observações</h2>
+          <div className={cardCls}>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-3">Observações</h2>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
               disabled={!isEditable}
               rows={3}
               placeholder="Notas, ressalvas, condições especiais..."
-              className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 resize-none disabled:opacity-50 transition-colors"
+              className={`${inputCls} resize-none`}
             />
           </div>
         </div>
 
         {/* Coluna lateral */}
         <div className="space-y-4">
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-200">Valores e Prazo</h2>
+          <div className={`${cardCls} space-y-4`}>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200">Valores e Prazo</h2>
 
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">Valor Total (R$)</label>
+              <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">Valor Total (R$)</label>
               <input
                 value={totalValue}
                 onChange={e => setTotalValue(e.target.value)}
@@ -386,36 +415,36 @@ export default function ProposalEditor() {
                 type="number"
                 min="0"
                 placeholder="0,00"
-                className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-400 disabled:opacity-50 transition-colors"
+                className={inputCls}
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">Validade (dias)</label>
+              <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">Validade (dias)</label>
               <input
                 value={validityDays}
                 onChange={e => setValidityDays(e.target.value)}
                 disabled={!isEditable}
                 type="number"
                 min="1"
-                className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-400 disabled:opacity-50 transition-colors"
+                className={inputCls}
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">Condições de Pagamento</label>
+              <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">Condições de Pagamento</label>
               <textarea
                 value={paymentTerms}
                 onChange={e => setPaymentTerms(e.target.value)}
                 disabled={!isEditable}
                 rows={3}
-                className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-400 resize-none disabled:opacity-50 transition-colors"
+                className={`${inputCls} resize-none`}
               />
             </div>
 
             {/* Total calculado */}
             {totalValue && (
-              <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
-                <p className="text-xs text-slate-400">Valor Total</p>
-                <p className="text-xl font-bold text-emerald-400 mt-0.5">
+              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-3 text-center">
+                <p className="text-xs text-gray-500 dark:text-slate-400">Valor Total</p>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                   {fmt(parseFloat(totalValue))}
                 </p>
               </div>
@@ -435,11 +464,11 @@ export default function ProposalEditor() {
           )}
 
           {saved && !isNew && (
-            <p className="text-xs text-emerald-400 text-center">✓ Salvo com sucesso</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 text-center">✓ Salvo com sucesso</p>
           )}
 
           {saveMutation.isError && (
-            <div className="flex items-center gap-2 text-red-400 text-xs">
+            <div className="flex items-center gap-2 text-red-500 dark:text-red-400 text-xs">
               <AlertCircle className="w-3.5 h-3.5" /> Erro ao salvar proposta.
             </div>
           )}

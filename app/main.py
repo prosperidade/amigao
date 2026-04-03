@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.metrics import metrics_response
 from app.core.security import warm_up_security
-from app.api.v1 import auth, clients, processes, documents, properties, tasks, threads, intake, checklists, workflows, dossier, proposals, contracts, ai
+from app.api.v1 import auth, clients, processes, documents, properties, tasks, threads, intake, checklists, workflows, dossier, proposals, contracts, ai, dashboard
 from app.api.websockets import manager as websocket_manager
 from app.api.websockets import router as websocket_router
 from app.api.middleware import RequestContextMiddleware
@@ -89,6 +89,7 @@ app.include_router(dossier.router, prefix=f"{settings.API_V1_STR}/processes", ta
 app.include_router(proposals.router, prefix=f"{settings.API_V1_STR}/proposals", tags=["Propostas Comerciais"])
 app.include_router(contracts.router, prefix=f"{settings.API_V1_STR}/contracts", tags=["Contratos"])
 app.include_router(ai.router, prefix=f"{settings.API_V1_STR}", tags=["IA"])
+app.include_router(dashboard.router, prefix=f"{settings.API_V1_STR}/dashboard", tags=["Dashboard"])
 app.include_router(websocket_router, tags=["Tempo Real"])
 
 

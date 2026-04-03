@@ -86,6 +86,15 @@ services:
       SEED_RESET_PASSWORDS: "${SEED_RESET_PASSWORDS:-false}"
       CLIENT_PORTAL_URL: "${CLIENT_PORTAL_URL:-http://localhost:3000/dashboard}"
       BACKEND_CORS_ORIGINS: "${BACKEND_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      AI_DEFAULT_MODEL: "${AI_DEFAULT_MODEL:-gpt-4o-mini}"
+      AI_FALLBACK_MODEL: "${AI_FALLBACK_MODEL:-gemini/gemini-1.5-flash}"
+      AI_MAX_TOKENS: "${AI_MAX_TOKENS:-2048}"
+      AI_TEMPERATURE: "${AI_TEMPERATURE:-0.2}"
+      AI_TIMEOUT_SECONDS: "${AI_TIMEOUT_SECONDS:-30}"
     restart: unless-stopped
     depends_on:
       db:
@@ -135,6 +144,15 @@ services:
       EMAILS_FROM_NAME: "${EMAILS_FROM_NAME:-Amigao do Meio Ambiente}"
       CLIENT_PORTAL_URL: "${CLIENT_PORTAL_URL:-http://localhost:3000/dashboard}"
       BACKEND_CORS_ORIGINS: "${BACKEND_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      AI_DEFAULT_MODEL: "${AI_DEFAULT_MODEL:-gpt-4o-mini}"
+      AI_FALLBACK_MODEL: "${AI_FALLBACK_MODEL:-gemini/gemini-1.5-flash}"
+      AI_MAX_TOKENS: "${AI_MAX_TOKENS:-2048}"
+      AI_TEMPERATURE: "${AI_TEMPERATURE:-0.2}"
+      AI_TIMEOUT_SECONDS: "${AI_TIMEOUT_SECONDS:-30}"
     restart: unless-stopped
     depends_on:
       db:
