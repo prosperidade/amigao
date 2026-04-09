@@ -104,6 +104,18 @@ class Settings(BaseSettings):
     # Custo máximo por job (USD) — proteção contra prompt injection gigante
     AI_MAX_COST_PER_JOB_USD: float = 0.10
 
+    # Legislação — Gemini context loading (sem chunking)
+    LEGISLATION_MAX_CONTEXT_TOKENS: int = 500_000
+    LEGISLATION_MAX_RESULTS: int = 20
+
+    # Claude API (agente regulatório)
+    CLAUDE_LEGAL_MODEL: str = "claude-sonnet-4-20250514"
+    CLAUDE_LEGAL_MAX_TOKENS: int = 4096
+    CLAUDE_LEGAL_TEMPERATURE: float = 0.1
+
+    # Gemini (context loading de legislação)
+    GEMINI_LEGAL_MODEL: str = "gemini/gemini-2.0-flash"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]

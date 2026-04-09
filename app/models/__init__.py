@@ -6,6 +6,9 @@ from app.models.communication import CommunicationThread, Message
 from app.models.contract import Contract
 from app.models.contract_template import ContractTemplate
 from app.models.document import Document
+from app.models.legislation import LegislationDocument
+from app.models.legislation_alert import LegislationAlert
+from app.models.macroetapa import MacroetapaChecklist
 from app.models.process import Process
 from app.models.prompt_template import PromptTemplate
 from app.models.property import Property

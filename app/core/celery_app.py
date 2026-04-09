@@ -1,6 +1,7 @@
 from time import perf_counter
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import before_task_publish, task_failure, task_postrun, task_prerun
 
 from app.core.alerts import emit_operational_alert
@@ -23,6 +24,20 @@ celery_app.conf.update(
     timezone="America/Sao_Paulo",
     enable_utc=False,
     task_track_started=True,
+    beat_schedule={
+        "monitor-legislation-dou-daily": {
+            "task": "workers.monitor_legislation_dou",
+            "schedule": crontab(hour=6, minute=0),  # 06:00 BRT diario
+        },
+        "monitor-legislation-doe-daily": {
+            "task": "workers.monitor_legislation_doe",
+            "schedule": crontab(hour=6, minute=30),  # 06:30 BRT diario
+        },
+        "monitor-legislation-agencies-weekly": {
+            "task": "workers.monitor_legislation_agencies",
+            "schedule": crontab(hour=3, minute=0, day_of_week=1),  # segunda 03:00
+        },
+    },
 )
 
 # Auto-descobrir tasks no módulo workers

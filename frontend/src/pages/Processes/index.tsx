@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { Plus, Search, FileText, Clock, X, CheckCircle2, Circle, Download } from 'lucide-react';
+import { Plus, Search, FileText, Clock, X, CheckCircle2, Circle, Download, LayoutGrid, Columns3 } from 'lucide-react';
 import { AxiosError } from 'axios';
 import DocumentUpload from '@/components/DocumentUpload';
+import QuadroAcoes from './QuadroAcoes';
 
 interface Process {
   id: number;
@@ -63,15 +65,18 @@ const COLUMNS = [
   { id: 'concluido', label: 'Concluído', color: 'bg-green-50 border-green-200 text-green-700' },
 ];
 
+type ViewMode = 'quadro' | 'kanban';
+
 export default function ProcessesPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
+
   const [selectedProcess, setSelectedProcess] = useState<Process | null>(null);
   const [activeTab, setActiveTab] = useState('tasks');
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -113,7 +118,7 @@ export default function ProcessesPage() {
       queryClient.invalidateQueries({ queryKey: ['processes'] });
     },
     onError: (err: AxiosError<{ detail?: string }>) => {
-      alert(err.response?.data?.detail || 'Erro ao alterar o status do processo. Verifique dependências.');
+      toast.error(err.response?.data?.detail || 'Erro ao alterar o status do processo. Verifique dependências.');
     }
   });
 
@@ -155,7 +160,7 @@ export default function ProcessesPage() {
       link.click();
       document.body.removeChild(link);
     } catch {
-      alert('Erro ao gerar link de download seguro.');
+      toast.error('Erro ao gerar link de download seguro.');
     }
   };
 
@@ -195,6 +200,25 @@ export default function ProcessesPage() {
     }
   });
 
+  // Quadro de Ações (macroetapas) — early return APÓS todos os hooks
+  if (viewMode === 'quadro') {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex justify-end mb-2 shrink-0">
+          <button
+            onClick={() => setViewMode('kanban')}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 border border-gray-200 dark:border-zinc-700"
+          >
+            <Columns3 className="w-3.5 h-3.5" /> Voltar ao Kanban
+          </button>
+        </div>
+        <div className="flex-1 min-h-0">
+          <QuadroAcoes />
+        </div>
+      </div>
+    );
+  }
+
   const handleDragStart = (e: React.DragEvent, processId: number) => {
     e.dataTransfer.setData('processId', processId.toString());
   };
@@ -224,9 +248,15 @@ export default function ProcessesPage() {
         </div>
         
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => { setViewMode('quadro'); try { localStorage.setItem('processes-view', 'quadro'); } catch { /* */ } }}
+            className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors px-3 py-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" /> Quadro de Ações (7 Etapas)
+          </button>
           <div className="relative w-64 hidden md:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
+            <input
               type="text"
               placeholder="Buscar processo..."
               value={searchTerm}
@@ -234,7 +264,7 @@ export default function ProcessesPage() {
               className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all dark:text-zinc-200"
             />
           </div>
-          <button 
+          <button
             onClick={() => setIsModalOpen(true)}
             className="bg-primary text-white px-4 py-2 flex items-center gap-2 rounded-lg hover:bg-primary/90 transition-colors shadow-sm font-medium text-sm"
           >

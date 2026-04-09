@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models.process import ProcessStatus
 
@@ -20,7 +20,15 @@ class ProcessBase(BaseModel):
 
 
 class ProcessCreate(ProcessBase):
-    pass
+    @field_validator("status")
+    @classmethod
+    def validate_initial_status(cls, v: ProcessStatus) -> ProcessStatus:
+        allowed = {ProcessStatus.lead, ProcessStatus.triagem}
+        if v not in allowed:
+            raise ValueError(
+                f"Status inicial deve ser 'lead' ou 'triagem', recebido: '{v.value}'"
+            )
+        return v
 
 
 class ProcessUpdate(BaseModel):
@@ -37,6 +45,7 @@ class ProcessStatusUpdate(BaseModel):
 class Process(ProcessBase):
     id: int
     tenant_id: int
+    macroetapa: Optional[str] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 

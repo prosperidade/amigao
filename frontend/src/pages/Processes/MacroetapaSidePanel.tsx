@@ -1,0 +1,254 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { X, CheckSquare, Square, FileText, Clock, Sparkles } from 'lucide-react';
+import { api } from '@/lib/api';
+import type { KanbanProcessCard, MacroetapaStatusResponse } from './quadro-types';
+import MacroetapaStepper from './MacroetapaStepper';
+import DocumentUpload from '@/components/DocumentUpload';
+
+interface Props {
+  card: KanbanProcessCard;
+  onClose: () => void;
+}
+
+type TabId = 'checklist' | 'documents' | 'timeline';
+
+interface TimelineEntry {
+  id: number;
+  action: string;
+  details?: string;
+  old_value?: string;
+  new_value?: string;
+  created_at: string;
+}
+
+interface ProcessDocument {
+  id: number;
+  filename: string;
+  file_size_bytes: number;
+  created_at: string;
+}
+
+export default function MacroetapaSidePanel({ card, onClose }: Props) {
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<TabId>('checklist');
+
+  const { data: macroetapaStatus } = useQuery({
+    queryKey: ['macroetapa-status', card.id],
+    queryFn: () =>
+      api.get<MacroetapaStatusResponse>(`/processes/${card.id}/macroetapa/status`).then(r => r.data),
+  });
+
+  const { data: timeline } = useQuery({
+    queryKey: ['timeline', card.id],
+    queryFn: () => api.get<TimelineEntry[]>(`/processes/${card.id}/timeline`).then(r => r.data),
+    enabled: activeTab === 'timeline',
+  });
+
+  const { data: documents } = useQuery({
+    queryKey: ['documents', card.id],
+    queryFn: () => api.get<ProcessDocument[]>(`/documents/?process_id=${card.id}`).then(r => r.data),
+    enabled: activeTab === 'documents',
+  });
+
+  const toggleActionMutation = useMutation({
+    mutationFn: ({ actionId, completed }: { actionId: string; completed: boolean }) =>
+      api.patch(`/processes/${card.id}/macroetapa/${card.macroetapa}/actions`, {
+        action_id: actionId,
+        completed,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['macroetapa-status', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['kanban'] });
+    },
+  });
+
+  const currentStep = macroetapaStatus?.steps.find(s => s.status === 'active');
+
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'checklist', label: 'Checklist' },
+    { id: 'documents', label: 'Documentos' },
+    { id: 'timeline', label: 'Timeline' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        {/* Header */}
+        <div className="p-5 border-b border-gray-100 dark:border-zinc-800">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                {card.client_name ?? card.title}
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {card.property_name ?? ''} {card.demand_type ? `• ${card.demand_type}` : ''}
+              </p>
+              {card.macroetapa_label && (
+                <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                  {card.macroetapa_label}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 -mr-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Stepper */}
+        {macroetapaStatus && (
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-zinc-800 max-h-56 overflow-y-auto">
+            <MacroetapaStepper steps={macroetapaStatus.steps} compact />
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="px-5 border-b border-gray-100 dark:border-zinc-800 flex gap-6 text-sm font-medium text-gray-500 dark:text-gray-400">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-3 border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {/* Checklist tab */}
+          {activeTab === 'checklist' && currentStep && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Ações da Etapa
+                </h3>
+                <span className="text-xs text-gray-500">
+                  {currentStep.actions.filter(a => a.completed).length}/{currentStep.actions.length}
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                {currentStep.actions.map(action => (
+                  <button
+                    type="button"
+                    key={action.id}
+                    onClick={() =>
+                      toggleActionMutation.mutate({
+                        actionId: action.id,
+                        completed: !action.completed,
+                      })
+                    }
+                    className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left w-full"
+                  >
+                    {action.completed ? (
+                      <CheckSquare className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                    ) : (
+                      <Square className="w-5 h-5 text-gray-300 dark:text-zinc-600 shrink-0 mt-0.5" />
+                    )}
+                    <span
+                      className={`text-sm ${
+                        action.completed
+                          ? 'text-gray-400 line-through'
+                          : 'text-gray-800 dark:text-gray-200'
+                      }`}
+                    >
+                      {action.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Agent suggestion */}
+              {currentStep.agent_chain && (
+                <div className="mt-4 p-3 bg-amber-50 dark:bg-zinc-800 rounded-lg border border-amber-200 dark:border-zinc-700">
+                  <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400 mb-1">
+                    <Sparkles className="w-4 h-4" />
+                    Agente IA disponível
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Clique para consultar o agente de IA vinculado a esta etapa.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'checklist' && !currentStep && (
+            <p className="text-sm text-gray-500 text-center py-8">
+              Nenhuma etapa ativa. Inicialize as macroetapas do processo.
+            </p>
+          )}
+
+          {/* Documents tab */}
+          {activeTab === 'documents' && (
+            <div className="space-y-4">
+              <DocumentUpload processId={card.id} />
+              {documents?.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">Nenhum documento anexado.</p>
+              )}
+              {documents?.map(doc => (
+                <div
+                  key={doc.id}
+                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-100 dark:border-zinc-800"
+                >
+                  <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {doc.filename}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Timeline tab */}
+          {activeTab === 'timeline' && (
+            <div className="relative pl-6 border-l-2 border-gray-100 dark:border-zinc-800 space-y-5 py-2">
+              {timeline?.length === 0 && (
+                <p className="text-sm text-gray-500 text-center">Nenhum evento registrado.</p>
+              )}
+              {timeline?.map(log => (
+                <div key={log.id} className="relative">
+                  <div className="absolute -left-[31px] bg-white dark:bg-zinc-900 p-1">
+                    <div className="w-3 h-3 bg-primary rounded-full ring-4 ring-white dark:ring-zinc-900" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {log.action === 'status_changed'
+                      ? 'Mudança de Status'
+                      : log.action === 'macroetapa_changed'
+                        ? 'Avanço de Macroetapa'
+                        : log.details ?? log.action}
+                  </p>
+                  {log.old_value && log.new_value && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {log.old_value} → <span className="text-primary font-medium">{log.new_value}</span>
+                    </p>
+                  )}
+                  <span className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(log.created_at).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

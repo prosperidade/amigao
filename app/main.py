@@ -3,10 +3,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
-from app.api.middleware import RequestContextMiddleware
+from app.api.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.api.v1 import (
+    agents,
     ai,
     auth,
     checklists,
@@ -16,6 +19,8 @@ from app.api.v1 import (
     documents,
     dossier,
     intake,
+    legislation,
+    legislation_alerts,
     processes,
     properties,
     proposals,
@@ -27,6 +32,7 @@ from app.api.websockets import manager as websocket_manager
 from app.api.websockets import router as websocket_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.rate_limit import limiter
 from app.core.metrics import metrics_response
 from app.core.security import warm_up_security
 from app.db.session import SessionLocal
@@ -70,22 +76,37 @@ async def lifespan(_: FastAPI):
 # Inicializar logging estruturado ao subir a aplicação
 setup_logging()
 
+_is_dev = settings.ENVIRONMENT == "development"
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url="/docs",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if _is_dev else None,
+    docs_url="/docs" if _is_dev else None,
+    redoc_url="/redoc" if _is_dev else None,
     lifespan=lifespan,
 )
 
-# Middlewares (ordem importa: Context antes de CORS)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Middlewares (ordem importa: Security → Context → CORS)
+# Starlette executa na ordem inversa do registro: CORS → Context → Security
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Request-Id",
+        "X-Auth-Profile",
+        "X-Tenant-Id",
+        "Accept",
+    ],
 )
 
 # Rotas
@@ -104,7 +125,10 @@ app.include_router(dossier.router, prefix=f"{settings.API_V1_STR}/processes", ta
 app.include_router(proposals.router, prefix=f"{settings.API_V1_STR}/proposals", tags=["Propostas Comerciais"])
 app.include_router(contracts.router, prefix=f"{settings.API_V1_STR}/contracts", tags=["Contratos"])
 app.include_router(ai.router, prefix=f"{settings.API_V1_STR}", tags=["IA"])
+app.include_router(agents.router, prefix=f"{settings.API_V1_STR}/agents", tags=["Agentes IA"])
 app.include_router(dashboard.router, prefix=f"{settings.API_V1_STR}/dashboard", tags=["Dashboard"])
+app.include_router(legislation.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Base Legislativa"])
+app.include_router(legislation_alerts.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Alertas Legislativos"])
 app.include_router(websocket_router, tags=["Tempo Real"])
 
 

@@ -83,9 +83,9 @@ class Process(Base):
     __tablename__ = "processes"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
-    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False, index=True)
+    property_id = Column(Integer, ForeignKey("properties.id", ondelete="SET NULL"), nullable=True, index=True)
 
     title = Column(String, nullable=False)
     description = Column(Text)
@@ -96,7 +96,7 @@ class Process(Base):
     urgency = Column(String, nullable=True)
 
     # Responsável interno
-    responsible_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    responsible_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Dados de protocolo externo
     destination_agency = Column(String, nullable=True)
@@ -113,6 +113,9 @@ class Process(Base):
     initial_diagnosis = Column(Text, nullable=True)             # pré-diagnóstico por regras
     suggested_checklist_template = Column(String, nullable=True) # demand_type do template sugerido
     intake_notes = Column(Text, nullable=True)                  # observações do intake
+
+    # Macroetapa (7 etapas do fluxo real MVP1)
+    macroetapa = Column(String, nullable=True, index=True)
 
     # IA / score
     ai_summary = Column(Text, nullable=True)
