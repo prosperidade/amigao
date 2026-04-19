@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, CheckSquare, Square, FileText, Clock, Sparkles } from 'lucide-react';
+import { X, CheckSquare, Square, FileText, Clock, Sparkles, Loader2, Zap } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import type { KanbanProcessCard, MacroetapaStatusResponse } from './quadro-types';
+import { CHAIN_LABELS } from '@/types/agent';
 import MacroetapaStepper from './MacroetapaStepper';
 import DocumentUpload from '@/components/DocumentUpload';
 
@@ -169,17 +171,9 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
                 ))}
               </div>
 
-              {/* Agent suggestion */}
+              {/* Agent chain trigger */}
               {currentStep.agent_chain && (
-                <div className="mt-4 p-3 bg-amber-50 dark:bg-zinc-800 rounded-lg border border-amber-200 dark:border-zinc-700">
-                  <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400 mb-1">
-                    <Sparkles className="w-4 h-4" />
-                    Agente IA disponível
-                  </div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    Clique para consultar o agente de IA vinculado a esta etapa.
-                  </p>
-                </div>
+                <AgentChainButton processId={card.id} chainName={currentStep.agent_chain} />
               )}
             </div>
           )}
@@ -248,6 +242,53 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Botao para disparar chain de agentes a partir da macroetapa */
+function AgentChainButton({ processId, chainName }: { processId: number; chainName: string }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.post('/agents/chain-async', {
+        chain_name: chainName,
+        process_id: processId,
+        metadata: {},
+        stop_on_review: true,
+      }).then(r => r.data),
+    onSuccess: () => {
+      toast.success('Chain de agentes enfileirada!');
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs', processId] }), 2000);
+    },
+    onError: () => {
+      toast.error('Erro ao executar chain de agentes.');
+    },
+  });
+
+  return (
+    <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-500/10 rounded-lg border border-purple-200 dark:border-purple-500/20">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300 mb-1">
+            <Sparkles className="w-4 h-4" />
+            {CHAIN_LABELS[chainName] ?? chainName}
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            Agentes IA para esta etapa
+          </p>
+        </div>
+        <button
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
+          className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors"
+        >
+          {mutation.isPending
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <Zap className="w-3.5 h-3.5" />}
+          Executar
+        </button>
       </div>
     </div>
   );

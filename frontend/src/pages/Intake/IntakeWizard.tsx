@@ -2,10 +2,19 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import DiagnosisPanel from './DiagnosisPanel';
+import DraftDocumentUploader from './DraftDocumentUploader';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4;
+// Regente Cam1: Step 0 = tipo de entrada, Step 4 = documentos (opcional), Step 5 = confirmar
+type Step = 0 | 1 | 2 | 3 | 4 | 5;
+
+type EntryType =
+  | 'novo_cliente_novo_imovel'
+  | 'cliente_existente_novo_imovel'
+  | 'cliente_existente_imovel_existente'
+  | 'complementar_base_existente'
+  | 'importar_documentos';
 
 interface DocumentRequirement {
   id: string;
@@ -28,6 +37,9 @@ interface ClassifyResult {
 }
 
 interface FormState {
+  // Etapa 0 — Tipo de entrada (Regente Cam1)
+  entry_type: EntryType;
+
   // Etapa 1 — Cliente
   client_mode: 'existing' | 'new';
   client_id: string;
@@ -40,6 +52,7 @@ interface FormState {
 
   // Etapa 2 — Demanda
   description: string;
+  initial_summary: string;
   urgency: string;
 
   // Etapa 3 — Imóvel
@@ -53,6 +66,44 @@ interface FormState {
   // Etapa 4 — Notas finais
   intake_notes: string;
 }
+
+const ENTRY_TYPE_OPTIONS: { value: EntryType; label: string; description: string; icon: string; available: boolean }[] = [
+  {
+    value: 'novo_cliente_novo_imovel',
+    label: 'Novo cliente + novo imóvel',
+    description: 'Cadastrar do zero',
+    icon: '✨',
+    available: true,
+  },
+  {
+    value: 'cliente_existente_novo_imovel',
+    label: 'Cliente existente + novo imóvel',
+    description: 'Adicionar imóvel a um cliente já cadastrado',
+    icon: '➕',
+    available: true,
+  },
+  {
+    value: 'cliente_existente_imovel_existente',
+    label: 'Cliente existente + imóvel existente',
+    description: 'Abrir nova demanda sobre base já criada',
+    icon: '🔄',
+    available: true,
+  },
+  {
+    value: 'complementar_base_existente',
+    label: 'Complementar base já iniciada',
+    description: 'Adicionar dados/docs faltantes a um caso existente',
+    icon: '📝',
+    available: true,
+  },
+  {
+    value: 'importar_documentos',
+    label: 'Importar documentos',
+    description: 'Subir arquivos e deixar a IA preencher',
+    icon: '📄',
+    available: true,
+  },
+];
 
 const SOURCE_CHANNEL_OPTIONS = [
   { value: 'whatsapp', label: '💬 WhatsApp' },
@@ -76,16 +127,19 @@ const URGENCY_OPTIONS = [
 
 export default function IntakeWizard() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step>(0);
   const [classifyResult, setClassifyResult] = useState<ClassifyResult | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftId, setDraftId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
+    entry_type: 'novo_cliente_novo_imovel',
     client_mode: 'new', client_id: '', client_name: '', client_phone: '',
     client_email: '', client_cpf_cnpj: '', client_type: 'pf', source_channel: 'whatsapp',
-    description: '', urgency: 'media',
+    description: '', initial_summary: '', urgency: 'media',
     property_mode: 'none', property_id: '', property_name: '',
     property_municipality: '', property_state: '', property_car: '',
     intake_notes: '',
@@ -93,6 +147,29 @@ export default function IntakeWizard() {
 
   const set = (field: keyof FormState, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
+
+  // Regente Cam1: entry_type força certos modes no Step 1 e 3
+  const selectEntryType = (t: EntryType) => {
+    const forceExistingClient =
+      t === 'cliente_existente_novo_imovel' ||
+      t === 'cliente_existente_imovel_existente' ||
+      t === 'complementar_base_existente';
+    const forceExistingProperty =
+      t === 'cliente_existente_imovel_existente' ||
+      t === 'complementar_base_existente';
+    setForm(prev => ({
+      ...prev,
+      entry_type: t,
+      client_mode: forceExistingClient ? 'existing' : prev.client_mode,
+      property_mode: forceExistingProperty
+        ? 'existing'
+        : t === 'cliente_existente_novo_imovel'
+        ? 'new'
+        : prev.property_mode,
+    }));
+  };
+
+  const isEnrichFlow = form.entry_type === 'complementar_base_existente';
 
   // ── Etapa 2: classificar demanda ──────────────────────────────────────────
   const handleClassify = async () => {
@@ -116,44 +193,69 @@ export default function IntakeWizard() {
     }
   };
 
-  // ── Etapa 4: criar caso ───────────────────────────────────────────────────
+  // ── Monta payload compartilhado entre submit e salvar-rascunho ───────────
+  const buildPayload = (): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      entry_type: form.entry_type,
+      description: form.description.trim() || null,
+      initial_summary: form.initial_summary.trim() || null,
+      urgency: form.urgency,
+      source_channel: form.source_channel,
+      intake_notes: form.intake_notes || null,
+      demand_type: classifyResult?.demand_type,
+    };
+
+    if (form.client_mode === 'existing') {
+      payload.client_id = parseInt(form.client_id);
+    } else {
+      payload.new_client = {
+        full_name: form.client_name,
+        phone: form.client_phone || null,
+        email: form.client_email || null,
+        cpf_cnpj: form.client_cpf_cnpj || null,
+        client_type: form.client_type,
+        source_channel: form.source_channel,
+      };
+    }
+
+    if (form.property_mode === 'existing') {
+      payload.property_id = parseInt(form.property_id);
+    } else if (form.property_mode === 'new' && form.property_name.trim()) {
+      payload.new_property = {
+        name: form.property_name,
+        municipality: form.property_municipality || null,
+        state: form.property_state || null,
+        car_number: form.property_car || null,
+      };
+    }
+
+    return payload;
+  };
+
+  // ── Etapa 4: criar caso OU complementar base ─────────────────────────────
   const handleSubmit = async () => {
     setSubmitting(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = {
-        description: form.description,
-        urgency: form.urgency,
-        source_channel: form.source_channel,
-        intake_notes: form.intake_notes || null,
-        demand_type: classifyResult?.demand_type,
-      };
-
-      if (form.client_mode === 'existing') {
-        payload.client_id = parseInt(form.client_id);
-      } else {
-        payload.new_client = {
-          full_name: form.client_name,
-          phone: form.client_phone || null,
-          email: form.client_email || null,
-          cpf_cnpj: form.client_cpf_cnpj || null,
-          client_type: form.client_type,
-          source_channel: form.source_channel,
+      if (isEnrichFlow) {
+        // CAM1-004: complementar base existente
+        const clientId = parseInt(form.client_id);
+        if (!clientId) {
+          setError('Informe o ID do cliente existente.');
+          setSubmitting(false);
+          return;
+        }
+        const propertyId = form.property_id ? parseInt(form.property_id) : null;
+        const enrichPayload = {
+          client_id: clientId,
+          property_id: propertyId,
+          note: form.intake_notes || null,
         };
+        const { data } = await api.post('/intake/enrich', enrichPayload);
+        navigate('/processes', { state: { baseEnriched: true, enrichData: data } });
+        return;
       }
-
-      if (form.property_mode === 'existing') {
-        payload.property_id = parseInt(form.property_id);
-      } else if (form.property_mode === 'new' && form.property_name.trim()) {
-        payload.new_property = {
-          name: form.property_name,
-          municipality: form.property_municipality || null,
-          state: form.property_state || null,
-          car_number: form.property_car || null,
-        };
-      }
-
-      const { data } = await api.post('/intake/create-case', payload);
+      const { data } = await api.post('/intake/create-case', buildPayload());
       navigate(`/processes/${data.process_id}`, {
         state: { fromIntake: true, caseData: data },
       });
@@ -165,12 +267,67 @@ export default function IntakeWizard() {
     }
   };
 
+  // ── Salvar rascunho (CAM1-008/009) ────────────────────────────────────────
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    setError(null);
+    try {
+      const id = await persistDraft();
+      if (!id) throw new Error('Falha ao salvar rascunho');
+      navigate('/processes', { state: { draftSaved: true } });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? (err as { message?: string })?.message;
+      setError(msg || 'Erro ao salvar rascunho.');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  // Persiste o rascunho sem navegar — útil pra obter draftId antes de upload.
+  const persistDraft = async (): Promise<number | null> => {
+    try {
+      const body = {
+        entry_type: form.entry_type,
+        form_data: buildPayload(),
+      };
+      if (draftId) {
+        await api.patch(`/intake/drafts/${draftId}`, body);
+        return draftId;
+      }
+      const { data } = await api.post('/intake/drafts', body);
+      setDraftId(data.id);
+      return data.id as number;
+    } catch {
+      return null;
+    }
+  };
+
+  // Auto-cria rascunho ao entrar no Step 4 (Documentos) se ainda não existe.
+  const ensureDraftBeforeStep4 = async () => {
+    if (!draftId) {
+      setError(null);
+      const id = await persistDraft();
+      if (!id) setError('Não consegui salvar o rascunho para anexar documentos.');
+    }
+  };
+
   const canGoNext = () => {
+    if (step === 0) {
+      const opt = ENTRY_TYPE_OPTIONS.find(o => o.value === form.entry_type);
+      return !!opt?.available;
+    }
     if (step === 1) {
       if (form.client_mode === 'existing') return form.client_id.trim().length > 0;
-      return form.client_name.trim().length >= 2;
+      // Regente Cam1: dados mínimos = nome + telefone + email + tipo
+      return (
+        form.client_name.trim().length >= 2 &&
+        !!form.client_phone.trim() &&
+        !!form.client_email.trim() &&
+        !!form.client_type
+      );
     }
-    if (step === 2) return form.description.trim().length >= 10 && !!classifyResult;
+    // Steps 2, 3 e 4 sempre permitem avançar (todos opcionais agora)
     return true;
   };
 
@@ -189,13 +346,12 @@ export default function IntakeWizard() {
 
         {/* Stepper */}
         <div className="flex items-center justify-between mb-8 px-4">
-          {(['1', '2', '3', '4'] as const).map((s, i) => {
-            const labels = ['Cliente', 'Demanda', 'Imóvel', 'Confirmar'];
-            const num = i + 1;
+          {([0, 1, 2, 3, 4, 5] as const).map((num, i) => {
+            const labels = ['Entrada', 'Cliente', 'Demanda', 'Imóvel', 'Documentos', 'Confirmar'];
             const active = step === num;
             const done = step > num;
             return (
-              <div key={s} className="flex-1 flex flex-col items-center gap-1">
+              <div key={num} className="flex-1 flex flex-col items-center gap-1">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
                   done ? 'bg-emerald-500 border-emerald-500 text-white' :
                   active ? 'bg-white border-white text-slate-900' :
@@ -203,12 +359,9 @@ export default function IntakeWizard() {
                 }`}>
                   {done ? '✓' : num}
                 </div>
-                <span className={`text-xs ${active ? 'text-white font-semibold' : 'text-slate-500'}`}>
+                <span className={`text-[10px] ${active ? 'text-white font-semibold' : 'text-slate-500'}`}>
                   {labels[i]}
                 </span>
-                {i < 3 && (
-                  <div className={`absolute hidden`} />
-                )}
               </div>
             );
           })}
@@ -220,6 +373,50 @@ export default function IntakeWizard() {
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
               {error}
+            </div>
+          )}
+
+          {/* ── Etapa 0: Tipo de entrada (Regente Cam1) ────────────────────── */}
+          {step === 0 && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-white mb-1">O que você está cadastrando agora?</h2>
+                <p className="text-slate-400 text-sm">Escolha o cenário para o sistema adaptar o fluxo.</p>
+              </div>
+
+              <div className="grid gap-3">
+                {ENTRY_TYPE_OPTIONS.map(opt => {
+                  const active = form.entry_type === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => opt.available && selectEntryType(opt.value)}
+                      disabled={!opt.available}
+                      className={`text-left p-4 rounded-xl border transition-all flex items-start gap-3 ${
+                        !opt.available
+                          ? 'bg-white/5 border-white/5 text-slate-500 cursor-not-allowed opacity-50'
+                          : active
+                          ? 'bg-emerald-500/10 border-emerald-500 text-white'
+                          : 'bg-white/5 border-white/10 text-slate-300 hover:border-white/30'
+                      }`}
+                    >
+                      <span className="text-2xl">{opt.icon}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{opt.label}</span>
+                          {!opt.available && (
+                            <span className="text-[10px] uppercase tracking-wide bg-white/10 px-1.5 py-0.5 rounded">
+                              Em breve
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-400 mt-0.5 block">{opt.description}</span>
+                      </div>
+                      {active && <span className="text-emerald-400">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -273,36 +470,56 @@ export default function IntakeWizard() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-white mb-1">Qual é a demanda?</h2>
-                <p className="text-slate-400 text-sm">Descreva com suas palavras o problema do cliente. O sistema classifica automaticamente.</p>
+                <p className="text-slate-400 text-sm">
+                  Regra Regente: o card pode nascer <strong>sem</strong> descrição completa. Você complementa depois.
+                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Descrição da demanda *</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Resumo inicial <span className="text-slate-500 font-normal">(opcional — voz do cliente no primeiro contato)</span>
+                </label>
                 <textarea
-                  rows={5}
-                  value={form.description}
-                  onChange={e => set('description', e.target.value)}
-                  placeholder="Ex: Cliente chegou pelo WhatsApp dizendo que o banco solicitou o CAR regularizado para liberar o PRONAF. Ele tem o imóvel há 10 anos mas nunca regularizou. Precisa resolver rápido pois a proposta vence em 30 dias."
+                  rows={2}
+                  value={form.initial_summary}
+                  onChange={e => set('initial_summary', e.target.value)}
+                  placeholder="Ex: Cliente ligou querendo regularizar CAR para pegar PRONAF"
                   className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 resize-none"
                 />
-                <p className="text-xs text-slate-500 mt-1">{form.description.length} caracteres (mín. 10)</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Descrição técnica <span className="text-slate-500 font-normal">(opcional — habilita classificação automática)</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={form.description}
+                  onChange={e => set('description', e.target.value)}
+                  placeholder="Descrição mais detalhada — se tiver 10+ caracteres, o sistema pode pré-classificar a demanda."
+                  className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 resize-none"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  {form.description.length} caracteres {form.description.length < 10 && form.description.length > 0 ? '(mín. 10 para classificar)' : ''}
+                </p>
               </div>
 
               <Select label="Urgência" value={form.urgency} onChange={v => set('urgency', v)} options={URGENCY_OPTIONS} />
 
-              {!classifyResult ? (
+              {form.description.trim().length >= 10 && !classifyResult && (
                 <button
                   onClick={handleClassify}
-                  disabled={classifying || form.description.trim().length < 10}
+                  disabled={classifying}
                   className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold transition-all flex items-center justify-center gap-2"
                 >
                   {classifying ? (
                     <><span className="animate-spin">⟳</span> Classificando...</>
                   ) : (
-                    '🔍 Classificar demanda'
+                    '🔍 Classificar demanda (opcional)'
                   )}
                 </button>
-              ) : (
+              )}
+              {classifyResult && (
                 <div className="space-y-3">
                   <DiagnosisPanel result={classifyResult} />
                   <button
@@ -360,36 +577,73 @@ export default function IntakeWizard() {
             </div>
           )}
 
-          {/* ── Etapa 4: Confirmar ────────────────────────────────────────── */}
-          {step === 4 && classifyResult && (
+          {/* ── Etapa 4: Documentos (Regente Cam1 Bloco 3 — opcional) ───────── */}
+          {step === 4 && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-white mb-1">📎 Documentos (opcional)</h2>
+                <p className="text-slate-400 text-sm">
+                  Upload opcional dos documentos iniciais. Regra Regente: o card nasce mesmo sem docs completos — isso aqui só pré-alimenta a base.
+                </p>
+              </div>
+              {draftId ? (
+                <DraftDocumentUploader draftId={draftId} />
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-800/50 border border-white/10 text-sm text-slate-300">
+                  Preparando rascunho... <button
+                    onClick={ensureDraftBeforeStep4}
+                    className="underline hover:text-white"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Etapa 5: Confirmar ────────────────────────────────────────── */}
+          {step === 5 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-white mb-1">Confirmar e abrir caso</h2>
-                <p className="text-slate-400 text-sm">Revise o resumo e confirme a abertura do caso.</p>
+                <p className="text-slate-400 text-sm">
+                  Revise o resumo. Você pode criar o card agora ou salvar como rascunho pra continuar depois.
+                </p>
               </div>
 
               {/* Resumo */}
               <div className="space-y-3">
+                <SummaryRow icon="🎯" label="Cenário">
+                  {ENTRY_TYPE_OPTIONS.find(o => o.value === form.entry_type)?.label ?? form.entry_type}
+                </SummaryRow>
                 <SummaryRow icon="👤" label="Cliente">
                   {form.client_mode === 'existing'
                     ? `Cliente ID #${form.client_id}`
                     : form.client_name}
                 </SummaryRow>
                 <SummaryRow icon="🏷️" label="Tipo de demanda">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    classifyResult.urgency_flag === 'critica' ? 'bg-red-500/20 text-red-300' :
-                    classifyResult.urgency_flag === 'alta' ? 'bg-orange-500/20 text-orange-300' :
-                    'bg-emerald-500/20 text-emerald-300'
-                  }`}>
-                    {classifyResult.demand_label}
-                  </span>
+                  {classifyResult ? (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      classifyResult.urgency_flag === 'critica' ? 'bg-red-500/20 text-red-300' :
+                      classifyResult.urgency_flag === 'alta' ? 'bg-orange-500/20 text-orange-300' :
+                      'bg-emerald-500/20 text-emerald-300'
+                    }`}>
+                      {classifyResult.demand_label}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-500/20 text-slate-300">
+                      Não identificado — a IA classifica depois
+                    </span>
+                  )}
                 </SummaryRow>
                 <SummaryRow icon="🚨" label="Urgência">
                   {URGENCY_OPTIONS.find(o => o.value === form.urgency)?.label ?? form.urgency}
                 </SummaryRow>
-                <SummaryRow icon="📋" label="Documentos esperados">
-                  {classifyResult.required_documents.filter(d => d.required).length} obrigatórios, {classifyResult.required_documents.length} no total
-                </SummaryRow>
+                {classifyResult && (
+                  <SummaryRow icon="📋" label="Documentos esperados">
+                    {classifyResult.required_documents.filter(d => d.required).length} obrigatórios, {classifyResult.required_documents.length} no total
+                  </SummaryRow>
+                )}
                 {form.property_mode !== 'none' && (
                   <SummaryRow icon="🌾" label="Imóvel">
                     {form.property_mode === 'existing' ? `Imóvel ID #${form.property_id}` : form.property_name}
@@ -408,34 +662,56 @@ export default function IntakeWizard() {
                 />
               </div>
 
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
-              >
-                {submitting ? (
-                  <><span className="animate-spin">⟳</span> Criando caso...</>
-                ) : (
-                  '✅ Abrir caso agora'
+              <div className="space-y-3">
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting || savingDraft}
+                  className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
+                >
+                  {submitting ? (
+                    <><span className="animate-spin">⟳</span> {isEnrichFlow ? 'Complementando...' : 'Criando caso...'}</>
+                  ) : isEnrichFlow ? (
+                    '📝 Complementar base agora'
+                  ) : (
+                    '✅ Abrir caso agora'
+                  )}
+                </button>
+
+                {!isEnrichFlow && (
+                  <button
+                    onClick={handleSaveDraft}
+                    disabled={submitting || savingDraft}
+                    className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-sm font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                  >
+                    {savingDraft ? (
+                      <><span className="animate-spin">⟳</span> Salvando...</>
+                    ) : (
+                      '💾 Salvar e continuar depois'
+                    )}
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
           )}
 
           {/* Navegação */}
           <div className="flex justify-between mt-8 pt-6 border-t border-white/10">
             <button
-              onClick={() => setStep(prev => Math.max(1, prev - 1) as Step)}
-              disabled={step === 1}
+              onClick={() => setStep(prev => Math.max(0, prev - 1) as Step)}
+              disabled={step === 0}
               className="px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 disabled:opacity-30 transition-all text-sm font-medium"
             >
               ← Voltar
             </button>
-            {step < 4 && (
+            {step < 5 && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   setError(null);
-                  setStep(prev => Math.min(4, prev + 1) as Step);
+                  // Auto-salva rascunho ao entrar no Step 4 (Documentos) pra habilitar upload
+                  if (step === 3) {
+                    await ensureDraftBeforeStep4();
+                  }
+                  setStep(prev => Math.min(5, prev + 1) as Step);
                 }}
                 disabled={!canGoNext()}
                 className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-semibold transition-all text-sm"

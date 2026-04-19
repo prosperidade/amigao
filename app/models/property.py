@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
+from app.models.types import PortableJSON
 
 
 class Property(Base):
@@ -11,8 +12,8 @@ class Property(Base):
     __tablename__ = "properties"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     name = Column(String, nullable=False)
     registry_number = Column(String, nullable=True)   # matrícula
@@ -31,6 +32,10 @@ class Property(Base):
     has_embargo = Column(Boolean, default=False)
     status = Column(String, default="active")         # active, inactive, archived
     notes = Column(Text, nullable=True)
+
+    # Regente Cam2 CAM2IH-007 — origem por campo: raw | ai_extracted | human_validated
+    # Ex: {"car_code": "human_validated", "registry_number": "ai_extracted", ...}
+    field_sources = Column(PortableJSON, nullable=True, default=dict)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

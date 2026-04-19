@@ -78,13 +78,16 @@ def generate_weekly_summary(tenant_id: int, process_id: int) -> dict[str, Any]:
         # Salvar o resumo na AuditLog como um evento do sistema
         audit = AuditLog(
             tenant_id=tenant_id,
-            user_id=None, # System
+            user_id=None,  # System
             entity_type="process",
             entity_id=process.id,
             action="ai_summary_generated",
-            details=ai_text
+            details=ai_text,
         )
         db.add(audit)
+        db.flush()
+        from app.services.audit_hash import stamp_audit_hash
+        stamp_audit_hash(db, audit)
         db.commit()
 
         logger.info(f"✨ Resumo de IA gerado para Processo #{process_id}")

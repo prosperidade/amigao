@@ -2,8 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
-
-import httpx
+from unittest.mock import MagicMock
 
 from app.core import alerts
 from app.core.logging import request_id_ctx
@@ -20,29 +19,14 @@ def test_should_dispatch_webhook_respects_min_severity(monkeypatch) -> None:
 
 
 def test_dispatch_webhook_sends_auth_signature_and_traceparent(monkeypatch) -> None:
+    """Verify that _dispatch_webhook enqueues a Celery task with correct payload and headers."""
     captured: dict[str, object] = {}
 
-    class FakeResponse:
-        def raise_for_status(self) -> None:
-            return None
+    mock_delay = MagicMock(side_effect=lambda **kwargs: captured.update(kwargs))
 
-    class FakeClient:
-        def __init__(self, *args, **kwargs) -> None:
-            captured["timeout"] = kwargs.get("timeout")
+    import app.workers.webhook_tasks as wt
+    monkeypatch.setattr(wt.send_webhook_alert, "delay", mock_delay)
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb) -> bool:
-            return False
-
-        def post(self, url: str, *, content: bytes, headers: dict[str, str]):
-            captured["url"] = url
-            captured["content"] = content
-            captured["headers"] = headers
-            return FakeResponse()
-
-    monkeypatch.setattr(alerts.httpx, "Client", FakeClient)
     monkeypatch.setattr(alerts.settings, "ALERT_WEBHOOK_URL", "https://alerts.example/webhook")
     monkeypatch.setattr(alerts.settings, "ALERT_WEBHOOK_TIMEOUT_SECONDS", 4.5)
     monkeypatch.setattr(alerts.settings, "ALERT_WEBHOOK_MIN_SEVERITY", "warning")
@@ -66,11 +50,13 @@ def test_dispatch_webhook_sends_auth_signature_and_traceparent(monkeypatch) -> N
         request_id_ctx.reset(request_token)
         reset_trace_context(trace_token, span_token)
 
-    payload = json.loads(captured["content"].decode("utf-8"))
+    mock_delay.assert_called_once()
+    assert captured["url"] == "https://alerts.example/webhook"
+
+    raw_payload = bytes.fromhex(captured["raw_payload_hex"])
+    payload = json.loads(raw_payload.decode("utf-8"))
     headers = captured["headers"]
 
-    assert captured["url"] == "https://alerts.example/webhook"
-    assert captured["timeout"] == 4.5
     assert payload["category"] == "smoke_test"
     assert payload["severity"] == "warning"
     assert payload["message"] == "Webhook hardening smoke"
@@ -87,26 +73,18 @@ def test_dispatch_webhook_sends_auth_signature_and_traceparent(monkeypatch) -> N
     assert headers["traceparent"] == f"00-{'a' * 32}-{'b' * 16}-01"
     assert headers["X-Amigao-Signature-256"] == "sha256=" + hmac.new(
         b"signing-secret",
-        captured["content"],
+        raw_payload,
         hashlib.sha256,
     ).hexdigest()
 
 
-def test_dispatch_webhook_logs_failure_metadata(monkeypatch, caplog) -> None:
-    class FailingClient:
-        def __init__(self, *args, **kwargs) -> None:
-            return None
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb) -> bool:
-            return False
-
-        def post(self, url: str, *, content: bytes, headers: dict[str, str]):
-            raise httpx.ConnectError("network down")
-
-    monkeypatch.setattr(alerts.httpx, "Client", FailingClient)
+def test_dispatch_webhook_logs_failure_on_enqueue_error(monkeypatch, caplog) -> None:
+    """Verify that when Celery enqueue fails, a warning is logged."""
+    import app.workers.webhook_tasks as wt
+    monkeypatch.setattr(
+        wt.send_webhook_alert, "delay",
+        MagicMock(side_effect=ConnectionError("broker down")),
+    )
     monkeypatch.setattr(alerts.settings, "ALERT_WEBHOOK_URL", "https://alerts.example/webhook")
     monkeypatch.setattr(alerts.settings, "ALERT_WEBHOOK_MIN_SEVERITY", "warning")
     monkeypatch.setattr(alerts.settings, "ALERT_WEBHOOK_AUTH_TOKEN", "")
@@ -120,13 +98,14 @@ def test_dispatch_webhook_logs_failure_metadata(monkeypatch, caplog) -> None:
             metadata={"source": "pytest"},
         )
 
-    records = [record for record in caplog.records if getattr(record, "action", "") == "operational.alert.webhook_failed"]
+    records = [
+        record for record in caplog.records
+        if getattr(record, "action", "") == "operational.alert.webhook_enqueue_failed"
+    ]
 
     assert len(records) == 1
     metadata = records[0].metadata
     assert metadata["category"] == "email_delivery"
     assert metadata["severity"] == "error"
-    assert metadata["auth_enabled"] is False
-    assert metadata["signature_enabled"] is False
-    assert metadata["error"] == "network down"
+    assert metadata["error"] == "broker down"
     assert metadata["alert_id"]

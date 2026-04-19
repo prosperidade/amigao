@@ -3,7 +3,7 @@ services:
     image: postgis/postgis:15-3.3
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-password}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pgpass2026}"
       POSTGRES_DB: "${POSTGRES_DB:-amigao_db}"
     ports:
       - "5433:5432"
@@ -17,12 +17,13 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redispass2026}
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redispass2026}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -38,12 +39,20 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
 
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "python -m app.db.init_db && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "python -m mempalace init --yes . 2>/dev/null || true && python -m app.db.init_db && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - mempalace_data:/root/.mempalace
     ports:
       - "8000:8000"
     environment:
@@ -61,10 +70,10 @@ services:
       PROMETHEUS_QUEUE_NAMES: "${PROMETHEUS_QUEUE_NAMES:-celery}"
       POSTGRES_SERVER: "${DOCKER_POSTGRES_SERVER:-db}"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-password}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pgpass2026}"
       POSTGRES_DB: "${POSTGRES_DB:-amigao_db}"
       POSTGRES_PORT: "${DOCKER_POSTGRES_PORT:-5432}"
-      REDIS_URL: "${DOCKER_REDIS_URL:-redis://redis:6379/0}"
+      REDIS_URL: "${DOCKER_REDIS_URL:-redis://:redispass2026@redis:6379/0}"
       MINIO_SERVER: "${DOCKER_MINIO_SERVER:-minio:9000}"
       MINIO_PUBLIC_URL: "${MINIO_PUBLIC_URL:-http://localhost:9000}"
       MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY:-minioadmin}"
@@ -102,13 +111,15 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
 
   worker:
     build:
       context: .
       dockerfile: Dockerfile
     command: celery -A app.core.celery_app worker --loglevel=info --pool=solo
+    volumes:
+      - mempalace_data:/root/.mempalace
     environment:
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       SERVICE_NAME: worker
@@ -124,10 +135,10 @@ services:
       PROMETHEUS_QUEUE_NAMES: "${PROMETHEUS_QUEUE_NAMES:-celery}"
       POSTGRES_SERVER: "${DOCKER_POSTGRES_SERVER:-db}"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-password}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pgpass2026}"
       POSTGRES_DB: "${POSTGRES_DB:-amigao_db}"
       POSTGRES_PORT: "${DOCKER_POSTGRES_PORT:-5432}"
-      REDIS_URL: "${DOCKER_REDIS_URL:-redis://redis:6379/0}"
+      REDIS_URL: "${DOCKER_REDIS_URL:-redis://:redispass2026@redis:6379/0}"
       MINIO_SERVER: "${DOCKER_MINIO_SERVER:-minio:9000}"
       MINIO_PUBLIC_URL: "${MINIO_PUBLIC_URL:-http://localhost:9000}"
       MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY:-minioadmin}"
@@ -160,7 +171,7 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
 
   client-portal:
     build:
@@ -183,3 +194,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  mempalace_data:

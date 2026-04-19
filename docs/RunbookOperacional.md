@@ -2061,3 +2061,290 @@ curl -X PATCH http://localhost:8000/api/v1/legislation/alerts/<id>/read \
 | Deduplicacao | identifier + content_hash |
 | Match processos | UF + demand_type automatico |
 | Total rotas API | 99 |
+
+---
+
+## Ativacao dos Agentes IA + MemPalace (08-09/04/2026)
+
+### Pre-requisitos
+
+```bash
+# Chaves de API no .env (obrigatorio para IA funcionar)
+OPENAI_API_KEY=sk-proj-...  # chave real, nao placeholder
+GEMINI_API_KEY=AIzaSy...     # opcional, usado pelo agente legislacao para contexto grande
+AI_ENABLED=true
+AI_DEFAULT_MODEL=gpt-4o-mini
+```
+
+**ATENCAO**: `ai_configured` rejeita chaves placeholder (`changeme`, `sk-...`, `test`, `your-key-here`, ou qualquer chave <10 chars). Se os agentes retornam resultado baseado em regras, verifique a chave.
+
+### Subir sistema com agentes
+
+```bash
+docker compose up --build -d
+```
+
+Validar:
+```bash
+# Verificar que IA esta configurada
+docker compose exec api python -c "from app.core.config import settings; print('ai_configured:', settings.ai_configured)"
+# Esperado: ai_configured: True
+
+# Verificar que tasks estao registradas no worker
+docker compose logs worker --tail 20 | grep "workers\."
+# Esperado: workers.run_agent, workers.run_agent_chain, workers.vigia_all_tenants, etc.
+```
+
+### MemPalace
+
+```bash
+# Re-indexar apos mudancas grandes no codigo
+docker compose exec api python -m mempalace mine .
+
+# Verificar palace
+docker compose exec api python -c "
+import sqlite3, os
+db = os.path.expanduser('~/.mempalace/palace/chroma.sqlite3')
+conn = sqlite3.connect(db)
+cur = conn.cursor()
+cur.execute('SELECT COUNT(*) FROM embeddings')
+print('Embeddings:', cur.fetchone()[0])
+"
+```
+
+O volume `mempalace_data` persiste entre rebuilds. Para backup:
+```bash
+docker run --rm -v amigao_do_meio_ambiente_mempalace_data:/data -v $(pwd):/backup alpine tar czf /backup/mempalace-backup.tar.gz /data
+```
+
+### Celery Beat — 5 tasks agendadas
+
+| Task | Schedule | Funcao |
+|------|----------|--------|
+| `monitor-legislation-dou-daily` | 06:00 BRT | Crawler DOU |
+| `monitor-legislation-doe-daily` | 06:30 BRT | Crawler DOE |
+| `monitor-legislation-agencies-weekly` | Segunda 03:00 | Crawler IBAMA |
+| `vigia-scheduled-check` | A cada 6h (min 15) | Vigia todos os tenants (prazos, docs, processos) |
+| `acompanhamento-check-processes` | A cada 30min | Acompanhamento de processos aguardando_orgao |
+
+### Triggers automaticos de agentes
+
+| Evento | Agente/Chain disparado | Arquivo |
+|--------|----------------------|---------|
+| `POST /intake/create-case` | atendimento (async) | `app/api/v1/intake.py` |
+| `POST /documents/confirm-upload` (tipos extraiveis) | extrator (async) | `app/api/v1/documents.py` |
+| `POST /processes/{id}/macroetapa` → diagnostico_tecnico | chain diagnostico_completo | `app/api/v1/processes.py` |
+| `POST /processes/{id}/macroetapa` → caminho_regulatorio | chain enquadramento_regulatorio | `app/api/v1/processes.py` |
+| `POST /processes/{id}/macroetapa` → orcamento_negociacao | chain gerar_proposta | `app/api/v1/processes.py` |
+
+Todos sao fire-and-forget — se Celery estiver fora, o fluxo continua normalmente.
+
+### Endpoints de agentes
+
+| Metodo | Endpoint | Funcao |
+|--------|----------|--------|
+| POST | `/agents/run` | Executa agente sincrono |
+| POST | `/agents/run-async` | Executa agente via Celery (202) |
+| POST | `/agents/chain` | Executa chain sincrona |
+| POST | `/agents/chain-async` | Executa chain via Celery (202) |
+| GET | `/agents/registry` | Lista 10 agentes |
+| GET | `/agents/chains` | Lista 9 chains |
+
+### Smoke test de agentes
+
+```bash
+# Teste rapido via curl
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Profile: internal" \
+  -d '{"email":"admin@amigao.com","password":"Seed@2026"}' | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Listar agentes
+curl -s http://localhost:8000/api/v1/agents/registry -H "Authorization: Bearer $TOKEN" | python -m json.tool
+
+# Rodar diagnostico (async)
+curl -s -X POST http://localhost:8000/api/v1/agents/run-async \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name":"diagnostico","process_id":1,"metadata":{}}' | python -m json.tool
+
+# Verificar resultado nos logs
+docker compose logs worker --tail 10
+```
+
+### Frontend — Pagina de Agentes
+
+Acesso: `http://localhost:5173/agents` (dev) ou menu lateral "Agentes IA"
+
+Funcionalidades:
+- Metricas do dia (execucoes, taxa sucesso, custo, review pendente)
+- Disparo manual de agente individual ou chain
+- Historico global com filtro por agente
+- Resultados humanizados (AgentResultRenderer com 10 layouts por agente)
+- Toast notifications via WebSocket quando agente completa/falha
+
+### Troubleshooting agentes
+
+| Sintoma | Causa provavel | Solucao |
+|---------|---------------|---------|
+| Job status=failed sem error | API key invalida/placeholder | Verificar `.env` → `OPENAI_API_KEY` real |
+| `KeyError: workers.run_agent` | Tasks nao registradas | `docker compose up --build -d worker` |
+| Resultado baseado em regras | `ai_configured=False` | Verificar chave: `docker compose exec api python -c "..."` |
+| Chain para no extrator | Sem documento no processo | Normal — extrator retorna vazio e chain continua |
+| WebSocket error no console | Backend nao esta rodando | `docker compose up -d api` |
+| Toast nao aparece | WebSocket nao conectou | Verificar que API esta em 8000 e proxy Vite funciona |
+
+### Estado operacional pos-Agentes
+
+| Controle | Estado |
+|----------|--------|
+| Agentes ativos | 10/10 |
+| Chains disponiveis | 9 |
+| Triggers automaticos | 5 |
+| Celery Beat tasks | 5 |
+| MemPalace embeddings | 588 |
+| Volume Docker | mempalace_data (persistente) |
+| MCP Server global | mempalace (Claude Code) |
+| Frontend pagina | /agents + tab IA no processo |
+| IA providers | OpenAI (gpt-4o-mini) + Gemini (legislacao) |
+| Custo medio/execucao | ~$0.0004 - $0.0007 |
+
+---
+
+## Regente v3 — Arquitetura 4 Camadas (abril/2026)
+
+Implementacao das 43 mudancas levantadas em `docs/MUDANCAS_REGENTE.md` conforme mapa mental Whimsical da socia. Historico completo em `docs/progresso6.md`.
+
+### Migrations Regente v3 aplicadas
+
+Head atual do Alembic: `e7c9b2a4f8d1`.
+
+```bash
+# Validar que todas as migrations estao aplicadas
+docker compose exec api python -m alembic current
+# Esperado: e7c9b2a4f8d1 (head)
+
+# Aplicar manualmente se necessario
+docker compose exec api python -m alembic upgrade head
+```
+
+Migrations (ordem):
+1. `f5b7c9a1d3e2` — `processes.entry_type` + `processes.initial_summary`
+2. `a6d8f2c4b1e3` — tabela `intake_drafts`
+3. `b7e9f1c3a2d4` — `documents.intake_draft_id` FK
+4. `c8a1e5d7f3b2` — `macroetapa_checklists.state`
+5. `d4e6b8f1a3c5` — tabela `stage_outputs`
+6. `e7c9b2a4f8d1` — `properties.field_sources` JSONB
+
+### Endpoints Regente v3
+
+**Intake (Camada 1):**
+- `POST /api/v1/intake/create-case` — description agora opcional; aceita `entry_type` + `initial_summary`
+- `GET  /api/v1/intake/drafts` — lista rascunhos do tenant
+- `POST /api/v1/intake/drafts` — cria rascunho
+- `GET  /api/v1/intake/drafts/{id}` — detalhe
+- `PATCH /api/v1/intake/drafts/{id}` — atualiza form_data
+- `DELETE /api/v1/intake/drafts/{id}` — remove (exceto se ja commitado)
+- `POST /api/v1/intake/drafts/{id}/commit` — converte rascunho em processo
+- `POST /api/v1/intake/drafts/{id}/upload-url` — presigned URL para upload em rascunho
+- `POST /api/v1/intake/drafts/{id}/documents` — confirma upload e registra Document
+- `GET  /api/v1/intake/drafts/{id}/documents` — lista docs do rascunho
+- `POST /api/v1/intake/drafts/{id}/import` — dispara agent_extrator nos docs
+- `POST /api/v1/intake/enrich` — complementar cliente/imovel existente
+
+**Processes (Camada 3):**
+- `GET  /api/v1/processes/{id}/can-advance` — checa se pode avancar de etapa (retorna blockers)
+- `POST /api/v1/processes/{id}/macroetapa` — agora bloqueia com 409 se gate falhar
+- `POST /api/v1/processes/{id}/macroetapa/{etapa}/actions/validate` — humano valida action
+- `GET  /api/v1/processes/{id}/artifacts` — lista StageOutputs
+- `POST /api/v1/processes/{id}/artifacts` — cria artefato
+- `POST /api/v1/processes/{id}/artifacts/{art_id}/validate` — humano valida artefato
+
+**Cliente Hub (Camada 2):**
+- `GET /api/v1/clients/{id}/summary` — cabeçalho + KPIs + estado
+- `GET /api/v1/clients/{id}/properties-with-status` — imoveis com estado do caso + eventos
+- `GET /api/v1/clients/{id}/timeline?limit=N&days=N` — eventos do AuditLog
+- `GET /api/v1/clients/{id}/ai-summary` — leitura executiva deterministica
+
+**Imovel Hub (Camada 2):**
+- `GET /api/v1/properties/{id}/summary` — cabeçalho + KPIs + health score + estado
+- `GET /api/v1/properties/{id}/cases` — casos do imovel com estado
+- `GET /api/v1/properties/{id}/events?limit=N` — timeline
+- `GET /api/v1/properties/{id}/ai-summary` — leitura tecnica deterministica
+- `POST /api/v1/properties/{id}/validate-fields` — humano valida campo (raw→human_validated)
+
+**Dashboard Executivo (Camada 2):**
+- `GET /api/v1/dashboard/stages` — distribuicao 7 etapas (total/blocked/ready/avg_days)
+- `GET /api/v1/dashboard/alerts` — gargalos agregados
+- `GET /api/v1/dashboard/priority-cases?limit=N` — casos rankeados do dia
+- `GET /api/v1/dashboard/ai-summary` — leitura executiva
+
+Todos os endpoints de dashboard aceitam filtros: `urgency`, `demand_type`, `state_uf`, `days`, `responsible_user_id`.
+
+**Documentos:**
+- `GET /api/v1/documents/categories` — 6 categorias canonicas Regente com labels
+
+### Rotas frontend novas
+
+- `/clients/:id` → `ClientHub` (6 blocos + 5 abas + painel IA lateral)
+- `/properties/:id` → `PropertyHub` (health score + 5 abas + painel IA + validate fields)
+
+Cards de cliente em `/clients` e cards de imovel em `/properties` agora sao linkaveis para o hub respectivo.
+
+### Fluxo smoke Regente v3 (E2E manual)
+
+```bash
+# Login
+curl -sS -X POST http://localhost:8000/api/v1/auth/login \
+  -H "X-Auth-Profile: internal" \
+  -d "username=consultor@amigao.com&password=Seed@2026"
+
+# Criar rascunho sem description
+curl -sS -X POST http://localhost:8000/api/v1/intake/drafts \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "entry_type": "novo_cliente_novo_imovel",
+    "form_data": {
+      "new_client": {"full_name":"Teste","phone":"1199","email":"t@t.com","client_type":"pf"},
+      "new_property": {"name":"Fazenda Teste"}
+    }
+  }'
+
+# Commit → vira Process em macroetapa=entrada_demanda
+curl -sS -X POST http://localhost:8000/api/v1/intake/drafts/{id}/commit \
+  -H "Authorization: Bearer $TOKEN"
+
+# Kanban mostra gate + state + counts
+curl -sS http://localhost:8000/api/v1/processes/kanban \
+  -H "Authorization: Bearer $TOKEN" | jq '.columns[] | {label, count, blocked_count, ready_to_advance_count}'
+
+# Tentar avancar bloqueia com 409 se gate falhar
+curl -sS -X POST http://localhost:8000/api/v1/processes/{id}/macroetapa \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"macroetapa":"diagnostico_preliminar"}'
+# → {"detail":{"message":"Avanco bloqueado...","blockers":[...]}}
+```
+
+### Problemas conhecidos (pendencias Regente v3)
+
+| Sintoma | Causa | Solucao |
+|---------|-------|---------|
+| Dados legados com `has_minimal_base=false` | Clientes antigos sem phone/email | Normal — gate reflete dados reais; editar cliente para completar |
+| Kanban drag-and-drop nao valida gate | Frontend nao integrado com `/can-advance` | Decisao de produto pendente (ver pergunta na socia) |
+| Blocos condicionais do workspace | CAM3WS-002 nao implementado | Requer decisao: regra automatica ou manual |
+| Ai-summary dos hubs nao usa LLM | Design choice — deterministico no MVP | Ao liberar restricao de agentes, trocar por `agent_atendimento` |
+| Camada 4 Configuracoes | Mapa entregue mas nao implementado | Requer decisao de plano/gateway de pagamento |
+
+### Estado operacional pos-Regente v3
+
+| Controle | Estado |
+|----------|--------|
+| Sprints Regente v3 | 6/6 |
+| Itens Regente fechados | 43/43 (100%) |
+| Migrations novas aplicadas | 6 |
+| Endpoints novos | ~30 |
+| Componentes React novos | 5 |
+| Rotas frontend novas | 2 (`/clients/:id`, `/properties/:id`) |
+| Typecheck frontend | OK (`npx tsc --noEmit` passa) |
+| `app/agents/*` | Nao alterado (restricao respeitada) |
+| Alembic head | `e7c9b2a4f8d1` |

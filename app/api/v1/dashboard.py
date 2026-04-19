@@ -613,3 +613,476 @@ def get_kanban_insights(
         mensagem=mensagem,
         distribuicao=distribuicao,
     )
+
+
+# ---------------------------------------------------------------------------
+# Regente Cam2 — Dashboard executivo (CAM2D-001 a CAM2D-004)
+# ---------------------------------------------------------------------------
+
+class StageDistribution(BaseModel):
+    macroetapa: str
+    label: str
+    total: int
+    blocked: int = 0
+    ready_to_advance: int = 0
+    avg_days_in_stage: Optional[float] = None
+
+
+class DashboardAlert(BaseModel):
+    kind: str       # doc_pendente | etapa_travada | contrato_aguardando | inconsistencia
+    severity: str   # low | medium | high | critical
+    count: int
+    label: str      # texto curto ex "5 casos com matrícula pendente"
+    macroetapa: Optional[str] = None
+
+
+class DashboardPriorityCase(BaseModel):
+    process_id: int
+    client_name: Optional[str] = None
+    property_name: Optional[str] = None
+    demand_type: Optional[str] = None
+    urgency: Optional[str] = None
+    macroetapa: Optional[str] = None
+    macroetapa_label: Optional[str] = None
+    state: Optional[str] = None
+    priority_reason: str
+    next_step: Optional[str] = None
+    responsible_user_name: Optional[str] = None
+
+
+class DashboardAISummary(BaseModel):
+    text: str
+    top_stage_bottleneck: Optional[str] = None
+    top_stage_bottleneck_label: Optional[str] = None
+    critical_pending_count: int = 0
+    ready_to_advance_count: int = 0
+    recommendation: Optional[str] = None
+    source: str = "deterministic"
+
+
+def _apply_process_filters(
+    query,
+    *,
+    responsible_user_id: Optional[int] = None,
+    urgency: Optional[str] = None,
+    demand_type: Optional[str] = None,
+    state_uf: Optional[str] = None,
+    days: Optional[int] = None,
+    now: Optional[datetime] = None,
+):
+    """CAM2D-005 — aplica filtros executivos comuns em uma query de Process."""
+    if responsible_user_id:
+        query = query.filter(Process.responsible_user_id == responsible_user_id)
+    if urgency:
+        query = query.filter(Process.urgency == urgency)
+    if demand_type:
+        query = query.filter(Process.demand_type == demand_type)
+    if state_uf:
+        # state_uf aplicado via join com Property
+        query = query.join(Property, Process.property_id == Property.id).filter(Property.state == state_uf)
+    if days and now:
+        since = now - timedelta(days=days)
+        query = query.filter(Process.created_at >= since)
+    return query
+
+
+@router.get("/stages", response_model=list[StageDistribution])
+def get_dashboard_stages(
+    responsible_user_id: Optional[int] = Query(None),
+    urgency: Optional[str] = Query(None, description="critica | alta | media | baixa"),
+    demand_type: Optional[str] = Query(None),
+    state_uf: Optional[str] = Query(None, description="UF do imóvel (2 letras)"),
+    days: Optional[int] = Query(None, description="Considerar apenas casos criados nos últimos N dias"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> list[StageDistribution]:
+    """CAM2D-001 + CAM2D-005 — Distribuição de casos pelas 7 macroetapas com filtros."""
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+    from app.models.macroetapa import (  # noqa: PLC0415
+        MACROETAPA_ORDER,
+        MacroetapaChecklist,
+        compute_macroetapa_state,
+        list_macroetapa_blockers,
+    )
+
+    tenant_id = current_user.tenant_id
+    now = datetime.now(UTC)
+
+    # Processos ativos por etapa
+    q = (
+        db.query(Process)
+        .filter(
+            Process.tenant_id == tenant_id,
+            Process.deleted_at.is_(None),
+            Process.macroetapa.isnot(None),
+            Process.status.in_([s.value for s in _ACTIVE_PROCESS_STATUSES]),
+        )
+    )
+    q = _apply_process_filters(
+        q, responsible_user_id=responsible_user_id, urgency=urgency,
+        demand_type=demand_type, state_uf=state_uf, days=days, now=now,
+    )
+    processes = q.all()
+
+    proc_ids = [p.id for p in processes]
+
+    # Checklists pra computar state por processo
+    cl_map: dict[tuple[int, str], MacroetapaChecklist] = {}
+    if proc_ids:
+        for cl in db.query(MacroetapaChecklist).filter(MacroetapaChecklist.process_id.in_(proc_ids)).all():
+            etapa = cl.macroetapa.value if hasattr(cl.macroetapa, "value") else cl.macroetapa
+            cl_map[(cl.process_id, etapa)] = cl
+
+    # Documentos obrigatórios pendentes por processo
+    pending_by_proc: dict[int, int] = {}
+    if proc_ids:
+        for pc in db.query(ProcessChecklist).filter(ProcessChecklist.process_id.in_(proc_ids)).all():
+            n = 0
+            for item in pc.items or []:
+                if item.get("required") and item.get("status") == "pending":
+                    n += 1
+            pending_by_proc[pc.process_id] = n
+
+    # Agregação por etapa
+    by_stage: dict[str, dict] = {
+        m.value: {"total": 0, "blocked": 0, "ready": 0, "days_sum": 0.0, "days_count": 0}
+        for m in MACROETAPA_ORDER
+    }
+
+    for p in processes:
+        etapa = p.macroetapa
+        if etapa not in by_stage:
+            continue
+        b = by_stage[etapa]
+        b["total"] += 1
+
+        # Tempo na etapa baseado em updated_at (proxy — pode refinar com audit log de mudança)
+        if p.updated_at:
+            days = (now - p.updated_at).days
+            b["days_sum"] += max(days, 0)
+            b["days_count"] += 1
+
+        cl = cl_map.get((p.id, etapa))
+        missing_docs = pending_by_proc.get(p.id, 0)
+        blockers = list_macroetapa_blockers(cl, documents_pending_required=missing_docs)
+        if cl:
+            state = compute_macroetapa_state(
+                cl, is_current=True, has_blockers=bool(blockers)
+            )
+            if state.value == "travada":
+                b["blocked"] += 1
+            elif state.value == "pronta_para_avancar":
+                b["ready"] += 1
+
+    return [
+        StageDistribution(
+            macroetapa=m.value,
+            label=MACROETAPA_LABELS[m],
+            total=by_stage[m.value]["total"],
+            blocked=by_stage[m.value]["blocked"],
+            ready_to_advance=by_stage[m.value]["ready"],
+            avg_days_in_stage=(
+                round(by_stage[m.value]["days_sum"] / by_stage[m.value]["days_count"], 1)
+                if by_stage[m.value]["days_count"] > 0
+                else None
+            ),
+        )
+        for m in MACROETAPA_ORDER
+    ]
+
+
+@router.get("/alerts", response_model=list[DashboardAlert])
+def get_dashboard_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> list[DashboardAlert]:
+    """CAM2D-002 — Gargalos e alertas críticos agregados."""
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+    from app.models.macroetapa import (  # noqa: PLC0415
+        MacroetapaChecklist,
+        compute_macroetapa_state,
+        list_macroetapa_blockers,
+    )
+
+    tenant_id = current_user.tenant_id
+    alerts: list[DashboardAlert] = []
+
+    # Processos ativos
+    active_procs = (
+        db.query(Process)
+        .filter(
+            Process.tenant_id == tenant_id,
+            Process.deleted_at.is_(None),
+            Process.status.in_([s.value for s in _ACTIVE_PROCESS_STATUSES]),
+        )
+        .all()
+    )
+    active_ids = [p.id for p in active_procs]
+
+    # Docs obrigatórios pendentes — contagem por tipo
+    doc_type_pending: dict[str, int] = {}
+    if active_ids:
+        for pc in db.query(ProcessChecklist).filter(ProcessChecklist.process_id.in_(active_ids)).all():
+            for item in pc.items or []:
+                if item.get("required") and item.get("status") == "pending":
+                    dt = item.get("doc_type") or item.get("id") or "documento"
+                    doc_type_pending[dt] = doc_type_pending.get(dt, 0) + 1
+    for dt, count in sorted(doc_type_pending.items(), key=lambda x: -x[1])[:5]:
+        if count > 0:
+            label_dt = dt.replace("_", " ")
+            alerts.append(DashboardAlert(
+                kind="doc_pendente",
+                severity="high" if count >= 3 else "medium",
+                count=count,
+                label=f"{count} caso(s) com {label_dt} pendente",
+            ))
+
+    # Etapas travadas
+    if active_ids:
+        cls = db.query(MacroetapaChecklist).filter(MacroetapaChecklist.process_id.in_(active_ids)).all()
+        blocked_by_stage: dict[str, int] = {}
+        # Mapa proc_id → macroetapa
+        proc_macro = {p.id: p.macroetapa for p in active_procs}
+        # Mapa proc_id → missing_docs
+        missing_by_proc: dict[int, int] = {}
+        for pc in db.query(ProcessChecklist).filter(ProcessChecklist.process_id.in_(active_ids)).all():
+            n = 0
+            for item in pc.items or []:
+                if item.get("required") and item.get("status") == "pending":
+                    n += 1
+            missing_by_proc[pc.process_id] = n
+
+        for cl in cls:
+            etapa = cl.macroetapa.value if hasattr(cl.macroetapa, "value") else cl.macroetapa
+            if proc_macro.get(cl.process_id) != etapa:
+                continue  # só etapa corrente
+            blockers = list_macroetapa_blockers(cl, documents_pending_required=missing_by_proc.get(cl.process_id, 0))
+            state = compute_macroetapa_state(cl, is_current=True, has_blockers=bool(blockers))
+            if state.value == "travada":
+                blocked_by_stage[etapa] = blocked_by_stage.get(etapa, 0) + 1
+
+        for etapa, count in sorted(blocked_by_stage.items(), key=lambda x: -x[1])[:3]:
+            try:
+                m_enum = Macroetapa(etapa)
+                label = MACROETAPA_LABELS[m_enum]
+            except ValueError:
+                label = etapa
+            alerts.append(DashboardAlert(
+                kind="etapa_travada",
+                severity="high",
+                count=count,
+                label=f"{count} caso(s) travado(s) em {label}",
+                macroetapa=etapa,
+            ))
+
+    # Propostas sem retorno há >7 dias
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(days=7)
+    stale_proposals = (
+        db.query(sa_func.count(Proposal.id))
+        .filter(
+            Proposal.tenant_id == tenant_id,
+            Proposal.sent_at.isnot(None),
+            Proposal.sent_at < cutoff,
+            Proposal.accepted_at.is_(None),
+            Proposal.rejected_at.is_(None),
+        )
+        .scalar() or 0
+    )
+    if stale_proposals > 0:
+        alerts.append(DashboardAlert(
+            kind="proposta_sem_retorno",
+            severity="medium",
+            count=stale_proposals,
+            label=f"{stale_proposals} proposta(s) sem retorno há mais de 7 dias",
+        ))
+
+    return alerts
+
+
+@router.get("/priority-cases", response_model=list[DashboardPriorityCase])
+def get_dashboard_priority_cases(
+    limit: int = Query(10, le=50),
+    responsible_user_id: Optional[int] = Query(None),
+    urgency: Optional[str] = Query(None),
+    demand_type: Optional[str] = Query(None),
+    state_uf: Optional[str] = Query(None),
+    days: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> list[DashboardPriorityCase]:
+    """CAM2D-003 + CAM2D-005 — Casos prioritários do dia com filtros executivos."""
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+    from app.models.macroetapa import (  # noqa: PLC0415
+        MacroetapaChecklist,
+        compute_macroetapa_state,
+        list_macroetapa_blockers,
+    )
+
+    tenant_id = current_user.tenant_id
+    now = datetime.now(UTC)
+
+    q = (
+        db.query(Process)
+        .filter(
+            Process.tenant_id == tenant_id,
+            Process.deleted_at.is_(None),
+            Process.status.in_([s.value for s in _ACTIVE_PROCESS_STATUSES]),
+        )
+    )
+    q = _apply_process_filters(
+        q, responsible_user_id=responsible_user_id, urgency=urgency,
+        demand_type=demand_type, state_uf=state_uf, days=days, now=now,
+    )
+    processes = q.all()
+    proc_ids = [p.id for p in processes]
+    if not proc_ids:
+        return []
+
+    # Preload
+    clients = {c.id: c for c in db.query(Client).filter(Client.id.in_([p.client_id for p in processes if p.client_id])).all()}
+    props = {p.id: p for p in db.query(Property).filter(Property.id.in_([pr.property_id for pr in processes if pr.property_id])).all()}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_([pr.responsible_user_id for pr in processes if pr.responsible_user_id])).all()}
+
+    cl_map: dict[tuple[int, str], MacroetapaChecklist] = {}
+    for cl in db.query(MacroetapaChecklist).filter(MacroetapaChecklist.process_id.in_(proc_ids)).all():
+        etapa = cl.macroetapa.value if hasattr(cl.macroetapa, "value") else cl.macroetapa
+        cl_map[(cl.process_id, etapa)] = cl
+
+    missing_by_proc: dict[int, int] = {}
+    for pc in db.query(ProcessChecklist).filter(ProcessChecklist.process_id.in_(proc_ids)).all():
+        n = sum(1 for item in (pc.items or []) if item.get("required") and item.get("status") == "pending")
+        missing_by_proc[pc.process_id] = n
+
+    _URGENCY_WEIGHT = {"critica": 400, "alta": 200, "media": 50, "baixa": 0}
+
+    scored: list[tuple[float, DashboardPriorityCase]] = []
+    for p in processes:
+        score = 0.0
+        reasons: list[str] = []
+
+        urg = (p.urgency or "").lower()
+        score += _URGENCY_WEIGHT.get(urg, 0)
+        if urg in ("critica", "alta"):
+            reasons.append(f"urgência {urg}")
+
+        # Dias parado (updated_at como proxy)
+        if p.updated_at:
+            days_stale = max((now - p.updated_at).days, 0)
+            if days_stale >= 7:
+                score += min(days_stale * 5, 150)
+                reasons.append(f"{days_stale}d sem movimento")
+
+        # Docs pendentes obrigatórios
+        missing = missing_by_proc.get(p.id, 0)
+        if missing > 0:
+            score += missing * 20
+            reasons.append(f"{missing} docs pendentes")
+
+        # Estado da etapa corrente
+        state_value: Optional[str] = None
+        next_step: Optional[str] = None
+        if p.macroetapa:
+            cl = cl_map.get((p.id, p.macroetapa))
+            if cl:
+                blockers = list_macroetapa_blockers(cl, documents_pending_required=missing)
+                state = compute_macroetapa_state(cl, is_current=True, has_blockers=bool(blockers))
+                state_value = state.value
+                if state.value == "travada":
+                    score += 120
+                    if "travas" not in reasons:
+                        reasons.append("etapa travada")
+                elif state.value == "pronta_para_avancar":
+                    score += 80
+                    reasons.append("pronto para avançar")
+                elif state.value == "aguardando_validacao":
+                    score += 100
+                    reasons.append("aguardando validação humana")
+
+                # Next step — primeira action pendente
+                for a in cl.actions or []:
+                    if not a.get("completed"):
+                        next_step = a.get("label")
+                        break
+
+        if score <= 0:
+            continue
+
+        c = clients.get(p.client_id) if p.client_id else None
+        prop = props.get(p.property_id) if p.property_id else None
+        user = users.get(p.responsible_user_id) if p.responsible_user_id else None
+
+        stage_label = None
+        if p.macroetapa:
+            try:
+                stage_label = MACROETAPA_LABELS[Macroetapa(p.macroetapa)]
+            except ValueError:
+                stage_label = p.macroetapa
+
+        scored.append((score, DashboardPriorityCase(
+            process_id=p.id,
+            client_name=c.full_name if c else None,
+            property_name=prop.name if prop else None,
+            demand_type=p.demand_type.value if p.demand_type else None,
+            urgency=p.urgency,
+            macroetapa=p.macroetapa,
+            macroetapa_label=stage_label,
+            state=state_value,
+            priority_reason=", ".join(reasons) or "prioridade geral",
+            next_step=next_step,
+            responsible_user_name=user.full_name if user else None,
+        )))
+
+    scored.sort(key=lambda x: -x[0])
+    return [pc for _, pc in scored[:limit]]
+
+
+@router.get("/ai-summary", response_model=DashboardAISummary)
+def get_dashboard_ai_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> DashboardAISummary:
+    """CAM2D-004 — Leitura executiva da IA (determinística MVP)."""
+    stages = get_dashboard_stages(db=db, current_user=current_user)
+    alerts = get_dashboard_alerts(db=db, current_user=current_user)
+
+    # Gargalo: etapa com mais bloqueados; empate, mais total
+    bottleneck = max(stages, key=lambda s: (s.blocked, s.total), default=None)
+    ready_total = sum(s.ready_to_advance for s in stages)
+    critical_pending = sum(a.count for a in alerts if a.severity in ("high", "critical") and a.kind == "doc_pendente")
+    blocked_total = sum(s.blocked for s in stages)
+
+    parts: list[str] = []
+    if bottleneck and bottleneck.blocked > 0:
+        parts.append(
+            f"Hoje o maior gargalo está em {bottleneck.label}: {bottleneck.blocked} caso(s) travado(s)"
+        )
+    elif bottleneck and bottleneck.total > 0:
+        parts.append(f"Maior volume está em {bottleneck.label} ({bottleneck.total} casos)")
+
+    if critical_pending > 0:
+        parts.append(f"{critical_pending} documento(s) crítico(s) pendente(s)")
+    if ready_total > 0:
+        parts.append(f"{ready_total} caso(s) prontos para avançar")
+
+    text = ". ".join(parts) + "." if parts else "Operação sem gargalos relevantes no momento."
+
+    recommendation: Optional[str] = None
+    if blocked_total > 0 and ready_total > 0:
+        recommendation = "Aprove os casos prontos e endereçe simultaneamente as travas mais frequentes."
+    elif blocked_total > 0:
+        recommendation = f"Priorize destravar {bottleneck.label if bottleneck else 'a etapa com mais travas'}."
+    elif ready_total > 0:
+        recommendation = "Revise e valide os casos prontos para fazer o fluxo andar."
+    else:
+        recommendation = "Fluxo saudável. Mantenha o acompanhamento normal."
+
+    return DashboardAISummary(
+        text=text,
+        top_stage_bottleneck=bottleneck.macroetapa if bottleneck and bottleneck.blocked > 0 else None,
+        top_stage_bottleneck_label=bottleneck.label if bottleneck and bottleneck.blocked > 0 else None,
+        critical_pending_count=critical_pending,
+        ready_to_advance_count=ready_total,
+        recommendation=recommendation,
+        source="deterministic",
+    )

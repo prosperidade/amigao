@@ -14,7 +14,7 @@ class ContractTemplate(Base):
     __tablename__ = "contract_templates"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)  # None = global
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=True, index=True)  # None = global
 
     demand_type = Column(String, nullable=True, index=True)  # None = genérico
     name = Column(String, nullable=False)

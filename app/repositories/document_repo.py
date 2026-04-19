@@ -19,7 +19,10 @@ class DocumentRepository(BaseRepository[Document]):
         q = (
             self.db.query(Document)
             .outerjoin(Process, Document.process_id == Process.id)
-            .filter(Document.tenant_id == self.tenant_id)
+            .filter(
+                Document.tenant_id == self.tenant_id,
+                Document.deleted_at.is_(None),
+            )
         )
         if client_id is not None:
             q = q.filter(
@@ -70,4 +73,7 @@ class DocumentRepository(BaseRepository[Document]):
             details=details,
         )
         self.db.add(audit)
+        self.db.flush()
+        from app.services.audit_hash import stamp_audit_hash
+        stamp_audit_hash(self.db, audit)
         return audit

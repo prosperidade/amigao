@@ -16,7 +16,9 @@ boto3
 GeoAlchemy2
 fpdf2
 litellm
+mempalace>=3.0.0
 httpx
+slowapi>=0.1.9
 pytest
 pytest-cov
 testcontainers[postgres]

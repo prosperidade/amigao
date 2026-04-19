@@ -158,8 +158,15 @@ class Settings(BaseSettings):
 
     @property
     def ai_configured(self) -> bool:
-        return self.AI_ENABLED and bool(
-            self.OPENAI_API_KEY or self.GEMINI_API_KEY or self.ANTHROPIC_API_KEY
+        placeholders = {"", "changeme", "sk-...", "your-key-here", "test", "none"}
+
+        def _is_real_key(key: str | None) -> bool:
+            return bool(key and key.strip().lower() not in placeholders and len(key) > 10)
+
+        return self.AI_ENABLED and (
+            _is_real_key(self.OPENAI_API_KEY)
+            or _is_real_key(self.GEMINI_API_KEY)
+            or _is_real_key(self.ANTHROPIC_API_KEY)
         )
 
     @property

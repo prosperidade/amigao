@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Task: classificação de demanda
 # ---------------------------------------------------------------------------
 
-@celery_app.task(name="workers.run_llm_classification", bind=True, max_retries=2)
+@celery_app.task(name="workers.run_llm_classification", bind=True, max_retries=2, soft_time_limit=300)
 def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: int | None = None):
     """
     Classifica a demanda do processo via LLM e atualiza initial_diagnosis + demand_type.
@@ -117,7 +117,7 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
 # Task: extração de documento
 # ---------------------------------------------------------------------------
 
-@celery_app.task(name="workers.run_document_extraction", bind=True, max_retries=2)
+@celery_app.task(name="workers.run_document_extraction", bind=True, max_retries=2, soft_time_limit=300)
 def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: int | None = None):
     """
     Extrai campos estruturados de um documento via LLM.

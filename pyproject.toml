@@ -60,6 +60,14 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=app --cov-report=term-missing"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/workers/ai_tasks.py", "app/workers/ai_summarizer.py"]
+
+[tool.coverage.report]
+fail_under = 70

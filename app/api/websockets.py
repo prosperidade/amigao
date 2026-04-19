@@ -5,7 +5,8 @@ from typing import Optional
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
+from pydantic import ValidationError
 
 from app.core.alerts import emit_operational_alert
 from app.core.config import settings
@@ -158,7 +159,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         except WebSocketDisconnect:
             manager.disconnect(websocket, tenant_id, client_id)
 
-    except JWTError:
+    except ExpiredSignatureError:
+        emit_operational_alert(
+            category="websocket_auth",
+            severity="warning",
+            message="Tentativa de conexão websocket com token expirado",
+            metadata={},
+        )
+        await websocket.close(code=1008)
+    except (JWTError, ValidationError):
         emit_operational_alert(
             category="websocket_auth",
             severity="warning",

@@ -126,12 +126,29 @@ export default function QuadroAcoes() {
               >
                 {/* Column header */}
                 <div
-                  className={`p-3 rounded-t-xl border-b font-medium text-sm flex items-center justify-between ${colors.bg} ${colors.border} ${colors.text} dark:bg-zinc-800 dark:border-zinc-700 dark:text-gray-200`}
+                  className={`p-3 rounded-t-xl border-b font-medium text-sm ${colors.bg} ${colors.border} ${colors.text} dark:bg-zinc-800 dark:border-zinc-700 dark:text-gray-200`}
                 >
-                  <span className="truncate">{column.label}</span>
-                  <span className="bg-white/50 dark:bg-black/20 px-2 py-0.5 rounded-full text-xs">
-                    {column.count}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="truncate">{column.label}</span>
+                    <span className="bg-white/50 dark:bg-black/20 px-2 py-0.5 rounded-full text-xs">
+                      {column.count}
+                    </span>
+                  </div>
+                  {/* CAM3FT-003 — counts agregados por estado */}
+                  {(column.blocked_count > 0 || column.ready_to_advance_count > 0) && (
+                    <div className="flex gap-2 mt-1.5 text-[10px]">
+                      {column.blocked_count > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                          🚫 {column.blocked_count} travado{column.blocked_count > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {column.ready_to_advance_count > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                          ✓ {column.ready_to_advance_count} pronto{column.ready_to_advance_count > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Cards */}

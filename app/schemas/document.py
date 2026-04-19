@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DocumentUploadUrlRequest(BaseModel):
@@ -24,7 +24,7 @@ class DocumentConfirmRequest(BaseModel):
     storage_key: str
     filename: str
     content_type: str
-    file_size_bytes: int
+    file_size_bytes: int = Field(gt=0, le=104857600, description="Tamanho em bytes, máximo 100MB")
     document_type: Optional[str] = None
     document_category: Optional[str] = None
 

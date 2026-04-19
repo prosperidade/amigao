@@ -3,7 +3,7 @@ from typing import Generator, Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt
+from jose import ExpiredSignatureError, jwt
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -51,10 +51,20 @@ def get_token_payload(token: str = Depends(reusable_oauth2)) -> TokenPayload:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         token_data = TokenPayload(**payload)
-    except (jwt.JWTError, ValidationError, Exception):
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expirado",
+        )
+    except jwt.JWTError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Não foi possível validar as credenciais",
+            detail="Token inválido",
+        )
+    except ValidationError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Payload do token inválido",
         )
     if not token_data.sub:
         raise HTTPException(
@@ -70,6 +80,11 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(token_data.sub)).first() # type: ignore
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+    if token_data.tenant_id is not None and user.tenant_id != token_data.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: tenant incompatível",
+        )
     return user
 
 def get_current_active_user(

@@ -22,11 +22,11 @@ class Contract(Base):
     __tablename__ = "contracts"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    proposal_id = Column(Integer, ForeignKey("proposals.id"), nullable=True, index=True)
-    process_id = Column(Integer, ForeignKey("processes.id"), nullable=True, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
-    template_id = Column(Integer, ForeignKey("contract_templates.id"), nullable=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    proposal_id = Column(Integer, ForeignKey("proposals.id", ondelete="SET NULL"), nullable=True, index=True)
+    process_id = Column(Integer, ForeignKey("processes.id", ondelete="SET NULL"), nullable=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey("contract_templates.id", ondelete="SET NULL"), nullable=True)
 
     status = Column(Enum(ContractStatus), default=ContractStatus.draft, nullable=False)
     title = Column(String, nullable=False)
@@ -41,7 +41,7 @@ class Contract(Base):
     signed_at = Column(DateTime(timezone=True), nullable=True)
     signed_by_client = Column(Boolean, default=False)
 
-    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

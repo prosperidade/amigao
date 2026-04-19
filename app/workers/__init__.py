@@ -7,3 +7,11 @@ from app.workers.tasks import (
     send_email_notification,
     test_job,
 )
+from app.workers.agent_tasks import (  # noqa: F401
+    run_agent,
+    run_agent_chain,
+    vigia_scheduled_check,
+    vigia_all_tenants,
+    acompanhamento_check_all,
+)
+from app.workers.webhook_tasks import send_webhook_alert  # noqa: F401

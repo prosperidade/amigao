@@ -6,8 +6,8 @@ import { SyncService } from '@/services/SyncService';
 import { Leaf } from 'lucide-react-native';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('admin@amigao.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,9 +39,9 @@ export default function LoginScreen() {
       // Dispara pull agressivo logo após o login no Wi-Fi
       await SyncService.pullActiveProcesses();
 
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erro ao conectar. Verifique sua conexão(ou IP).');
-      console.error(err);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: string } }; message?: string };
+      setError(axiosErr.response?.data?.detail || 'Erro ao conectar. Verifique sua conexão(ou IP).');
     } finally {
       setLoading(false);
     }
@@ -76,10 +76,10 @@ export default function LoginScreen() {
         
         {error ? <Text style={{ color: '#ef4444', textAlign: 'center', fontWeight: '500' }}>{error}</Text> : null}
 
-        <TouchableOpacity 
-          onPress={handleLogin} 
-          disabled={loading}
-          style={{ backgroundColor: '#10b981', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
+        <TouchableOpacity
+          onPress={handleLogin}
+          disabled={loading || !email.trim() || !password.trim()}
+          style={{ backgroundColor: (!email.trim() || !password.trim()) ? '#9ca3af' : '#10b981', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8, opacity: loading || !email.trim() || !password.trim() ? 0.7 : 1 }}
         >
           {loading ? (
             <ActivityIndicator color="white" />

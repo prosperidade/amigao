@@ -41,14 +41,14 @@ def _list_internal_recipients(
         db.close()
 
 
-@celery_app.task(name="workers.test_job", bind=True)
+@celery_app.task(name="workers.test_job", bind=True, soft_time_limit=60)
 def test_job(self):
     """Tarefa base de validação do worker - Sprint 1."""
     logger.info("✅ worker funcionando")
     return {"status": "ok", "message": "worker funcionando"}
 
 
-@celery_app.task(name="workers.log_document_uploaded", bind=True)
+@celery_app.task(name="workers.log_document_uploaded", bind=True, soft_time_limit=30)
 def log_document_uploaded(self, document_id: int, tenant_id: int, filename: str):
     """Loga assincronamente o upload de documentos para auditoria."""
     logger.info(
@@ -57,7 +57,7 @@ def log_document_uploaded(self, document_id: int, tenant_id: int, filename: str)
     return {"document_id": document_id, "status": "logged"}
 
 
-@celery_app.task(name="workers.generate_pdf_report", bind=True)
+@celery_app.task(name="workers.generate_pdf_report", bind=True, soft_time_limit=300)
 def generate_pdf_report(self, tenant_id: int, process_id: int):
     """Gera um relatório de visita em PDF para o processo."""
     from app.workers.pdf_generator import generate_process_visit_report
@@ -67,7 +67,7 @@ def generate_pdf_report(self, tenant_id: int, process_id: int):
     return result
 
 
-@celery_app.task(name="workers.generate_ai_weekly_summary", bind=True)
+@celery_app.task(name="workers.generate_ai_weekly_summary", bind=True, soft_time_limit=300)
 def generate_ai_weekly_summary(self, tenant_id: int, process_id: int):
     """Gera um resumo semanal executivo utilizando IA (LiteLLM/OpenAI)."""
     from app.workers.ai_summarizer import generate_weekly_summary
@@ -76,7 +76,7 @@ def generate_ai_weekly_summary(self, tenant_id: int, process_id: int):
     return result
 
 
-@celery_app.task(name="workers.notify_process_status_changed", bind=True, max_retries=3, default_retry_delay=30)
+@celery_app.task(name="workers.notify_process_status_changed", bind=True, max_retries=3, default_retry_delay=30, soft_time_limit=120)
 def notify_process_status_changed(
     self,
     tenant_id: int,
@@ -169,7 +169,7 @@ def notify_process_status_changed(
         db.close()
 
 
-@celery_app.task(name="workers.notify_document_uploaded", bind=True, max_retries=3, default_retry_delay=30)
+@celery_app.task(name="workers.notify_document_uploaded", bind=True, max_retries=3, default_retry_delay=30, soft_time_limit=120)
 def notify_document_uploaded(
     self,
     tenant_id: int,
@@ -270,7 +270,7 @@ def notify_document_uploaded(
         db.close()
 
 
-@celery_app.task(name="workers.send_email_notification", bind=True)
+@celery_app.task(name="workers.send_email_notification", bind=True, soft_time_limit=60)
 def send_email_notification(self, email_to: str, subject: str, html_content: str):
     """Envia um email assincronamente pelo serviço SMTP."""
     logger.info(f"✉️ Iniciando disparo de email para {email_to}")

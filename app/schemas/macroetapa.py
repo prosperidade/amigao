@@ -33,6 +33,14 @@ class ActionItem(BaseModel):
     completed: bool
     completed_at: Optional[str] = None
     agent_suggestion: Optional[str] = None
+    # Regente Cam3 CAM3WS-005 — validação humana
+    needs_human_validation: bool = False
+    validated_at: Optional[str] = None
+    validated_by_user_id: Optional[int] = None
+
+
+class ActionValidateRequest(BaseModel):
+    action_id: str
 
 
 class MacroetapaStep(BaseModel):
@@ -64,6 +72,46 @@ class MacroetapaChecklistResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# CAM3FT-005 — Resposta do gate de avanço
+class CanAdvanceResponse(BaseModel):
+    can_advance: bool
+    current_macroetapa: Optional[str] = None
+    current_state: Optional[str] = None
+    next_macroetapa: Optional[str] = None
+    blockers: list[str] = []
+    objective: Optional[str] = None
+    expected_outputs: list[str] = []
+
+
+# CAM3WS-006 — Saídas/artefatos por etapa
+class StageOutputCreate(BaseModel):
+    macroetapa: Macroetapa
+    output_type: str
+    title: str
+    content: Optional[str] = None
+    content_data: Optional[dict] = None
+    produced_by_agent: Optional[str] = None
+    needs_human_validation: bool = False
+
+
+class StageOutputResponse(BaseModel):
+    id: int
+    process_id: int
+    macroetapa: str
+    output_type: str
+    title: str
+    content: Optional[str] = None
+    content_data: Optional[dict] = None
+    produced_by_agent: Optional[str] = None
+    produced_by_user_id: Optional[int] = None
+    needs_human_validation: bool = False
+    validated_at: Optional[datetime] = None
+    validated_by_user_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ---------------------------------------------------------------------------
 # Kanban card (enriquecido para frontend)
 # ---------------------------------------------------------------------------
@@ -84,6 +132,16 @@ class KanbanProcessCard(BaseModel):
     has_alerts: bool = False
     created_at: Optional[datetime] = None
 
+    # Regente Cam1 — Gate de prontidão (CAM1-011)
+    entry_type: Optional[str] = None
+    has_minimal_base: bool = False
+    has_complementary_base: bool = False
+    missing_docs_count: int = 0
+
+    # Regente Cam3 — Estado formal da etapa (CAM3FT-004)
+    macroetapa_state: Optional[str] = None  # MacroetapaState value
+    blockers: list[str] = []
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -91,6 +149,9 @@ class KanbanColumn(BaseModel):
     macroetapa: str
     label: str
     count: int
+    # CAM3FT-003 — counts agregados por estado
+    blocked_count: int = 0
+    ready_to_advance_count: int = 0
     cards: list[KanbanProcessCard]
 
 

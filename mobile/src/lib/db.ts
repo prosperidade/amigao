@@ -50,9 +50,24 @@ export const initDb = async () => {
         payload TEXT NOT NULL, -- JSON String
         status TEXT DEFAULT 'pending', -- pending, error, synced
         error_message TEXT,
+        retry_count INTEGER DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
+
+
     `);
+
+    // Migração segura: adiciona retry_count em sync_queue se não existir
+    try {
+      const columns: any[] = await db.getAllAsync(`PRAGMA table_info(sync_queue)`);
+      const hasRetryCount = columns.some((col: any) => col.name === 'retry_count');
+      if (!hasRetryCount) {
+        await db.runAsync(`ALTER TABLE sync_queue ADD COLUMN retry_count INTEGER DEFAULT 0`);
+        console.log('[SQLite] Migrated sync_queue: added retry_count column');
+      }
+    } catch (_) {
+      // Tabela pode não existir ainda na primeira execução — ignora
+    }
 
     console.log('[SQLite] Local database initialized successfully');
     return db;

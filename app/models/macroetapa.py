@@ -40,6 +40,21 @@ class Macroetapa(str, enum.Enum):
     contrato_formalizacao = "contrato_formalizacao"
 
 
+class MacroetapaState(str, enum.Enum):
+    """Estados formais por etapa (Regente Cam3 CAM3FT-004).
+
+    Granularidade maior que o boolean completed/completion_pct atual.
+    Calculado dinamicamente — pode ser persistido como cache opcional.
+    """
+    nao_iniciada = "nao_iniciada"
+    em_andamento = "em_andamento"
+    aguardando_input = "aguardando_input"          # consultor precisa inserir algo
+    aguardando_validacao = "aguardando_validacao"  # IA produziu, humano valida
+    travada = "travada"                             # bloqueio impeditivo
+    pronta_para_avancar = "pronta_para_avancar"
+    concluida = "concluida"
+
+
 # Ordem para calculo de progresso e stepper
 MACROETAPA_ORDER: list[Macroetapa] = list(Macroetapa)
 
@@ -102,6 +117,74 @@ MACROETAPA_LABELS: dict[Macroetapa, str] = {
     Macroetapa.caminho_regulatorio: "Caminho Regulatório",
     Macroetapa.orcamento_negociacao: "Orçamento e Negociação",
     Macroetapa.contrato_formalizacao: "Contrato e Formalização",
+}
+
+
+# CAM3WS-003 — Objetivo e saída esperada por etapa (Regente Camada 3)
+# Usado pelo Workspace pra mostrar "o que precisa ser produzido pra avançar"
+# e pelo TransitionGuard pra validar prontidão.
+MACROETAPA_METADATA: dict[Macroetapa, dict] = {
+    Macroetapa.entrada_demanda: {
+        "objective": "Transformar o contato inicial em caso formal aberto",
+        "expected_outputs": [
+            "Caso aberto",
+            "Cliente vinculado ou criado",
+            "Ficha inicial mínima gerada",
+        ],
+    },
+    Macroetapa.diagnostico_preliminar: {
+        "objective": "Entender o problema provável antes da coleta documental completa",
+        "expected_outputs": [
+            "Ficha inicial estruturada",
+            "Hipótese preliminar validada",
+            "Urgência definida",
+            "Lacunas registradas",
+            "Documentos a solicitar definidos",
+        ],
+    },
+    Macroetapa.coleta_documental: {
+        "objective": "Montar o dossiê mínimo válido para análise",
+        "expected_outputs": [
+            "Dossiê mínimo montado",
+            "Pendências claras",
+            "Base documental apta para diagnóstico técnico",
+        ],
+    },
+    Macroetapa.diagnostico_tecnico: {
+        "objective": "Transformar documentos e bases em leitura técnica confiável",
+        "expected_outputs": [
+            "Problema real definido",
+            "Complexidade classificada",
+            "Risco inicial mapeado",
+            "Resumo técnico consolidado",
+        ],
+    },
+    Macroetapa.caminho_regulatorio: {
+        "objective": "Escolher a rota correta do caso",
+        "expected_outputs": [
+            "Caminho regulatório definido",
+            "Ordem das próximas etapas",
+            "Plano de contingência",
+            "Checklist da próxima fase",
+        ],
+    },
+    Macroetapa.orcamento_negociacao: {
+        "objective": "Converter o caminho em proposta viável",
+        "expected_outputs": [
+            "Proposta emitida",
+            "Proposta negociada",
+            "Aceite comercial registrado",
+        ],
+    },
+    Macroetapa.contrato_formalizacao: {
+        "objective": "Transformar proposta aceita em caso formalizado e apto para execução",
+        "expected_outputs": [
+            "Caso formalizado",
+            "Escopo fechado",
+            "Autorização obtida",
+            "Pronto para execução plena",
+        ],
+    },
 }
 
 
@@ -208,13 +291,99 @@ class MacroetapaChecklist(Base):
     )
     macroetapa = Column(String, nullable=False, index=True)
 
-    # [{id, label, completed: bool, completed_at: str|null, agent_suggestion: str|null}]
+    # [{id, label, completed: bool, completed_at: str|null, agent_suggestion: str|null,
+    #   needs_human_validation: bool, validated_at: str|null, validated_by_user_id: int|null}]
     actions = Column(PortableJSON, nullable=False, default=list)
 
     completion_pct = Column(Float, nullable=False, default=0.0)
+
+    # Regente Cam3 CAM3FT-004 — estado formal da etapa (cache; valor canônico
+    # vem de compute_macroetapa_state).
+    state = Column(String, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relacionamentos
     process = relationship("Process", backref="macroetapa_checklists")
+
+
+# ---------------------------------------------------------------------------
+# Cálculo de estado (CAM3FT-004) e gate de avanço (CAM3FT-005)
+# ---------------------------------------------------------------------------
+
+
+def compute_macroetapa_state(
+    checklist: "MacroetapaChecklist",
+    *,
+    is_current: bool = False,
+    has_blockers: bool = False,
+) -> MacroetapaState:
+    """Deriva o estado formal de uma etapa a partir do checklist + flags externas.
+
+    Regras:
+      - sem actions ou todas pendentes E não é a corrente → nao_iniciada
+      - has_blockers=True → travada
+      - alguma action com needs_human_validation=True não validada → aguardando_validacao
+      - completion_pct >= 1.0 → concluida (ou pronta_para_avancar se ainda corrente)
+      - tem actions completas mas não todas → em_andamento
+      - é a corrente sem progresso → aguardando_input
+    """
+    actions = checklist.actions or []
+    if has_blockers:
+        return MacroetapaState.travada
+
+    # Validações humanas pendentes (CAM3WS-005)
+    for a in actions:
+        if a.get("completed") and a.get("needs_human_validation") and not a.get("validated_at"):
+            return MacroetapaState.aguardando_validacao
+
+    pct = float(checklist.completion_pct or 0.0)
+    if pct >= 1.0:
+        return MacroetapaState.pronta_para_avancar if is_current else MacroetapaState.concluida
+    if pct > 0:
+        return MacroetapaState.em_andamento
+    if is_current:
+        return MacroetapaState.aguardando_input
+    return MacroetapaState.nao_iniciada
+
+
+def list_macroetapa_blockers(
+    checklist: "MacroetapaChecklist | None",
+    *,
+    documents_pending_required: int = 0,
+) -> list[str]:
+    """Coleta blockers que impedem o avanço da etapa.
+
+    Hoje cobre:
+      - documentos obrigatórios pendentes
+      - actions críticas marcadas (futuro: ações com flag `blocking=True`)
+      - validação humana pendente
+    """
+    blockers: list[str] = []
+    if documents_pending_required > 0:
+        blockers.append(
+            f"{documents_pending_required} documento(s) obrigatório(s) pendente(s)"
+        )
+    if checklist:
+        for a in (checklist.actions or []):
+            if a.get("completed") and a.get("needs_human_validation") and not a.get("validated_at"):
+                blockers.append(f"Validação humana pendente: {a.get('label')}")
+    return blockers
+
+
+def can_advance_macroetapa(
+    checklist: "MacroetapaChecklist | None",
+    *,
+    documents_pending_required: int = 0,
+    require_complete: bool = True,
+) -> tuple[bool, list[str]]:
+    """Regente CAM3FT-005 — só avança se output mínimo OK + sem trava + validações OK."""
+    blockers = list_macroetapa_blockers(
+        checklist, documents_pending_required=documents_pending_required
+    )
+    if checklist is None:
+        return False, ["Etapa não iniciada (sem checklist)."]
+    if require_complete and float(checklist.completion_pct or 0.0) < 1.0:
+        blockers.append("Output mínimo não atingido (checklist incompleto).")
+    return (len(blockers) == 0), blockers

@@ -10,10 +10,13 @@ import {
   LogOut,
   Leaf,
   FileText,
+  Bot,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAgentEvents } from '@/hooks/useAgentEvents';
 
 export default function PrivateLayout() {
+  useAgentEvents();
   const { token, user, logout } = useAuthStore();
   const location = useLocation();
   const hasPortalToken = token ? isClientPortalToken(token) : false;
@@ -44,6 +47,7 @@ export default function PrivateLayout() {
     { name: 'Clientes', icon: Users, path: '/clients' },
     { name: 'Imóveis', icon: MapPin, path: '/properties' },
     { name: 'Propostas', icon: FileText, path: '/proposals' },
+    { name: 'Agentes IA', icon: Bot, path: '/agents' },
   ];
 
   return (

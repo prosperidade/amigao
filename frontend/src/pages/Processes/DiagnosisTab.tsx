@@ -1,6 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Stethoscope } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Stethoscope, Brain, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
 import { Process } from './ProcessDetailTypes';
+import type { AIJob } from '@/types/agent';
+import { CONFIDENCE_STYLES } from '@/types/agent';
 
 interface DiagnosisTabProps {
   process: Process;
@@ -8,6 +12,19 @@ interface DiagnosisTabProps {
 
 export default function DiagnosisTab({ process }: DiagnosisTabProps) {
   const navigate = useNavigate();
+
+  // Buscar ultimo job do agente diagnostico para este processo
+  const { data: jobs = [] } = useQuery<AIJob[]>({
+    queryKey: ['ai-jobs', process.id],
+    queryFn: () =>
+      api.get('/ai/jobs', {
+        params: { entity_type: 'process', entity_id: process.id },
+      }).then(r => r.data),
+  });
+
+  const diagJob = jobs.find(j => j.agent_name === 'diagnostico' && j.status === 'completed');
+  const diagResult = diagJob?.result as Record<string, unknown> | undefined;
+  const diagRunning = jobs.some(j => j.agent_name === 'diagnostico' && (j.status === 'running' || j.status === 'pending'));
 
   return (
     <div className="space-y-4">
@@ -37,6 +54,68 @@ export default function DiagnosisTab({ process }: DiagnosisTabProps) {
             </button>{' '}
             {`para gerar um diagn\u00f3stico autom\u00e1tico.`}
           </p>
+        </div>
+      )}
+
+      {/* Resultado do Agente Diagnostico (IA) */}
+      {diagRunning && (
+        <div className="rounded-xl bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 p-5 flex items-center gap-3">
+          <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+          <p className="text-sm text-blue-700 dark:text-blue-300">Agente de diagnostico em execucao...</p>
+        </div>
+      )}
+
+      {diagResult && (
+        <div className="rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <h2 className="text-sm font-semibold text-purple-800 dark:text-purple-300 uppercase tracking-wider">
+                Diagnostico IA
+              </h2>
+            </div>
+            {typeof diagResult.confidence === 'string' && (
+              <span className={`text-xs px-2 py-0.5 rounded border ${CONFIDENCE_STYLES[diagResult.confidence] ?? ''}`}>
+                Confianca {diagResult.confidence}
+              </span>
+            )}
+          </div>
+
+          {typeof diagResult.situacao_geral === 'string' && (
+            <p className="text-sm text-gray-700 dark:text-slate-200 mb-3 leading-relaxed">
+              {diagResult.situacao_geral}
+            </p>
+          )}
+
+          {Array.isArray(diagResult.passivos_identificados) && (diagResult.passivos_identificados as string[]).length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> Passivos Identificados
+              </p>
+              <ul className="space-y-1">
+                {(diagResult.passivos_identificados as string[]).map((p, i) => (
+                  <li key={i} className="text-sm text-gray-700 dark:text-slate-300 flex items-start gap-2">
+                    <span className="text-red-400 mt-0.5">&#x2022;</span> {String(p)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {Array.isArray(diagResult.acoes_remediacao) && (diagResult.acoes_remediacao as string[]).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Acoes de Remediacao
+              </p>
+              <ul className="space-y-1">
+                {(diagResult.acoes_remediacao as string[]).map((a, i) => (
+                  <li key={i} className="text-sm text-gray-700 dark:text-slate-300 flex items-start gap-2">
+                    <span className="text-emerald-400 mt-0.5">&#x203A;</span> {String(a)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

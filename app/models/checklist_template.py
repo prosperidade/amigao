@@ -17,7 +17,7 @@ class ChecklistTemplate(Base):
     __tablename__ = "checklist_templates"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)  # None = global
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=True, index=True)  # None = global
 
     demand_type = Column(String, nullable=False, index=True)  # ex: "car", "licenciamento"
     name = Column(String, nullable=False)
@@ -38,9 +38,9 @@ class ProcessChecklist(Base):
     __tablename__ = "process_checklists"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    process_id = Column(Integer, ForeignKey("processes.id"), nullable=False, index=True, unique=True)
-    template_id = Column(Integer, ForeignKey("checklist_templates.id"), nullable=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    process_id = Column(Integer, ForeignKey("processes.id", ondelete="CASCADE"), nullable=False, index=True, unique=True)
+    template_id = Column(Integer, ForeignKey("checklist_templates.id", ondelete="SET NULL"), nullable=True)
 
     # Cópia dos itens com status: [{...template_item, status: pending|received|waived, document_id, waiver_reason}]
     items = Column(JSON, nullable=False, default=list)

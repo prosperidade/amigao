@@ -4,9 +4,15 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import AccessContext, get_access_context, get_db
+from app.api.deps import AccessContext, get_access_context, get_current_internal_user, get_db
 from app.core.metrics import record_document_upload
 from app.models.document import Document
+from app.models.document_categories import (
+    REGENTE_CATEGORIES,
+    REGENTE_CATEGORY_LABELS,
+    normalize_category,
+)
+from app.models.user import User
 from app.repositories import DocumentRepository, ProcessRepository
 from app.schemas.document import (
     DocumentConfirmRequest,
@@ -19,9 +25,59 @@ from app.services.storage import StorageService, get_storage_service
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+ALLOWED_EXTENSIONS = {
+    "pdf", "doc", "docx", "xls", "xlsx", "csv",
+    "jpg", "jpeg", "png", "tiff", "tif", "bmp",
+    "zip", "rar", "7z",
+    "dwg", "dxf", "shp", "kml", "kmz", "geojson",
+    "txt", "rtf", "odt", "ods",
+}
+
+MIME_EXTENSION_MAP: dict[str, set[str]] = {
+    "application/pdf": {"pdf"},
+    "image/jpeg": {"jpg", "jpeg"},
+    "image/png": {"png"},
+    "image/tiff": {"tiff", "tif"},
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {"docx"},
+    "application/msword": {"doc"},
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {"xlsx"},
+    "application/vnd.ms-excel": {"xls"},
+    "text/csv": {"csv"},
+    "application/zip": {"zip"},
+    "text/plain": {"txt"},
+}
+
+
+def _validate_file(filename: str, content_type: str) -> str:
+    """Valida extensão e consistência MIME do arquivo. Retorna a extensão normalizada."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Extensão '.{ext}' não permitida. Permitidas: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+    if content_type in MIME_EXTENSION_MAP:
+        if ext not in MIME_EXTENSION_MAP[content_type]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Content-type '{content_type}' incompatível com extensão '.{ext}'",
+            )
+    return ext
+
 
 def _get_storage_service() -> StorageService:
     return get_storage_service()
+
+
+@router.get("/categories")
+def list_document_categories(
+    current_user: User = Depends(get_current_internal_user),
+):
+    """CAM2IH-010 — Lista as 6 categorias canônicas Regente com labels."""
+    return [
+        {"value": v, "label": REGENTE_CATEGORY_LABELS[v]}
+        for v in REGENTE_CATEGORIES
+    ]
 
 
 @router.get("/", response_model=list[DocumentResponse])
@@ -56,6 +112,8 @@ def get_upload_url(
     proc_repo = ProcessRepository(db, access_context.tenant_id)
     proc_repo.get_scoped_or_404(body.process_id, client_id=access_context.client_id)
 
+    _validate_file(body.filename, body.content_type)
+
     result = _get_storage_service().generate_presigned_put_url(
         tenant_id=access_context.tenant_id,
         process_id=body.process_id,
@@ -79,7 +137,7 @@ def confirm_upload(
     proc_repo = ProcessRepository(db, access_context.tenant_id)
     process = proc_repo.get_scoped_or_404(body.process_id, client_id=access_context.client_id)
 
-    ext = body.filename.split('.')[-1] if '.' in body.filename else ''
+    ext = _validate_file(body.filename, body.content_type)
 
     doc_repo = DocumentRepository(db, access_context.tenant_id)
     db_doc = Document(
@@ -127,6 +185,25 @@ def confirm_upload(
             db_doc.id,
             exc,
         )
+
+    # Trigger Agente Extrator para doc_types extraiveis (async, fire-and-forget)
+    EXTRACTABLE_DOC_TYPES = {"matricula", "car", "ccir", "auto_infracao", "licenca"}
+    if body.document_type and body.document_type in EXTRACTABLE_DOC_TYPES:
+        try:
+            from app.workers.agent_tasks import run_agent  # noqa: PLC0415
+            run_agent.delay(
+                agent_name="extrator",
+                tenant_id=access_context.tenant_id,
+                user_id=access_context.user.id,
+                process_id=body.process_id,
+                metadata={
+                    "document_id": db_doc.id,
+                    "doc_type": body.document_type,
+                },
+            )
+            logger.info("Agente extrator enfileirado para document_id=%s", db_doc.id)
+        except Exception as exc:
+            logger.warning("Falha ao enfileirar agente extrator para document_id=%s: %s", db_doc.id, exc)
 
     record_document_upload("client_portal" if access_context.is_client_portal else "internal", "success")
     logger.info(f"Documento #{db_doc.id} confirmado | tenant={access_context.tenant_id} | '{body.filename}'")

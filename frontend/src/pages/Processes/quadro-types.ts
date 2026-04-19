@@ -24,12 +24,43 @@ export interface KanbanProcessCard {
   next_action: string | null;
   has_alerts: boolean;
   created_at: string | null;
+
+  // Regente Cam1 — Gate de prontidão (CAM1-011)
+  entry_type: string | null;
+  has_minimal_base: boolean;
+  has_complementary_base: boolean;
+  missing_docs_count: number;
+
+  // Regente Cam3 — Estado formal da etapa (CAM3FT-004)
+  macroetapa_state: string | null;
+  blockers: string[];
 }
+
+export type MacroetapaState =
+  | 'nao_iniciada'
+  | 'em_andamento'
+  | 'aguardando_input'
+  | 'aguardando_validacao'
+  | 'travada'
+  | 'pronta_para_avancar'
+  | 'concluida';
+
+export const MACROETAPA_STATE_BADGE: Record<string, { label: string; cls: string }> = {
+  nao_iniciada:           { label: 'Não iniciada', cls: 'bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-gray-400' },
+  em_andamento:           { label: 'Em andamento', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  aguardando_input:       { label: 'Aguardando input', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  aguardando_validacao:   { label: 'Aguardando validação', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' },
+  travada:                { label: 'Travada', cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+  pronta_para_avancar:    { label: 'Pronta p/ avançar', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+  concluida:              { label: 'Concluída', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' },
+};
 
 export interface KanbanColumn {
   macroetapa: string;
   label: string;
   count: number;
+  blocked_count: number;
+  ready_to_advance_count: number;
   cards: KanbanProcessCard[];
 }
 

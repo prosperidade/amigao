@@ -28,10 +28,12 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    process_id = Column(Integer, ForeignKey("processes.id"), nullable=True, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True, index=True)
-    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    process_id = Column(Integer, ForeignKey("processes.id", ondelete="CASCADE"), nullable=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True)
+    property_id = Column(Integer, ForeignKey("properties.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Regente Cam1 — docs podem ser anexados a um rascunho antes do processo existir
+    intake_draft_id = Column(Integer, ForeignKey("intake_drafts.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Metadados do arquivo
     original_file_name = Column(String, nullable=False)
@@ -58,7 +60,7 @@ class Document(Base):
     confidence_score = Column(Float, nullable=True)
     review_required = Column(Boolean, default=False)
 
-    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Sprint 2 — vínculo com item de checklist e validade documental
     checklist_item_id = Column(String, nullable=True)   # id do item no ProcessChecklist.items[]
@@ -66,6 +68,7 @@ class Document(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     tenant = relationship("Tenant")
     process = relationship("Process")

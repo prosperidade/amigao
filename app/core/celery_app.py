@@ -37,6 +37,14 @@ celery_app.conf.update(
             "task": "workers.monitor_legislation_agencies",
             "schedule": crontab(hour=3, minute=0, day_of_week=1),  # segunda 03:00
         },
+        "vigia-scheduled-check": {
+            "task": "workers.vigia_all_tenants",
+            "schedule": crontab(hour="*/6", minute=15),  # a cada 6h, minuto 15
+        },
+        "acompanhamento-check-processes": {
+            "task": "workers.acompanhamento_check_all",
+            "schedule": crontab(minute="*/30"),  # a cada 30 minutos
+        },
     },
 )
 

@@ -164,6 +164,20 @@ def _infer_category(slug: str):
         return PromptCategory.extract
     if slug.startswith("summarize") or slug.startswith("summary"):
         return PromptCategory.summarize
+    if slug.startswith("diagnostico"):
+        return PromptCategory.diagnostico
+    if slug.startswith("legislacao"):
+        return PromptCategory.legislacao
+    if slug.startswith("redator"):
+        return PromptCategory.redator
+    if slug.startswith("financeiro"):
+        return PromptCategory.financeiro
+    if slug.startswith("acompanhamento"):
+        return PromptCategory.acompanhamento
+    if slug.startswith("vigia"):
+        return PromptCategory.vigia
+    if slug.startswith("marketing"):
+        return PromptCategory.marketing
     return PromptCategory.proposal
 
 

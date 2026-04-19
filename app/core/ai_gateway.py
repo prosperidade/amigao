@@ -11,7 +11,6 @@ Gateway multi-provider via litellm com:
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -36,32 +35,53 @@ class AIGatewayError(Exception):
     last_error: Optional[str] = None
 
 
-def _set_api_keys(settings) -> None:
-    """Exporta chaves de API para as variáveis de ambiente esperadas pelo litellm."""
-    if settings.OPENAI_API_KEY:
-        os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
-    if settings.GEMINI_API_KEY:
-        os.environ["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
-    if settings.ANTHROPIC_API_KEY:
-        os.environ["ANTHROPIC_API_KEY"] = settings.ANTHROPIC_API_KEY
+AI_HOURLY_COST_LIMIT_USD = 5.0  # limite padrão por tenant por hora
 
 
-def _build_model_list(settings) -> list[str]:
-    """Monta lista de modelos em ordem de preferência baseado nas chaves disponíveis."""
-    candidates: list[tuple[str, str]] = [
-        (settings.OPENAI_API_KEY, settings.AI_DEFAULT_MODEL),
-        (settings.GEMINI_API_KEY, settings.AI_FALLBACK_MODEL),
-        (settings.ANTHROPIC_API_KEY, "claude-haiku-4-5-20251001"),
+def check_tenant_cost_limit(
+    tenant_id: int,
+    db: "Session",
+    limit_usd: float = AI_HOURLY_COST_LIMIT_USD,
+) -> float:
+    """Retorna custo acumulado na última hora. Levanta HTTPException se exceder limite."""
+    from datetime import UTC, datetime, timedelta
+
+    from fastapi import HTTPException
+    from sqlalchemy import func
+
+    from app.models.ai_job import AIJob
+
+    one_hour_ago = datetime.now(UTC) - timedelta(hours=1)
+    total_cost = (
+        db.query(func.coalesce(func.sum(AIJob.cost_usd), 0.0))
+        .filter(
+            AIJob.tenant_id == tenant_id,
+            AIJob.created_at >= one_hour_ago,
+        )
+        .scalar()
+    )
+    if total_cost >= limit_usd:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Limite de custo de IA excedido: ${total_cost:.2f}/${limit_usd:.2f} na última hora",
+        )
+    return float(total_cost)
+
+
+def _build_model_list(settings) -> list[tuple[str, str]]:
+    """Monta lista de (modelo, api_key) em ordem de preferência baseado nas chaves disponíveis."""
+    candidates: list[tuple[str, str, str]] = [
+        (settings.OPENAI_API_KEY, settings.AI_DEFAULT_MODEL, settings.OPENAI_API_KEY),
+        (settings.GEMINI_API_KEY, settings.AI_FALLBACK_MODEL, settings.GEMINI_API_KEY),
+        (settings.ANTHROPIC_API_KEY, "claude-haiku-4-5-20251001", settings.ANTHROPIC_API_KEY),
     ]
-    models = [model for key, model in candidates if key]
-    # Garante sem duplicatas mantendo ordem
+    result: list[tuple[str, str]] = []
     seen: set[str] = set()
-    result: list[str] = []
-    for m in models:
-        if m not in seen:
-            seen.add(m)
-            result.append(m)
-    return result or [settings.AI_DEFAULT_MODEL]
+    for key, model, api_key in candidates:
+        if key and model not in seen:
+            seen.add(model)
+            result.append((model, api_key))
+    return result or [(settings.AI_DEFAULT_MODEL, "")]
 
 
 def complete(
@@ -83,9 +103,7 @@ def complete(
 
     from app.core.config import settings
 
-    _set_api_keys(settings)
-
-    models = [model] if model else _build_model_list(settings)
+    models: list[tuple[str, str]] = [(model, "")] if model else _build_model_list(settings)
     _max_tokens = max_tokens or settings.AI_MAX_TOKENS
     _temperature = temperature if temperature is not None else settings.AI_TEMPERATURE
     _timeout = settings.AI_TIMEOUT_SECONDS
@@ -96,7 +114,7 @@ def complete(
     messages.append({"role": "user", "content": prompt})
 
     last_error: Optional[str] = None
-    for attempt_model in models:
+    for attempt_model, api_key in models:
         try:
             t0 = time.monotonic()
             response = litellm.completion(
@@ -105,6 +123,7 @@ def complete(
                 max_tokens=_max_tokens,
                 temperature=_temperature,
                 timeout=_timeout,
+                api_key=api_key or None,
             )
             elapsed_ms = int((time.monotonic() - t0) * 1000)
 

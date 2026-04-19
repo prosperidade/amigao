@@ -102,6 +102,10 @@ def toggle_action(
         if action.get("id") == action_id:
             action["completed"] = completed
             action["completed_at"] = datetime.now(UTC).isoformat() if completed else None
+            # Se desmarcou, invalida validação humana (precisa revalidar)
+            if not completed:
+                action["validated_at"] = None
+                action["validated_by_user_id"] = None
             found = True
             break
 
@@ -110,6 +114,71 @@ def toggle_action(
 
     checklist.actions = actions
     checklist.completion_pct = calculate_completion_pct(actions)
+    db.flush()
+    return checklist
+
+
+def validate_action(
+    db: Session,
+    checklist: MacroetapaChecklist,
+    action_id: str,
+    *,
+    user_id: int,
+) -> MacroetapaChecklist:
+    """CAM3WS-005 — humano valida o resultado de uma ação que exige validação.
+
+    A ação precisa estar `completed=True` e ter `needs_human_validation=True`.
+    """
+    actions = list(checklist.actions)
+    found = False
+    for action in actions:
+        if action.get("id") == action_id:
+            if not action.get("completed"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Ação não está completa — não pode ser validada.",
+                )
+            if not action.get("needs_human_validation"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Ação não exige validação humana.",
+                )
+            action["validated_at"] = datetime.now(UTC).isoformat()
+            action["validated_by_user_id"] = user_id
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=404, detail=f"Ação '{action_id}' não encontrada")
+
+    checklist.actions = actions
+    db.flush()
+    return checklist
+
+
+def mark_action_needs_validation(
+    db: Session,
+    checklist: MacroetapaChecklist,
+    action_id: str,
+    *,
+    needs: bool = True,
+    agent_suggestion: Optional[str] = None,
+) -> MacroetapaChecklist:
+    """Helper interno — agentes IA usam pra sinalizar que sua saída precisa
+    de validação humana antes de a etapa ser considerada pronta.
+    """
+    actions = list(checklist.actions)
+    for action in actions:
+        if action.get("id") == action_id:
+            action["needs_human_validation"] = needs
+            if agent_suggestion is not None:
+                action["agent_suggestion"] = agent_suggestion
+            if not needs:
+                # Limpa rastros de validação anterior se não exige mais
+                action["validated_at"] = None
+                action["validated_by_user_id"] = None
+            break
+    checklist.actions = actions
     db.flush()
     return checklist
 

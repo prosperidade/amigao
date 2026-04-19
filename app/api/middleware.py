@@ -15,6 +15,26 @@ from app.core.tracing import build_traceparent, parse_traceparent, reset_trace_c
 logger = logging.getLogger(__name__)
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Adiciona headers de segurança padrão OWASP a todas as respostas."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=()"
+        )
+        response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'"
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return response
+
+
 def _extract_auth_context(request: Request) -> tuple[str, str]:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -23,7 +43,7 @@ def _extract_auth_context(request: Request) -> tuple[str, str]:
     token = auth_header.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except (JWTError, Exception):
+    except (JWTError, ValueError, KeyError):
         return "-", request.headers.get("X-Tenant-Id", "-")
 
     user_id = str(payload.get("sub", "-"))

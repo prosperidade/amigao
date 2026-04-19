@@ -57,13 +57,31 @@ export default function ProposalEditor() {
   } | null>(null);
   const [saved, setSaved] = useState(false);
 
-  // Buscar dados do cliente para exibir nome/email ao usuário
-  const { data: clientInfo } = useQuery({
-    queryKey: ['client-info', clientId],
-    queryFn: () => api.get(`/clients/${clientId}`).then(r => r.data),
-    enabled: !!clientId && !isNaN(Number(clientId)) && Number(clientId) > 0,
+  // Buscar lista de clientes para dropdown
+  const { data: clientsList = [] } = useQuery<{ id: number; full_name: string; email: string | null }[]>({
+    queryKey: ['clients-list'],
+    queryFn: () => api.get('/clients/').then(r => r.data),
     staleTime: 60_000,
   });
+
+  // Buscar dados do cliente selecionado
+  const clientInfo = clientsList.find(c => String(c.id) === clientId) ?? null;
+
+  // Buscar processo para auto-preencher client_id
+  const { data: processData } = useQuery<{ id: number; client_id: number; title: string }>({
+    queryKey: ['process-for-proposal', processId],
+    queryFn: () => api.get(`/processes/${processId}`).then(r => r.data),
+    enabled: !!processId && !isNaN(Number(processId)),
+    staleTime: 60_000,
+  });
+
+  // Auto-preencher client_id quando processo carrega
+  useMemo(() => {
+    if (processData?.client_id && !clientId) {
+      setClientId(String(processData.client_id));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processData?.client_id]);
 
   // Buscar proposta existente
   const { data: proposal } = useQuery({
@@ -306,20 +324,25 @@ export default function ProposalEditor() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">ID do Cliente</label>
-                <input
+                <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5">Cliente</label>
+                <select
                   value={clientId}
                   onChange={e => setClientId(e.target.value)}
                   disabled={!isEditable}
-                  placeholder="client_id"
-                  type="number"
                   className={inputCls}
-                />
+                >
+                  <option value="">Selecione o cliente...</option>
+                  {clientsList.map(c => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.full_name} {c.email ? `(${c.email})` : ''}
+                    </option>
+                  ))}
+                </select>
                 {clientInfo && (
                   <div className="mt-1.5 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-xs">
                     <p className="font-medium text-emerald-700 dark:text-emerald-300">{clientInfo.full_name}</p>
                     <p className="text-gray-500 dark:text-slate-400 mt-0.5">
-                      {clientInfo.email ? `✉ ${clientInfo.email}` : 'Sem e-mail cadastrado'}
+                      {clientInfo.email ? `\u2709 ${clientInfo.email}` : 'Sem e-mail cadastrado'}
                     </p>
                   </div>
                 )}

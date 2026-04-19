@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Plus, Search, Edit2, Trash2, User as UserIcon, Building2, Mail, Phone } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, User as UserIcon, Building2, Mail, Phone, ExternalLink } from 'lucide-react';
 
 interface Client {
   id: number;
@@ -15,6 +16,7 @@ interface Client {
 
 export default function ClientsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState<Client | null>(null);
@@ -164,7 +166,13 @@ export default function ClientsPage() {
                           {client.client_type === 'pj' ? <Building2 className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900 dark:text-gray-100">{client.full_name}</p>
+                          <button
+                            onClick={() => navigate(`/clients/${client.id}`)}
+                            className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary dark:hover:text-emerald-400 inline-flex items-center gap-1 group/name"
+                          >
+                            {client.full_name}
+                            <ExternalLink className="w-3 h-3 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                          </button>
                           <p className="text-xs text-gray-500 capitalize">{client.client_type === 'pf' ? 'Pessoa Física' : 'Pessoa Jurídica'}</p>
                         </div>
                       </div>

@@ -1,0 +1,63 @@
+wing: amigao_do_meio_ambiente
+rooms:
+# --- Backend Core ---
+- name: alembic
+  description: Database migrations (Alembic)
+- name: app_core
+  description: Core config, security, celery, logging, metrics, tracing, alerts, ai_gateway
+- name: app_models
+  description: SQLAlchemy ORM models (16 entidades)
+- name: app_api
+  description: FastAPI routers (14 routers), deps, middleware, websockets
+- name: app_services
+  description: Business logic services (notifications, prompts)
+- name: app_workers
+  description: Celery tasks (ai_summarizer, ai_tasks, tasks)
+- name: app_schemas
+  description: Pydantic DTOs (request/response schemas)
+- name: app_repositories
+  description: Data access layer (document_repo, process_repo, task_repo)
+
+# --- Agentes IA ---
+- name: agents_core
+  description: Agent framework (BaseAgent, AgentRegistry, orchestrator, validators, events)
+- name: agent_atendimento
+  description: Agente de atendimento ao cliente
+- name: agent_extrator
+  description: Agente extrator de dados de documentos
+- name: agent_diagnostico
+  description: Agente de diagnostico ambiental
+- name: agent_redator
+  description: Agente redator de relatorios e documentos tecnicos
+- name: agent_orcamento
+  description: Agente de orcamento e custos
+- name: agent_financeiro
+  description: Agente financeiro
+- name: agent_acompanhamento
+  description: Agente de acompanhamento de processos
+- name: agent_vigia
+  description: Agente vigia (monitoramento de prazos e compliance)
+- name: agent_marketing
+  description: Agente de marketing e comunicacao
+- name: agent_legislacao
+  description: Agente regulatorio (RAG sobre legislacao ambiental federal/estadual)
+
+# --- Frontend ---
+- name: frontend
+  description: React + Vite internal dashboard (TypeScript, TailwindCSS)
+- name: client_portal
+  description: Next.js 16 client portal (App Router, TypeScript)
+- name: mobile
+  description: Expo React Native app (offline-first, SQLite)
+
+# --- Infra & Ops ---
+- name: docker
+  description: Docker Compose services (db, redis, minio, api, worker, client-portal)
+- name: testing
+  description: pytest test suite
+- name: documentation
+  description: Project docs (regras de negocio, arquitetura, API spec, runbook)
+- name: ops
+  description: Operational scripts
+- name: general
+  description: Root config files, CI/CD, misc

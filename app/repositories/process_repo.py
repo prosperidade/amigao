@@ -53,6 +53,7 @@ class ProcessRepository(BaseRepository[Process]):
         return (
             self.db.query(Task)
             .filter(
+                Task.tenant_id == self.tenant_id,
                 Task.process_id == process_id,
                 Task.status.notin_(list(TERMINAL_TASK_STATUSES)),
             )
@@ -80,6 +81,9 @@ class ProcessRepository(BaseRepository[Process]):
             new_value=new_value,
         )
         self.db.add(audit)
+        self.db.flush()
+        from app.services.audit_hash import stamp_audit_hash
+        stamp_audit_hash(self.db, audit)
         return audit
 
     def get_timeline(self, process_id: int) -> Sequence[AuditLog]:

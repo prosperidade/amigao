@@ -56,6 +56,15 @@ class IntakeSource(str, enum.Enum):
     site = "site"
 
 
+class EntryType(str, enum.Enum):
+    """Cenário escolhido pelo consultor na entrada do cadastro (Regente Cam1)."""
+    novo_cliente_novo_imovel = "novo_cliente_novo_imovel"
+    cliente_existente_novo_imovel = "cliente_existente_novo_imovel"
+    cliente_existente_imovel_existente = "cliente_existente_imovel_existente"
+    complementar_base_existente = "complementar_base_existente"
+    importar_documentos = "importar_documentos"
+
+
 # Transições válidas conforme Regras de Negócio
 VALID_TRANSITIONS = {
     ProcessStatus.lead: [ProcessStatus.triagem],
@@ -109,9 +118,11 @@ class Process(Base):
 
     # Intake / classificação
     intake_source = Column(Enum(IntakeSource), nullable=True)  # canal de entrada
+    entry_type = Column(Enum(EntryType), nullable=True)         # cenário Regente Cam1
     demand_type = Column(Enum(DemandType), nullable=True)       # tipo de demanda classificado
     initial_diagnosis = Column(Text, nullable=True)             # pré-diagnóstico por regras
     suggested_checklist_template = Column(String, nullable=True) # demand_type do template sugerido
+    initial_summary = Column(Text, nullable=True)               # resumo curto da demanda (voz do cliente)
     intake_notes = Column(Text, nullable=True)                  # observações do intake
 
     # Macroetapa (7 etapas do fluxo real MVP1)

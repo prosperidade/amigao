@@ -27,6 +27,7 @@ class LegislacaoAgent(BaseAgent):
     description = "Enquadramento regulatorio com base legislativa e raciocinio juridico (Claude/Gemini)"
     job_type = AIJobType.consulta_regulatoria
     prompt_slugs = ["legislacao_system", "legislacao_user"]
+    palace_room = "agent_legislacao"
 
     def validate_preconditions(self) -> None:
         query = self.ctx.metadata.get("query", "")
@@ -67,6 +68,16 @@ class LegislacaoAgent(BaseAgent):
             uf=state,
         )
 
+        # MemPalace: enriquecer com casos passados similares
+        memory_context = ""
+        recall = self.recall_memory(f"legislacao {demand_type} {state}")
+        if recall.get("recent_diary"):
+            entries = [e.get("entry", "") if isinstance(e, dict) else str(e) for e in recall["recent_diary"][:3]]
+            memory_context = "\n".join(f"- {e}" for e in entries if e)
+        if recall.get("search_results"):
+            hits = [r.get("text", "")[:200] if isinstance(r, dict) else str(r)[:200] for r in recall["search_results"][:3]]
+            memory_context += "\n" + "\n".join(f"- {h}" for h in hits if h)
+
         # Montar prompts
         system_prompt = self.get_prompt("legislacao_system")
         user_prompt = self.get_prompt("legislacao_user", {
@@ -76,6 +87,13 @@ class LegislacaoAgent(BaseAgent):
             "context": json.dumps(process_context, ensure_ascii=False, default=str),
             "legislation": legislation_context,
         })
+
+        # Anexar contexto historico do MemPalace ao prompt
+        if memory_context.strip():
+            user_prompt += (
+                "\n\nCASOS ANTERIORES SIMILARES (base de conhecimento interna):\n"
+                + memory_context
+            )
 
         # Decidir qual LLM usar baseado no tamanho do contexto
         if legislation_context and len(legislation_context) > 100_000:

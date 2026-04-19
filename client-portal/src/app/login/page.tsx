@@ -40,8 +40,8 @@ export default function LoginPage() {
 
       // Vai pro Dashboard
       router.push('/dashboard');
-    } catch (err: any) {
-      console.error(err);
+    } catch (err: unknown) {
+      console.error(err instanceof Error ? err.message : 'Erro desconhecido');
       setError('Credenciais inválidas. Tente novamente.');
     } finally {
       setLoading(false);

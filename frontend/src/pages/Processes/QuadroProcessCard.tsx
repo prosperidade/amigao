@@ -1,6 +1,6 @@
 import { User, MapPin, ArrowRight } from 'lucide-react';
 import type { KanbanProcessCard } from './quadro-types';
-import { DEMAND_TYPE_LABELS, URGENCY_BADGES } from './quadro-types';
+import { DEMAND_TYPE_LABELS, MACROETAPA_STATE_BADGE, URGENCY_BADGES } from './quadro-types';
 
 interface Props {
   card: KanbanProcessCard;
@@ -42,9 +42,45 @@ export default function QuadroProcessCard({ card, onClick, onDragStart }: Props)
             {urgencyKey === 'critica' ? 'Urgente' : urgencyKey === 'alta' ? 'Alta' : urgencyKey === 'media' ? 'Média' : 'Baixa'}
           </span>
         )}
-        {card.has_alerts && (
-          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-            Alerta
+        {/* Regente Cam3 — Estado formal da etapa (CAM3FT-004) */}
+        {card.macroetapa_state && MACROETAPA_STATE_BADGE[card.macroetapa_state] && (
+          <span
+            title={card.blockers.length > 0 ? `Travas:\n${card.blockers.join('\n')}` : MACROETAPA_STATE_BADGE[card.macroetapa_state].label}
+            className={`text-xs px-2 py-0.5 rounded-full font-medium ${MACROETAPA_STATE_BADGE[card.macroetapa_state].cls}`}
+          >
+            {MACROETAPA_STATE_BADGE[card.macroetapa_state].label}
+          </span>
+        )}
+        {/* Regente Cam1 — Gate de prontidão */}
+        {card.has_minimal_base ? (
+          <span
+            title="Base mínima (cliente+imóvel) preenchida"
+            className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+          >
+            Base ✓
+          </span>
+        ) : (
+          <span
+            title="Faltam dados mínimos do cliente ou imóvel"
+            className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+          >
+            Base incompleta
+          </span>
+        )}
+        {card.has_complementary_base && (
+          <span
+            title="Documentos complementares anexados"
+            className="text-xs px-2 py-0.5 rounded-full font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400"
+          >
+            Docs anexados
+          </span>
+        )}
+        {card.missing_docs_count > 0 && (
+          <span
+            title={`${card.missing_docs_count} documento(s) obrigatório(s) pendente(s)`}
+            className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+          >
+            {card.missing_docs_count} pendente{card.missing_docs_count > 1 ? 's' : ''}
           </span>
         )}
       </div>

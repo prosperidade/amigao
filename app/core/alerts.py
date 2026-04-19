@@ -5,8 +5,6 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import httpx
-
 from app.core.config import settings
 from app.core.logging import request_id_ctx
 from app.core.metrics import record_alert
@@ -100,27 +98,27 @@ def _dispatch_webhook(*, category: str, severity: str, message: str, metadata: d
     )
     raw_payload = _serialize_webhook_payload(payload)
     headers = _build_webhook_headers(payload=payload, raw_payload=raw_payload, traceparent=traceparent)
+
+    # Dispatch via Celery task with retry (instead of synchronous fire-and-forget)
     try:
-        with httpx.Client(timeout=settings.ALERT_WEBHOOK_TIMEOUT_SECONDS) as client:
-            response = client.post(settings.ALERT_WEBHOOK_URL, content=raw_payload, headers=headers)
-            response.raise_for_status()
+        from app.workers.webhook_tasks import send_webhook_alert
+        send_webhook_alert.delay(
+            url=settings.ALERT_WEBHOOK_URL,
+            raw_payload_hex=raw_payload.hex(),
+            headers=headers,
+        )
     except Exception as exc:
-        error_metadata = {
-            "category": category,
-            "severity": severity,
-            "alert_id": payload["alert_id"],
-            "error": str(exc),
-            "traceparent": traceparent,
-            "auth_enabled": bool(settings.alert_webhook_auth_token),
-            "signature_enabled": bool(settings.alert_webhook_signing_secret),
-        }
-        if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
-            error_metadata["status_code"] = exc.response.status_code
+        # Fallback: if Celery broker is unreachable, log and move on
         logger.warning(
-            "Falha ao disparar webhook de alerta",
+            "Falha ao enfileirar webhook de alerta no Celery",
             extra={
-                "action": "operational.alert.webhook_failed",
-                "metadata": error_metadata,
+                "action": "operational.alert.webhook_enqueue_failed",
+                "metadata": {
+                    "category": category,
+                    "severity": severity,
+                    "alert_id": payload["alert_id"],
+                    "error": str(exc),
+                },
             },
         )
 

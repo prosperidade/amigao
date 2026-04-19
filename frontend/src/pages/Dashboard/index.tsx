@@ -2,13 +2,14 @@ import { useState } from 'react';
 import {
   Users, Briefcase, AlertCircle, FileText, Activity, Plus,
   CheckSquare, Clock, TrendingUp, DollarSign, AlertTriangle,
-  Eye, Calendar, Shield,
+  Eye, Calendar, Shield, Bot,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import DashboardRegente from './DashboardRegente';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -540,6 +541,109 @@ function ProcessAlertsSection({ alerts, navigate }: { alerts: ProcessAlert[]; na
 }
 
 // ---------------------------------------------------------------------------
+// Agent Metrics + Vigia Alerts
+// ---------------------------------------------------------------------------
+
+function AgentMetricsCard() {
+  const { data: jobs = [] } = useQuery<{
+    id: number; status: string; agent_name: string | null;
+    cost_usd: number | null; created_at: string;
+    result: Record<string, unknown> | null;
+  }[]>({
+    queryKey: ['ai-jobs-dashboard'],
+    queryFn: () => api.get('/ai/jobs', { params: { limit: 100 } }).then(r => r.data),
+    staleTime: 60_000,
+  });
+
+  const today = new Date().toDateString();
+  const todayJobs = jobs.filter(j => new Date(j.created_at).toDateString() === today);
+  const completed = todayJobs.filter(j => j.status === 'completed').length;
+  const failed = todayJobs.filter(j => j.status === 'failed').length;
+  const totalCost = todayJobs.reduce((s, j) => s + (j.cost_usd ?? 0), 0);
+  const needsReview = todayJobs.filter(j => j.result?.requires_review === true).length;
+  const successRate = todayJobs.length > 0 ? Math.round((completed / todayJobs.length) * 100) : 0;
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm p-6">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+        <Bot className="w-5 h-5 mr-2 text-purple-600" />
+        Agentes IA (hoje)
+      </h2>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Execucoes</p>
+          <p className="text-xl font-bold text-gray-900 dark:text-white">{todayJobs.length}</p>
+        </div>
+        <div className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Taxa Sucesso</p>
+          <p className={`text-xl font-bold ${successRate >= 80 ? 'text-emerald-600' : successRate >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+            {successRate}%
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Custo</p>
+          <p className="text-xl font-bold text-gray-900 dark:text-white">${totalCost.toFixed(4)}</p>
+        </div>
+        <div className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Revisao Pendente</p>
+          <p className={`text-xl font-bold ${needsReview > 0 ? 'text-amber-600' : 'text-gray-900 dark:text-white'}`}>
+            {needsReview}
+          </p>
+        </div>
+      </div>
+      {failed > 0 && (
+        <div className="mt-3 p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/20">
+          <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> {failed} execucao(oes) falharam hoje
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VigiaAlertsBanner({ navigate }: { navigate: (path: string) => void }) {
+  const { data: jobs = [] } = useQuery<{
+    id: number; agent_name: string | null; status: string;
+    result: Record<string, unknown> | null; created_at: string;
+  }[]>({
+    queryKey: ['vigia-alerts'],
+    queryFn: () => api.get('/ai/jobs', {
+      params: { agent_name: 'vigia', limit: 1 },
+    }).then(r => r.data),
+    staleTime: 300_000,
+  });
+
+  const lastVigia = jobs.find(j => j.agent_name === 'vigia' && j.status === 'completed');
+  const alerts = (lastVigia?.result?.alerts ?? []) as {
+    type: string; severity: string; message: string; process_id?: number;
+  }[];
+
+  if (!alerts.length) return null;
+
+  const severityStyles: Record<string, string> = {
+    error: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300',
+    warning: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300',
+  };
+
+  return (
+    <div className="space-y-2">
+      {alerts.slice(0, 5).map((alert, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={() => alert.process_id && navigate(`/processes/${alert.process_id}`)}
+          className={`w-full text-left p-3 rounded-xl border text-sm flex items-center gap-2 transition-colors hover:opacity-80 ${severityStyles[alert.severity] ?? severityStyles.warning}`}
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span className="truncate">{alert.message}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Dashboard
 // ---------------------------------------------------------------------------
 
@@ -628,6 +732,14 @@ export default function Dashboard() {
             <Plus className="w-4 h-4" />
             Nova Demanda
           </button>
+          {/* CAM2D-007 — Ação rápida: Fluxo de trabalho */}
+          <button
+            onClick={() => navigate('/processes')}
+            className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/10 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <Briefcase className="w-4 h-4" />
+            Fluxo
+          </button>
         </div>
       </div>
 
@@ -639,6 +751,9 @@ export default function Dashboard() {
           stats.map((item, index) => <StatCard key={index} {...item} />)
         )}
       </div>
+
+      {/* Regente Cam2 — Blocos 3/4/5/6 (CAM2D-001/002/003/004) */}
+      {viewMode === 'executivo' && <DashboardRegente />}
 
       {/* === EXECUTIVO SECTIONS === */}
       {viewMode === 'executivo' && (
@@ -681,12 +796,16 @@ export default function Dashboard() {
       {/* === OPERACIONAL SECTIONS === */}
       {viewMode === 'operacional' && (
         <div className="space-y-6">
-          {/* Row 1: Tarefas + Docs Revisao */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Vigia Alerts Banner */}
+          <VigiaAlertsBanner navigate={navigate} />
+
+          {/* Row 1: Tarefas + Docs Revisao + IA Metrics */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <TasksSection tasks={tasks} loading={isLoading} navigate={navigate} />
             {summaryData?.view === 'operacional' && (
               <DocumentsReviewSection docs={summaryData.documents_for_review} navigate={navigate} />
             )}
+            <AgentMetricsCard />
           </div>
 
           {/* Row 2: Docs Expirando + Alertas */}

@@ -37,10 +37,11 @@ export default function DashboardPage() {
       });
       setProcesses(res.data);
       setErrorMsg(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Evitando o console.error que aciona a Tela Vermelha do Next.js
-      const detail = error.response?.data?.detail || error.message || 'Erro Desconhecido';
-      setErrorMsg(`Falha ao buscar: ${detail} (${error.response?.status || 'Sem HTTP Status'})`);
+      const axiosErr = error as { response?: { data?: { detail?: string }; status?: number }; message?: string };
+      const detail = axiosErr.response?.data?.detail || axiosErr.message || 'Erro Desconhecido';
+      setErrorMsg(`Falha ao buscar: ${detail} (${axiosErr.response?.status || 'Sem HTTP Status'})`);
     } finally {
       setLoading(false);
     }

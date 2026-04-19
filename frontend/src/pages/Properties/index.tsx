@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { Plus, Search, MapPin, User as UserIcon, AlertTriangle } from 'lucide-react';
+import { Plus, Search, MapPin, User as UserIcon, AlertTriangle, ExternalLink } from 'lucide-react';
 
 interface Property {
   id: number;
@@ -16,6 +18,7 @@ interface Property {
 }
 
 export default function PropertiesPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,7 +62,7 @@ export default function PropertiesPage() {
     },
     onError: (err: unknown) => {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
-      alert(axiosErr.response?.data?.detail || 'Erro ao salvar o Pydantic / Banco de Dados.');
+      toast.error(axiosErr.response?.data?.detail || 'Erro ao salvar o Pydantic / Banco de Dados.');
       console.error(axiosErr.response?.data);
     }
   });
@@ -126,7 +129,13 @@ export default function PropertiesPage() {
                           <MapPin className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900 dark:text-gray-100">{prop.name}</p>
+                          <button
+                            onClick={() => navigate(`/properties/${prop.id}`)}
+                            className="font-medium text-gray-900 dark:text-gray-100 hover:text-emerald-600 dark:hover:text-emerald-400 inline-flex items-center gap-1 group/name"
+                          >
+                            {prop.name}
+                            <ExternalLink className="w-3 h-3 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                          </button>
                           <p className="text-xs text-gray-500 font-mono mt-0.5" title="Cadastro Ambiental Rural">CAR: {prop.car_code || 'Não informado'}</p>
                         </div>
                       </div>

@@ -44,4 +44,7 @@ class TaskRepository(BaseRepository[Task]):
             new_value=new_value,
         )
         self.db.add(audit)
+        self.db.flush()
+        from app.services.audit_hash import stamp_audit_hash
+        stamp_audit_hash(self.db, audit)
         return audit

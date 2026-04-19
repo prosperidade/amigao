@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { FileText, Download } from 'lucide-react';
+import { FileText, Download, Sparkles } from 'lucide-react';
 import { Document } from './ProcessDetailTypes';
+import type { AIJob } from '@/types/agent';
 import ProcessChecklist from './ProcessChecklist';
 import DocumentUploadZone from '@/components/DocumentUploadZone';
 
@@ -19,6 +21,21 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
     enabled: !!processId,
   });
 
+  // Buscar jobs do extrator para mostrar badge de campos extraidos
+  const { data: aiJobs = [] } = useQuery<AIJob[]>({
+    queryKey: ['ai-jobs', processId],
+    queryFn: () =>
+      api.get('/ai/jobs', {
+        params: { entity_type: 'process', entity_id: processId },
+      }).then(r => r.data),
+  });
+
+  const extractedDocIds = new Set(
+    aiJobs
+      .filter(j => j.agent_name === 'extrator' && j.status === 'completed' && j.result?.document_id)
+      .map(j => j.result!.document_id as number)
+  );
+
   const handleDownload = async (docId: number, filename: string) => {
     try {
       const res = await api.get(`/documents/${docId}/download-url`);
@@ -30,7 +47,7 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
       link.click();
       document.body.removeChild(link);
     } catch {
-      alert('Erro ao gerar link de download.');
+      toast.error('Erro ao gerar link de download.');
     }
   };
 
@@ -58,11 +75,18 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{doc.filename || doc.original_file_name}</p>
-                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
-                  {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
-                  {doc.document_type && ` \u00b7 ${doc.document_type}`}
-                  {' \u00b7 '}{new Date(doc.created_at).toLocaleDateString('pt-BR')}
-                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-xs text-gray-400 dark:text-slate-500">
+                    {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
+                    {doc.document_type && ` \u00b7 ${doc.document_type}`}
+                    {' \u00b7 '}{new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                  {extractedDocIds.has(doc.id) && (
+                    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
+                      <Sparkles className="w-3 h-3" /> Campos extraidos
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => handleDownload(doc.id, doc.filename || doc.original_file_name || 'download')}

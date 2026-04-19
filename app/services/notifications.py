@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from typing import Optional
 
 import redis
@@ -11,6 +12,23 @@ from app.core.metrics import record_realtime_event
 from app.models.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
+
+_redis_lock = threading.Lock()
+_redis_client: Optional[redis.Redis] = None
+
+
+def _get_redis_client() -> redis.Redis:
+    global _redis_client
+    if _redis_client is None:
+        with _redis_lock:
+            if _redis_client is None:
+                pool = redis.ConnectionPool.from_url(
+                    settings.REDIS_URL,
+                    decode_responses=True,
+                    max_connections=10,
+                )
+                _redis_client = redis.Redis(connection_pool=pool)
+    return _redis_client
 
 
 def publish_realtime_event(
@@ -29,9 +47,8 @@ def publish_realtime_event(
         "payload": payload,
     }
 
-    client = None
     try:
-        client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        client = _get_redis_client()
         client.publish(
             settings.REALTIME_EVENTS_CHANNEL,
             json.dumps(message, ensure_ascii=False),
@@ -52,12 +69,6 @@ def publish_realtime_event(
             exc,
         )
         return False
-    finally:
-        if client is not None:
-            try:
-                client.close()
-            except Exception:
-                pass
 
 
 def register_notification_audit(
@@ -79,3 +90,6 @@ def register_notification_audit(
         details=json.dumps(details or {}, ensure_ascii=False),
     )
     db.add(audit)
+    db.flush()
+    from app.services.audit_hash import stamp_audit_hash
+    stamp_audit_hash(db, audit)

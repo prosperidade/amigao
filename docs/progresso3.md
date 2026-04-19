@@ -822,3 +822,93 @@ Estabelecer infraestrutura de testes rigorosa no frontend Vite, eliminar dívida
 - Integração com OpenAPI gerada pelo backend (tipagem end-to-end)
 - Acessibilidade: aria-labels nos cards e botões do Dashboard
 
+---
+
+## Execução em 08-09/04/2026 — MemPalace + Ativação dos 10 Agentes IA
+
+### MemPalace — Sistema de Memória de Longo Prazo para IA
+- **Instalado**: mempalace 3.0.0 + ChromaDB 1.5.7 no venv e Docker
+- **Inicializado**: `mempalace init` + `mempalace mine` → 588 embeddings indexados
+- **MCP Global**: Configurado em `~/.claude.json` como server stdio (19 tools)
+- **Integrado nos 10 agentes**: diary_write + knowledge graph automatico a cada execucao
+- **recall_memory()**: legislacao e diagnostico enriquecem prompts com casos passados
+- **Git hook**: `post-commit` salva contexto de cada commit no palace
+- **Docker**: volume `mempalace_data` persistente, compartilhado entre api e worker
+
+### Sprint 1 — Triggers Automaticos Backend (4 integracoes)
+
+| Trigger | Momento | Agente/Chain |
+|---------|---------|-------------|
+| Intake | `POST /intake/create-case` | atendimento (async) |
+| Upload Doc | `POST /documents/confirm-upload` | extrator (tipos: matricula, car, ccir, auto_infracao, licenca) |
+| Macroetapa | `POST /processes/{id}/macroetapa` | Chain automatica (diagnostico_tecnico→diagnostico_completo, caminho_regulatorio→enquadramento_regulatorio, orcamento_negociacao→gerar_proposta) |
+| Vigia | Celery Beat 6h | vigia_all_tenants → vigia_scheduled_check por tenant |
+| Acompanhamento | Celery Beat 30min | acompanhamento_check_all → processos aguardando_orgao |
+
+**Celery Beat atualizado**: 5 tasks agendadas (3 legislacao + vigia + acompanhamento)
+
+### Sprint 2 — Frontend UI para Agentes
+
+**Pagina dedicada `/agents`** (nova):
+- Metricas: execucoes hoje, taxa sucesso, custo, review pendente, em execucao
+- Lista dos 10 agentes com status do dia
+- Disparo manual: dropdown agente + dropdown chain + input process_id
+- Historico global: ultimas 50 execucoes com filtro por agente
+- Guia de uso inline ("Como usar os agentes?")
+- Item "Agentes IA" no menu lateral
+
+**Tab IA no ProcessDetail** (reescrita):
+- Dropdown de 10 agentes + 9 chains via `/agents/*` endpoints
+- Auto-refresh 3s enquanto tem jobs rodando
+- Resultado humanizado (AgentResultRenderer)
+
+**Resultados inline**:
+- DiagnosisTab: mostra resultado do agente diagnostico (passivos, acoes, confianca)
+- DocumentsTab: badge "Campos extraidos" quando extrator completou
+- MacroetapaSidePanel: botao "Executar" chain da macroetapa
+
+**Notificacoes tempo real**:
+- Hook `useAgentEvents` no PrivateLayout (WebSocket → toast)
+
+### Sprint 3 — Integracao Avancada
+
+- **MemPalace recall**: legislacao e diagnostico buscam casos passados antes de chamar LLM
+- **Dashboard operacional**: card "Agentes IA (hoje)" + VigiaAlertsBanner
+- **AgentResultRenderer**: 10 renderers humanizados (JSON → cards visuais por agente)
+- **ProposalEditor corrigido**: dropdown de clientes, auto-preenchimento client_id do processo
+
+### Fixes Criticos Resolvidos
+
+| Fix | Problema | Solucao |
+|-----|----------|---------|
+| Worker tasks | `KeyError: workers.run_agent` | Imports explicitos em `workers/__init__.py` |
+| API keys placeholder | `changeme` aceito como valido | `ai_configured` rejeita keys <10 chars e palavras-chave |
+| Chain quebrava sem doc | Extrator exigia document_id | Retorna resultado vazio, chain continua |
+| send_webhook_alert | Task nao registrada | Import adicionado no `__init__.py` |
+| ProposalEditor 500 | client_id inexistente | Dropdown de clientes + auto-preenchimento do processo |
+
+### Arquivos Criados
+
+| Arquivo | Funcao |
+|---------|--------|
+| `app/agents/memory.py` | Helper MemPalace fire-and-forget para agentes |
+| `frontend/src/pages/AI/AgentsPage.tsx` | Pagina dedicada /agents |
+| `frontend/src/components/AgentResultRenderer.tsx` | 10 renderers humanizados |
+| `frontend/src/types/agent.ts` | Tipos TypeScript para agentes |
+| `frontend/src/hooks/useAgentEvents.ts` | WebSocket → toast notifications |
+| `mempalace.yaml` | Config de wing/rooms do MemPalace |
+| `.git/hooks/post-commit` | Auto-save de commits no palace |
+
+### Estado Final
+
+| Metrica | Valor |
+|---------|-------|
+| Agentes ativos | 10/10 |
+| Chains disponiveis | 9 |
+| Triggers automaticos | 5 (intake, upload, macroetapa, vigia, acompanhamento) |
+| Celery Beat tasks | 5 |
+| Frontend build | Limpo (0 erros TS) |
+| IA configurada | OpenAI (gpt-4o-mini) + Gemini |
+| MemPalace embeddings | 588 |
+| Custo primeira execucao real | $0.000861 (legislacao + diagnostico) |
+

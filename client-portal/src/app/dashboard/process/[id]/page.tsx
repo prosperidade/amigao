@@ -37,7 +37,8 @@ export default function ProcessDetailsClient() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -63,8 +64,9 @@ export default function ProcessDetailsClient() {
       setTimeline(tRes.data);
       setDocuments(dRes.data);
       setErrorMsg(null);
-    } catch (error: any) {
-      const detail = error.response?.data?.detail || error.message || 'Erro ao carregar processo.';
+    } catch (error: unknown) {
+      const axiosErr = error as { response?: { data?: { detail?: string } }; message?: string };
+      const detail = axiosErr.response?.data?.detail || axiosErr.message || 'Erro ao carregar processo.';
       setErrorMsg(detail);
     } finally {
       setLoading(false);
@@ -76,7 +78,7 @@ export default function ProcessDetailsClient() {
       const res = await api.get(`/documents/${docId}/download-url`);
       window.open(res.data.download_url, '_blank');
     } catch {
-      window.alert('Erro ao baixar documento.');
+      setActionMsg('Erro ao baixar documento.');
     }
   };
 
@@ -115,7 +117,7 @@ export default function ProcessDetailsClient() {
       // 4. Recarrega Lista
       await fetchData();
     } catch {
-      window.alert('Erro ao fazer upload do arquivo.');
+      setActionMsg('Erro ao fazer upload do arquivo.');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -174,6 +176,13 @@ export default function ProcessDetailsClient() {
           </div>
         </div>
       </div>
+
+      {actionMsg && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-200 flex items-center justify-between">
+          <span>{actionMsg}</span>
+          <button type="button" onClick={() => setActionMsg(null)} className="text-red-400 hover:text-red-600 ml-4 font-bold">&times;</button>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-8">
         

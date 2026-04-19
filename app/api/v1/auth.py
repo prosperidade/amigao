@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -9,6 +9,7 @@ from sqlalchemy.sql import func
 from app.api.deps import get_current_active_user, get_db
 from app.core import security
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models.client import Client
 from app.models.user import User
 from app.schemas.token import Token
@@ -51,7 +52,9 @@ def _get_portal_client_by_email(db: Session, tenant_id: int, normalized_email: s
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 def login_access_token(
+    request: Request,
     db: Session = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends(),
     auth_profile: str | None = Header(default=None, alias="X-Auth-Profile"),

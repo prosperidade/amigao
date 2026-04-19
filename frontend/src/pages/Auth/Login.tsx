@@ -6,8 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import { Leaf } from 'lucide-react';
 
 export default function Login() {
-  const [email, setEmail] = useState('admin@amigao.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -35,7 +35,8 @@ export default function Login() {
       const token = tokenRes.data.access_token;
 
       if (isClientPortalToken(token)) {
-        throw new Error('Este usuário pertence ao portal do cliente. Use o portal em http://localhost:3000/login.');
+        const portalUrl = import.meta.env.VITE_CLIENT_PORTAL_URL || '/';
+        throw new Error(`Este usuário pertence ao portal do cliente. Use o portal em ${portalUrl}`);
       }
       
       // Chamada para pegar dados do User com o novo token

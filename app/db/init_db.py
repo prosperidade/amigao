@@ -8,7 +8,14 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy_utils import create_database, database_exists
 
+from sqlalchemy.engine.url import make_url
+
 from app.db.session import engine
+
+
+def _safe_url(url) -> str:
+    u = make_url(str(url))
+    return u.render_as_string(hide_password=True)
 
 
 def _build_alembic_config() -> Config:
@@ -26,9 +33,9 @@ def _build_alembic_config() -> Config:
 def init_db() -> None:
     if not database_exists(engine.url):
         create_database(engine.url)
-        print(f"✅ Banco de dados criado: {engine.url}")
+        print(f"✅ Banco de dados criado: {_safe_url(engine.url)}")
     else:
-        print(f"ℹ️  Banco de dados já existe: {engine.url}")
+        print(f"ℹ️  Banco de dados já existe: {_safe_url(engine.url)}")
 
     command.upgrade(_build_alembic_config(), "head")
     print("✅ Schema atualizado com Alembic até head.")

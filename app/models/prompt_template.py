@@ -33,6 +33,14 @@ class PromptCategory(str, enum.Enum):
     extract = "extract"
     summarize = "summarize"
     proposal = "proposal"
+    # Categorias dos agentes
+    diagnostico = "diagnostico"
+    legislacao = "legislacao"
+    redator = "redator"
+    financeiro = "financeiro"
+    acompanhamento = "acompanhamento"
+    vigia = "vigia"
+    marketing = "marketing"
 
 
 class PromptRole(str, enum.Enum):
@@ -48,7 +56,7 @@ class PromptTemplate(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=True, index=True)
 
     slug = Column(String(100), nullable=False, index=True)
     category = Column(Enum(PromptCategory, name="promptcategory"), nullable=False, index=True)

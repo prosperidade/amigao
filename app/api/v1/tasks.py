@@ -24,6 +24,28 @@ from app.services.notifications import publish_realtime_event
 router = APIRouter()
 
 
+def _has_circular_dependency(db: Session, task_id: int, new_dependency_id: int, tenant_id: int) -> bool:
+    """Verifica se adicionar new_dependency_id como dependência de task_id cria ciclo."""
+    if task_id == new_dependency_id:
+        return True
+    visited: set[int] = set()
+    queue = [new_dependency_id]
+    while queue:
+        current = queue.pop(0)
+        if current == task_id:
+            return True
+        if current in visited:
+            continue
+        visited.add(current)
+        task = db.query(TaskModel).filter(
+            TaskModel.id == current,
+            TaskModel.tenant_id == tenant_id,
+        ).first()
+        if task and task.dependencies:
+            queue.extend(dep.id for dep in task.dependencies)
+    return False
+
+
 def _serialize_task(task_obj: TaskModel) -> Task:
     task_payload = Task.model_validate(task_obj).model_dump()
     task_payload["allowed_transitions"] = VALID_TASK_TRANSITIONS.get(task_obj.status, [])
@@ -209,3 +231,27 @@ def update_task_status(
     repo = TaskRepository(db, current_user.tenant_id)
     task_obj = repo.get_or_404(id, detail="Task not found")
     return _apply_task_update(repo, task_obj, TaskUpdate(status=status_in.status), current_user)
+
+
+@router.post("/{id}/dependencies/{dependency_id}", response_model=Task)
+def add_dependency(
+    *,
+    db: Session = Depends(deps.get_db),
+    id: int,
+    dependency_id: int,
+    current_user: User = Depends(deps.get_current_internal_user),
+):
+    """Adiciona uma dependência à tarefa, com detecção de ciclos."""
+    repo = TaskRepository(db, current_user.tenant_id)
+    task_obj = repo.get_or_404(id, detail="Task not found")
+    dep_obj = repo.get_or_404(dependency_id, detail="Dependência não encontrada")
+
+    if _has_circular_dependency(db, id, dependency_id, current_user.tenant_id):
+        raise HTTPException(status_code=400, detail="Dependência circular detectada")
+
+    if dep_obj not in task_obj.dependencies:
+        task_obj.dependencies.append(dep_obj)
+        db.commit()
+        db.refresh(task_obj)
+
+    return _serialize_task(task_obj)

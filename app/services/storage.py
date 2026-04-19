@@ -72,6 +72,29 @@ class StorageService:
         )
         return {"upload_url": url, "storage_key": key, "expires_in": expires_in}
 
+    def generate_presigned_put_url_for_draft(
+        self,
+        tenant_id: int,
+        draft_id: int,
+        filename: str,
+        content_type: str,
+        expires_in: int = 300,
+    ) -> dict:
+        """Regente Cam1 — presigned URL para upload direto anexado a um rascunho."""
+        ext = filename.split('.')[-1] if '.' in filename else ''
+        file_uuid = str(uuid.uuid4())
+        key = (
+            f"tenant_{tenant_id}/draft_{draft_id}/{file_uuid}.{ext}"
+            if ext
+            else f"tenant_{tenant_id}/draft_{draft_id}/{file_uuid}"
+        )
+        url = self.presign_client.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": BUCKET_NAME, "Key": key, "ContentType": content_type},
+            ExpiresIn=expires_in,
+        )
+        return {"upload_url": url, "storage_key": key, "expires_in": expires_in}
+
     def generate_presigned_get_url(self, storage_key: str, expires_in: int = 300) -> str:
         """Gera presigned URL para download seguro."""
         return self.presign_client.generate_presigned_url(

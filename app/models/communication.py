@@ -9,9 +9,9 @@ class CommunicationThread(Base):
     __tablename__ = "communication_threads"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    process_id = Column(Integer, ForeignKey("processes.id"), nullable=True, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    process_id = Column(Integer, ForeignKey("processes.id", ondelete="SET NULL"), nullable=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True)
 
     title = Column(String, nullable=False)
     channel = Column(String, nullable=False) # 'whatsapp', 'email', 'internal'
@@ -29,8 +29,8 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    thread_id = Column(Integer, ForeignKey("communication_threads.id"), nullable=False, index=True)
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    thread_id = Column(Integer, ForeignKey("communication_threads.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     content = Column(Text, nullable=False)
     is_internal = Column(Boolean, default=False)

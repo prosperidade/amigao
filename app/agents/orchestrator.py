@@ -129,7 +129,7 @@ class OrchestratorAgent:
                 break
 
         # Emitir evento de chain completa
-        emit_agent_event("orchestrator", "completed", ctx, result=AgentResult(
+        chain_result = AgentResult(
             success=all(r.success for r in results),
             data={
                 "chain": chain_name,
@@ -144,7 +144,11 @@ class OrchestratorAgent:
             requires_review=stopped_for_review,
             agent_name="orchestrator",
             duration_ms=sum(r.duration_ms for r in results),
-        ))
+        )
+        emit_agent_event("orchestrator", "completed", ctx, result=chain_result)
+
+        # MemPalace: log chain execution
+        _mempalace_log_chain(chain_name, ctx, results, stopped_for_review)
 
         logger.info(
             "orchestrator: chain '%s' concluida — %d/%d steps, review=%s",
@@ -159,3 +163,41 @@ class OrchestratorAgent:
         if not chain_name:
             raise ValueError(f"Intent desconhecido: '{intent}'. Disponiveis: {list(INTENT_TO_CHAIN.keys())}")
         return OrchestratorAgent.execute_chain(chain_name, ctx)
+
+
+# ---------------------------------------------------------------------------
+# MemPalace integration (module-level, fire-and-forget)
+# ---------------------------------------------------------------------------
+
+def _mempalace_log_chain(
+    chain_name: str,
+    ctx: AgentContext,
+    results: list[AgentResult],
+    stopped_for_review: bool,
+) -> None:
+    """Log chain execution to MemPalace diary + knowledge graph."""
+    try:
+        from app.agents.memory import diary_write, kg_add  # noqa: PLC0415
+
+        agents_run = [r.agent_name for r in results]
+        success = all(r.success for r in results)
+        total_ms = sum(r.duration_ms for r in results)
+
+        entry = (
+            f"[CHAIN {'OK' if success else 'FAIL'}] {chain_name} "
+            f"agents={agents_run} ms={total_ms} review={stopped_for_review}"
+        )
+        if ctx.process_id:
+            entry += f" process={ctx.process_id}"
+
+        diary_write("orchestrator", entry, topic=chain_name)
+
+        if ctx.process_id and success:
+            kg_add(
+                subject=f"process_{ctx.process_id}",
+                predicate=f"chain_{chain_name}_completed",
+                obj=f"agents={','.join(agents_run)}",
+                source="orchestrator",
+            )
+    except Exception as exc:
+        logger.debug("orchestrator mempalace log failed: %s", exc)

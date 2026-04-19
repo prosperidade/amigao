@@ -15,7 +15,7 @@ class WorkflowTemplate(Base):
     __tablename__ = "workflow_templates"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)  # None = global
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=True, index=True)  # None = global
 
     demand_type = Column(String, nullable=False, index=True)
     name = Column(String, nullable=False)
