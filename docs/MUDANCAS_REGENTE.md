@@ -880,3 +880,214 @@ Prioridade máxima: corrigir o fluxo de Cadastro pra respeitar a premissa "entra
 7. **Camada 3 — Kanban vs drag-and-drop**: o drag-and-drop atual do Amigão permite mover qualquer caso entre colunas. Regente diz que só pode avançar com gate. **Confirmar se a sócia quer:** (a) desabilitar drag-and-drop e forçar botão "Avançar etapa" com validação, ou (b) manter drag mas validar no drop e reverter se falhar.
 8. **Camada 3 — Decisões**: o item "Decisões" no menu lateral do workspace — é um log textual (consultor registra decisões tomadas) ou um campo estruturado (ex: "decisão sobre caminho regulatório: A vs B")?
 9. **Camada 3 — Condicionais**: a lista de blocos condicionais (procuração, contrato societário, parceiro técnico, etc.) — quem decide se o bloco aparece? É regra automática baseada em campos do cliente/imóvel, ou o consultor liga/desliga manualmente?
+
+---
+
+## RESPOSTAS DA SÓCIA — 2026-04-19
+
+Respostas vieram via `amigao´regente/amigao-regente.docx` + PDFs de Camada 3, Camada 4 e prints do Lovable (`regente-vista-macro.lovable.app`).
+
+### ✅ Pergunta 3 — Status do cliente
+
+**Decisão:** `ativo` / `em andamento` / `sem casos ativos` / `bloqueado`.
+
+### ✅ Pergunta 5 — Estado do rascunho
+
+**Decisão:** **rascunho expira em 15 dias**. Depois disso descarta automaticamente.
+
+### ✅ Pergunta 6 — Frequência da Leitura IA (Dashboard)
+
+**Decisão:** Preferência inicial era tempo real, mas **se custo/backend for significativo → atualização 1x/dia**. Adotar 1x/dia no MVP; re-avaliar depois.
+
+### ✅ Pergunta 9 — Blocos condicionais
+
+**Decisão:** **desconsiderar por enquanto** — é complexidade desnecessária no MVP. Procuração, contrato societário, parceiro técnico, campo, embargo etc. ficam **fora do escopo atual**. Voltar depois quando a base estabilizar.
+
+### ⚠️ Perguntas ainda em aberto
+
+- **#2 Núcleo** — seguimos interpretando como orchestrator + rooms MemPalace + chains (já mapeado na Camada 4 agora).
+- **#4 Tipos de entrada** — a sócia simplificou em 3 tipos no diagrama (`cliente+imóvel existente` / `complementar base` / `importar docs para análise`). Ainda falta definir se são fluxos separados ou toggle.
+- **#7 Kanban drag-and-drop** — não foi tocado nas respostas. Assumindo **gate por botão "Avançar etapa"** (coerente com "regras de avanço" da Camada 3 PDF).
+- **#8 Decisões** — pelo PDF da Camada 3, é **aba estruturada** (tipo, decisão, justificativa, base, quem validou, data, impacto, próximo passo, status). Muito mais rico que log textual.
+
+---
+
+## ATUALIZAÇÕES DE ESCOPO — CAMADAS 3 E 4 (2026-04-19)
+
+### Camada 3 — Aba "Decisões" como componente de 1ª classe
+
+Baseado em `CAMADA 3 - WORKSPACE EDIT1.pdf`. Cada decisão registrada:
+
+| Campo | Descrição |
+|---|---|
+| `etapa` | Qual das 7 |
+| `tipo_decisao` | triagem, documental, técnica, regulatória, comercial, contratual, bloqueio, avanço de etapa |
+| `decisao_tomada` | Texto curto |
+| `justificativa` | Por que |
+| `base_usada` | Evidências/documentos/leituras IA que sustentaram |
+| `quem_validou` | Usuário |
+| `data` | Timestamp |
+| `impacto_no_caso` | Como mudou o rumo |
+| `proximo_passo_gerado` | Ação derivada |
+| `status` | proposta / validada / revisada / substituída |
+
+**Valor:** transforma análise em governança. Rastreabilidade, auditoria interna, reaproveitamento de memória entre casos.
+
+### Camada 3 — Camadas do Workspace
+
+- **Camada fixa:** identidade do caso, etapas, dados-base, timeline, painel IA (sempre visível)
+- **Camada progressiva:** módulos da etapa ativa, saídas das anteriores, pré-requisitos da próxima
+- **Camada de governança:** validação humana, decisões críticas, bloqueios, rastreabilidade
+
+### Camada 4 — Configurações (6 abas)
+
+`Perfil` · `Assinatura e pagamento` · `Notificações` · `Preferências operacionais` · `Preferências de IA` · `Segurança e acesso`. Futuro: `Equipe e permissões`.
+
+Princípio: "configuração boa não parece painel de avião". Baixa fricção, pagamento com destaque, IA configurável sem engenharia exposta.
+
+### Camada 4 — 10 agentes por etapa (mapa formal)
+
+| Etapa | Principal | Secundários |
+|---|---|---|
+| 1 Entrada | `agent_atendimento` | extrator, vigia |
+| 2 Diag. preliminar | atendimento + `agent_diagnostico` | legislacao, extrator |
+| 3 Coleta | `agent_extrator` | vigia, acompanhamento |
+| 4 Diag. técnico | `agent_diagnostico` | extrator, legislacao, redator |
+| 5 Caminho regulatório | `agent_legislacao` | diagnostico, redator, acompanhamento |
+| 6 Orçamento | `agent_orcamento` + `agent_financeiro` | redator, acompanhamento, vigia |
+| 7 Contrato | `agent_redator` + `agent_financeiro` | legislacao, acompanhamento, vigia |
+| Transversal | `agent_vigia`, `agent_acompanhamento` | — |
+| Fora do fluxo | `agent_marketing` | — |
+
+**Nota:** configuração dos agentes segue congelada (feedback 2026-04-17). Mapa serve para **orientar endpoints consumidores**, não alterar agentes.
+
+---
+
+## QUADRO DE AÇÕES — SPEC DETALHADA
+
+**Fontes:** `OEPRACAO.pdf` (Camada 3) + prints do Lovable.
+
+### Princípio central
+
+> **"Cadastro abre, Workspace constrói, Fluxo coordena."**
+
+O Quadro de Ações é a **camada de coordenação visual** entre Cadastro e Workspace. Ele **não executa trabalho profundo** — reflete o estado gerado no Workspace e guia o consultor sobre onde agir.
+
+### 5 perguntas que o Quadro responde por caso
+
+1. Onde o caso está?
+2. O que já foi concluído na etapa atual?
+3. O que falta para concluir essa etapa?
+4. Existe bloqueio impeditivo?
+5. O caso já pode avançar?
+
+### Estrutura da tela — 5 blocos
+
+#### Bloco 1 — Cabeçalho operacional
+- Título: "Quadro de Ações" + subtítulo "Fluxo macro dos casos em andamento"
+- Busca: cliente / imóvel / caso
+- Filtros: Responsável, Urgência, Tipo de demanda, Município/UF, Etapa, Status de prontidão
+- Ações rápidas: `+ Novo Caso`, `Ordenar por prioridade`, `Filtrar travados`, `Filtrar prontos para avançar`
+- Contador: "N casos ativos"
+
+#### Bloco 2 — Banner de Leitura IA
+Resumo operacional gerado por `agent_vigia` + `agent_acompanhamento`.
+Ex do Lovable: *"Hoje o maior acúmulo está em Coleta Documental. 4 casos possuem pendência crítica e 2 estão prontos para seguir para proposta. Priorize os casos com urgência alta e documentos impeditivos."*
+Atualização **1x/dia**. Endpoint: `GET /dashboard/board-insights`.
+
+#### Bloco 3 — Kanban horizontal (7 colunas)
+
+Ordem fixa: Entrada da demanda · Diagnóstico preliminar · Coleta documental · Diagnóstico técnico consolidado · Definição do caminho regulatório · Orçamento e negociação · Contrato e formalização.
+
+Header de coluna: nome + contador total (v2: contador travados + prontos).
+
+#### Bloco 4 — Card do caso
+
+Campos: cliente, imóvel, tipo de demanda, badge de urgência (`Urgente`/`Alta`/`Média`/`Baixa`), badge de alerta, avatar+nome responsável, próximo passo sugerido (`→ Validar imóvel vinculado`).
+
+Estados (7): `não iniciada` / `em andamento` / `aguardando input` / `aguardando validação` / `travada` / `pronta para avançar` / `concluída`.
+
+**Card NÃO mostra:** checklist, leitura IA profunda, detalhe técnico, lista de docs. Isso é Workspace.
+
+#### Bloco 5 — Modal lateral (preview)
+
+Drawer à direita, abre ao clicar no card. Não navega — mantém kanban visível.
+
+Conteúdo (do Lovable):
+- Cabeçalho: cliente + imóvel + tipo + urgência + responsável
+- Barra `Etapa ativa · X/Y ações concluídas`
+- Resumo: `PROBLEMA PERCEBIDO`, `OBJETIVO REAL`, `STATUS DA ETAPA`
+- Ações da etapa (compacta)
+- `URGÊNCIA SUGERIDA`
+- `LACUNAS DETECTADAS` (com ⚠️)
+- `PRÓXIMA AÇÃO SUGERIDA`
+- Seção "No workspace completo você verá"
+- **CTA verde:** `Abrir workspace do caso`
+
+### Gate de transição entre etapas
+
+Avanço só com: (1) output mínimo da etapa, (2) validação humana quando necessária, (3) sem trava impeditiva.
+
+**Decisão arquitetural:** botão `Avançar etapa` **no Workspace**, não drag-and-drop no kanban.
+
+---
+
+## BACKLOG DE EXECUÇÃO — QUADRO DE AÇÕES
+
+### Sprint A — Base do Kanban (2026-04-19 → 04-20)
+
+**Objetivo:** trocar layout atual por Kanban horizontal 7 colunas + cards fiéis ao Lovable.
+
+- **QA-001** — Auditar estado atual (arquivo da página, endpoints, modelo de dados)
+- **QA-002** — Layout Kanban horizontal 7 colunas com scroll + header (nome + contador)
+- **QA-003** — Componente `CaseCard` novo (cliente, imóvel, demanda, urgência, alerta, responsável, próximo passo)
+- **QA-004** — Cabeçalho operacional (busca + filtros + `+ Novo Caso`)
+
+### Sprint B — Modal lateral de preview (2026-04-21)
+
+- **QA-005** — Drawer lateral à direita (ESC, clique fora, X)
+- **QA-006** — Conteúdo do preview (consome `GET /processes/{id}/preview` — criar se não existir)
+- **QA-007** — CTA `Abrir workspace do caso` (link preserva etapa ativa)
+
+### Sprint C — Leitura IA + gate (2026-04-22)
+
+- **QA-008** — Banner Leitura IA (endpoint `GET /dashboard/board-insights`, cache 1x/dia via celery beat)
+- **QA-009** — Estados visuais por card (badge + filtros travados/prontos)
+- **QA-010** — Botão `Avançar etapa` no Workspace + desabilitar drag no kanban
+
+### Sprint D — Polimento (2026-04-23)
+
+- **QA-011** — Contadores travado/pronto por coluna
+- **QA-012** — Ordenação por prioridade (urgência × tempo na etapa × risco)
+- **QA-013** — Card → última decisão (quando aba Decisões existir)
+
+### Dependências
+
+- Backend: confirmar campos em `GET /processes` (`macroetapa`, `stage_state`, `next_action`, `alert_type`).
+- IA insight: `agent_vigia` (congelado, só consumir).
+- `macroetapa_state` do Plano Mestre v2 precisa ter os 7 estados cobertos.
+
+### Fora deste backlog
+
+- Agentes novos ou alteração de prompts (congelado)
+- Aba Decisões do Workspace (sprint próprio)
+- Govtech (horizonte estratégico)
+
+---
+
+## HORIZONTE ESTRATÉGICO — AMIGÃO COMO GOVTECH
+
+**Registrado em 2026-04-19 — visão do user.**
+
+Após consolidar o SaaS de consultoria, o Amigão tem vocação para virar govtech que também atende o Estado: IBAMA, ICMBio, secretarias estaduais, órgãos de licenciamento. Palavras do user:
+
+> *"Não adianta a gente ajudar o consultor e não olhar para os órgãos ambientais."*
+
+### Orientação arquitetural
+
+- Estruturas de dados (cliente, imóvel, caso, documento, caminho regulatório, **decisões**) devem permanecer **reutilizáveis como API pública/B2G**.
+- **Rastreabilidade e governança** (Aba Decisões, audit log, assinatura digital, base normativa citada) são **investimentos estratégicos** — abrem a porta pro Estado.
+- Referência: `docs/DocumentodeIntegraçõesGovTech.md`.
+- Trade-offs "simples agora vs preparado para escala pública" devem ser **discutidos explicitamente** quando aparecerem.
+
+**Não implementar agora.** MVP consultor primeiro. Manter no radar ao tomar decisões.

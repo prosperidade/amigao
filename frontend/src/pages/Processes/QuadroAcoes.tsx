@@ -1,21 +1,24 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
-import { Plus, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Plus, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { AxiosError } from 'axios';
 import { api } from '@/lib/api';
 import type { KanbanResponse, KanbanProcessCard } from './quadro-types';
-import { MACROETAPA_COLORS } from './quadro-types';
+import { MACROETAPA_COLORS, DEMAND_TYPE_LABELS } from './quadro-types';
 import LeituraIA from './LeituraIA';
 import QuadroProcessCard from './QuadroProcessCard';
 import MacroetapaSidePanel from './MacroetapaSidePanel';
 
+type ReadinessFilter = 'all' | 'blocked' | 'ready';
+
 export default function QuadroAcoes() {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCard, setSelectedCard] = useState<KanbanProcessCard | null>(null);
+  const [filterResponsible, setFilterResponsible] = useState<string>('');
+  const [filterUrgency, setFilterUrgency] = useState<string>('');
+  const [filterDemandType, setFilterDemandType] = useState<string>('');
+  const [filterReadiness, setFilterReadiness] = useState<ReadinessFilter>('all');
 
   const { data: kanbanData, isLoading } = useQuery({
     queryKey: ['kanban'],
@@ -23,49 +26,62 @@ export default function QuadroAcoes() {
     staleTime: 15_000,
   });
 
-  const advanceMutation = useMutation({
-    mutationFn: (data: { id: number; macroetapa: string }) =>
-      api.post(`/processes/${data.id}/macroetapa`, { macroetapa: data.macroetapa }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] });
-      queryClient.invalidateQueries({ queryKey: ['kanban-insights'] });
-      toast.success('Macroetapa avançada');
-    },
-    onError: (err: AxiosError<{ detail?: string }>) => {
-      toast.error(err.response?.data?.detail ?? 'Erro ao avançar macroetapa');
-    },
-  });
-
-  const handleDragStart = (e: React.DragEvent, processId: number) => {
-    e.dataTransfer.setData('processId', processId.toString());
-  };
-
-  const handleDrop = (e: React.DragEvent, targetMacroetapa: string) => {
-    e.preventDefault();
-    const processId = e.dataTransfer.getData('processId');
-    if (processId) {
-      advanceMutation.mutate({ id: parseInt(processId), macroetapa: targetMacroetapa });
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  // Regente Cam3: avanço de macroetapa NÃO ocorre via drag-and-drop no Quadro.
+  // O gate formal acontece no Workspace do Caso (botão "Avançar etapa" com validação).
+  // Quadro coordena, Workspace executa.
 
   const columns = kanbanData?.columns ?? [];
   const totalActive = kanbanData?.total_active ?? 0;
 
-  // Filtro por busca
+  // Listas únicas para os filtros (derivadas dos cards carregados).
+  const { responsibleOptions, demandTypeOptions } = useMemo(() => {
+    const responsibles = new Set<string>();
+    const demandTypes = new Set<string>();
+    for (const col of columns) {
+      for (const card of col.cards) {
+        if (card.responsible_user_name) responsibles.add(card.responsible_user_name);
+        if (card.demand_type) demandTypes.add(card.demand_type);
+      }
+    }
+    return {
+      responsibleOptions: Array.from(responsibles).sort((a, b) => a.localeCompare(b)),
+      demandTypeOptions: Array.from(demandTypes).sort((a, b) => a.localeCompare(b)),
+    };
+  }, [columns]);
+
+  const hasActiveFilters =
+    !!searchTerm || !!filterResponsible || !!filterUrgency || !!filterDemandType || filterReadiness !== 'all';
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterResponsible('');
+    setFilterUrgency('');
+    setFilterDemandType('');
+    setFilterReadiness('all');
+  };
+
+  // Aplica filtros em cascata. Busca + responsável + urgência + tipo demanda + prontidão.
   const filteredColumns = columns.map(col => ({
     ...col,
-    cards: searchTerm
-      ? col.cards.filter(
-          c =>
-            c.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.property_name?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      : col.cards,
+    cards: col.cards.filter(c => {
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matches =
+          c.client_name?.toLowerCase().includes(term) ||
+          c.title.toLowerCase().includes(term) ||
+          c.property_name?.toLowerCase().includes(term);
+        if (!matches) return false;
+      }
+      if (filterResponsible && c.responsible_user_name !== filterResponsible) return false;
+      if (filterUrgency) {
+        const urg = c.urgency ?? c.priority ?? '';
+        if (urg !== filterUrgency) return false;
+      }
+      if (filterDemandType && c.demand_type !== filterDemandType) return false;
+      if (filterReadiness === 'blocked' && c.macroetapa_state !== 'travada') return false;
+      if (filterReadiness === 'ready' && c.macroetapa_state !== 'pronta_para_avancar') return false;
+      return true;
+    }),
   }));
 
   return (
@@ -104,6 +120,77 @@ export default function QuadroAcoes() {
         </div>
       </div>
 
+      {/* Filtros operacionais (Regente Cam3 — Quadro de Ações) */}
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <select
+          value={filterResponsible}
+          onChange={e => setFilterResponsible(e.target.value)}
+          className="text-xs px-3 py-1.5 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-full dark:text-zinc-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+        >
+          <option value="">Responsável (todos)</option>
+          {responsibleOptions.map(r => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
+
+        <select
+          value={filterUrgency}
+          onChange={e => setFilterUrgency(e.target.value)}
+          className="text-xs px-3 py-1.5 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-full dark:text-zinc-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+        >
+          <option value="">Urgência (todas)</option>
+          <option value="critica">Urgente</option>
+          <option value="alta">Alta</option>
+          <option value="media">Média</option>
+          <option value="baixa">Baixa</option>
+        </select>
+
+        <select
+          value={filterDemandType}
+          onChange={e => setFilterDemandType(e.target.value)}
+          className="text-xs px-3 py-1.5 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-full dark:text-zinc-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+        >
+          <option value="">Tipo de demanda (todos)</option>
+          {demandTypeOptions.map(d => (
+            <option key={d} value={d}>{DEMAND_TYPE_LABELS[d] ?? d}</option>
+          ))}
+        </select>
+
+        <div className="flex rounded-full overflow-hidden border border-gray-200 dark:border-zinc-700">
+          <button
+            type="button"
+            onClick={() => setFilterReadiness('all')}
+            className={`text-xs px-3 py-1.5 transition-colors ${filterReadiness === 'all' ? 'bg-primary text-white' : 'bg-white dark:bg-zinc-800 dark:text-zinc-200 hover:bg-gray-50'}`}
+          >
+            Todos
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterReadiness('blocked')}
+            className={`text-xs px-3 py-1.5 transition-colors border-l border-gray-200 dark:border-zinc-700 ${filterReadiness === 'blocked' ? 'bg-red-500 text-white' : 'bg-white dark:bg-zinc-800 dark:text-zinc-200 hover:bg-gray-50'}`}
+          >
+            🚫 Travados
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterReadiness('ready')}
+            className={`text-xs px-3 py-1.5 transition-colors border-l border-gray-200 dark:border-zinc-700 ${filterReadiness === 'ready' ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-zinc-800 dark:text-zinc-200 hover:bg-gray-50'}`}
+          >
+            ✓ Prontos
+          </button>
+        </div>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
+            <X className="w-3 h-3" /> Limpar filtros
+          </button>
+        )}
+      </div>
+
       {/* Leitura da IA */}
       <LeituraIA />
 
@@ -121,8 +208,6 @@ export default function QuadroAcoes() {
               <div
                 key={column.macroetapa}
                 className="w-80 flex flex-col h-full bg-gray-50/50 dark:bg-zinc-900/30 rounded-xl"
-                onDragOver={handleDragOver}
-                onDrop={e => handleDrop(e, column.macroetapa)}
               >
                 {/* Column header */}
                 <div
@@ -163,7 +248,6 @@ export default function QuadroAcoes() {
                         key={card.id}
                         card={card}
                         onClick={() => setSelectedCard(card)}
-                        onDragStart={e => handleDragStart(e, card.id)}
                       />
                     ))
                   )}

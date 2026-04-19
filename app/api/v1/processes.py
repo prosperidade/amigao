@@ -511,6 +511,15 @@ def advance_process_macroetapa(
     db.commit()
     db.refresh(process)
 
+    # QA-008 — invalida cache do kanban-insights para o banner do Quadro
+    # refletir o avanço imediatamente (evita "mentira" de até 24h).
+    try:
+        from app.api.v1.dashboard import _kanban_insights_cache_key  # noqa: PLC0415
+        from app.services.notifications import _get_redis_client  # noqa: PLC0415
+        _get_redis_client().delete(_kanban_insights_cache_key(current_user.tenant_id))
+    except Exception as exc:
+        logger.warning("Falha ao invalidar kanban-insights cache: %s", exc)
+
     # Trigger chain de agentes automatica por macroetapa (async, fire-and-forget)
     _MACROETAPA_CHAINS: dict[str, str] = {
         "diagnostico_tecnico": "diagnostico_completo",

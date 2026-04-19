@@ -5,18 +5,15 @@ import { DEMAND_TYPE_LABELS, MACROETAPA_STATE_BADGE, URGENCY_BADGES } from './qu
 interface Props {
   card: KanbanProcessCard;
   onClick: () => void;
-  onDragStart: (e: React.DragEvent) => void;
 }
 
-export default function QuadroProcessCard({ card, onClick, onDragStart }: Props) {
+export default function QuadroProcessCard({ card, onClick }: Props) {
   const urgencyKey = card.urgency ?? card.priority ?? '';
   const urgencyBadge = URGENCY_BADGES[urgencyKey];
   const demandLabel = card.demand_type ? (DEMAND_TYPE_LABELS[card.demand_type] ?? card.demand_type) : null;
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
       onClick={onClick}
       className="bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800 cursor-pointer hover:border-primary/30 dark:hover:border-primary/30 transition-colors"
     >

@@ -10,10 +10,12 @@
  *  - Travas/blockers
  *  - Agente principal da etapa
  */
-import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, AlertTriangle, ArrowRight, Bot, Target } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
+import { CheckCircle2, AlertTriangle, ArrowRight, Bot, Target, Lock, Loader2, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
-import { MACROETAPA_STATE_BADGE } from './quadro-types';
+import { MACROETAPA_STATE_BADGE, MACROETAPA_LABELS } from './quadro-types';
 
 // Mapeamento agentes principais por etapa (Regente Cam3)
 const PRIMARY_AGENT_BY_STAGE: Record<string, string[]> = {
@@ -57,6 +59,7 @@ interface Props {
 }
 
 export default function WorkspaceRightPanel({ processId, onValidateAction }: Props) {
+  const queryClient = useQueryClient();
   const { data: gate } = useQuery({
     queryKey: ['process-can-advance', processId],
     queryFn: () => api.get<CanAdvance>(`/processes/${processId}/can-advance`).then(r => r.data),
@@ -66,6 +69,24 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
     queryKey: ['process-macroetapa-status', processId],
     queryFn: () => api.get<MacroetapaStatus>(`/processes/${processId}/macroetapa/status`).then(r => r.data),
     staleTime: 15_000,
+  });
+
+  // CAM3FT-005 — Gate formal de transição entre etapas (Regente Cam3).
+  // Só o Workspace avança macroetapa. O Quadro de Ações apenas coordena.
+  const advanceMutation = useMutation({
+    mutationFn: (nextMacroetapa: string) =>
+      api.post(`/processes/${processId}/macroetapa`, { macroetapa: nextMacroetapa }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['process', processId] });
+      queryClient.invalidateQueries({ queryKey: ['process-can-advance', processId] });
+      queryClient.invalidateQueries({ queryKey: ['process-macroetapa-status', processId] });
+      queryClient.invalidateQueries({ queryKey: ['kanban'] });
+      queryClient.invalidateQueries({ queryKey: ['kanban-insights'] });
+      toast.success('Etapa avançada');
+    },
+    onError: (err: AxiosError<{ detail?: string }>) => {
+      toast.error(err.response?.data?.detail ?? 'Erro ao avançar etapa');
+    },
   });
 
   if (!gate) {
@@ -106,6 +127,51 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
           </div>
         )}
       </div>
+
+      {/* Botão Avançar etapa (Regente Cam3 CAM3FT-005 — gate formal) */}
+      {gate.next_macroetapa && (
+        <button
+          type="button"
+          onClick={() => gate.next_macroetapa && advanceMutation.mutate(gate.next_macroetapa)}
+          disabled={!gate.can_advance || advanceMutation.isPending}
+          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold transition-colors ${
+            gate.can_advance
+              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+              : 'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-slate-500 cursor-not-allowed border border-gray-200 dark:border-white/10'
+          }`}
+          title={
+            gate.can_advance
+              ? `Avançar para: ${MACROETAPA_LABELS[gate.next_macroetapa] ?? gate.next_macroetapa}`
+              : 'Requisitos pendentes — veja as travas abaixo'
+          }
+        >
+          {advanceMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : gate.can_advance ? (
+            <ChevronRight className="w-4 h-4" />
+          ) : (
+            <Lock className="w-4 h-4" />
+          )}
+          <span className="truncate">
+            {gate.can_advance
+              ? `Avançar → ${MACROETAPA_LABELS[gate.next_macroetapa] ?? gate.next_macroetapa}`
+              : 'Aguardando requisitos'}
+          </span>
+        </button>
+      )}
+
+      {/* Caso encerrado (sem próxima etapa) */}
+      {!gate.next_macroetapa && gate.current_macroetapa === 'contrato_formalizacao' && (
+        <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4 text-center">
+          <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1.5" />
+          <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+            Caso formalizado
+          </p>
+          <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+            Última etapa do fluxo concluída
+          </p>
+        </div>
+      )}
 
       {/* Próxima ação */}
       {status?.next_action && (

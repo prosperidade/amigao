@@ -8,6 +8,8 @@ GET /dashboard/summary?view=operacional → Tarefas do dia, docs pendentes, aler
 from __future__ import annotations
 
 import enum
+import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Literal, Optional, Union
 
@@ -26,8 +28,18 @@ from app.models.proposal import Proposal
 from app.models.property import Property
 from app.models.task import TERMINAL_TASK_STATUSES, Task
 from app.models.user import User
+from app.services.notifications import _get_redis_client
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# Regente Cam3 / QA-008 — Leitura da IA do Quadro de Ações cacheada 1x/dia.
+# Decisão da sócia em 2026-04-19: atualizar 1x/dia para controlar custo.
+KANBAN_INSIGHTS_CACHE_TTL = 24 * 60 * 60  # 24h em segundos
+
+
+def _kanban_insights_cache_key(tenant_id: int) -> str:
+    return f"tenant:{tenant_id}:kanban_insights:v1"
 
 
 # ---------------------------------------------------------------------------
@@ -540,9 +552,24 @@ class KanbanInsight(BaseModel):
 def get_kanban_insights(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
+    refresh: bool = Query(False, description="Força recálculo ignorando cache (24h TTL)."),
 ) -> KanbanInsight:
-    """Analisa o kanban e retorna insights operacionais (Leitura da IA)."""
+    """Analisa o kanban e retorna insights operacionais (Leitura da IA).
+
+    Regente Cam3 / QA-008 — cache server-side de 24h por tenant.
+    Usar ?refresh=true para recalcular sob demanda.
+    """
     tenant_id = current_user.tenant_id
+    cache_key = _kanban_insights_cache_key(tenant_id)
+
+    # Tenta hit de cache primeiro (a menos que o caller peça refresh).
+    if not refresh:
+        try:
+            cached = _get_redis_client().get(cache_key)
+            if cached:
+                return KanbanInsight(**json.loads(cached))
+        except Exception:
+            logger.warning("kanban_insights cache read failed", exc_info=True)
 
     # Contar processos por macroetapa
     rows = (
@@ -604,7 +631,7 @@ def get_kanban_insights(
     else:
         mensagem = "Nenhum caso ativo com macroetapa definida no momento."
 
-    return KanbanInsight(
+    response = KanbanInsight(
         gargalo_macroetapa=gargalo_etapa,
         gargalo_label=gargalo_label,
         gargalo_count=gargalo_count,
@@ -613,6 +640,18 @@ def get_kanban_insights(
         mensagem=mensagem,
         distribuicao=distribuicao,
     )
+
+    # Grava no cache para as próximas 24h.
+    try:
+        _get_redis_client().setex(
+            cache_key,
+            KANBAN_INSIGHTS_CACHE_TTL,
+            response.model_dump_json(),
+        )
+    except Exception:
+        logger.warning("kanban_insights cache write failed", exc_info=True)
+
+    return response
 
 
 # ---------------------------------------------------------------------------

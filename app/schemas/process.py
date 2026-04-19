@@ -46,6 +46,12 @@ class Process(ProcessBase):
     id: int
     tenant_id: int
     macroetapa: Optional[str] = None
+    demand_type: Optional[str] = None
+    entry_type: Optional[str] = None
+    initial_summary: Optional[str] = None
+    initial_diagnosis: Optional[str] = None
+    intake_notes: Optional[str] = None
+    ai_summary: Optional[str] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 

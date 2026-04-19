@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, CheckSquare, Square, FileText, Clock, Sparkles, Loader2, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  X, CheckSquare, Square, FileText, Clock, Sparkles, Loader2, Zap,
+  AlertTriangle, Target, ArrowUpRight, TrendingUp,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import type { KanbanProcessCard, MacroetapaStatusResponse } from './quadro-types';
+import { URGENCY_BADGES, DEMAND_TYPE_LABELS, MACROETAPA_STATE_BADGE } from './quadro-types';
 import { CHAIN_LABELS } from '@/types/agent';
 import MacroetapaStepper from './MacroetapaStepper';
 import DocumentUpload from '@/components/DocumentUpload';
@@ -13,7 +18,21 @@ interface Props {
   onClose: () => void;
 }
 
-type TabId = 'checklist' | 'documents' | 'timeline';
+type TabId = 'preview' | 'checklist' | 'documents' | 'timeline';
+
+interface ProcessDetail {
+  id: number;
+  title: string;
+  description: string | null;
+  initial_summary: string | null;
+  initial_diagnosis: string | null;
+  ai_summary: string | null;
+  intake_notes: string | null;
+  entry_type: string | null;
+  demand_type: string | null;
+  urgency: string | null;
+  priority: string | null;
+}
 
 interface TimelineEntry {
   id: number;
@@ -33,12 +52,19 @@ interface ProcessDocument {
 
 export default function MacroetapaSidePanel({ card, onClose }: Props) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabId>('checklist');
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<TabId>('preview');
 
   const { data: macroetapaStatus } = useQuery({
     queryKey: ['macroetapa-status', card.id],
     queryFn: () =>
       api.get<MacroetapaStatusResponse>(`/processes/${card.id}/macroetapa/status`).then(r => r.data),
+  });
+
+  const { data: processDetail } = useQuery({
+    queryKey: ['process-detail', card.id],
+    queryFn: () => api.get<ProcessDetail>(`/processes/${card.id}`).then(r => r.data),
+    enabled: activeTab === 'preview',
   });
 
   const { data: timeline } = useQuery({
@@ -68,10 +94,26 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
   const currentStep = macroetapaStatus?.steps.find(s => s.status === 'active');
 
   const tabs: { id: TabId; label: string }[] = [
+    { id: 'preview', label: 'Visão geral' },
     { id: 'checklist', label: 'Checklist' },
     { id: 'documents', label: 'Documentos' },
     { id: 'timeline', label: 'Timeline' },
   ];
+
+  const urgencyKey = card.urgency ?? card.priority ?? '';
+  const urgencyLabel = urgencyKey === 'critica' ? 'Urgente'
+    : urgencyKey === 'alta' ? 'Alta'
+    : urgencyKey === 'media' ? 'Média'
+    : urgencyKey === 'baixa' ? 'Baixa' : null;
+  const demandLabel = card.demand_type ? (DEMAND_TYPE_LABELS[card.demand_type] ?? card.demand_type) : null;
+  const actionsDone = currentStep?.actions.filter(a => a.completed).length ?? 0;
+  const actionsTotal = currentStep?.actions.length ?? 0;
+  const stateBadge = card.macroetapa_state ? MACROETAPA_STATE_BADGE[card.macroetapa_state] : null;
+
+  const openWorkspace = () => {
+    onClose();
+    navigate(`/processes/${card.id}`);
+  };
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
@@ -128,6 +170,134 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
+          {/* Preview tab — Visão geral (Regente Cam3: preview antes de abrir workspace) */}
+          {activeTab === 'preview' && (
+            <div className="space-y-5">
+              {/* Barra de progresso da etapa ativa */}
+              {currentStep && (
+                <div>
+                  <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                    <span>Etapa ativa · {actionsDone}/{actionsTotal} ações concluídas</span>
+                    {stateBadge && (
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${stateBadge.cls}`}>
+                        {stateBadge.label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
+                    <div
+                      className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                      style={{ width: `${Math.min(card.macroetapa_completion_pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Tags rápidas */}
+              <div className="flex flex-wrap gap-1.5">
+                {demandLabel && (
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                    {demandLabel}
+                  </span>
+                )}
+                {urgencyLabel && URGENCY_BADGES[urgencyKey] && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${URGENCY_BADGES[urgencyKey]}`}>
+                    Urgência: {urgencyLabel}
+                  </span>
+                )}
+              </div>
+
+              {/* Resumo do caso */}
+              <div className="space-y-3">
+                {(processDetail?.ai_summary ?? processDetail?.initial_diagnosis) && (
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      Problema percebido
+                    </div>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+                      {processDetail?.ai_summary ?? processDetail?.initial_diagnosis}
+                    </p>
+                  </div>
+                )}
+                {processDetail?.initial_summary && (
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                      <Target className="w-3.5 h-3.5" />
+                      Objetivo real
+                    </div>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+                      {processDetail.initial_summary}
+                    </p>
+                  </div>
+                )}
+                {!processDetail?.ai_summary && !processDetail?.initial_diagnosis && !processDetail?.initial_summary && (
+                  <p className="text-xs text-gray-400 italic">
+                    Resumo IA ainda não gerado para este caso.
+                  </p>
+                )}
+              </div>
+
+              {/* Lacunas detectadas (usa blockers da macroetapa) */}
+              {card.blockers.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Lacunas detectadas
+                  </div>
+                  <ul className="space-y-1.5">
+                    {card.blockers.map((blocker, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <span>{blocker}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Próxima ação sugerida */}
+              {card.next_action && (
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-lg p-3">
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-emerald-700 dark:text-emerald-300 mb-1">
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    Próxima ação sugerida
+                  </div>
+                  <p className="text-sm text-emerald-900 dark:text-emerald-100 leading-relaxed">
+                    {card.next_action}
+                  </p>
+                </div>
+              )}
+
+              {/* Preview do que existe no workspace completo */}
+              <div className="border border-gray-200 dark:border-zinc-700 rounded-lg p-3 bg-gray-50 dark:bg-zinc-800/50">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  No workspace completo você verá
+                </div>
+                <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 pl-5 list-disc">
+                  <li>Checklist detalhado de ações da etapa</li>
+                  <li>Documentos anexados e pendentes</li>
+                  <li>Timeline completa de eventos</li>
+                  <li>Agentes IA por etapa com apoio em tempo real</li>
+                  <li>Botão para avançar para a próxima macroetapa</li>
+                </ul>
+              </div>
+
+              {/* CTA grande — Abrir Workspace */}
+              <button
+                onClick={openWorkspace}
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3.5 rounded-xl text-sm font-semibold transition-colors shadow-lg shadow-emerald-500/20"
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                Abrir workspace do caso
+              </button>
+              <p className="text-xs text-gray-500 text-center -mt-2">
+                Acesse a página completa para continuar a execução desta etapa com apoio da IA
+              </p>
+            </div>
+          )}
+
           {/* Checklist tab */}
           {activeTab === 'checklist' && currentStep && (
             <div className="space-y-4">
