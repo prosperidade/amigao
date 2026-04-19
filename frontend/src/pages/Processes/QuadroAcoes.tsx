@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Search, X } from 'lucide-react';
+import { ArrowDownWideNarrow, Plus, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import type { KanbanResponse, KanbanProcessCard } from './quadro-types';
@@ -10,6 +10,37 @@ import QuadroProcessCard from './QuadroProcessCard';
 import MacroetapaSidePanel from './MacroetapaSidePanel';
 
 type ReadinessFilter = 'all' | 'blocked' | 'ready';
+type SortMode = 'default' | 'priority';
+
+// QA-012 — Score de prioridade para ordenação dentro de cada coluna.
+// Combina urgência, estado da etapa, travas e documentos faltantes.
+// Casos travados e urgentes aparecem primeiro.
+const URGENCY_SCORE: Record<string, number> = {
+  critica: 1000,
+  alta: 500,
+  media: 100,
+  baixa: 0,
+};
+
+const STATE_SCORE: Record<string, number> = {
+  travada: 300,
+  aguardando_validacao: 220,
+  aguardando_input: 200,
+  em_andamento: 100,
+  pronta_para_avancar: 80,
+  nao_iniciada: 40,
+  concluida: 0,
+};
+
+function computePriorityScore(card: KanbanProcessCard): number {
+  const urgencyKey = (card.urgency ?? card.priority ?? '').toLowerCase();
+  const stateKey = (card.macroetapa_state ?? '').toLowerCase();
+  let score = (URGENCY_SCORE[urgencyKey] ?? 0) + (STATE_SCORE[stateKey] ?? 0);
+  if (card.has_alerts) score += 50;
+  if (card.blockers.length > 0) score += 30 * card.blockers.length;
+  if (card.missing_docs_count > 0) score += 20 * card.missing_docs_count;
+  return score;
+}
 
 export default function QuadroAcoes() {
   const navigate = useNavigate();
@@ -19,6 +50,7 @@ export default function QuadroAcoes() {
   const [filterUrgency, setFilterUrgency] = useState<string>('');
   const [filterDemandType, setFilterDemandType] = useState<string>('');
   const [filterReadiness, setFilterReadiness] = useState<ReadinessFilter>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('default');
 
   const { data: kanbanData, isLoading } = useQuery({
     queryKey: ['kanban'],
@@ -61,9 +93,9 @@ export default function QuadroAcoes() {
   };
 
   // Aplica filtros em cascata. Busca + responsável + urgência + tipo demanda + prontidão.
-  const filteredColumns = columns.map(col => ({
-    ...col,
-    cards: col.cards.filter(c => {
+  // Depois ordena pelos critérios do sortMode.
+  const filteredColumns = columns.map(col => {
+    const filtered = col.cards.filter(c => {
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const matches =
@@ -81,8 +113,14 @@ export default function QuadroAcoes() {
       if (filterReadiness === 'blocked' && c.macroetapa_state !== 'travada') return false;
       if (filterReadiness === 'ready' && c.macroetapa_state !== 'pronta_para_avancar') return false;
       return true;
-    }),
-  }));
+    });
+
+    if (sortMode === 'priority') {
+      filtered.sort((a, b) => computePriorityScore(b) - computePriorityScore(a));
+    }
+
+    return { ...col, cards: filtered };
+  });
 
   return (
     <div className="h-full flex flex-col gap-4">
@@ -179,6 +217,21 @@ export default function QuadroAcoes() {
             ✓ Prontos
           </button>
         </div>
+
+        {/* QA-012 — Toggle de ordenação por prioridade */}
+        <button
+          type="button"
+          onClick={() => setSortMode(sortMode === 'priority' ? 'default' : 'priority')}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+            sortMode === 'priority'
+              ? 'bg-amber-500 text-white shadow'
+              : 'border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-200 hover:bg-gray-50'
+          }`}
+          title="Ordena cards por urgência, estado da etapa e travas"
+        >
+          <ArrowDownWideNarrow className="w-3.5 h-3.5" />
+          {sortMode === 'priority' ? 'Ordenado por prioridade' : 'Ordenar por prioridade'}
+        </button>
 
         {hasActiveFilters && (
           <button
