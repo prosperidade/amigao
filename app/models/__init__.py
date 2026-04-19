@@ -11,6 +11,7 @@ from app.models.legislation import LegislationDocument
 from app.models.legislation_alert import LegislationAlert
 from app.models.macroetapa import MacroetapaChecklist
 from app.models.process import Process
+from app.models.process_decision import ProcessDecision
 from app.models.prompt_template import PromptTemplate
 from app.models.property import Property
 from app.models.proposal import Proposal

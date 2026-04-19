@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   X, CheckSquare, Square, FileText, Clock, Sparkles, Loader2, Zap,
-  AlertTriangle, Target, ArrowUpRight, TrendingUp,
+  AlertTriangle, Target, ArrowUpRight, TrendingUp, Scale,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
@@ -32,6 +32,20 @@ interface ProcessDetail {
   demand_type: string | null;
   urgency: string | null;
   priority: string | null;
+}
+
+// QA-013 — resumo da última decisão registrada (Sprint E)
+interface DecisionSummary {
+  id: number;
+  macroetapa: string;
+  decision_type: string;
+  decision_type_label: string;
+  decision_text: string;
+  status: string;
+  status_label: string;
+  decided_by_user_name: string | null;
+  decided_at: string | null;
+  created_at: string;
 }
 
 interface TimelineEntry {
@@ -64,6 +78,14 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
   const { data: processDetail } = useQuery({
     queryKey: ['process-detail', card.id],
     queryFn: () => api.get<ProcessDetail>(`/processes/${card.id}`).then(r => r.data),
+    enabled: activeTab === 'preview',
+  });
+
+  // QA-013 — última decisão registrada (Sprint E)
+  const { data: latestDecision } = useQuery({
+    queryKey: ['decision-latest', card.id],
+    queryFn: () =>
+      api.get<DecisionSummary | null>(`/processes/${card.id}/decisions/latest`).then(r => r.data),
     enabled: activeTab === 'preview',
   });
 
@@ -266,6 +288,35 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
                   <p className="text-sm text-emerald-900 dark:text-emerald-100 leading-relaxed">
                     {card.next_action}
                   </p>
+                </div>
+              )}
+
+              {/* QA-013 — Última decisão registrada (Sprint E) */}
+              {latestDecision && (
+                <div className="border border-emerald-200 dark:border-emerald-500/30 rounded-lg p-3 bg-emerald-50/50 dark:bg-emerald-500/5">
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-emerald-700 dark:text-emerald-300 mb-1.5">
+                    <Scale className="w-3.5 h-3.5" />
+                    Última decisão
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                      {latestDecision.decision_type_label}
+                    </span>
+                    <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                      · {latestDecision.status_label}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed line-clamp-3">
+                    {latestDecision.decision_text}
+                  </p>
+                  <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-500">
+                    {latestDecision.decided_by_user_name && (
+                      <span>{latestDecision.decided_by_user_name}</span>
+                    )}
+                    <span>
+                      {new Date(latestDecision.decided_at ?? latestDecision.created_at).toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
                 </div>
               )}
 

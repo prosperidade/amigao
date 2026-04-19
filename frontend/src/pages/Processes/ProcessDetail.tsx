@@ -27,9 +27,10 @@ import ProcessDossier from './ProcessDossier';
 import WorkflowTimeline from './WorkflowTimeline';
 import ProcessCommercial from './ProcessCommercial';
 import WorkspaceRightPanel from './WorkspaceRightPanel';
+import DecisionsTab from './DecisionsTab';
 import AIPanel from '@/pages/AI/AIPanel';
 
-type TabKey = 'diagnosis' | 'dossier' | 'workflow' | 'commercial' | 'tasks' | 'documents' | 'timeline' | 'ai';
+type TabKey = 'diagnosis' | 'dossier' | 'workflow' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'timeline' | 'ai';
 
 const STAGE_ORDER = [
   'entrada_demanda',
@@ -201,6 +202,7 @@ export default function ProcessDetail() {
           {activeTab === 'diagnosis' && <DiagnosisTab process={process} />}
           {activeTab === 'dossier' && <ProcessDossier processId={processId} />}
           {activeTab === 'workflow' && <WorkflowTimeline processId={processId} />}
+          {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={currentStage} />}
           {activeTab === 'commercial' && <ProcessCommercial processId={processId} />}
           {activeTab === 'tasks' && <TasksTab processId={processId} />}
           {activeTab === 'documents' && <DocumentsTab processId={processId} />}

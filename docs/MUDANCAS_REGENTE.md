@@ -1057,9 +1057,21 @@ Avanço só com: (1) output mínimo da etapa, (2) validação humana quando nece
 
 ### Sprint D — Polimento (2026-04-23)
 
-- **QA-011** — Contadores travado/pronto por coluna
-- **QA-012** — Ordenação por prioridade (urgência × tempo na etapa × risco)
-- **QA-013** — Card → última decisão (quando aba Decisões existir)
+- **QA-011** — Contadores travado/pronto por coluna ✅ já existia desde Regente v3
+- **QA-012** — Ordenação por prioridade ✅ entregue 2026-04-19 (commit `50a0a39`)
+- **QA-013** — Card → última decisão ⏸ bloqueado até Sprint E existir
+
+### Sprint E — Aba Decisões (Camada 3 · governança do raciocínio)
+
+**Objetivo:** materializar a "camada de governança" do Workspace descrita no `CAMADA 3 - WORKSPACE EDIT1.pdf`. Transforma análise em rastreabilidade auditável.
+
+**Valor estratégico:** é a fundação da visão govtech (rastreabilidade, base normativa citada, quem validou) — ver seção "Horizonte Estratégico" no fim deste doc.
+
+- **SE-001** — Model `ProcessDecision` + migration Alembic (tabela `process_decisions`)
+- **SE-002** — Schemas Pydantic (`DecisionCreate`, `DecisionUpdate`, `DecisionRead`)
+- **SE-003** — Endpoints CRUD: `GET/POST/PATCH/DELETE /processes/{id}/decisions`
+- **SE-004** — Tab "Decisões" no `ProcessDetail.tsx` + `DecisionsTab.tsx` (lista + form de nova)
+- **SE-005** — **QA-013 destravado** — endpoint `GET /processes/{id}/decisions/latest` e exibir no drawer do Quadro
 
 ### Dependências
 

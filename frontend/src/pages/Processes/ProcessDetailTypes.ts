@@ -3,7 +3,7 @@
  */
 import {
   Stethoscope, LayoutGrid, GitBranch, Briefcase, ListChecks,
-  FolderOpen, CalendarDays, Bot,
+  FolderOpen, CalendarDays, Bot, Scale,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -102,6 +102,7 @@ export const TABS = [
   { key: 'diagnosis',  label: 'Diagnostico', icon: Stethoscope },
   { key: 'dossier',    label: 'Dossie',       icon: LayoutGrid },
   { key: 'workflow',   label: 'Trilha',        icon: GitBranch },
+  { key: 'decisions',  label: 'Decis\u00f5es',       icon: Scale },
   { key: 'commercial', label: 'Comercial',     icon: Briefcase },
   { key: 'tasks',      label: 'Tarefas',       icon: ListChecks },
   { key: 'documents',  label: 'Documentos',    icon: FolderOpen },
