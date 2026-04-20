@@ -84,13 +84,14 @@ def list_document_categories(
 def list_documents(
     process_id: Optional[int] = None,
     client_id: Optional[int] = None,
+    property_id: Optional[int] = None,
     db: Session = Depends(get_db),
     access_context: AccessContext = Depends(get_access_context),
 ):
     """Lista documentos respeitando o escopo do usuário autenticado.
 
-    - Usuário do portal: escopo fixo no próprio client_id (query param ignorado).
-    - Usuário interno (consultor): pode filtrar por client_id e/ou process_id.
+    - Usuário do portal: escopo fixo no próprio client_id (query params client_id/property_id ignorados).
+    - Usuário interno (consultor): pode filtrar por client_id, process_id e/ou property_id.
     """
     doc_repo = DocumentRepository(db, access_context.tenant_id)
 
@@ -98,12 +99,14 @@ def list_documents(
         proc_repo = ProcessRepository(db, access_context.tenant_id)
         proc_repo.get_scoped_or_404(process_id, client_id=access_context.client_id)
 
-    # Portal tem escopo fixo; interno usa query param quando fornecido.
+    # Portal tem escopo fixo; interno usa query params quando fornecidos.
     effective_client_id = access_context.client_id if access_context.client_id else client_id
+    effective_property_id = None if access_context.client_id else property_id
 
     return doc_repo.list_scoped(
         client_id=effective_client_id,
         process_id=process_id,
+        property_id=effective_property_id,
     )
 
 
@@ -148,10 +151,14 @@ def confirm_upload(
     ext = _validate_file(body.filename, body.content_type)
 
     doc_repo = DocumentRepository(db, access_context.tenant_id)
+    # CAM2IH-010 (Sprint H) — normaliza categoria para a taxonomia Regente canônica.
+    normalized_category = normalize_category(body.document_category) or body.document_category
     db_doc = Document(
         tenant_id=access_context.tenant_id,
         process_id=body.process_id,
         client_id=process.client_id,
+        # CAM2IH-004 (Sprint H) — herda property_id do processo para a Aba Documentos do Imóvel Hub.
+        property_id=process.property_id,
         uploaded_by_user_id=access_context.user.id,
         filename=body.filename,
         original_file_name=body.filename,
@@ -163,7 +170,7 @@ def confirm_upload(
         file_size_bytes=body.file_size_bytes,
         size=body.file_size_bytes,
         document_type=body.document_type,
-        document_category=body.document_category,
+        document_category=normalized_category,
     )
     db.add(db_doc)
     db.flush()

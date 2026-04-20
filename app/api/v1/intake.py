@@ -687,6 +687,9 @@ def confirm_draft_upload(
         )
 
     ext = body.filename.split(".")[-1].lower() if "." in body.filename else None
+    # CAM2IH-010 (Sprint H) — normaliza categoria para a taxonomia Regente canônica.
+    from app.models.document_categories import normalize_category  # noqa: PLC0415
+    normalized_category = normalize_category(body.document_category) or body.document_category
     doc = Document(
         tenant_id=current_user.tenant_id,
         intake_draft_id=draft_id,
@@ -701,7 +704,7 @@ def confirm_draft_upload(
         file_size_bytes=body.file_size_bytes,
         size=body.file_size_bytes,
         document_type=body.document_type,
-        document_category=body.document_category,
+        document_category=normalized_category,
         ocr_status=OcrStatus.pending,
     )
     db.add(doc)

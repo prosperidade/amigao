@@ -325,6 +325,14 @@ def get_property_hub_summary(
         has_embargo=bool(prop.has_embargo),
         created_at=prop.created_at,
         field_sources=prop.field_sources or {},
+        # CAM2IH-003/004 (Sprint H) — campos técnicos
+        rl_status=prop.rl_status,
+        app_area_ha=prop.app_area_ha,
+        regulatory_issues=prop.regulatory_issues or [],
+        area_documental_ha=prop.area_documental_ha,
+        area_grafica_ha=prop.area_grafica_ha,
+        tipologia=prop.tipologia,
+        strategic_notes=prop.strategic_notes,
     )
 
     return PropertyHubSummary(header=header, chips=chips, kpis=kpis, health=health, state=state)
@@ -550,6 +558,8 @@ _VALID_SOURCES = {"raw", "ai_extracted", "human_validated"}
 _TRACKED_FIELDS = {
     "registry_number", "ccir", "nirf", "car_code", "total_area_ha",
     "municipality", "state", "biome",
+    # CAM2IH-003/004 (Sprint H) — campos técnicos também validáveis
+    "rl_status", "app_area_ha", "area_documental_ha", "area_grafica_ha", "tipologia",
 }
 
 

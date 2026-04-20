@@ -37,6 +37,15 @@ class Property(Base):
     # Ex: {"car_code": "human_validated", "registry_number": "ai_extracted", ...}
     field_sources = Column(PortableJSON, nullable=True, default=dict)
 
+    # Regente Cam2 CAM2IH-003/004 (Sprint H) — campos técnicos do Dashboard + Aba Informações
+    rl_status = Column(String, nullable=True)           # averbada | proposta | pendente | cancelada
+    app_area_ha = Column(Float, nullable=True)
+    regulatory_issues = Column(PortableJSON, nullable=True, default=list)  # [{tipo, descricao, severidade}]
+    area_documental_ha = Column(Float, nullable=True)
+    area_grafica_ha = Column(Float, nullable=True)
+    tipologia = Column(String, nullable=True)           # agricultura | pecuaria | misto | outro
+    strategic_notes = Column(Text, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

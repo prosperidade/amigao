@@ -220,7 +220,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> dict[str, 
             size=upload_result["file_size_bytes"],
             checksum_sha256=upload_result["checksum_sha256"],
             document_type="relatorio_visita",
-            document_category="relatorio",
+            document_category="relatorios_gerados",  # CAM2IH-010 — canônica Regente
             ocr_status=OcrStatus.not_required,
         )
         db.add(doc)

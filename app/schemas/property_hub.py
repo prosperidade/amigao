@@ -27,6 +27,15 @@ class PropertyHubHeader(BaseModel):
     # CAM2IH-007 — origem por campo: raw | ai_extracted | human_validated
     field_sources: dict = {}
 
+    # CAM2IH-003/004 (Sprint H) — campos técnicos expostos na Aba Informações
+    rl_status: Optional[str] = None                 # averbada | proposta | pendente | cancelada
+    app_area_ha: Optional[float] = None
+    regulatory_issues: list = []                    # [{tipo, descricao, severidade}]
+    area_documental_ha: Optional[float] = None
+    area_grafica_ha: Optional[float] = None
+    tipologia: Optional[str] = None                 # agricultura | pecuaria | misto | outro
+    strategic_notes: Optional[str] = None
+
 
 class PropertyFieldValidateRequest(BaseModel):
     fields: list[str]  # nomes dos campos que o humano está validando

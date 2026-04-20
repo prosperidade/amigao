@@ -1283,6 +1283,98 @@ Aditiva e sem downtime: `alembic upgrade head`.
 
 ---
 
+## SPRINT H — Imóvel Hub (Camada 2) ✅ entregue 2026-04-20
+
+**Contexto:** ao auditar o Imóvel Hub descobrimos — mesmo padrão da Sprint G — que ~75% já existia no código sem registro. Backend tinha 5 endpoints agregadores, schemas `PropertyHubSummary/Header/HealthScore/AISummary`, lógica `_compute_health_score` + `_compute_property_hub_state`, field sources com AuditLog (CAM2IH-007), rota `/properties/:id` montada. Frontend tinha `PropertyHub.tsx` com cabeçalho, KPIs, painel IA determinístico, score de saúde, 5 abas (Informações/Documentos/Análises/Histórico/Casos) — Documentos e Análises como placeholder.
+
+### Já entregue antes (sem registro)
+
+- **CAM2IH-001** Rota `/properties/:id` + componente `PropertyHub.tsx`
+- **CAM2IH-002** Cabeçalho com identificação técnica + chips + CTAs
+- **CAM2IH-005** Painel lateral IA determinístico (`GET /properties/{id}/ai-summary`)
+- **CAM2IH-006** Health score 0-100 com 4 componentes (`_compute_health_score`)
+- **CAM2IH-007** Field sources (raw/ai_extracted/human_validated) + endpoint `validate-fields`
+- **CAM2IH-008** 5 estados do hub (`_compute_property_hub_state`)
+- **CAM2IH-009** CTA fixo "Abrir workspace do caso" no cabeçalho
+
+### Gaps fechados na Sprint H
+
+#### Bloco A — Aba Documentos real (CAM2IH-004)
+
+Antes: placeholder "abra o caso para ver detalhes". Agora:
+
+**Backend:**
+- `GET /documents/?property_id=X` aceita filtro por imóvel quando o usuário é interno (portal mantém escopo fixo).
+- `DocumentRepository._scoped_query` ganha parâmetro `property_id` fazendo `OR` com `Process.property_id` (pega docs vinculados direto OU via processo do imóvel).
+- `POST /documents/confirm-upload` agora herda `property_id` do processo, para que uploads feitos em casos apareçam no Imóvel Hub.
+
+**Frontend:**
+- Nova `DocumentsTab` com chips de filtro por categoria (6 canônicas Regente + "Outras"), lista de docs com nome, categoria (label pt-BR), OCR status, tamanho, caso vinculado, CTA "Abrir caso".
+- Mapa `CATEGORY_LABELS` com os 6 labels pt-BR.
+
+#### Bloco B — Campos técnicos do Property (CAM2IH-003/004)
+
+Antes: Dashboard técnico vazio nos campos RL/APP/pendências. Agora adicionados ao modelo e expostos no `/properties/{id}/summary`:
+
+**Migration `e5a7c9b1f3d6`** — ALTER TABLE aditivo, 7 colunas nullable:
+- `rl_status` (averbada / proposta / pendente / cancelada)
+- `app_area_ha` (ha)
+- `regulatory_issues` (JSONB — `[{tipo, descricao, severidade}]`)
+- `area_documental_ha`, `area_grafica_ha` (ha) — comparáveis para detectar divergência
+- `tipologia` (agricultura / pecuaria / misto / outro)
+- `strategic_notes` (Text — observações estratégicas)
+
+**Schema & endpoint:**
+- `PropertyHubHeader` ganha os 7 campos novos.
+- `/properties/{id}/summary` popula todos.
+- `_TRACKED_FIELDS` do endpoint `validate-fields` inclui `rl_status`, `app_area_ha`, `area_documental_ha`, `area_grafica_ha`, `tipologia` — todos podem ser promovidos IA→validado.
+
+**Frontend Aba Informações — nova seção "Dados técnicos":**
+- 5 `InfoField`s com badges de origem + botão Validar.
+- Bloco visual de pendências ambientais (amarelo com ícone de alerta) quando `regulatory_issues.length > 0`.
+- Bloco de observações estratégicas (texto livre, respeita `\n`).
+- Alerta de divergência quando |documental - gráfica| > 0.5 ha.
+
+#### Bloco C — Enum canônico de categoria de documento (CAM2IH-010)
+
+A infraestrutura já existia (`app/models/document_categories.py` com `REGENTE_CATEGORIES`, `normalize_category`, endpoint `GET /documents/categories`), mas os writes não usavam:
+
+- `POST /documents/confirm-upload`: agora chama `normalize_category()` antes de persistir.
+- `POST /intake/drafts/{id}/documents`: mesma chamada.
+- `app/workers/pdf_generator.py`: categoria do relatório PDF gerado passou de `"relatorio"` (legado) para `"relatorios_gerados"` (canônica).
+- Dados existentes seguem como string livre — o normalize é idempotente (já-canônico passa direto; legados conhecidos traduzem; desconhecidos viram None para a UI mostrar "outras").
+
+### Chain de migrations Sprint E → Sprint H
+
+```
+a3f5c7b9d2e4  process_decisions               (Sprint E)
+b7d9e1f3a5c8  users.preferences               (Sprint F · Bloco 2)
+c9f1a3b5d7e2  intake_drafts.expires_at        (Sprint F · Bloco 3)
+d8b3f7c2e5a9  clientstatus.blocked            (Sprint G)
+e5a7c9b1f3d6  properties.{rl,app,areas,...}   (Sprint H)      ← HEAD
+```
+
+Aditiva e sem downtime: `alembic upgrade head`.
+
+### Decisões de escopo (Sprint H)
+
+- ❌ **Não** criar tabela `PropertyAnalysis` — Aba Análises continua apontando pros `StageOutputs` dos casos. Decisão adiada para Sprint I (precisa definir se análise é entidade própria ou agregação).
+- ❌ **Não** trocar `/properties/{id}/ai-summary` determinístico por chamada a agentes reais — respeita `feedback_agents_config_frozen`.
+- ❌ **Não** migrar dados existentes de `document_category` (ex: "geral", "portal_cliente") — normalize só em writes novos; a UI de listagem trata desconhecido como "Outras".
+- ❌ **Não** adicionar SNCR/CIB/access_description/operation_start_date ao modelo — menos prioritários, podem entrar via Sprint I se aparecer demanda.
+- ✅ Permitir `property_id` em `/documents/` para usuários internos (mesma lógica do `client_id` da Sprint G).
+- ✅ Confirm-upload passa a herdar `property_id` do processo — retrocompatível, só preenche quando existe.
+
+### Validações Sprint H
+
+- [x] Backend: migration `e5a7c9b1f3d6` aplicada (DB = head), 7 colunas presentes em `properties`
+- [x] Frontend `tsc --noEmit` limpo em `PropertyHub.tsx`
+- [x] `GET /documents/?property_id=X` retorna docs do imóvel (testado com doc vinculado direto; tenant isolation respeitada)
+- [x] Upload via `confirm-upload` herda `property_id` do processo (edit em `app/api/v1/documents.py`)
+- [x] `normalize_category` aplicado em writes novos (`ambiental` → `ambientais`, `relatorio` → `relatorios_gerados` OK em smoke test)
+
+---
+
 ## HORIZONTE ESTRATÉGICO — AMIGÃO COMO GOVTECH
 
 **Registrado em 2026-04-19 — visão do user.**

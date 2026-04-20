@@ -38,11 +38,27 @@ interface PropertyHubHeader {
   has_embargo: boolean;
   created_at: string | null;
   field_sources: Record<string, string>;
+  // CAM2IH-003/004 (Sprint H) — campos técnicos
+  rl_status: string | null;
+  app_area_ha: number | null;
+  regulatory_issues: Array<{ tipo?: string; descricao?: string; severidade?: string }>;
+  area_documental_ha: number | null;
+  area_grafica_ha: number | null;
+  tipologia: string | null;
+  strategic_notes: string | null;
 }
 
-// CAM2IH-007 — Origem dos dados
-type FieldSource = 'raw' | 'ai_extracted' | 'human_validated';
+// CAM2IH-010 (Sprint H) — labels pt-BR das 6 categorias canônicas Regente.
+const CATEGORY_LABELS: Record<string, string> = {
+  fundiarios: 'Fundiários',
+  ambientais: 'Ambientais',
+  fiscais_rurais: 'Fiscais/Rurais',
+  societarios: 'Societários',
+  espaciais: 'Espaciais (KML/SIGEF)',
+  relatorios_gerados: 'Relatórios gerados',
+};
 
+// CAM2IH-007 — Origem dos dados
 const FIELD_SOURCE_BADGE: Record<string, { icon: string; label: string; cls: string }> = {
   raw:              { icon: '📥', label: 'Bruto',          cls: 'bg-gray-100 text-gray-600' },
   ai_extracted:     { icon: '🤖', label: 'Extraído por IA', cls: 'bg-sky-100 text-sky-700' },
@@ -123,13 +139,6 @@ const HUB_STATE_LABEL: Record<string, { label: string; cls: string }> = {
   memoria_estruturada:  { label: 'Memória estruturada', cls: 'bg-emerald-100 text-emerald-700' },
   com_alertas:          { label: 'Com alertas', cls: 'bg-red-100 text-red-700' },
   consolidado:          { label: 'Consolidado', cls: 'bg-violet-100 text-violet-700' },
-};
-
-const HEALTH_COLOR: Record<string, string> = {
-  ruim:        'bg-red-500',
-  media:       'bg-amber-500',
-  boa:         'bg-emerald-500',
-  consolidada: 'bg-violet-500',
 };
 
 type TabKey = 'info' | 'documents' | 'analyses' | 'history' | 'cases';
@@ -341,7 +350,7 @@ export default function PropertyHub() {
           </div>
           <div className="p-5">
             {tab === 'info' && <InfoTab header={header} kpis={kpis} onValidate={(fields) => validateFields.mutate(fields)} />}
-            {tab === 'documents' && <DocumentsTab propertyId={propertyId} count={kpis.documents_count} />}
+            {tab === 'documents' && <DocumentsTab propertyId={propertyId} />}
             {tab === 'analyses' && <AnalysesTab propertyId={propertyId} count={kpis.analyses_count} cases={cases} />}
             {tab === 'history' && <HistoryTab events={events} />}
             {tab === 'cases' && <CasesTab cases={cases} navigate={navigate} />}
@@ -525,6 +534,74 @@ function InfoTab({ header, kpis, onValidate }: {
           <InfoField label="Embargo" value={header.has_embargo ? 'Sim' : 'Não'} />
         </div>
       </section>
+      {/* CAM2IH-003/004 (Sprint H) — Dados técnicos ambientais */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-2">Dados técnicos</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+          <InfoField
+            label="Reserva Legal"
+            value={header.rl_status}
+            source={src.rl_status}
+            onValidate={onValidate ? () => onValidate(['rl_status']) : undefined}
+          />
+          <InfoField
+            label="Área APP"
+            value={header.app_area_ha != null ? `${header.app_area_ha} ha` : null}
+            source={src.app_area_ha}
+            onValidate={onValidate ? () => onValidate(['app_area_ha']) : undefined}
+          />
+          <InfoField
+            label="Área documental"
+            value={header.area_documental_ha != null ? `${header.area_documental_ha} ha` : null}
+            source={src.area_documental_ha}
+            onValidate={onValidate ? () => onValidate(['area_documental_ha']) : undefined}
+          />
+          <InfoField
+            label="Área gráfica"
+            value={header.area_grafica_ha != null ? `${header.area_grafica_ha} ha` : null}
+            sub={
+              header.area_documental_ha != null && header.area_grafica_ha != null
+              && Math.abs(header.area_documental_ha - header.area_grafica_ha) > 0.5
+                ? '⚠ divergência com documental'
+                : undefined
+            }
+            source={src.area_grafica_ha}
+            onValidate={onValidate ? () => onValidate(['area_grafica_ha']) : undefined}
+          />
+          <InfoField
+            label="Tipologia"
+            value={header.tipologia}
+            source={src.tipologia}
+            onValidate={onValidate ? () => onValidate(['tipologia']) : undefined}
+          />
+        </div>
+        {header.regulatory_issues && header.regulatory_issues.length > 0 && (
+          <div className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-3">
+            <p className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-300 font-semibold mb-1.5">
+              Pendências ambientais ({header.regulatory_issues.length})
+            </p>
+            <ul className="space-y-1 text-xs text-amber-900 dark:text-amber-100">
+              {header.regulatory_issues.map((iss, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>
+                    {iss.tipo && <strong>{iss.tipo}: </strong>}
+                    {iss.descricao ?? '—'}
+                    {iss.severidade && <span className="ml-1 text-[10px] text-amber-700">[{iss.severidade}]</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {header.strategic_notes && (
+          <div className="mt-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-3">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-1">Observações estratégicas</p>
+            <p className="text-xs text-gray-700 dark:text-slate-200 whitespace-pre-line">{header.strategic_notes}</p>
+          </div>
+        )}
+      </section>
+
       <section>
         <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-2">Atividade</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
@@ -537,14 +614,107 @@ function InfoTab({ header, kpis, onValidate }: {
   );
 }
 
-function DocumentsTab({ propertyId: _propertyId, count }: { propertyId: number; count: number }) {
-  if (count === 0) return <p className="text-sm text-gray-400 italic">Nenhum documento anexado ao imóvel ou seus casos.</p>;
+// CAM2IH-004+010 (Sprint H) — Aba Documentos real do imóvel
+interface PropertyDocument {
+  id: number;
+  original_file_name: string;
+  content_type: string;
+  file_size_bytes: number;
+  document_category: string | null;
+  document_type: string | null;
+  ocr_status: string | null;
+  process_id: number | null;
+  created_at: string;
+}
+
+function DocumentsTab({ propertyId }: { propertyId: number }) {
+  const [category, setCategory] = useState<string>('all');
+  const navigate = useNavigate();
+
+  const { data: docs = [], isLoading } = useQuery({
+    queryKey: ['property-hub-documents', propertyId],
+    queryFn: () => api.get<PropertyDocument[]>(`/documents/?property_id=${propertyId}`).then(r => r.data),
+    enabled: !!propertyId,
+  });
+
+  if (isLoading) {
+    return <div className="animate-pulse space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-14 rounded-xl bg-gray-100 dark:bg-white/5" />)}</div>;
+  }
+  if (docs.length === 0) {
+    return <p className="text-sm text-gray-400 italic">Nenhum documento vinculado a este imóvel.</p>;
+  }
+
+  const filtered = category === 'all' ? docs : docs.filter(d => (d.document_category ?? 'outras') === category);
+  const counts: Record<string, number> = { all: docs.length, outras: 0 };
+  for (const d of docs) {
+    const k = d.document_category ?? 'outras';
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
+
   return (
-    <div className="text-sm text-gray-500">
-      <p className="mb-2">{count} documento(s) vinculado(s) a este imóvel.</p>
-      <p className="text-xs italic">
-        Para visualizar a lista completa, abra o caso correspondente no workspace.
-      </p>
+    <div className="space-y-3">
+      {/* Filtro por categoria (6 canônicas Regente + outras) */}
+      <div className="flex gap-1.5 flex-wrap text-xs">
+        {(['all', ...Object.keys(CATEGORY_LABELS), 'outras'] as const).map(k => {
+          const active = category === k;
+          const count = counts[k] ?? 0;
+          if (k !== 'all' && count === 0) return null;
+          const label = k === 'all' ? 'Todos' : k === 'outras' ? 'Outras' : CATEGORY_LABELS[k];
+          return (
+            <button
+              key={k}
+              onClick={() => setCategory(k)}
+              className={`px-2 py-1 rounded-full font-medium border ${
+                active
+                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                  : 'bg-white dark:bg-white/5 text-gray-500 border-gray-200 dark:border-white/10 hover:bg-gray-50'
+              }`}
+            >
+              {label} <span className="text-gray-400">({count})</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-gray-400 italic">Nenhum documento nesta categoria.</p>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(d => (
+            <div
+              key={d.id}
+              className="p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 flex items-start justify-between gap-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="font-medium text-gray-900 dark:text-white text-sm truncate">{d.original_file_name}</span>
+                  {d.document_category && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                      {CATEGORY_LABELS[d.document_category] ?? d.document_category}
+                    </span>
+                  )}
+                  {d.ocr_status && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{d.ocr_status}</span>}
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {d.content_type}
+                  {d.file_size_bytes > 0 && ` · ${(d.file_size_bytes / 1024).toFixed(1)} KB`}
+                  {d.process_id && ` · Caso #${d.process_id}`}
+                  {` · ${formatRelative(d.created_at)}`}
+                </p>
+              </div>
+              {d.process_id && (
+                <button
+                  onClick={() => navigate(`/processes/${d.process_id}`)}
+                  className="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0"
+                >
+                  Abrir caso
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

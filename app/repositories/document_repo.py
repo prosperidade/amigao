@@ -15,7 +15,12 @@ from app.repositories.base import BaseRepository
 class DocumentRepository(BaseRepository[Document]):
     model = Document
 
-    def _scoped_query(self, *, client_id: Optional[int] = None):
+    def _scoped_query(
+        self,
+        *,
+        client_id: Optional[int] = None,
+        property_id: Optional[int] = None,
+    ):
         q = (
             self.db.query(Document)
             .outerjoin(Process, Document.process_id == Process.id)
@@ -34,6 +39,18 @@ class DocumentRepository(BaseRepository[Document]):
                     ),
                 )
             )
+        if property_id is not None:
+            # CAM2IH-004 (Sprint H) — docs do imóvel incluem docs vinculados
+            # diretamente ou via processo do imóvel.
+            q = q.filter(
+                or_(
+                    Document.property_id == property_id,
+                    and_(
+                        Document.property_id.is_(None),
+                        Process.property_id == property_id,
+                    ),
+                )
+            )
         return q
 
     def list_scoped(
@@ -41,8 +58,9 @@ class DocumentRepository(BaseRepository[Document]):
         *,
         client_id: Optional[int] = None,
         process_id: Optional[int] = None,
+        property_id: Optional[int] = None,
     ) -> Sequence[Document]:
-        q = self._scoped_query(client_id=client_id)
+        q = self._scoped_query(client_id=client_id, property_id=property_id)
         if process_id is not None:
             q = q.filter(Document.process_id == process_id)
         return q.all()
