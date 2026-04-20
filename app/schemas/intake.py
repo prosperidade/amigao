@@ -226,3 +226,27 @@ class IntakeImportResponse(BaseModel):
     draft_id: int
     docs_queued: int
     task_ids: list[str] = []
+
+
+# CAM1-005 Parte A (Sprint L) — resultados de extração prontos para revisão.
+class IntakeExtractedDocument(BaseModel):
+    document_id: int
+    filename: Optional[str] = None
+    document_type: Optional[str] = None
+    ocr_status: Optional[str] = None
+    extracted_fields: dict = {}           # campos extraídos (cpf_cnpj, matricula, car_code, etc.)
+    fields_count: int = 0
+    extracted_at: Optional[str] = None    # ISO timestamp
+
+
+class IntakeExtractionResultsResponse(BaseModel):
+    """CAM1-005 Parte A — retorna sugestões extraídas dos docs do draft.
+
+    Consultor revisa em `suggestions` (agregado por campo, prioridade por confiança)
+    e detalhe em `by_document` (origem da sugestão). Aplica manualmente no formulário.
+    """
+    draft_id: int
+    docs_total: int
+    docs_with_results: int
+    by_document: list[IntakeExtractedDocument] = []
+    suggestions: dict = {}                # campo → valor mais confiável (ex: cpf_cnpj, matricula)

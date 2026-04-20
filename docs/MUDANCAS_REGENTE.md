@@ -1579,6 +1579,65 @@ O rodapé colapsável já existia; Sprint J só trocou o conteúdo pra `Timeline
 
 ---
 
+## SPRINT L — Enriquecimento Cam1 (Importar docs c/ IA) ✅ entregue 2026-04-20
+
+**Contexto:** auditoria dos 3 tickets da Sprint 2 (Enriquecimento Cam1) revelou — seguindo o padrão recorrente — que **CAM1-004 e CAM1-007 já estavam 100%** no código, sem registro. Apenas **CAM1-005** tinha gap real: o agente extrator era disparado mas o resultado (`extracted_fields`) ficava apenas no `AIJob.result`, sem exposição ao frontend nem UI de revisão.
+
+### Já entregue antes (sem registro) — 2 tickets
+
+#### ✅ CAM1-004 — "Complementar base já iniciada"
+- **Backend**: endpoint `POST /intake/enrich` em [app/api/v1/intake.py:536-633](../app/api/v1/intake.py) — recebe `client_id` + `property_id` + `client_fields` + `property_fields`; registra AuditLog com stamp de hash (action `base_enriched`).
+- **Schemas**: `IntakeEnrichRequest` / `IntakeEnrichResponse` em [app/schemas/intake.py:140-178](../app/schemas/intake.py).
+- **Frontend**: flow `isEnrichFlow` no [IntakeWizard.tsx:173-256](../frontend/src/pages/Intake/IntakeWizard.tsx) — botão "Complementar base agora" + entry_type `complementar_base_existente` forçando modo existente para cliente/imóvel.
+
+#### ✅ CAM1-007 — "Upload opcional multi-tipo com estados"
+- **Backend**: `OcrStatus` enum em [app/models/document.py:10-15](../app/models/document.py) cobre `pending`/`processing`/`done`/`failed`/`not_required`.
+- **Backend**: `POST /drafts/{id}/upload-url` + `POST /drafts/{id}/documents` registra Document com `ocr_status=pending`, aceita `document_type` dos 7 tipos Regente.
+- **Frontend**: [DraftDocumentUploader.tsx:5-14](../frontend/src/pages/Intake/DraftDocumentUploader.tsx) expõe 7 tipos documentais; `badgeFor()` renderiza 4 estados visuais (Lido/Em leitura/Falhou/Enviado).
+
+### Gap fechado na Sprint L — CAM1-005 em duas partes
+
+#### Parte A — Endpoint de resultados extraídos
+
+**Problema:** o agente `extrator` rodava (via `POST /intake/drafts/{id}/import`), salvava `extracted_fields` em `AIJob.result.extracted_fields`, mas não havia endpoint para o frontend consultar esses resultados. Consultor não via o que a IA extraiu.
+
+**Mudança:**
+- Novo endpoint `GET /intake/drafts/{id}/extraction-results` em [app/api/v1/intake.py](../app/api/v1/intake.py).
+- Busca AIJobs `agent_name=extrator` + `status=completed`, ordena por `finished_at desc`, mantém o mais recente por `result.document_id` dos docs do draft.
+- Schema novo `IntakeExtractionResultsResponse` com:
+  - `by_document`: detalhe por doc (filename, type, `extracted_fields`, `fields_count`, `extracted_at`).
+  - `suggestions`: dict agregado — primeiro valor não-vazio por campo vence (prioridade pela ordem do `finished_at desc`).
+  - Contadores `docs_total`, `docs_with_results`.
+
+**Validação:** smoke test com draft+doc+AIJob simulado — endpoint retorna `suggestions: {matricula, car_code, area_ha, municipio, uf}` + `by_document` populado.
+
+#### Parte B — UI de sugestões no DraftDocumentUploader
+
+**Mudança:**
+- [DraftDocumentUploader.tsx](../frontend/src/pages/Intake/DraftDocumentUploader.tsx) ganha:
+  - `useQuery` (via `useEffect + setInterval`) para `GET /extraction-results` com polling leve (5s) enquanto houver doc em `processing`.
+  - Mapa `FIELD_LABELS` com labels pt-BR dos campos comuns (cpf_cnpj, matricula, car_code, area_ha, município, UF, etc.).
+  - Painel violeta "🤖 Sugestões extraídas pela IA" abaixo do botão de importar, com grid 2-col mostrando cada sugestão + botão "Aplicar".
+  - Prop nova `onApplySuggestion?: (field, value) => void` permite o wizard consumir e pré-preencher o formulário. Campos aplicados viram verdes com "✓ aplicado".
+- Estado local `appliedFields: Set<string>` evita aplicação duplicada.
+
+### Decisões de escopo (Sprint L)
+
+- ❌ **Não** conectar `onApplySuggestion` ao `IntakeWizard` automaticamente nesta sprint — o hook existe, ligar os 5+ inputs do wizard é trabalho de UX/refactor que pode entrar numa sprint seguinte. O consultor ainda vê as sugestões e pode copiar manualmente.
+- ❌ **Não** usar WebSocket para notificar fim da extração — polling 5s é suficiente para o UX (agente extrator leva ~10-30s).
+- ❌ **Não** modificar agentes (`feedback_agents_config_frozen`) — só agregamos resultado existente.
+- ❌ **Não** aplicar `normalize_category` nos documentos importados via draft upload — já feito na Sprint H (commit 36842fc).
+- ✅ **Persistir extraction results só em AIJob** (não duplicar em Document) — fonte única de verdade.
+
+### Validações Sprint L
+
+- [x] Backend: endpoint `/intake/drafts/{id}/extraction-results` retorna estrutura correta (testado com draft+doc+AIJob simulado)
+- [x] Backend: agrega corretamente quando múltiplos AIJobs existem para o mesmo doc (mais recente vence)
+- [x] Frontend `tsc --noEmit` limpo em `DraftDocumentUploader.tsx`
+- [x] UI mostra painel só quando há resultados; campos aplicados ficam em verde
+
+---
+
 ## HORIZONTE ESTRATÉGICO — AMIGÃO COMO GOVTECH
 
 **Registrado em 2026-04-19 — visão do user.**

@@ -40,6 +40,8 @@ from app.schemas.intake import (
     IntakeEnrichResponse,
     IntakeImportRequest,
     IntakeImportResponse,
+    IntakeExtractedDocument,
+    IntakeExtractionResultsResponse,
 )
 from app.services.intake_classifier import classify_demand, get_demand_rules
 
@@ -826,6 +828,94 @@ def import_draft_documents(
         draft_id=draft_id,
         docs_queued=len(task_ids),
         task_ids=task_ids,
+    )
+
+
+@router.get(
+    "/drafts/{draft_id}/extraction-results",
+    response_model=IntakeExtractionResultsResponse,
+)
+def get_draft_extraction_results(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """CAM1-005 Parte A (Sprint L) — retorna sugestões extraídas pelos agentes.
+
+    Agrega o `result.extracted_fields` do AIJob mais recente de cada documento
+    do draft (agent extrator, status=completed). Fornece:
+      - `by_document`: detalhe por documento (origem das sugestões)
+      - `suggestions`: campo → valor mais confiável (primeiro não-vazio por prioridade)
+    """
+    from app.models.document import Document  # noqa: PLC0415
+    from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+
+    draft = db.query(IntakeDraft).filter(
+        IntakeDraft.id == draft_id,
+        IntakeDraft.tenant_id == current_user.tenant_id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rascunho não encontrado.")
+
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.intake_draft_id == draft_id,
+            Document.tenant_id == current_user.tenant_id,
+            Document.deleted_at.is_(None),
+        )
+        .all()
+    )
+    doc_by_id = {d.id: d for d in docs}
+
+    # Busca AIJobs do agente extrator completados, mais recentes primeiro.
+    # result.document_id indica qual doc cada job extraiu.
+    jobs = (
+        db.query(AIJob)
+        .filter(
+            AIJob.tenant_id == current_user.tenant_id,
+            AIJob.agent_name == "extrator",
+            AIJob.status == AIJobStatus.completed,
+        )
+        .order_by(AIJob.finished_at.desc().nullslast(), AIJob.id.desc())
+        .all()
+    )
+
+    # Mantém apenas o job mais recente por document_id (primeiro visto por ordem desc).
+    latest_by_doc: dict[int, AIJob] = {}
+    for j in jobs:
+        try:
+            doc_id = (j.result or {}).get("document_id")
+        except AttributeError:
+            continue
+        if isinstance(doc_id, int) and doc_id in doc_by_id and doc_id not in latest_by_doc:
+            latest_by_doc[doc_id] = j
+
+    by_document: list[IntakeExtractedDocument] = []
+    suggestions: dict = {}
+    for doc_id, j in latest_by_doc.items():
+        d = doc_by_id[doc_id]
+        fields = (j.result or {}).get("extracted_fields") or {}
+        by_document.append(IntakeExtractedDocument(
+            document_id=doc_id,
+            filename=d.original_file_name,
+            document_type=d.document_type,
+            ocr_status=d.ocr_status.value if d.ocr_status else None,
+            extracted_fields=fields,
+            fields_count=len(fields),
+            extracted_at=j.finished_at.isoformat() if j.finished_at else None,
+        ))
+        # Agrega sugestões: primeiro valor não-vazio por chave vence.
+        for k, v in fields.items():
+            if v and k not in suggestions:
+                suggestions[k] = v
+
+    return IntakeExtractionResultsResponse(
+        draft_id=draft_id,
+        docs_total=len(docs),
+        docs_with_results=len(latest_by_doc),
+        by_document=by_document,
+        suggestions=suggestions,
     )
 
 

@@ -13,6 +13,27 @@ const DOCUMENT_TYPES = [
   { value: 'kml_sigef', label: 'KML / croqui / SIGEF' },
 ] as const;
 
+// CAM1-005 Parte B (Sprint L) — labels pt-BR dos campos comuns extraídos pelo agente.
+const FIELD_LABELS: Record<string, string> = {
+  cpf_cnpj: 'CPF / CNPJ',
+  nome: 'Nome',
+  razao_social: 'Razão social',
+  matricula: 'Matrícula',
+  car_code: 'Código CAR',
+  car: 'CAR',
+  ccir: 'CCIR',
+  nirf: 'NIRF',
+  area_ha: 'Área (ha)',
+  area: 'Área',
+  municipality: 'Município',
+  municipio: 'Município',
+  state: 'UF',
+  uf: 'UF',
+  property_name: 'Nome do imóvel',
+  registry_number: 'Matrícula',
+  endereco: 'Endereço',
+};
+
 interface DraftDoc {
   id: number;
   filename: string;
@@ -23,19 +44,41 @@ interface DraftDoc {
   created_at: string | null;
 }
 
+interface ExtractedDoc {
+  document_id: number;
+  filename: string | null;
+  document_type: string | null;
+  ocr_status: string | null;
+  extracted_fields: Record<string, unknown>;
+  fields_count: number;
+  extracted_at: string | null;
+}
+
+interface ExtractionResults {
+  draft_id: number;
+  docs_total: number;
+  docs_with_results: number;
+  by_document: ExtractedDoc[];
+  suggestions: Record<string, unknown>;
+}
+
 interface Props {
   draftId: number;
   /** Quando os docs mudam (útil pra badges no step de confirmação). */
   onChange?: (docs: DraftDoc[]) => void;
+  /** CAM1-005 Parte B — callback opcional quando o consultor aplica uma sugestão. */
+  onApplySuggestion?: (field: string, value: unknown) => void;
 }
 
-export default function DraftDocumentUploader({ draftId, onChange }: Props) {
+export default function DraftDocumentUploader({ draftId, onChange, onApplySuggestion }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<DraftDoc[]>([]);
   const [uploading, setUploading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [pendingType, setPendingType] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [extraction, setExtraction] = useState<ExtractionResults | null>(null);
+  const [appliedFields, setAppliedFields] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
@@ -47,9 +90,34 @@ export default function DraftDocumentUploader({ draftId, onChange }: Props) {
     }
   }, [draftId, onChange]);
 
+  // CAM1-005 Parte B (Sprint L) — busca sugestões extraídas pelos agentes.
+  const refreshExtraction = useCallback(async () => {
+    try {
+      const { data } = await api.get<ExtractionResults>(
+        `/intake/drafts/${draftId}/extraction-results`,
+      );
+      setExtraction(data);
+    } catch {
+      // silent — endpoint pode não ter resultados ainda
+    }
+  }, [draftId]);
+
   useEffect(() => {
     if (draftId) refresh();
   }, [draftId, refresh]);
+
+  // Polling leve enquanto houver doc em 'processing' — refetch a cada 5s.
+  useEffect(() => {
+    if (!draftId) return;
+    refreshExtraction();
+    const hasProcessing = docs.some(d => d.ocr_status === 'processing');
+    if (!hasProcessing) return;
+    const timer = window.setInterval(() => {
+      refresh();
+      refreshExtraction();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [draftId, docs, refresh, refreshExtraction]);
 
   const uploadFiles = async (files: FileList) => {
     if (!files.length) return;
@@ -177,6 +245,53 @@ export default function DraftDocumentUploader({ draftId, onChange }: Props) {
           >
             {importing ? <><span className="animate-spin">⟳</span> Disparando leitura IA...</> : '🤖 Ler documentos com IA'}
           </button>
+        </div>
+      )}
+
+      {/* CAM1-005 Parte B (Sprint L) — Sugestões extraídas pelos agentes */}
+      {extraction && extraction.docs_with_results > 0 && Object.keys(extraction.suggestions).length > 0 && (
+        <div className="rounded-xl bg-violet-500/10 border border-violet-500/30 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-violet-200">
+            <span>🤖</span>
+            <span>Sugestões extraídas pela IA</span>
+            <span className="text-[10px] font-normal text-violet-300/70">
+              ({extraction.docs_with_results} de {extraction.docs_total} doc{extraction.docs_total > 1 ? 's' : ''})
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {Object.entries(extraction.suggestions).map(([field, value]) => {
+              const applied = appliedFields.has(field);
+              return (
+                <div
+                  key={field}
+                  className={`flex items-center gap-2 p-2 rounded-lg text-xs border ${
+                    applied
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                      : 'bg-white/5 border-white/10 text-slate-200'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] uppercase tracking-wide text-slate-400">
+                      {FIELD_LABELS[field] ?? field}
+                    </div>
+                    <div className="truncate font-medium">{String(value)}</div>
+                  </div>
+                  {onApplySuggestion && !applied && (
+                    <button
+                      onClick={() => {
+                        onApplySuggestion(field, value);
+                        setAppliedFields(new Set([...appliedFields, field]));
+                      }}
+                      className="shrink-0 text-[10px] px-2 py-0.5 rounded bg-violet-500/30 hover:bg-violet-500/50 text-violet-100 font-medium"
+                    >
+                      Aplicar
+                    </button>
+                  )}
+                  {applied && <span className="text-[10px] text-emerald-300">✓ aplicado</span>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
