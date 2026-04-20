@@ -6,7 +6,8 @@
  * status de validação humana. Corresponde ao item "Saídas" do menu lateral
  * da sócia (Camada 3 — Workspace).
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { PackageCheck, CheckCircle2, Clock, User, Bot } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MACROETAPA_LABELS } from './quadro-types';
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export default function SaidasTab({ processId, viewingStage }: Props) {
+  const queryClient = useQueryClient();
   const { data: outputs = [], isLoading } = useQuery({
     queryKey: ['process-artifacts', processId, viewingStage ?? 'all'],
     queryFn: () => {
@@ -41,6 +43,17 @@ export default function SaidasTab({ processId, viewingStage }: Props) {
       return api.get<StageOutput[]>(url).then(r => r.data);
     },
     enabled: !!processId,
+  });
+
+  // CAM3WS-006 (Sprint K) — validar artefato pendente via POST /artifacts/{id}/validate
+  const validateMutation = useMutation({
+    mutationFn: (artifactId: number) =>
+      api.post(`/processes/${processId}/artifacts/${artifactId}/validate`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['process-artifacts', processId] });
+      toast.success('Saída validada');
+    },
+    onError: () => toast.error('Falha ao validar saída'),
   });
 
   if (isLoading) {
@@ -116,6 +129,15 @@ export default function SaidasTab({ processId, viewingStage }: Props) {
                       {o.created_at && ` · ${new Date(o.created_at).toLocaleDateString('pt-BR')}`}
                     </p>
                   </div>
+                  {pendingValidation && (
+                    <button
+                      onClick={() => validateMutation.mutate(o.id)}
+                      disabled={validateMutation.isPending}
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-medium"
+                    >
+                      {validateMutation.isPending && validateMutation.variables === o.id ? '...' : 'Validar'}
+                    </button>
+                  )}
                 </li>
               );
             })}

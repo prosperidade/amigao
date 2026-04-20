@@ -34,6 +34,7 @@ interface CanAdvance {
   current_state: string | null;
   next_macroetapa: string | null;
   blockers: string[];
+  gaps: string[];                 // CAM3WS-005 (Sprint K) — lacunas informativas
   objective: string | null;
   expected_outputs: string[];
 }
@@ -227,6 +228,24 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
           <ul className="space-y-1 mt-2 text-sm text-red-900 dark:text-red-100">
             {gate.blockers.map((b, i) => (
               <li key={i}>• {b}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Lacunas (CAM3WS-005 / Sprint K) — informativas, não travam avanço */}
+      {gate.gaps && gate.gaps.length > 0 && (
+        <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300 font-semibold">
+              Lacunas a preencher
+            </span>
+            <span className="text-[10px] text-amber-700/70 dark:text-amber-300/70">(não bloqueiam)</span>
+          </div>
+          <ul className="space-y-1 mt-2 text-sm text-amber-900 dark:text-amber-100">
+            {gate.gaps.map((g, i) => (
+              <li key={i}>• {g}</li>
             ))}
           </ul>
         </div>

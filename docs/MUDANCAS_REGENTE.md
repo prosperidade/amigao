@@ -1520,6 +1520,65 @@ O rodapé colapsável já existia; Sprint J só trocou o conteúdo pra `Timeline
 
 ---
 
+## SPRINT K — Cam3 core polish (Lacunas + Validar saídas) ✅ entregue 2026-04-20
+
+**Contexto:** auditoria dos 8 tickets da Sprint 3 (Fluxo + Workspace Cam3) revelou — de novo — que 6 já estavam 100% no código: **CAM3FT-001** (próximo passo + badge alerta), **CAM3FT-003** (counts de travados/prontos por coluna, renderizados em `QuadroAcoes.tsx:276-285`), **CAM3FT-004** (7 estados `MacroetapaState` + `compute_macroetapa_state`), **CAM3FT-005** (gate `can_advance_macroetapa` + enforce em `POST /macroetapa`), **CAM3WS-001** (layout 6-áreas em `ProcessDetail.tsx`), **CAM3WS-003** (`MACROETAPA_METADATA` com objetivo + expected_outputs por etapa + render em `WorkspaceRightPanel`). Apenas 2 tinham gap real: CAM3WS-005 (lacunas separadas de travas) e CAM3WS-006 (botão validar saídas).
+
+### Já entregue antes (sem registro) — 6 tickets
+
+| Ticket | Evidência |
+|---|---|
+| **CAM3FT-001** | `KanbanProcessCard.next_action` + `has_alerts`; render em [QuadroProcessCard.tsx:94-99](../frontend/src/pages/Processes/QuadroProcessCard.tsx) |
+| **CAM3FT-003** | `KanbanColumn.blocked_count/ready_to_advance_count`; agregação em [processes.py:215-230](../app/api/v1/processes.py); render em [QuadroAcoes.tsx:276-285](../frontend/src/pages/Processes/QuadroAcoes.tsx) |
+| **CAM3FT-004** | Enum [macroetapa.py:43-56](../app/models/macroetapa.py) com 7 estados; `compute_macroetapa_state` linha 316-348 |
+| **CAM3FT-005** | `can_advance_macroetapa` + enforce em `POST /macroetapa` (HTTP 409 com blockers); UI desabilita botão "Avançar" |
+| **CAM3WS-001** | 6 áreas em [ProcessDetail.tsx](../frontend/src/pages/Processes/ProcessDetail.tsx): Cabeçalho · Stepper · Menu lateral · Central · Painel direito · Rodapé colapsável |
+| **CAM3WS-003** | `MACROETAPA_METADATA.objective` + `expected_outputs` expostos em `/can-advance` e renderizados em `WorkspaceRightPanel` |
+
+### Gaps fechados na Sprint K
+
+#### Bloco 1 — CAM3WS-005: Lacunas separadas de Travas
+
+**Problema:** o painel lateral direito mostrava apenas "Travas" (impeditivos). A sócia pediu explicitamente **Lacunas** como seção distinta — informações faltando que o consultor pode preencher em paralelo, sem bloquear o avanço.
+
+**Mudança:**
+- `CanAdvanceResponse.gaps: list[str]` adicionado em [app/schemas/macroetapa.py](../app/schemas/macroetapa.py).
+- `_compute_can_advance` em [app/api/v1/processes.py:437+](../app/api/v1/processes.py) agora escaneia o caso e emite lacunas quando encontra:
+  - Cliente sem e-mail / telefone
+  - Cliente PJ sem razão social
+  - Imóvel sem matrícula / CAR / área / bioma
+  - Processo sem `initial_summary` (voz do cliente)
+- [WorkspaceRightPanel.tsx](../frontend/src/pages/Processes/WorkspaceRightPanel.tsx) ganha bloco amarelo "Lacunas a preencher (não bloqueiam)" distinto do bloco vermelho de Travas.
+
+**Validação:** processo 18 retorna `blockers: [4 docs obrigatórios, checklist incompleto]` + `gaps: [Resumo inicial não registrado]` — seções distintas, confirmado em smoke test.
+
+#### Bloco 2 — CAM3WS-006: Botão Validar saídas
+
+**Problema:** UI da Sprint J já listava artefatos (StageOutputs) com status "Aguardando validação" mas sem CTA para validar. Endpoint `POST /processes/{id}/artifacts/{id}/validate` existia (entregou em sprint anterior).
+
+**Mudança:**
+- [SaidasTab.tsx](../frontend/src/pages/Processes/SaidasTab.tsx) ganha `validateMutation` e botão "Validar" verde no card quando `needs_human_validation && !validated_at`.
+- Pós-validação, React Query invalida `process-artifacts` e o card vira "Validado" sem reload.
+
+**Validação:** artifact criado com `needs_human_validation=true` → POST `/validate` → `validated_at` e `validated_by_user_id` persistidos (smoke test em processo 18, artifact #2).
+
+### Decisões de escopo (Sprint K)
+
+- ❌ **Não** adicionar UI de criação manual de artefato — endpoint `POST /artifacts` já existe, mas criação ideal é via agente (agent produz → `needs_human_validation=true` → consultor valida). Criação manual fica para quando aparecer caso de uso claro.
+- ❌ **Não** refatorar agentes para popularem StageOutput automaticamente — mexe em config de agente (`feedback_agents_config_frozen`). Trigger pós-agente pode ser adicionado em orchestration sem mexer nos agentes em si (Sprint futura).
+- ❌ **Não** adicionar categoria "lacuna crítica" vs "lacuna soft" — nível atual (lista plana em amarelo) basta; sócia pode refinar se precisar.
+- ✅ **Gaps** computados server-side (não duplica lógica no frontend); backend é fonte única de verdade.
+
+### Validações Sprint K
+
+- [x] Backend: `GET /processes/{id}/can-advance` retorna `gaps` (validado em processo 18: 1 gap distinto de 2 blockers)
+- [x] Backend: `POST /processes/{id}/artifacts/{id}/validate` registra `validated_at` + `validated_by_user_id` (validado em artifact #2)
+- [x] Frontend `tsc --noEmit` limpo em `SaidasTab.tsx` e `WorkspaceRightPanel.tsx`
+- [x] Painel lateral mostra Lacunas (amarelo) distintas de Travas (vermelho)
+- [x] Kanban renderiza counts `blocked_count` / `ready_to_advance_count` por coluna (confirmado em `QuadroAcoes.tsx:276-285`)
+
+---
+
 ## HORIZONTE ESTRATÉGICO — AMIGÃO COMO GOVTECH
 
 **Registrado em 2026-04-19 — visão do user.**

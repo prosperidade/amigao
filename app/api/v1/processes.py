@@ -493,12 +493,43 @@ def _compute_can_advance(
 
     meta = MACROETAPA_METADATA.get(current_etapa, {}) if current_etapa else {}
 
+    # CAM3WS-005 (Sprint K) — lacunas informativas (nice-to-have, não travam avanço).
+    # Distintas dos blockers: lacunas sinalizam "informação faltando" que o consultor
+    # pode preencher em paralelo; blockers impedem transição.
+    from app.models.client import Client  # noqa: PLC0415
+    from app.models.property import Property  # noqa: PLC0415
+
+    gaps: list[str] = []
+    if process.client_id:
+        cli = db.query(Client).filter(Client.id == process.client_id).first()
+        if cli:
+            if not cli.email:
+                gaps.append("E-mail do cliente não preenchido")
+            if not cli.phone:
+                gaps.append("Telefone do cliente não preenchido")
+            if cli.client_type and cli.client_type.value == "pj" and not cli.legal_name:
+                gaps.append("Razão social do cliente PJ não preenchida")
+    if process.property_id:
+        prop = db.query(Property).filter(Property.id == process.property_id).first()
+        if prop:
+            if not prop.registry_number:
+                gaps.append("Matrícula do imóvel não preenchida")
+            if not prop.car_code:
+                gaps.append("Código CAR do imóvel não preenchido")
+            if not prop.total_area_ha:
+                gaps.append("Área total do imóvel não informada")
+            if not prop.biome:
+                gaps.append("Bioma do imóvel não identificado")
+    if not process.initial_summary:
+        gaps.append("Resumo inicial da demanda (voz do cliente) não registrado")
+
     return CanAdvanceResponse(
         can_advance=can,
         current_macroetapa=current_etapa.value if current_etapa else None,
         current_state=state_value,
         next_macroetapa=next_etapa,
         blockers=blockers,
+        gaps=gaps,
         objective=meta.get("objective"),
         expected_outputs=meta.get("expected_outputs", []),
     )

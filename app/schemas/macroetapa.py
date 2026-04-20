@@ -78,7 +78,8 @@ class CanAdvanceResponse(BaseModel):
     current_macroetapa: Optional[str] = None
     current_state: Optional[str] = None
     next_macroetapa: Optional[str] = None
-    blockers: list[str] = []
+    blockers: list[str] = []              # impeditivos (travam avanço)
+    gaps: list[str] = []                  # CAM3WS-005 (Sprint K) — lacunas informativas (não travam)
     objective: Optional[str] = None
     expected_outputs: list[str] = []
 
