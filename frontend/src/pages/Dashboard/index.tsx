@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/auth';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import DashboardRegente from './DashboardRegente';
+import DashboardOperacionalRegente from './DashboardOperacionalRegente';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -743,14 +744,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {isLoading ? (
-          <SkeletonStatsCards />
-        ) : (
-          stats.map((item, index) => <StatCard key={index} {...item} />)
-        )}
-      </div>
+      {/* Stats Cards — só na view executivo (operacional tem os 8 do Regente) */}
+      {viewMode === 'executivo' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {isLoading ? (
+            <SkeletonStatsCards />
+          ) : (
+            stats.map((item, index) => <StatCard key={index} {...item} />)
+          )}
+        </div>
+      )}
 
       {/* Regente Cam2 — Blocos 3/4/5/6 (CAM2D-001/002/003/004) */}
       {viewMode === 'executivo' && <DashboardRegente />}
@@ -796,6 +799,9 @@ export default function Dashboard() {
       {/* === OPERACIONAL SECTIONS === */}
       {viewMode === 'operacional' && (
         <div className="space-y-6">
+          {/* Bloco 1 do Sprint F — 8 KPIs + Casos por Etapa + Funil Operacional */}
+          <DashboardOperacionalRegente />
+
           {/* Vigia Alerts Banner */}
           <VigiaAlertsBanner navigate={navigate} />
 

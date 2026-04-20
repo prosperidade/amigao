@@ -20,11 +20,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
-from app.models.client import Client
+from app.models.client import Client, ClientStatus
+from app.models.contract import Contract, ContractStatus
 from app.models.macroetapa import MACROETAPA_LABELS, Macroetapa
 from app.models.document import Document
 from app.models.process import Process, ProcessPriority, ProcessStatus
-from app.models.proposal import Proposal
+from app.models.proposal import Proposal, ProposalStatus
 from app.models.property import Property
 from app.models.task import TERMINAL_TASK_STATUSES, Task
 from app.models.user import User
@@ -652,6 +653,286 @@ def get_kanban_insights(
         logger.warning("kanban_insights cache write failed", exc_info=True)
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Bloco 1 — Dashboard Operacional Regente (8 KPIs + Funil)
+# Matching com o print Lovable da sócia.
+# ---------------------------------------------------------------------------
+
+class KpiValue(BaseModel):
+    """KPI individual com valor e delta opcional em %."""
+    key: str                      # identificador estável (ex: "clientes_ativos")
+    label: str                    # rótulo do card
+    value: int
+    delta_pct: Optional[float] = None  # variação em % vs janela anterior (null se indeterminado)
+    hint: Optional[str] = None    # texto curto de dica (ex: macroetapa usada)
+
+
+class DashboardKpis(BaseModel):
+    """Resposta do endpoint /dashboard/kpis — 8 cards operacionais."""
+    days: int
+    responsible_user_id: Optional[int] = None
+    demand_type: Optional[str] = None
+    kpis: list[KpiValue]
+    funnel: list[StageDistribution]  # distribuição por macroetapa (para funil + barras)
+
+
+def _safe_delta_pct(current: int, previous: int) -> Optional[float]:
+    """Calcula variação percentual. Retorna None quando a base é zero ou baixa demais."""
+    if previous <= 0:
+        return None
+    return round(((current - previous) / previous) * 100.0, 1)
+
+
+def _count_processes_in_window(
+    db: Session,
+    *,
+    tenant_id: int,
+    window_start: datetime,
+    window_end: datetime,
+    macroetapa: Optional[list[str]] = None,
+    responsible_user_id: Optional[int] = None,
+    demand_type: Optional[str] = None,
+) -> int:
+    q = db.query(sa_func.count(Process.id)).filter(
+        Process.tenant_id == tenant_id,
+        Process.deleted_at.is_(None),
+        Process.created_at >= window_start,
+        Process.created_at < window_end,
+    )
+    if macroetapa:
+        q = q.filter(Process.macroetapa.in_(macroetapa))
+    if responsible_user_id:
+        q = q.filter(Process.responsible_user_id == responsible_user_id)
+    if demand_type:
+        q = q.filter(Process.demand_type == demand_type)
+    return q.scalar() or 0
+
+
+@router.get("/kpis", response_model=DashboardKpis)
+def get_dashboard_kpis(
+    days: int = Query(30, ge=1, le=365, description="Janela de comparação em dias."),
+    responsible_user_id: Optional[int] = None,
+    demand_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> DashboardKpis:
+    """Retorna os 8 KPIs operacionais + distribuição por macroetapa (p/ funil)."""
+    tenant_id = current_user.tenant_id
+    now = datetime.now(UTC)
+    window_current = now - timedelta(days=days)
+    window_previous = now - timedelta(days=days * 2)
+
+    # ── Filtros comuns pra contagem SNAPSHOT ────────────────────────────────
+    def _snapshot(query):
+        if responsible_user_id:
+            query = query.filter(Process.responsible_user_id == responsible_user_id)
+        if demand_type:
+            query = query.filter(Process.demand_type == demand_type)
+        return query
+
+    active_statuses_exclude = [
+        ProcessStatus.concluido, ProcessStatus.arquivado, ProcessStatus.cancelado,
+    ]
+
+    # 1. Clientes ativos (snapshot)
+    clientes_ativos = (
+        db.query(sa_func.count(Client.id))
+        .filter(
+            Client.tenant_id == tenant_id,
+            Client.status == ClientStatus.active,
+            Client.deleted_at.is_(None),
+        )
+        .scalar()
+    ) or 0
+    # Delta de clientes: compara criados na janela atual vs anterior
+    clientes_current = (
+        db.query(sa_func.count(Client.id))
+        .filter(
+            Client.tenant_id == tenant_id,
+            Client.created_at >= window_current,
+            Client.created_at < now,
+        )
+        .scalar()
+    ) or 0
+    clientes_previous = (
+        db.query(sa_func.count(Client.id))
+        .filter(
+            Client.tenant_id == tenant_id,
+            Client.created_at >= window_previous,
+            Client.created_at < window_current,
+        )
+        .scalar()
+    ) or 0
+
+    # 2. Casos ativos (snapshot)
+    casos_ativos_q = _snapshot(
+        db.query(sa_func.count(Process.id)).filter(
+            Process.tenant_id == tenant_id,
+            Process.deleted_at.is_(None),
+            Process.status.notin_(active_statuses_exclude),
+        )
+    )
+    casos_ativos = casos_ativos_q.scalar() or 0
+
+    casos_current = _count_processes_in_window(
+        db, tenant_id=tenant_id, window_start=window_current, window_end=now,
+        responsible_user_id=responsible_user_id, demand_type=demand_type,
+    )
+    casos_previous = _count_processes_in_window(
+        db, tenant_id=tenant_id, window_start=window_previous, window_end=window_current,
+        responsible_user_id=responsible_user_id, demand_type=demand_type,
+    )
+
+    # 3/4/5. Casos por macroetapa (snapshot)
+    def _count_by_macroetapa(etapas: list[str]) -> int:
+        q = _snapshot(
+            db.query(sa_func.count(Process.id)).filter(
+                Process.tenant_id == tenant_id,
+                Process.deleted_at.is_(None),
+                Process.macroetapa.in_(etapas),
+                Process.status.notin_(active_statuses_exclude),
+            )
+        )
+        return q.scalar() or 0
+
+    em_diagnostico = _count_by_macroetapa(["diagnostico_preliminar", "diagnostico_tecnico"])
+    em_coleta = _count_by_macroetapa(["coleta_documental"])
+    em_caminho_reg = _count_by_macroetapa(["caminho_regulatorio"])
+
+    # 6. Propostas enviadas (snapshot: atualmente em status=sent)
+    propostas_enviadas = (
+        db.query(sa_func.count(Proposal.id))
+        .filter(
+            Proposal.tenant_id == tenant_id,
+            Proposal.status == ProposalStatus.sent,
+            Proposal.deleted_at.is_(None),
+        )
+        .scalar()
+    ) or 0
+    propostas_current = (
+        db.query(sa_func.count(Proposal.id))
+        .filter(
+            Proposal.tenant_id == tenant_id,
+            Proposal.created_at >= window_current,
+            Proposal.created_at < now,
+        )
+        .scalar()
+    ) or 0
+    propostas_previous = (
+        db.query(sa_func.count(Proposal.id))
+        .filter(
+            Proposal.tenant_id == tenant_id,
+            Proposal.created_at >= window_previous,
+            Proposal.created_at < window_current,
+        )
+        .scalar()
+    ) or 0
+
+    # 7. Contratos enviados (snapshot: atualmente em status=sent)
+    contratos_enviados = (
+        db.query(sa_func.count(Contract.id))
+        .filter(
+            Contract.tenant_id == tenant_id,
+            Contract.status == ContractStatus.sent,
+            Contract.deleted_at.is_(None),
+        )
+        .scalar()
+    ) or 0
+
+    # 8. Casos formalizados (snapshot: macroetapa=contrato_formalizacao OR status=concluido)
+    casos_formalizados_q = _snapshot(
+        db.query(sa_func.count(Process.id)).filter(
+            Process.tenant_id == tenant_id,
+            Process.deleted_at.is_(None),
+        ).filter(
+            sa_func.coalesce(Process.macroetapa, "") == "contrato_formalizacao"
+        )
+    )
+    casos_formalizados = casos_formalizados_q.scalar() or 0
+
+    # ── Funil: distribuição por macroetapa (para gráficos) ──────────────────
+    rows = (
+        _snapshot(
+            db.query(Process.macroetapa, sa_func.count(Process.id))
+            .filter(
+                Process.tenant_id == tenant_id,
+                Process.deleted_at.is_(None),
+                Process.macroetapa.isnot(None),
+                Process.status.notin_(active_statuses_exclude),
+            )
+        )
+        .group_by(Process.macroetapa)
+        .all()
+    )
+    by_etapa: dict[str, int] = {k: v for k, v in rows}
+    funnel: list[StageDistribution] = []
+    for etapa in list(Macroetapa):
+        total = by_etapa.get(etapa.value, 0)
+        funnel.append(StageDistribution(
+            macroetapa=etapa.value,
+            label=MACROETAPA_LABELS[etapa],
+            total=total,
+        ))
+
+    kpis = [
+        KpiValue(
+            key="clientes_ativos",
+            label="Clientes Ativos",
+            value=clientes_ativos,
+            delta_pct=_safe_delta_pct(clientes_current, clientes_previous),
+        ),
+        KpiValue(
+            key="casos_ativos",
+            label="Casos Ativos",
+            value=casos_ativos,
+            delta_pct=_safe_delta_pct(casos_current, casos_previous),
+        ),
+        KpiValue(
+            key="em_diagnostico",
+            label="Em Diagnóstico",
+            value=em_diagnostico,
+            hint="Diagnóstico preliminar + técnico",
+        ),
+        KpiValue(
+            key="em_coleta",
+            label="Em Coleta Documental",
+            value=em_coleta,
+        ),
+        KpiValue(
+            key="em_caminho_regulatorio",
+            label="Em Caminho Regulatório",
+            value=em_caminho_reg,
+        ),
+        KpiValue(
+            key="propostas_enviadas",
+            label="Propostas Enviadas",
+            value=propostas_enviadas,
+            delta_pct=_safe_delta_pct(propostas_current, propostas_previous),
+            hint="Status: enviada",
+        ),
+        KpiValue(
+            key="contratos_enviados",
+            label="Contratos Enviados",
+            value=contratos_enviados,
+            hint="Status: enviado",
+        ),
+        KpiValue(
+            key="casos_formalizados",
+            label="Casos Formalizados",
+            value=casos_formalizados,
+            hint="Macroetapa: contrato e formalização",
+        ),
+    ]
+
+    return DashboardKpis(
+        days=days,
+        responsible_user_id=responsible_user_id,
+        demand_type=demand_type,
+        kpis=kpis,
+        funnel=funnel,
+    )
 
 
 # ---------------------------------------------------------------------------
