@@ -115,6 +115,27 @@ def _get_client_or_404(db: Session, tenant_id: int, client_id: int) -> ClientMod
     return c
 
 
+def _compute_status_label(status: ClientStatus, cases_active: int) -> str:
+    """CAM2CH-002 — Status operacional visual decidido pela sócia em 2026-04-19.
+
+    Mapeia o enum persistido (lead/active/inactive/delinquent/blocked) para os
+    labels operacionais do Regente (ativo / em andamento / sem casos ativos /
+    bloqueado). 'Em andamento' e 'Sem casos ativos' são derivados do volume,
+    não persistidos.
+    """
+    if status == ClientStatus.blocked:
+        return "Bloqueado"
+    if status == ClientStatus.active:
+        return "Em andamento" if cases_active > 0 else "Sem casos ativos"
+    if status == ClientStatus.lead:
+        return "Lead"
+    if status == ClientStatus.inactive:
+        return "Inativo"
+    if status == ClientStatus.delinquent:
+        return "Inadimplente"
+    return "Ativo"
+
+
 def _compute_hub_state(kpis: ClientHubKpis, client_age_days: int, has_alerts: bool) -> str:
     """CAM2CH-009 — deriva estado do hub baseado em volume + idade + alertas."""
     if has_alerts:
@@ -136,7 +157,7 @@ def get_client_hub_summary(
 ) -> Any:
     """CAM2CH-002+003+009 — Cabeçalho + KPIs + chips + estado do hub."""
     from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
-    from app.models.contract import Contract  # noqa: PLC0415
+    from app.models.contract import Contract, ContractStatus  # noqa: PLC0415
 
     c = _get_client_or_404(db, current_user.tenant_id, client_id)
     tenant_id = current_user.tenant_id
@@ -169,6 +190,17 @@ def get_client_hub_summary(
     contracts_emitted = (
         db.query(func.count(Contract.id))
         .filter(Contract.client_id == client_id, Contract.tenant_id == tenant_id)
+        .scalar() or 0
+    )
+
+    # Contratos pendentes (draft/sent não assinados)
+    contracts_pending = (
+        db.query(func.count(Contract.id))
+        .filter(
+            Contract.client_id == client_id,
+            Contract.tenant_id == tenant_id,
+            Contract.status.in_([ContractStatus.draft, ContractStatus.sent]),
+        )
         .scalar() or 0
     )
 
@@ -206,7 +238,7 @@ def get_client_hub_summary(
         is_active=(c.status == ClientStatus.active),
         has_active_cases=cases_active > 0,
         has_doc_pending=pending_critical > 0,
-        has_contract_pending=False,  # TODO: refinar quando ContractStatus existir
+        has_contract_pending=contracts_pending > 0,
         is_pj=(c.client_type and c.client_type.value == "pj"),
     )
 
@@ -224,6 +256,7 @@ def get_client_hub_summary(
         email=c.email,
         phone=c.phone,
         status=c.status.value if c.status else "lead",
+        status_label=_compute_status_label(c.status or ClientStatus.lead, cases_active),
         source_channel=c.source_channel,
         created_at=c.created_at,
     )

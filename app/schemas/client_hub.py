@@ -24,7 +24,8 @@ class ClientHubHeader(BaseModel):
     cpf_cnpj: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    status: str
+    status: str                                  # lead | active | inactive | delinquent | blocked
+    status_label: str = "Ativo"                  # label operacional Regente (CAM2CH-002)
     source_channel: Optional[str] = None
     created_at: Optional[datetime] = None
 

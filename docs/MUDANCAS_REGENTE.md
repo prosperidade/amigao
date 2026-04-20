@@ -1190,7 +1190,96 @@ Para aplicar: `alembic upgrade head` (aditivas, sem downtime).
 - **Filtro Responsável no Dashboard** — precisa endpoint `/users` novo; pragmática: adiar
 - **Integração real de billing** (Pagamento em Configurações) — placeholder UI pronto, backend fora de escopo MVP
 - **2FA** — placeholder visível, implementação em sprint próprio
-- **Cliente Hub / Imóvel Hub** (Camada 2) — próximo alvo natural (gaps listados em CAM2CH e CAM2IH neste doc)
+- **Cliente Hub / Imóvel Hub** (Camada 2) — Cliente Hub entregue na Sprint G (abaixo); Imóvel Hub pendente
+
+---
+
+## SPRINT G — Cliente Hub (Camada 2) ✅ entregue 2026-04-20
+
+**Contexto:** ao retomar o trabalho em 2026-04-20 descobrimos que **~80% do Cliente Hub já existia no código** (backend: 4 endpoints agregadores em `app/api/v1/clients.py`; frontend: `ClientHub.tsx` com 5 abas, KPIs, painel IA lateral, mini-timeline por imóvel), mas nunca havia sido registrado neste doc. Sprint G fecha os **gaps reais** que restavam para considerar CAM2CH-001 a CAM2CH-009 concluídos.
+
+### Já entregue antes (sem registro)
+
+- **CAM2CH-001** Rota `/clients/:id` + componente `ClientHub.tsx`
+- **CAM2CH-003** Dashboard resumido (7 KPI cards)
+- **CAM2CH-004** `GET /clients/{id}/properties-with-status`
+- **CAM2CH-005** Mini-timeline de eventos por imóvel (via AuditLog)
+- **CAM2CH-006** `GET /clients/{id}/timeline`
+- **CAM2CH-007** Painel lateral IA (determinístico — `GET /clients/{id}/ai-summary`)
+- **CAM2CH-008** Abas: Visão geral / Imóveis / Casos / Contratos (era placeholder) / Histórico
+- **CAM2CH-009** Estados computados do hub (`_compute_hub_state`)
+
+### Gaps fechados na Sprint G
+
+#### Bloco 1 — Status operacional conforme decisão da sócia (2026-04-19)
+
+Decisão da sócia: status do cliente = `ativo / em andamento / sem casos ativos / bloqueado`. O enum persistido continua `lead/active/inactive/delinquent` (já havia dados); adicionamos `blocked` e derivamos os outros labels visualmente no `status_label`.
+
+**Backend:**
+- Migration `d8b3f7c2e5a9` — `ALTER TYPE clientstatus ADD VALUE IF NOT EXISTS 'blocked'`
+- Modelo [app/models/client.py](../app/models/client.py) — novo valor `ClientStatus.blocked`
+- Novo helper `_compute_status_label()` em [app/api/v1/clients.py](../app/api/v1/clients.py) mapeando:
+  - `status=blocked` → "Bloqueado"
+  - `status=active & cases_active>0` → "Em andamento"
+  - `status=active & cases_active==0` → "Sem casos ativos"
+  - `status=lead/inactive/delinquent` → labels originais
+- Schema `ClientHubHeader` ganha campo `status_label: str`
+
+**Frontend:**
+- `STATUS_CLS` — mapa de classes CSS por status persistido (blocked vermelho, active verde, lead azul, etc.)
+- Cabeçalho agora exibe **dois badges** lado a lado: (1) status operacional Regente (derivado), (2) estado do hub (computed)
+
+#### Bloco 2 — `has_contract_pending` real
+
+Antes: `has_contract_pending: False` hardcoded com TODO. Agora: conta contratos em `status in (draft, sent)` do cliente no tenant atual.
+
+#### Bloco 3 — Aba Contratos real
+
+Era placeholder "Em construção". Agora consome `GET /contracts?client_id=X` (endpoint já existia) e lista contratos com:
+- Badge de status (rascunho / enviado / assinado / cancelado) com ícone
+- Flag `has_pdf`
+- Contexto: caso vinculado, data relevante (signed_at / sent_at / created_at)
+- CTA "Abrir caso" quando houver `process_id`
+
+#### Bloco 4 — Aba Documentos (nova)
+
+Nova aba para a ação "Ver documentos" do CAM2CH-002. Precisou de pequena extensão no backend:
+- [app/api/v1/documents.py](../app/api/v1/documents.py) `GET /documents/` aceita `client_id` query param quando o usuário é interno (portal continua com escopo fixo em `access_context.client_id`)
+- Frontend: novo componente `DocumentsTab` consumindo `/documents?client_id=X` com filename, categoria, status, tamanho e link para o caso vinculado
+
+#### Bloco 5 — Ações rápidas completas (6 itens)
+
+Antes: 4 botões. Agora alinhado com CAM2CH-002 (6 ações):
+- `+ Novo caso` → `/intake`
+- `Ver contratos` → aba contracts
+- `Ver diagnósticos` → aba cases
+- `Adicionar imóvel` → `/properties`
+- **`Gerar resumo`** (novo) → invalida cache do `ai-summary` e faz scroll suave ao painel lateral IA
+- **`Ver documentos`** (novo) → aba documents
+
+### Chain de migrations Sprint F → Sprint G
+
+```
+a3f5c7b9d2e4  process_decisions               (Sprint E)
+b7d9e1f3a5c8  users.preferences               (Sprint F · Bloco 2)
+c9f1a3b5d7e2  intake_drafts.expires_at        (Sprint F · Bloco 3)
+d8b3f7c2e5a9  clientstatus.blocked            (Sprint G)      ← HEAD
+```
+
+Aditiva e sem downtime: `alembic upgrade head`.
+
+### Decisões de escopo (Sprint G)
+
+- ❌ **Não** trocar `/ai-summary` determinístico por chamada a `agent_acompanhamento` — respeita `feedback_agents_config_frozen` + decisão da sócia sobre IA do Dashboard (1x/dia). Mantém TODO no endpoint.
+- ❌ **Não** criar endpoint `/clients/{id}/contracts` — reusa `/contracts?client_id=X` existente.
+- ❌ **Não** implementar blocos condicionais (procuração, contrato societário, etc.) — sócia mandou desconsiderar no MVP (pergunta 9, 2026-04-19).
+- ✅ Permitir `client_id` em `/documents/` para usuários internos — mudança pequena, preserva escopo do portal.
+
+### Validações Sprint G
+
+- [x] Backend: `ClientStatus.blocked` presente, helper `_compute_status_label` exportado implicitamente via response
+- [x] Frontend `tsc --noEmit` limpo em `ClientHub.tsx`
+- [x] Migration aplicável idempotentemente (usa `IF NOT EXISTS`) e única HEAD na chain
 
 ---
 

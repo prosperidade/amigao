@@ -83,18 +83,26 @@ def list_document_categories(
 @router.get("/", response_model=list[DocumentResponse])
 def list_documents(
     process_id: Optional[int] = None,
+    client_id: Optional[int] = None,
     db: Session = Depends(get_db),
     access_context: AccessContext = Depends(get_access_context),
 ):
-    """Lista documentos respeitando o escopo do usuário autenticado."""
+    """Lista documentos respeitando o escopo do usuário autenticado.
+
+    - Usuário do portal: escopo fixo no próprio client_id (query param ignorado).
+    - Usuário interno (consultor): pode filtrar por client_id e/ou process_id.
+    """
     doc_repo = DocumentRepository(db, access_context.tenant_id)
 
     if process_id:
         proc_repo = ProcessRepository(db, access_context.tenant_id)
         proc_repo.get_scoped_or_404(process_id, client_id=access_context.client_id)
 
+    # Portal tem escopo fixo; interno usa query param quando fornecido.
+    effective_client_id = access_context.client_id if access_context.client_id else client_id
+
     return doc_repo.list_scoped(
-        client_id=access_context.client_id,
+        client_id=effective_client_id,
         process_id=process_id,
     )
 

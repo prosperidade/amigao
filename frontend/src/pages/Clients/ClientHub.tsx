@@ -8,12 +8,12 @@
  *  Bloco 5 — Timeline de eventos
  *  Abas internas: Visão geral / Imóveis / Casos / Contratos / Histórico
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Mail, Phone, Building2, MapPin, Briefcase, FileText,
-  AlertTriangle, Clock, Plus, Sparkles,
+  AlertTriangle, Clock, Plus, Sparkles, Folder, RefreshCw, CheckCircle2, Send,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MACROETAPA_LABELS, MACROETAPA_STATE_BADGE } from '@/pages/Processes/quadro-types';
@@ -29,6 +29,7 @@ interface ClientHubHeader {
   email: string | null;
   phone: string | null;
   status: string;
+  status_label: string;
   source_channel: string | null;
   created_at: string | null;
 }
@@ -99,6 +100,26 @@ interface TimelineItem {
   user_id: number | null;
 }
 
+// CAM2CH-008 — Aba Contratos (lista real via /contracts?client_id=X)
+interface ClientContract {
+  id: number;
+  title: string;
+  status: 'draft' | 'sent' | 'signed' | 'cancelled';
+  process_id: number | null;
+  proposal_id: number | null;
+  has_pdf: boolean;
+  signed_at: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+const CONTRACT_STATUS_META: Record<ClientContract['status'], { label: string; cls: string; icon: React.ReactNode }> = {
+  draft:     { label: 'Rascunho', cls: 'bg-gray-100 text-gray-700', icon: <FileText className="w-3 h-3" /> },
+  sent:      { label: 'Enviado', cls: 'bg-sky-100 text-sky-700', icon: <Send className="w-3 h-3" /> },
+  signed:    { label: 'Assinado', cls: 'bg-emerald-100 text-emerald-700', icon: <CheckCircle2 className="w-3 h-3" /> },
+  cancelled: { label: 'Cancelado', cls: 'bg-red-100 text-red-700', icon: <AlertTriangle className="w-3 h-3" /> },
+};
+
 const HUB_STATE_LABEL: Record<string, { label: string; cls: string }> = {
   recem_criado:   { label: 'Recém-criado', cls: 'bg-gray-100 text-gray-700' },
   em_construcao:  { label: 'Em construção', cls: 'bg-blue-100 text-blue-700' },
@@ -107,15 +128,26 @@ const HUB_STATE_LABEL: Record<string, { label: string; cls: string }> = {
   consolidado:    { label: 'Consolidado', cls: 'bg-violet-100 text-violet-700' },
 };
 
-type TabKey = 'overview' | 'properties' | 'cases' | 'contracts' | 'history';
+// CAM2CH-002 — cor do status operacional (labels decididos pela sócia 2026-04-19)
+const STATUS_CLS: Record<string, string> = {
+  blocked: 'bg-red-100 text-red-700 border-red-200',
+  active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  lead: 'bg-sky-100 text-sky-700 border-sky-200',
+  inactive: 'bg-gray-100 text-gray-600 border-gray-200',
+  delinquent: 'bg-amber-100 text-amber-700 border-amber-200',
+};
+
+type TabKey = 'overview' | 'properties' | 'cases' | 'contracts' | 'documents' | 'history';
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function ClientHub() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const clientId = parseInt(id ?? '0', 10);
   const [tab, setTab] = useState<TabKey>('overview');
+  const aiPanelRef = useRef<HTMLDivElement>(null);
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ['client-hub-summary', clientId],
@@ -141,6 +173,21 @@ export default function ClientHub() {
     enabled: !!clientId,
     staleTime: 60_000,
   });
+
+  const { data: contracts = [], isLoading: contractsLoading } = useQuery({
+    queryKey: ['client-hub-contracts', clientId],
+    queryFn: () => api.get<ClientContract[]>(`/contracts/?client_id=${clientId}`).then(r => r.data),
+    enabled: !!clientId && tab === 'contracts',
+  });
+
+  const handleGenerateSummary = () => {
+    queryClient.invalidateQueries({ queryKey: ['client-hub-ai-summary', clientId] });
+    aiPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const handleViewDocuments = () => {
+    setTab('documents');
+  };
 
   if (isLoading || !summary) {
     return (
@@ -182,9 +229,14 @@ export default function ClientHub() {
               </p>
             </div>
           </div>
-          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${hubState.cls}`}>
-            {hubState.label}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${STATUS_CLS[header.status] ?? STATUS_CLS.active}`}>
+              {header.status_label}
+            </span>
+            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${hubState.cls}`}>
+              {hubState.label}
+            </span>
+          </div>
         </div>
 
         {/* Identificação */}
@@ -218,12 +270,14 @@ export default function ClientHub() {
           <Chip cls="bg-slate-100 text-slate-700">{chips.is_pj ? 'PJ' : 'PF'}</Chip>
         </div>
 
-        {/* Ações rápidas */}
+        {/* Ações rápidas (CAM2CH-002) */}
         <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100 dark:border-white/10">
           <ActionBtn icon={<Plus className="w-3.5 h-3.5" />} onClick={() => navigate('/intake')}>Novo caso</ActionBtn>
           <ActionBtn icon={<Briefcase className="w-3.5 h-3.5" />} onClick={() => setTab('contracts')}>Ver contratos</ActionBtn>
           <ActionBtn icon={<FileText className="w-3.5 h-3.5" />} onClick={() => setTab('cases')}>Ver diagnósticos</ActionBtn>
           <ActionBtn icon={<Building2 className="w-3.5 h-3.5" />} onClick={() => navigate('/properties')}>Adicionar imóvel</ActionBtn>
+          <ActionBtn icon={<RefreshCw className="w-3.5 h-3.5" />} onClick={handleGenerateSummary}>Gerar resumo</ActionBtn>
+          <ActionBtn icon={<Folder className="w-3.5 h-3.5" />} onClick={handleViewDocuments}>Ver documentos</ActionBtn>
         </div>
       </div>
 
@@ -247,12 +301,13 @@ export default function ClientHub() {
         {/* Abas + conteúdo central */}
         <div className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 overflow-hidden min-w-0">
           <div className="border-b border-gray-100 dark:border-white/10 flex gap-0 overflow-x-auto">
-            {(['overview', 'properties', 'cases', 'contracts', 'history'] as TabKey[]).map(k => {
+            {(['overview', 'properties', 'cases', 'contracts', 'documents', 'history'] as TabKey[]).map(k => {
               const labels: Record<TabKey, string> = {
                 overview: 'Visão geral',
                 properties: `Imóveis (${kpis.properties_count})`,
                 cases: `Casos (${kpis.cases_active + kpis.cases_completed})`,
                 contracts: `Contratos (${kpis.contracts_emitted})`,
+                documents: 'Documentos',
                 history: 'Histórico',
               };
               const active = tab === k;
@@ -278,13 +333,14 @@ export default function ClientHub() {
             )}
             {tab === 'properties' && <PropertiesTab properties={properties} navigate={navigate} />}
             {tab === 'cases' && <CasesTab properties={properties} navigate={navigate} />}
-            {tab === 'contracts' && <PlaceholderTab title="Contratos" message="Em construção — Camada 4 trará a listagem completa." />}
+            {tab === 'contracts' && <ContractsTab contracts={contracts} loading={contractsLoading} navigate={navigate} />}
+            {tab === 'documents' && <DocumentsTab clientId={clientId} navigate={navigate} />}
             {tab === 'history' && <HistoryTab timeline={timeline} />}
           </div>
         </div>
 
         {/* CAM2CH-007 — Painel lateral de IA */}
-        <aside className="lg:sticky lg:top-4 h-fit">
+        <aside ref={aiPanelRef} className="lg:sticky lg:top-4 h-fit">
           <AIPanel summary={aiSummary} onFocusProperty={(pid) => {
             setTab('properties');
             setTimeout(() => document.getElementById(`prop-${pid}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
@@ -506,11 +562,113 @@ function HistoryTab({ timeline }: { timeline: TimelineItem[] }) {
   );
 }
 
-function PlaceholderTab({ title, message }: { title: string; message: string }) {
+// CAM2CH-008 — Aba Contratos (lista real via /contracts?client_id=X)
+function ContractsTab({
+  contracts, loading, navigate,
+}: { contracts: ClientContract[]; loading: boolean; navigate: (p: string) => void }) {
+  if (loading) {
+    return <div className="animate-pulse space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-gray-100 dark:bg-white/5" />)}</div>;
+  }
+  if (contracts.length === 0) {
+    return <p className="text-sm text-gray-400 italic">Nenhum contrato emitido para este cliente.</p>;
+  }
   return (
-    <div className="text-center py-12 text-gray-500">
-      <h3 className="font-semibold mb-1">{title}</h3>
-      <p className="text-sm">{message}</p>
+    <div className="space-y-2">
+      {contracts.map(c => {
+        const meta = CONTRACT_STATUS_META[c.status];
+        return (
+          <div
+            key={c.id}
+            className="p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 flex items-start justify-between gap-3"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-gray-900 dark:text-white truncate">{c.title}</span>
+                <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium ${meta.cls}`}>
+                  {meta.icon}{meta.label}
+                </span>
+                {c.has_pdf && <span className="text-[10px] text-gray-500">📄 PDF</span>}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Contrato #{c.id}
+                {c.process_id && ` · Caso #${c.process_id}`}
+                {c.signed_at && ` · Assinado ${formatRelative(c.signed_at)}`}
+                {!c.signed_at && c.sent_at && ` · Enviado ${formatRelative(c.sent_at)}`}
+                {!c.signed_at && !c.sent_at && ` · Criado ${formatRelative(c.created_at)}`}
+              </p>
+            </div>
+            {c.process_id && (
+              <button
+                onClick={() => navigate(`/processes/${c.process_id}`)}
+                className="text-xs px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-700 hover:bg-emerald-200 shrink-0"
+              >
+                Abrir caso
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// CAM2CH-002 — Aba Documentos (lista todos docs do cliente via /documents?client_id=X)
+interface ClientDocument {
+  id: number;
+  original_file_name: string;
+  content_type: string;
+  file_size_bytes: number;
+  document_category: string | null;
+  document_type: string | null;
+  ocr_status: string | null;
+  process_id: number | null;
+  created_at: string;
+}
+
+function DocumentsTab({ clientId, navigate }: { clientId: number; navigate: (p: string) => void }) {
+  const { data: docs = [], isLoading } = useQuery({
+    queryKey: ['client-hub-documents', clientId],
+    queryFn: () => api.get<ClientDocument[]>(`/documents/?client_id=${clientId}`).then(r => r.data),
+    enabled: !!clientId,
+  });
+
+  if (isLoading) {
+    return <div className="animate-pulse space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-gray-100 dark:bg-white/5" />)}</div>;
+  }
+  if (docs.length === 0) {
+    return <p className="text-sm text-gray-400 italic">Nenhum documento vinculado a este cliente.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {docs.map(d => (
+        <div
+          key={d.id}
+          className="p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 flex items-start justify-between gap-3"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Folder className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <span className="font-medium text-gray-900 dark:text-white text-sm truncate">{d.original_file_name}</span>
+              {d.document_category && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">{d.document_category}</span>}
+              {d.ocr_status && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{d.ocr_status}</span>}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {d.content_type}
+              {d.file_size_bytes > 0 && ` · ${(d.file_size_bytes / 1024).toFixed(1)} KB`}
+              {d.process_id && ` · Caso #${d.process_id}`}
+              {` · ${formatRelative(d.created_at)}`}
+            </p>
+          </div>
+          {d.process_id && (
+            <button
+              onClick={() => navigate(`/processes/${d.process_id}`)}
+              className="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0"
+            >
+              Abrir caso
+            </button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

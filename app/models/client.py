@@ -17,6 +17,7 @@ class ClientStatus(str, enum.Enum):
     active = "active"
     inactive = "inactive"
     delinquent = "delinquent"
+    blocked = "blocked"
 
 
 class Client(Base):
