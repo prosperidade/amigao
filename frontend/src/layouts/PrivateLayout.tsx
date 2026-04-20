@@ -11,6 +11,7 @@ import {
   Leaf,
   FileText,
   Bot,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAgentEvents } from '@/hooks/useAgentEvents';
@@ -48,6 +49,7 @@ export default function PrivateLayout() {
     { name: 'Imóveis', icon: MapPin, path: '/properties' },
     { name: 'Propostas', icon: FileText, path: '/proposals' },
     { name: 'Agentes IA', icon: Bot, path: '/agents' },
+    { name: 'Configurações', icon: SettingsIcon, path: '/settings' },
   ];
 
   return (

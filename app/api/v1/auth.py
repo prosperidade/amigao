@@ -14,6 +14,13 @@ from app.models.client import Client
 from app.models.user import User
 from app.schemas.token import Token
 from app.schemas.user import User as UserSchema
+from app.schemas.user_preferences import (
+    PasswordChangeRequest,
+    PreferencesUpdate,
+    UserMeResponse,
+    UserPreferences,
+    UserProfileUpdate,
+)
 
 router = APIRouter()
 
@@ -121,6 +128,87 @@ def read_users_me(
     Retorna os dados do usuário autenticado.
     """
     return current_user
+
+
+# ── Regente Sprint F Bloco 2 — Configurações (Camada 4) ────────────────────
+
+@router.get("/me/full", response_model=UserMeResponse)
+def read_me_full(
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Retorna usuário autenticado + preferências expandidas (6 abas do Settings)."""
+    raw_prefs = current_user.preferences or {}
+    prefs = UserPreferences(**raw_prefs) if isinstance(raw_prefs, dict) else UserPreferences()
+    return UserMeResponse(
+        id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        is_active=current_user.is_active,
+        is_superuser=current_user.is_superuser,
+        preferences=prefs,
+    )
+
+
+@router.patch("/me", response_model=UserMeResponse)
+def update_me(
+    body: UserProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Atualiza nome e/ou email do próprio usuário."""
+    if body.email is not None:
+        new_email = body.email.strip().lower()
+        if new_email != current_user.email:
+            existing = _get_user_by_email(db, new_email)
+            if existing and existing.id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Email já em uso",
+                )
+            current_user.email = new_email
+    if body.full_name is not None:
+        current_user.full_name = body.full_name.strip()
+    db.commit()
+    db.refresh(current_user)
+    return read_me_full(current_user)  # reusa serialização
+
+
+@router.patch("/me/preferences", response_model=UserPreferences)
+def update_me_preferences(
+    body: PreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Merge parcial nas preferências (aceita qualquer subset dos 4 grupos)."""
+    # Carrega estado atual e aplica merge por grupo.
+    raw_prefs = current_user.preferences or {}
+    if not isinstance(raw_prefs, dict):
+        raw_prefs = {}
+    current = UserPreferences(**raw_prefs)
+    patch = body.model_dump(exclude_unset=True, exclude_none=True)
+    merged = current.model_copy(update=patch)
+
+    current_user.preferences = merged.model_dump()
+    db.commit()
+    db.refresh(current_user)
+    return merged
+
+
+@router.post("/password-change", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    body: PasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Troca a senha do usuário autenticado. Exige senha atual correta."""
+    if not security.verify_password(body.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senha atual incorreta",
+        )
+    current_user.hashed_password = security.get_password_hash(body.new_password)
+    db.commit()
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)

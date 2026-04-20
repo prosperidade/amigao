@@ -16,6 +16,7 @@ import ProposalList from './pages/Proposals/ProposalList';
 import ProposalEditor from './pages/Proposals/ProposalEditor';
 import ContractEditor from './pages/Contracts/ContractEditor';
 import AgentsPage from './pages/AI/AgentsPage';
+import Settings from './pages/Settings';
 
 // Query Client para gerenciar cache das requisições
 const queryClient = new QueryClient({
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/proposals/:id" element={<ProposalEditor />} />
             <Route path="/contracts/:id" element={<ContractEditor />} />
             <Route path="/agents" element={<AgentsPage />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
           
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
