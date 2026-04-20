@@ -400,6 +400,7 @@ def _serialize_draft(d: IntakeDraft) -> IntakeDraftResponse:
         has_minimal_base=has_minimal_base(d.form_data or {}),
         created_at=d.created_at.isoformat() if d.created_at else None,
         updated_at=d.updated_at.isoformat() if d.updated_at else None,
+        expires_at=d.expires_at.isoformat() if d.expires_at else None,
     )
 
 
@@ -426,6 +427,7 @@ def create_draft(
         form_data=payload.form_data or {},
         state=_compute_state(payload.form_data or {}),
     )
+    draft.refresh_expiration()  # TTL 15 dias
     db.add(draft)
     db.commit()
     db.refresh(draft)
@@ -438,13 +440,18 @@ def list_drafts(
     current_user: User = Depends(get_current_internal_user),
     state: Optional[str] = None,
 ) -> Any:
-    """Lista rascunhos do tenant, filtrando os já commitados por padrão."""
+    """Lista rascunhos do tenant, filtrando os já commitados/expirados por padrão."""
+    from datetime import datetime, timezone  # noqa: PLC0415
+    now = datetime.now(timezone.utc)
     q = db.query(IntakeDraft).filter(IntakeDraft.tenant_id == current_user.tenant_id)
     if state:
         q = q.filter(IntakeDraft.state == state)
     else:
-        # Por padrão, esconder drafts já commitados
+        # Por padrão, esconder drafts já commitados e já expirados
         q = q.filter(IntakeDraft.state != IntakeDraftState.card_criado)
+        q = q.filter(
+            (IntakeDraft.expires_at.is_(None)) | (IntakeDraft.expires_at >= now)
+        )
     drafts = q.order_by(IntakeDraft.updated_at.desc().nullslast(), IntakeDraft.created_at.desc()).all()
     return [_serialize_draft(d) for d in drafts]
 
@@ -488,6 +495,9 @@ def update_draft(
     if payload.form_data is not None:
         draft.form_data = payload.form_data
         draft.state = _compute_state(payload.form_data)
+
+    # TTL: cada edição renova o prazo de 15 dias.
+    draft.refresh_expiration()
 
     db.commit()
     db.refresh(draft)

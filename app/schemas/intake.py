@@ -129,6 +129,8 @@ class IntakeDraftResponse(BaseModel):
     has_minimal_base: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    # Sprint F Bloco 3 — rascunho expira em 15 dias (decisão sócia 2026-04-19).
+    expires_at: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -133,6 +133,7 @@ export default function IntakeWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftId, setDraftId] = useState<number | null>(null);
+  const [draftExpiresAt, setDraftExpiresAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
@@ -292,11 +293,13 @@ export default function IntakeWizard() {
         form_data: buildPayload(),
       };
       if (draftId) {
-        await api.patch(`/intake/drafts/${draftId}`, body);
+        const { data } = await api.patch(`/intake/drafts/${draftId}`, body);
+        setDraftExpiresAt(data?.expires_at ?? null);
         return draftId;
       }
       const { data } = await api.post('/intake/drafts', body);
       setDraftId(data.id);
+      setDraftExpiresAt(data.expires_at ?? null);
       return data.id as number;
     } catch {
       return null;
@@ -342,6 +345,8 @@ export default function IntakeWizard() {
             🌿 Nova Demanda
           </h1>
           <p className="text-slate-400 mt-1">Cadastro guiado de caso ambiental</p>
+          {/* Sprint F Bloco 3: rascunho expira em 15 dias */}
+          {draftExpiresAt && <DraftExpirationBadge expiresAt={draftExpiresAt} />}
         </div>
 
         {/* Stepper */}
@@ -780,5 +785,29 @@ function SummaryRow({ icon, label, children }: { icon: string; label: string; ch
         <span className="text-sm text-white font-medium">{children}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * Sprint F Bloco 3 — Regente Cam1: rascunho expira em 15 dias (sócia 2026-04-19).
+ * Mostra um badge com dias restantes. Amarelo se <= 3 dias.
+ */
+function DraftExpirationBadge({ expiresAt }: { expiresAt: string }) {
+  const diffMs = new Date(expiresAt).getTime() - Date.now();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return null;
+
+  const urgent = diffDays <= 3;
+  const cls = urgent
+    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+    : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 mt-3 text-xs px-3 py-1 rounded-full border ${cls}`}
+      title="Rascunho \u00e9 mantido por at\u00e9 15 dias sem atividade."
+    >
+      \ud83d\udcbe Rascunho salvo \u00b7 expira em {diffDays === 0 ? 'hoje' : `${diffDays} dia${diffDays > 1 ? 's' : ''}`}
+    </span>
   );
 }

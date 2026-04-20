@@ -45,6 +45,11 @@ celery_app.conf.update(
             "task": "workers.acompanhamento_check_all",
             "schedule": crontab(minute="*/30"),  # a cada 30 minutos
         },
+        # Sprint F Bloco 3 — expira rascunhos de cadastro após 15 dias.
+        "cleanup-expired-intake-drafts": {
+            "task": "workers.cleanup_expired_intake_drafts",
+            "schedule": crontab(hour=2, minute=30),  # 02:30 BRT diário (off-peak)
+        },
     },
 )
 
