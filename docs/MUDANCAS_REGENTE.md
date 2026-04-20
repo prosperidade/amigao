@@ -1453,6 +1453,73 @@ Revalidado no código em 2026-04-20:
 
 ---
 
+## SPRINT J — Workspace polish (Camada 3) ✅ entregue 2026-04-20
+
+**Contexto:** o user sinalizou que o menu lateral do workspace tinha itens que duplicavam o stepper horizontal do topo. Após reler `amigao_regente/CAMADA 3 - WORKSPACE EDIT1.pdf` ficou claro o alvo: alinhar o menu lateral aos 8 itens da sócia (Visão geral / Ações / Documentos / Dados / IA da etapa / Histórico / Decisões / Saídas), tornar o stepper informativo (4 estados) e clicável. A Sprint J entrega isso + remove a duplicata real ("Trilha") + aponta o rodapé colapsável para o conteúdo certo.
+
+### Descobertas do audit (o que já existia)
+
+- **Rodapé colapsável** (CAM3WS-009) **já existia** em [ProcessDetail.tsx:234+](../frontend/src/pages/Processes/ProcessDetail.tsx) — apenas estava exibindo `WorkflowTimeline` (trilha do template), não os eventos (audit log) que a sócia pediu. Troca simples.
+- **Endpoint de Saídas** (CAM3WS-006) `GET /processes/{id}/artifacts` já existia em [app/api/v1/processes.py:697](../app/api/v1/processes.py) com `StageOutputResponse` — UI nunca consumiu.
+- **MacroetapaState** completo com 7 estados (`nao_iniciada`, `em_andamento`, `aguardando_input`, `aguardando_validacao`, `pronta_para_avancar`, `travada`, `concluida`) exposto em `/can-advance.current_state` + `blockers[]`. Base pronta para o stepper 4 estados.
+
+### Gaps fechados na Sprint J
+
+#### Bloco 1 — Menu lateral reorganizado (CAM3WS-007)
+
+Antes (9 itens): Diagnóstico · Dossiê · **Trilha** · Decisões · Comercial · Tarefas · Documentos · Timeline · IA
+
+Agora (9 itens — alinhado à sócia + Comercial como condicional):
+**Visão geral** · **Ações** · Documentos · **Dados** · IA · **Histórico** · Decisões · **Saídas** · Comercial
+
+- ❌ **Removido**: "Trilha" (`workflow` TabKey) — duplicava o stepper horizontal do topo.
+- 🏷 **Renomeados**: `Diagnóstico → Visão geral` · `Dossiê → Dados` · `Tarefas → Ações` · `Timeline → Histórico`. Keys preservadas para não quebrar state.
+- ➕ **Adicionado**: tab "Saídas" (`saidas`) → novo componente [SaidasTab.tsx](../frontend/src/pages/Processes/SaidasTab.tsx) consumindo `GET /processes/{id}/artifacts`. Agrupa por macroetapa, marca produced_by (usuário/agente) e status de validação humana.
+- 🔀 **Rodapé colapsável** agora exibe `TimelineTab` (audit events: uploads, status, decisões, propostas, contratos) conforme sócia — antes exibia `WorkflowTimeline` (redundante com o stepper).
+
+#### Bloco 2 — Stepper com 4 estados + clicável (CAM3WS-008 / Opção A)
+
+Antes: 3 estados visuais (ativo / concluído / futuro), não-clicável.
+
+Agora: 5 visuais alinhados à sócia + futura:
+
+| Estado | Visual | Origem |
+|---|---|---|
+| Concluída | verde claro + ✓ | etapa < current |
+| Ativa | verde destacado | `em_andamento` / `pronta_para_avancar` |
+| Bloqueada | vermelho + ! | `travada` (inclui blockers) |
+| Aguardando pré-requisito | amarelo + ⏳ | `aguardando_input` / `aguardando_validacao` |
+| Futura | cinza | etapa > current |
+
+- Fonte de verdade: novo consumo de `GET /processes/{id}/can-advance` no [ProcessDetail.tsx:81+](../frontend/src/pages/Processes/ProcessDetail.tsx) → `current_state` + `blockers[]`.
+- **Opção A clicável** (decisão do user em 2026-04-20): clicar em qualquer etapa seta `viewingStage` (state local). Tabs relevantes passam a filtrar por essa etapa:
+  - `SaidasTab` → `?macroetapa=X` no endpoint
+  - `DecisionsTab` → prop `currentMacroetapa={viewingStage ?? currentStage}`
+  - (IA/AIPanel fica para sprint próxima quando expor filtro por etapa)
+- Banner violeta abaixo do stepper quando `viewingStage !== currentStage` com CTA "Voltar à etapa atual".
+- Anel violeta (`ring-2 ring-violet-400`) destaca a etapa sendo visualizada.
+
+#### Bloco 3 — CAM3WS-009 já cumprido
+
+O rodapé colapsável já existia; Sprint J só trocou o conteúdo pra `TimelineTab` (audit events). Sem alteração estrutural.
+
+### Decisões de escopo (Sprint J)
+
+- ❌ **Não** refatorar `AIPanel` para aceitar `viewingStage` — o componente hoje usa `processDemandType` e `processDescription`; adicionar filtro por etapa depende de endpoint novo. Adiado.
+- ❌ **Não** enriquecer `MacroetapaStatusResponse.steps[].status` com 7 estados no backend — o frontend compõe visual a partir de `can-advance` (fonte já existente), evita mudar contrato de schema estável.
+- ❌ **Não** deletar `WorkflowTimeline.tsx` — o componente ainda pode ser útil em outra tela (ex: ver trilha do template do caso). Ficou apenas sem uso em `ProcessDetail`.
+- ✅ **Manter** tab Comercial no menu (sócia trata como condicional etapa 6/7) — não compromete.
+- ✅ **Histórico** (TimelineTab) aparece em dois lugares: tab lateral + rodapé colapsável. Intencional — sócia sugeriu "Rodapé OU timeline". Ambos acessos OK.
+
+### Validações Sprint J
+
+- [x] Frontend `tsc --noEmit` limpo em `ProcessDetail.tsx` / `SaidasTab.tsx` / `ProcessDetailTypes.ts`
+- [x] `GET /processes/{id}/artifacts` já respondia antes da Sprint (endpoint `SaidasTab` consome sem mudança backend)
+- [x] `GET /processes/{id}/can-advance` já expõe `current_state` + `blockers` (usado pelo stepper)
+- [x] Stepper clicável seta `viewingStage` e aciona banner + filtro em SaidasTab/DecisionsTab
+
+---
+
 ## HORIZONTE ESTRATÉGICO — AMIGÃO COMO GOVTECH
 
 **Registrado em 2026-04-19 — visão do user.**

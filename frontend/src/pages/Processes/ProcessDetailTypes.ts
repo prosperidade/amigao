@@ -2,8 +2,8 @@
  * ProcessDetail — Shared types and constants
  */
 import {
-  Stethoscope, LayoutGrid, GitBranch, Briefcase, ListChecks,
-  FolderOpen, CalendarDays, Bot, Scale,
+  Stethoscope, LayoutGrid, Briefcase, ListChecks,
+  FolderOpen, CalendarDays, Bot, Scale, PackageCheck,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,6 +19,7 @@ export interface Process {
   urgency: string;
   process_type: string;
   demand_type: string | null;
+  macroetapa: string | null;   // ver Process schema do backend; usado p/ stepper
   intake_source: string | null;
   initial_diagnosis: string | null;
   suggested_checklist_template: string | null;
@@ -98,14 +99,18 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
   aguardando: 'Aguardando', revisao: 'Revisao', concluida: 'Concluida', cancelada: 'Cancelada',
 };
 
+// CAM3WS-007 (Sprint J) — Menu lateral alinhado com a sócia:
+// Visão geral / Ações / Documentos / Dados / IA / Histórico / Decisões / Saídas.
+// Comercial mantido como bloco condicional (sócia: etapa 6+7).
+// "Trilha" removida (duplicava o stepper horizontal do topo).
 export const TABS = [
-  { key: 'diagnosis',  label: 'Diagnostico', icon: Stethoscope },
-  { key: 'dossier',    label: 'Dossie',       icon: LayoutGrid },
-  { key: 'workflow',   label: 'Trilha',        icon: GitBranch },
+  { key: 'diagnosis',  label: 'Vis\u00e3o geral', icon: Stethoscope },
+  { key: 'tasks',      label: 'A\u00e7\u00f5es',       icon: ListChecks },
+  { key: 'documents',  label: 'Documentos',       icon: FolderOpen },
+  { key: 'dossier',    label: 'Dados',            icon: LayoutGrid },
+  { key: 'ai',         label: 'IA',               icon: Bot },
+  { key: 'timeline',   label: 'Hist\u00f3rico',      icon: CalendarDays },
   { key: 'decisions',  label: 'Decis\u00f5es',       icon: Scale },
-  { key: 'commercial', label: 'Comercial',     icon: Briefcase },
-  { key: 'tasks',      label: 'Tarefas',       icon: ListChecks },
-  { key: 'documents',  label: 'Documentos',    icon: FolderOpen },
-  { key: 'timeline',   label: 'Timeline',      icon: CalendarDays },
-  { key: 'ai',         label: 'IA',            icon: Bot },
+  { key: 'saidas',     label: 'Sa\u00eddas',          icon: PackageCheck },
+  { key: 'commercial', label: 'Comercial',        icon: Briefcase },
 ];

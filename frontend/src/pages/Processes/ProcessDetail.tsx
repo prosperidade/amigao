@@ -7,7 +7,7 @@
  *  3. Menu lateral interno esquerdo (8 itens)
  *  4. Área central de trabalho (tab content)
  *  5. Painel lateral direito (WorkspaceRightPanel — Estado/Objetivo/Validação/Travas/Saída/Agente)
- *  6. Rodapé / timeline (WorkflowTimeline)
+ *  6. Rodapé colapsável — histórico de eventos (TimelineTab)
  */
 import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -24,13 +24,13 @@ import TasksTab from './TasksTab';
 import DocumentsTab from './DocumentsTab';
 import TimelineTab from './TimelineTab';
 import ProcessDossier from './ProcessDossier';
-import WorkflowTimeline from './WorkflowTimeline';
 import ProcessCommercial from './ProcessCommercial';
 import WorkspaceRightPanel from './WorkspaceRightPanel';
 import DecisionsTab from './DecisionsTab';
+import SaidasTab from './SaidasTab';
 import AIPanel from '@/pages/AI/AIPanel';
 
-type TabKey = 'diagnosis' | 'dossier' | 'workflow' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'timeline' | 'ai';
+type TabKey = 'diagnosis' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'timeline' | 'ai' | 'saidas';
 
 const STAGE_ORDER = [
   'entrada_demanda',
@@ -50,6 +50,10 @@ export default function ProcessDetail() {
   const processId = parseInt(id ?? '0', 10);
 
   const [activeTab, setActiveTab] = useState<TabKey>('diagnosis');
+  // CAM3WS-008 (Sprint J) — etapa que o consultor está "visualizando" via stepper.
+  // null = segue a etapa atual do processo. Clicar em outra etapa do stepper filtra
+  // tabs relevantes (IA/Decisões/Saídas) para o contexto dessa etapa.
+  const [viewingStage, setViewingStage] = useState<string | null>(null);
   const fromIntake = location.state?.fromIntake;
   const [intakeBanner, setIntakeBanner] = useState(fromIntake ?? false);
 
@@ -70,6 +74,15 @@ export default function ProcessDetail() {
       return res.data as { full_name: string };
     },
     enabled: !!process?.client_id,
+  });
+
+  // CAM3WS-008 (Sprint J) — estado da etapa atual para colorir o stepper.
+  // Usa /can-advance pra obter current_state (MacroetapaState) + blockers.
+  const { data: canAdvance } = useQuery<{ current_state: string | null; blockers: string[] }>({
+    queryKey: ['process-can-advance', processId],
+    queryFn: () => api.get(`/processes/${processId}/can-advance`).then(r => r.data),
+    enabled: !!processId,
+    staleTime: 30_000,
   });
 
   // CAM3WS-005 — validar action via painel direito
@@ -136,31 +149,69 @@ export default function ProcessDetail() {
       {/* Área 1 — Cabeçalho do caso */}
       <ProcessHeader process={process} client={client} onBack={() => navigate('/processes')} />
 
-      {/* Área 2 — Barra horizontal das 7 etapas (CAM3WS-008) */}
+      {/* Área 2 — Stepper das 7 etapas (CAM3WS-008) — 4 estados visuais + clicável.
+          Concluída (verde claro + check) · Ativa (verde destacado) · Bloqueada (vermelho)
+          · Aguardando pré-requisito (amarelo) · Futura (cinza). Clicar em uma etapa seta
+          `viewingStage` e tabs relevantes (IA/Decisões/Saídas) filtram pelo contexto. */}
       <div className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 px-4 py-3">
         <div className="flex items-center gap-1 overflow-x-auto">
           {STAGE_ORDER.map((stage, i) => {
             const label = MACROETAPA_LABELS[stage];
             const isCurrent = stage === currentStage;
             const isDone = i < currentIndex;
+            const isViewing = viewingStage === stage;
+
+            // Deriva o estado visual da etapa atual a partir de can-advance.current_state.
+            // Só se aplica à etapa corrente; passadas = concluida, futuras = futura.
+            let visualState: 'concluida' | 'ativa' | 'bloqueada' | 'aguardando' | 'futura';
+            if (isDone) {
+              visualState = 'concluida';
+            } else if (isCurrent) {
+              const s = canAdvance?.current_state;
+              if (s === 'travada') visualState = 'bloqueada';
+              else if (s === 'aguardando_input' || s === 'aguardando_validacao') visualState = 'aguardando';
+              else visualState = 'ativa'; // em_andamento, pronta_para_avancar, nao_iniciada
+            } else {
+              visualState = 'futura';
+            }
+
+            const stateCls: Record<typeof visualState, string> = {
+              concluida:  'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+              ativa:      'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold',
+              bloqueada:  'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 font-semibold',
+              aguardando: 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 font-semibold',
+              futura:     'text-gray-400 dark:text-slate-500',
+            };
+            const dotCls: Record<typeof visualState, string> = {
+              concluida:  'bg-emerald-500 text-white',
+              ativa:      'bg-emerald-500 text-white',
+              bloqueada:  'bg-red-500 text-white',
+              aguardando: 'bg-amber-500 text-white',
+              futura:     'bg-gray-200 dark:bg-zinc-700',
+            };
+
             return (
               <div key={stage} className="flex items-center gap-1 shrink-0">
-                <div
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap ${
-                    isCurrent
-                      ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold'
-                      : isDone
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-gray-400 dark:text-slate-500'
+                <button
+                  type="button"
+                  onClick={() => setViewingStage(isViewing ? null : stage)}
+                  title={
+                    visualState === 'bloqueada' ? `Bloqueada — ${canAdvance?.blockers?.length ?? 0} impedimento(s)` :
+                    visualState === 'aguardando' ? 'Aguardando validação/input' :
+                    `Filtrar IA/Decisões/Saídas pela etapa ${label}`
+                  }
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${stateCls[visualState]} ${
+                    isViewing ? 'ring-2 ring-violet-400 ring-offset-1 dark:ring-offset-zinc-900' : 'hover:opacity-80'
                   }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
-                    isCurrent ? 'bg-emerald-500 text-white' : isDone ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-zinc-700'
-                  }`}>
-                    {isDone ? '✓' : i + 1}
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${dotCls[visualState]}`}>
+                    {visualState === 'concluida' ? '✓' :
+                     visualState === 'bloqueada' ? '!' :
+                     visualState === 'aguardando' ? '⏳' :
+                     i + 1}
                   </span>
                   {label}
-                </div>
+                </button>
                 {i < STAGE_ORDER.length - 1 && (
                   <div className={`w-3 h-px ${i < currentIndex ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-zinc-700'}`} />
                 )}
@@ -168,6 +219,17 @@ export default function ProcessDetail() {
             );
           })}
         </div>
+        {viewingStage && viewingStage !== currentStage && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/10 rounded-lg px-3 py-1.5">
+            <span>👁 Visualizando contexto de <strong>{MACROETAPA_LABELS[viewingStage]}</strong> — IA, Decisões e Saídas filtram por esta etapa.</span>
+            <button
+              onClick={() => setViewingStage(null)}
+              className="ml-auto text-[11px] underline hover:text-violet-900"
+            >
+              Voltar à etapa atual
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Layout 3 colunas: menu lateral + área central + painel direito */}
@@ -201,12 +263,12 @@ export default function ProcessDetail() {
         <main className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 p-5 min-w-0">
           {activeTab === 'diagnosis' && <DiagnosisTab process={process} />}
           {activeTab === 'dossier' && <ProcessDossier processId={processId} />}
-          {activeTab === 'workflow' && <WorkflowTimeline processId={processId} />}
-          {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={currentStage} />}
+          {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}
           {activeTab === 'commercial' && <ProcessCommercial processId={processId} />}
           {activeTab === 'tasks' && <TasksTab processId={processId} />}
           {activeTab === 'documents' && <DocumentsTab processId={processId} />}
           {activeTab === 'timeline' && <TimelineTab processId={processId} />}
+          {activeTab === 'saidas' && <SaidasTab processId={processId} viewingStage={viewingStage} />}
           {activeTab === 'ai' && (
             <AIPanel
               processId={processId}
@@ -227,14 +289,17 @@ export default function ProcessDetail() {
         </aside>
       </div>
 
-      {/* Área 6 — Rodapé / timeline */}
+      {/* Área 6 — Rodapé / timeline de eventos (CAM3WS-009).
+          Sócia: "Eventos: Uploads, Mudanças de status, Decisões, Geração de proposta,
+          Geração de contrato" → TimelineTab (audit log) é a fonte certa.
+          WorkflowTimeline (trilha do template) saiu junto com o tab 'Trilha'. */}
       <details className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 p-4 group">
         <summary className="cursor-pointer flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-300">
           <span className="text-lg">📅</span>
-          Timeline / Histórico de eventos
+          Histórico de eventos do caso
         </summary>
         <div className="mt-4">
-          <WorkflowTimeline processId={processId} />
+          <TimelineTab processId={processId} />
         </div>
       </details>
 
