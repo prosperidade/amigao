@@ -1061,29 +1061,136 @@ Avanço só com: (1) output mínimo da etapa, (2) validação humana quando nece
 - **QA-012** — Ordenação por prioridade ✅ entregue 2026-04-19 (commit `50a0a39`)
 - **QA-013** — Card → última decisão ⏸ bloqueado até Sprint E existir
 
-### Sprint E — Aba Decisões (Camada 3 · governança do raciocínio)
+### Sprint E — Aba Decisões (Camada 3 · governança do raciocínio) ✅ entregue 2026-04-19
 
 **Objetivo:** materializar a "camada de governança" do Workspace descrita no `CAMADA 3 - WORKSPACE EDIT1.pdf`. Transforma análise em rastreabilidade auditável.
 
 **Valor estratégico:** é a fundação da visão govtech (rastreabilidade, base normativa citada, quem validou) — ver seção "Horizonte Estratégico" no fim deste doc.
 
-- **SE-001** — Model `ProcessDecision` + migration Alembic (tabela `process_decisions`)
-- **SE-002** — Schemas Pydantic (`DecisionCreate`, `DecisionUpdate`, `DecisionRead`)
-- **SE-003** — Endpoints CRUD: `GET/POST/PATCH/DELETE /processes/{id}/decisions`
-- **SE-004** — Tab "Decisões" no `ProcessDetail.tsx` + `DecisionsTab.tsx` (lista + form de nova)
-- **SE-005** — **QA-013 destravado** — endpoint `GET /processes/{id}/decisions/latest` e exibir no drawer do Quadro
+- **SE-001** — Model `ProcessDecision` + migration Alembic ✅ migration `a3f5c7b9d2e4`
+- **SE-002** — Schemas Pydantic (`DecisionCreate`, `DecisionUpdate`, `DecisionRead`, `DecisionSummary`) ✅
+- **SE-003** — Endpoints CRUD: `GET/POST/PATCH/DELETE /processes/{id}/decisions` ✅ + `/latest`
+- **SE-004** — Tab "Decisões" no `ProcessDetail.tsx` + `DecisionsTab.tsx` ✅ (form com 8 tipos, 4 status, chain de substituição)
+- **SE-005** — **QA-013 destravado** — endpoint `/decisions/latest` renderizado no drawer do Quadro ✅
 
-### Dependências
+**Entregue no commit `ded1985`** (2026-04-19).
+
+### Dependências Sprint E
 
 - Backend: confirmar campos em `GET /processes` (`macroetapa`, `stage_state`, `next_action`, `alert_type`).
 - IA insight: `agent_vigia` (congelado, só consumir).
 - `macroetapa_state` do Plano Mestre v2 precisa ter os 7 estados cobertos.
 
-### Fora deste backlog
+### Fora do backlog original
 
 - Agentes novos ou alteração de prompts (congelado)
-- Aba Decisões do Workspace (sprint próprio)
+- Aba Decisões do Workspace (sprint próprio — agora entregue)
 - Govtech (horizonte estratégico)
+
+---
+
+## SPRINT F — Dashboard + Configurações + Cadastro TTL ✅ entregue 2026-04-19
+
+Três blocos executados em sequência no mesmo dia, cada um com commit próprio.
+Todos respondem diretamente ao que a sócia desenhou no Lovable e no `amigao-regente.docx`.
+
+### Sprint F · Bloco 1 — Dashboard Operacional Regente ✅ commit `0332c85`
+
+**Objetivo:** view "operacional" do Dashboard matching com o print Lovable (8 cards + 2 gráficos + filtros). Responde "como está a operação agora e onde preciso agir primeiro?".
+
+**Backend:**
+- `GET /dashboard/kpis?days=N&responsible_user_id=&demand_type=` (novo)
+- Retorna 8 KPIs + `funnel[]` por macroetapa
+- Delta % vs janela anterior (itens criados na janela atual vs anterior)
+- 8 KPIs: Clientes Ativos, Casos Ativos, Em Diagnóstico, Em Coleta, Em Caminho Regulatório, Propostas Enviadas, Contratos Enviados, Casos Formalizados
+- Schema `KpiValue { key, label, value, delta_pct?, hint? }` + `DashboardKpis`
+
+**Frontend:**
+- `DashboardOperacionalRegente.tsx` novo componente
+- Filtros: Período (7/30/90/180 dias) · Tipo de demanda (filtro Responsável adiado — precisa `/users`)
+- Grid 4×2 de KPI cards com ícone, valor, delta (`TrendingUp`/`Down`), hint
+- "Casos por Etapa" — barras horizontais proporcionais
+- "Funil Operacional" — 7 degraus decrescentes com degradê verde
+- Integrado apenas na view `operacional` do Dashboard; `executivo` intocado
+- Zero dependência nova: CSS puro com divs proporcionais
+
+### Sprint F · Bloco 2 — Configurações Camada 4 ✅ commit `9384041`
+
+**Objetivo:** materializar a Camada 4 (governança individual da conta) com 6 abas conforme `Camada 4 conifguracao e agente de ia.pdf` da sócia. Princípio: "configuração boa não parece painel de avião".
+
+**Backend:**
+- User model ganha coluna `preferences` JSONB com 4 grupos aninhados: `profile`, `notifications`, `operational`, `ai`
+- Migration `b7d9e1f3a5c8` (aditiva, default `{}`)
+- Schemas: `UserPreferences` + sub-grupos, `UserProfileUpdate`, `PreferencesUpdate`, `PasswordChangeRequest`, `UserMeResponse`
+- 4 novos endpoints em `/auth`:
+  - `GET /auth/me/full` — user + preferências expandidas
+  - `PATCH /auth/me` — nome/email (valida conflito de email)
+  - `PATCH /auth/me/preferences` — merge parcial por grupo
+  - `POST /auth/password-change` — exige senha atual correta
+
+**Frontend:**
+- Nova página `frontend/src/pages/Settings/index.tsx` com 6 abas:
+  1. **Perfil** — nome, email, telefone, cargo, empresa
+  2. **Pagamento** — placeholder ("billing em breve")
+  3. **Notificações** — canais (email/WhatsApp/in-app/push) + frequência (críticos / resumo diário / semanal)
+  4. **Preferências operacionais** — tela inicial, ordenação, formato data, UF padrão, modo compacto
+  5. **IA** — nível de assistência (Automático/Equilibrado/Controlado), tamanho de resumo, validação humana, histórico
+  6. **Segurança** — trocar senha (validação min 8 + match) + 2FA stub
+- Rota `/settings` em `App.tsx`
+- Item "Configurações" (ícone Settings) adicionado ao sidebar do `PrivateLayout`
+- Helpers reutilizáveis: `Section`, `Field`, `Toggle`, `SaveButton`
+
+### Sprint F · Bloco 3 — Cadastro (Step 0 + rascunho 15 dias) ✅ commit `4a4b282`
+
+**Objetivo:** aplicar a decisão da sócia de 2026-04-19 sobre rascunhos (expirar em 15 dias) e validar o Step 0 do wizard.
+
+**Step 0 do wizard:** **já existia** com 5 opções desde Regente v3 (commit `14462b5`). As 3 opções que a sócia pediu (cliente+imóvel existente / complementar base / importar docs) já estavam cobertas. Sem alteração necessária.
+
+**Rascunho expira em 15 dias (nova feature):**
+
+Backend:
+- `IntakeDraft` ganha coluna `expires_at` (DateTime, indexed) + migration `c9f1a3b5d7e2` com backfill (drafts em `rascunho`/`pronto_para_criar` recebem `NOW + 15 days`)
+- Helpers `refresh_expiration()` / `is_expired()` no model
+- Constante `INTAKE_DRAFT_TTL_DAYS = 15`
+- `POST /intake/drafts` e `PATCH /intake/drafts/{id}` chamam `refresh_expiration()` — cada edição renova o prazo
+- `GET /intake/drafts` filtra expirados por padrão
+- `IntakeDraftResponse` expõe `expires_at`
+
+Celery task:
+- `workers.cleanup_expired_intake_drafts` em `app/workers/intake_tasks.py`
+- Só remove drafts em `rascunho` / `pronto_para_criar` (preserva `card_criado` / `base_complementada`)
+- Beat schedule: **02:30 BRT diário** (off-peak)
+- Retry com backoff em caso de falha
+
+Frontend:
+- `IntakeWizard` guarda `draftExpiresAt` no state
+- Badge "💾 Rascunho salvo · expira em X dias" no header
+- Vira **amarelo** quando ≤ 3 dias restantes
+
+### Chain de migrations do Sprint E + F
+
+```
+a3f5c7b9d2e4  process_decisions               (Sprint E)
+b7d9e1f3a5c8  users.preferences               (Bloco 2)
+c9f1a3b5d7e2  intake_drafts.expires_at        (Bloco 3)  ← HEAD
+```
+
+Para aplicar: `alembic upgrade head` (aditivas, sem downtime).
+
+### Validações Sprint F
+
+- Frontend `tsc --noEmit`: limpo em todos os 3 blocos
+- Backend: imports + schemas smoke-testados, rotas registradas
+- 75 testes existentes continuam passando (test_settings + test_state_machines)
+- Celery task registrada (`workers.cleanup_expired_intake_drafts` aparece em `celery_app.tasks`)
+- Migration chain verificada: HEAD em `c9f1a3b5d7e2`
+
+### Itens intencionalmente adiados (registro de escopo)
+
+- **Filtro Responsável no Dashboard** — precisa endpoint `/users` novo; pragmática: adiar
+- **Integração real de billing** (Pagamento em Configurações) — placeholder UI pronto, backend fora de escopo MVP
+- **2FA** — placeholder visível, implementação em sprint próprio
+- **Cliente Hub / Imóvel Hub** (Camada 2) — próximo alvo natural (gaps listados em CAM2CH e CAM2IH neste doc)
 
 ---
 
