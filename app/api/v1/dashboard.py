@@ -38,9 +38,17 @@ logger = logging.getLogger(__name__)
 # Decisão da sócia em 2026-04-19: atualizar 1x/dia para controlar custo.
 KANBAN_INSIGHTS_CACHE_TTL = 24 * 60 * 60  # 24h em segundos
 
+# CAM2D-004 (Sprint M) — cache da Leitura executiva da IA do Dashboard.
+# Mesmo TTL do kanban-insights; refresh explícito via query param.
+DASHBOARD_AI_SUMMARY_CACHE_TTL = 24 * 60 * 60  # 24h em segundos
+
 
 def _kanban_insights_cache_key(tenant_id: int) -> str:
     return f"tenant:{tenant_id}:kanban_insights:v1"
+
+
+def _dashboard_ai_summary_cache_key(tenant_id: int) -> str:
+    return f"tenant:{tenant_id}:dashboard_ai_summary:v1"
 
 
 # ---------------------------------------------------------------------------
@@ -1217,6 +1225,27 @@ def get_dashboard_alerts(
             label=f"{stale_proposals} proposta(s) sem retorno há mais de 7 dias",
         ))
 
+    # CAM2D-002 (Sprint M) — Contratos enviados sem assinatura há >7 dias.
+    # A sócia pediu explicitamente "2 contratos aguardando assinatura" como alerta.
+    stale_contracts = (
+        db.query(sa_func.count(Contract.id))
+        .filter(
+            Contract.tenant_id == tenant_id,
+            Contract.status == ContractStatus.sent,
+            Contract.sent_at.isnot(None),
+            Contract.sent_at < cutoff,
+            Contract.signed_at.is_(None),
+        )
+        .scalar() or 0
+    )
+    if stale_contracts > 0:
+        alerts.append(DashboardAlert(
+            kind="contrato_aguardando_assinatura",
+            severity="high" if stale_contracts >= 3 else "medium",
+            count=stale_contracts,
+            label=f"{stale_contracts} contrato(s) aguardando assinatura há mais de 7 dias",
+        ))
+
     return alerts
 
 
@@ -1359,11 +1388,34 @@ def get_dashboard_priority_cases(
 
 @router.get("/ai-summary", response_model=DashboardAISummary)
 def get_dashboard_ai_summary(
+    refresh: bool = Query(False, description="Força recálculo ignorando cache (24h TTL)."),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> DashboardAISummary:
-    """CAM2D-004 — Leitura executiva da IA (determinística MVP)."""
-    stages = get_dashboard_stages(db=db, current_user=current_user)
+    """CAM2D-004 — Leitura executiva da IA (determinística MVP).
+
+    Sprint M: cache server-side de 24h por tenant (mesmo padrão do kanban-insights).
+    Usar `?refresh=true` para recalcular sob demanda.
+    """
+    tenant_id = current_user.tenant_id
+    cache_key = _dashboard_ai_summary_cache_key(tenant_id)
+
+    # Tenta hit de cache primeiro (a menos que o caller peça refresh).
+    if not refresh:
+        try:
+            cached = _get_redis_client().get(cache_key)
+            if cached:
+                return DashboardAISummary(**json.loads(cached))
+        except Exception:
+            logger.warning("dashboard_ai_summary cache read failed", exc_info=True)
+
+    # Passa Nones explícitos pra evitar que os defaults `Query(None)` vazem como
+    # objetos Query quando chamamos os endpoints diretamente (fora do dispatch
+    # FastAPI). Sprint M corrigiu esse bug pré-existente.
+    stages = get_dashboard_stages(
+        responsible_user_id=None, urgency=None, demand_type=None,
+        state_uf=None, days=None, db=db, current_user=current_user,
+    )
     alerts = get_dashboard_alerts(db=db, current_user=current_user)
 
     # Gargalo: etapa com mais bloqueados; empate, mais total
@@ -1397,7 +1449,7 @@ def get_dashboard_ai_summary(
     else:
         recommendation = "Fluxo saudável. Mantenha o acompanhamento normal."
 
-    return DashboardAISummary(
+    response = DashboardAISummary(
         text=text,
         top_stage_bottleneck=bottleneck.macroetapa if bottleneck and bottleneck.blocked > 0 else None,
         top_stage_bottleneck_label=bottleneck.label if bottleneck and bottleneck.blocked > 0 else None,
@@ -1406,3 +1458,15 @@ def get_dashboard_ai_summary(
         recommendation=recommendation,
         source="deterministic",
     )
+
+    # Grava no cache para as próximas 24h.
+    try:
+        _get_redis_client().setex(
+            cache_key,
+            DASHBOARD_AI_SUMMARY_CACHE_TTL,
+            json.dumps(response.model_dump()),
+        )
+    except Exception:
+        logger.warning("dashboard_ai_summary cache write failed", exc_info=True)
+
+    return response

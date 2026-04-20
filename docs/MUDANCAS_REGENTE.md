@@ -1638,6 +1638,105 @@ O rodapé colapsável já existia; Sprint J só trocou o conteúdo pra `Timeline
 
 ---
 
+## SPRINT M — Dashboard executivo (Camada 2) ✅ entregue 2026-04-20
+
+**Contexto:** auditoria dos 4 tickets do Dashboard executivo (Sprint 5 do plano) revelou — padrão das últimas 7 sprints — que **CAM2D-001 e CAM2D-003 já estavam 100%** e **CAM2D-002/004 a 85-90%**. Sprint F Bloco 1 tinha entregue KPIs + funil; endpoints `/dashboard/stages`, `/alerts`, `/priority-cases`, `/ai-summary` existiam todos em [app/api/v1/dashboard.py](../app/api/v1/dashboard.py) com UI consumindo em `DashboardRegente.tsx`.
+
+### Já entregue antes (sem registro) — 2 tickets 100%
+
+#### ✅ CAM2D-001 — Bloco 3: Casos por etapa (7 estágios)
+- `GET /dashboard/stages` em [dashboard.py:1017+](../app/api/v1/dashboard.py) retorna `list[StageDistribution]` com `macroetapa`, `label`, `total`, `blocked`, `ready_to_advance`, `avg_days_in_stage`.
+- Computa estado via `compute_macroetapa_state` (travada/pronta_para_avancar).
+- Filtros: `responsible_user_id`, `urgency`, `demand_type`, `state_uf`, `days`.
+- Frontend: componente `StagesBlock` em `DashboardRegente.tsx` renderiza as 7 etapas com ícones 🚫/✓.
+
+#### ✅ CAM2D-003 — Bloco 5: Casos prioritários do dia
+- `GET /dashboard/priority-cases` com scoring ponderado: urgência (crítica=400, alta=200, média=50, baixa=0), dias parado>7 (+5/dia cap 150), docs pendentes (+20/doc), etapa travada (+120), aguardando validação (+100), pronto p/ avançar (+80).
+- Retorna `client_name`, `property_name`, `macroetapa_label`, `priority_reason`, `next_step`, `responsible_user_name`.
+- Frontend: `PriorityCasesBlock` renderiza lista clicável → `/processes/{id}`.
+
+### Gaps fechados na Sprint M
+
+#### Bloco 1 — CAM2D-002: regra de contratos aguardando assinatura
+
+Antes, `/dashboard/alerts` cobria `doc_pendente`, `etapa_travada` e `proposta_sem_retorno`. A sócia pedia explicitamente "2 contratos aguardando assinatura". Agora:
+
+- Nova query em [dashboard.py:get_dashboard_alerts](../app/api/v1/dashboard.py) conta `Contract` com `status=sent` + `sent_at < now - 7d` + `signed_at IS NULL`.
+- Alerta `kind="contrato_aguardando_assinatura"`, severity `high` se ≥3 (match doc_pendente), senão `medium`.
+- Regra "matrícula pendente" já era coberta implicitamente pelo loop `doc_type_pending` (alertas específicos por tipo); smoke test confirmou: `"7 caso(s) com matricula pendente"`.
+
+#### Bloco 2 — CAM2D-004: cache 24h + fix de Query bug pré-existente
+
+**Cache (nova feature):**
+- Constante `DASHBOARD_AI_SUMMARY_CACHE_TTL = 86400s` + helper `_dashboard_ai_summary_cache_key(tenant_id)`.
+- Endpoint ganha `refresh: bool = Query(False)` — hit de cache por default, `?refresh=true` força recálculo.
+- Leitura Redis com `json.loads(cached)`, escrita com `setex`; falhas no Redis caem silenciosas (degradação graciosa — mesmo padrão do kanban-insights).
+- Validado: TTL `86070s` após primeira call.
+
+**Bug pré-existente fixado:**
+- `get_dashboard_ai_summary` chamava `get_dashboard_stages(db=db, current_user=current_user)` diretamente sem passar os parâmetros `responsible_user_id`, `urgency`, `demand_type`, `state_uf`, `days`. Quando chamado fora do dispatch FastAPI, esses `Query(None)` vazavam como objetos `Query` (truthy), e `timedelta(days=<Query>)` levantava `TypeError: unsupported type for timedelta days component: Query`.
+- Fix: passar `None` explícito para cada parâmetro. Existia desde o commit 14462b5 (Regente v3) — nunca detectado porque a UI não exercitava a rota até ser adicionada ao `DashboardRegente`.
+
+### Decisões de escopo (Sprint M)
+
+- ❌ **Não** integrar `agent_vigia` / `agent_acompanhamento` na Leitura IA — respeita `feedback_agents_config_frozen`; versão determinística atende MVP.
+- ❌ **Não** adicionar LLM na Leitura IA — sócia já aceitou "1x/dia" como cadência (veja decisão QA-008 no kanban-insights); determinístico + cache 24h é suficiente.
+- ❌ **Não** adicionar filtros `?refresh` aos demais endpoints do dashboard — só `ai-summary` tem cache.
+- ✅ **Manter** `source="deterministic"` — transparência para o consultor que a leitura não veio de LLM.
+- ✅ **Corrigir** o bug do Query objects — fix pequeno que destrava o endpoint inteiro.
+
+### Validações Sprint M
+
+- [x] Backend: `/dashboard/alerts` retorna 6 alertas incluindo novos tipos (docs por tipo específicos + etapa travada)
+- [x] Backend: `/dashboard/ai-summary` responde 200 (bug do Query corrigido), escreve cache no Redis com TTL ~24h
+- [x] Backend: `/dashboard/ai-summary?refresh=true` ignora cache e recalcula
+- [x] Regra de contratos aguardando assinatura inserida (cobre cenário vazio — sem contratos sent>7d no seed)
+- [x] Cache Redis key `tenant:2:dashboard_ai_summary:v1` presente com valor JSON serializado
+
+---
+
+## PENDÊNCIAS PARA AMANHÃ — 2026-04-21
+
+**Última sessão:** fechamos 7 sprints em sequência (G → H → I → J → K → L → M) cobrindo Camada 2 (Cliente/Imóvel Hub), Camada 1 (Cadastro + Enriquecimento), Camada 3 (Workspace polish + gates) e Dashboard executivo. Commits em `main`: `648646c` → `a2eeedd` → `df7b139` → (Sprint M na sequência).
+
+### Próxima sessão (em ordem de prioridade)
+
+1. **Sprint N = Sprint 7 do plano — Refinamentos Camada 3** (~1-2h esperado pelo padrão G-M)
+   - **CAM3WS-002** — Tipos de blocos no workspace (permanente / ativo / herdado / condicional). Provavelmente já parcial no `WorkspaceRightPanel` e nos tabs; auditar.
+   - **CAM3WS-004** — Multi-agente por etapa (primary + secondary agents). Endpoint `/macroetapa/status` já tem `agent_chain: Optional[str]` — verificar se expõe primary/secondary.
+   - **CAM3PR-001** — Princípio arquitetural "Cadastro cria, Workspace executa, Fluxo coordena". Auditoria das rotas de UI para identificar operações "profundas" fora do Workspace e redirecionar. É o mais pesado — possível split em dois blocos.
+
+2. **Sprint O+ = Camada 4 — Agentes + Configurações** (escopo maior)
+   - Material da sócia disponível em [amigao_regente/](../amigao_regente/): `Camada 4 conifguracao e agente de ia.pdf` + `regente lovable 1.png` + `1 nucleo.jpeg`.
+   - Sprint F Bloco 2 já entregou a UI de Configurações (6 abas). Falta a parte **Agentes** da Camada 4 (gestão de prompts, cadeias, observabilidade, telemetria).
+   - ⚠️ Respeitar `feedback_agents_config_frozen`: **não alterar** prompts/chains dos agentes existentes. Pode construir UI de visualização/dashboard dos agentes (read-only) ou endpoints novos que consomem agentes.
+
+### Dívidas técnicas pequenas detectadas (polimento futuro)
+
+- **CAM1-005 Parte B integração** — `DraftDocumentUploader.tsx` expõe `onApplySuggestion?` mas o `IntakeWizard` ainda não liga o callback aos campos do formulário. Ligar requer 5-7 `setField(...)` baseado no nome do campo extraído. ~30 min.
+- **Stepper Opção A — AIPanel/tab IA** — Sprint J fez SaidasTab e DecisionsTab aceitarem `viewingStage`, mas `AIPanel` ainda não expõe filtro por etapa. Requer endpoint novo ou parâmetro adicional. ~1-2h.
+- **CAM2D-002 agent_vigia** — alertas são determinísticos (regras SQL). `agent_vigia` existe mas não é chamado pelo endpoint. Integração respeitando `feedback_agents_config_frozen` seria apenas orquestração pós-agente.
+- **CAM2D-004 leitura IA real** — texto hoje é regras + concat. Upgrade pra LLM respeitando "1x/dia" da sócia (cache 24h já existe) + tracking de tokens/custo.
+- **Limpeza do doc** — as seções iniciais "CAMADA 1" → "CAMADA 4" listam tickets como "pendente/mudança necessária" que já foram entregues em G-M. Vale varrer e marcar status com 🔵 INFO linkando ao sprint de entrega.
+
+### Comandos úteis para retomar amanhã
+
+```bash
+# Estado geral
+docker compose ps
+git log --oneline -10
+alembic current  # (dentro do container api)
+
+# Subir tudo se Docker dormiu
+docker compose up -d db redis minio
+docker compose up -d api worker client-portal
+
+# Frontend dev local (fora do Docker)
+cd frontend && npm run dev   # → http://localhost:5173
+```
+
+---
+
 ## HORIZONTE ESTRATÉGICO — AMIGÃO COMO GOVTECH
 
 **Registrado em 2026-04-19 — visão do user.**
