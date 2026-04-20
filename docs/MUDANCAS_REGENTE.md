@@ -865,7 +865,9 @@ Prioridade máxima: corrigir o fluxo de Cadastro pra respeitar a premissa "entra
 22. CAM3WS-004 — Multi-agente por etapa (primary/secondary)
 23. CAM3PR-001 — Auditoria da separação Cadastro/Workspace/Fluxo
 
-### Sprint 8+ — Camada 4 (quando mapa chegar)
+### Sprint 8+ — Camada 4 (Agentes + Configurações)
+
+> **Nota 2026-04-20:** o material da sócia para Camada 4 já está em [amigao_regente/](../amigao_regente/) — inclui `Camada 4 conifguracao e agente de ia.pdf`, `OEPRACAO.pdf` e os PNGs do Regente Lovable. Quando atacarmos esta camada, começar lendo esses arquivos + respostas consolidadas. Sprint F Bloco 2 já entregou Configurações iniciais.
 
 ---
 
@@ -1372,6 +1374,82 @@ Aditiva e sem downtime: `alembic upgrade head`.
 - [x] `GET /documents/?property_id=X` retorna docs do imóvel (testado com doc vinculado direto; tenant isolation respeitada)
 - [x] Upload via `confirm-upload` herda `property_id` do processo (edit em `app/api/v1/documents.py`)
 - [x] `normalize_category` aplicado em writes novos (`ambiental` → `ambientais`, `relatorio` → `relatorios_gerados` OK em smoke test)
+
+---
+
+## SPRINT I — Cadastro Camada 1 (polish + gate de prontidão) ✅ entregue 2026-04-20
+
+**Contexto:** ao auditar os 7 tickets CAM1 pendentes (Sprint 1 do plano de ataque) descobrimos — de novo — que **5 deles já estavam 100% entregues** em sprints anteriores (Regente v3, Sprint F) sem registro neste doc. Só 2 tinham gap real. Sprint I fecha os 2 gaps e formaliza o que já existia.
+
+### Já entregue antes (sem registro) — Bloco A documental
+
+Revalidado no código em 2026-04-20:
+
+#### ✅ CAM1-002 — Descrição deixa de ser obrigatória
+- `IntakeCreateCaseRequest.description: Optional[str]` em [app/schemas/intake.py:78-81](../app/schemas/intake.py)
+- [app/api/v1/intake.py:164-187](../app/api/v1/intake.py): quando `description` < 10 chars, cria `DemandClassification` com `demand_type="nao_identificado"` e segue sem travar
+- Frontend: apenas exibe contador informativo, **não bloqueia** submit
+
+#### ✅ CAM1-008 — Estados do cadastro (4 estados formais)
+- [app/models/intake_draft.py:33-37](../app/models/intake_draft.py) `IntakeDraftState` enum: `rascunho`, `pronto_para_criar`, `card_criado`, `base_complementada`
+- Transições dinâmicas via `_compute_state()` no repositório
+- Sprint F Bloco 3 adicionou `expires_at` (TTL 15 dias)
+
+#### ✅ CAM1-009 — CTA "Salvar e continuar depois"
+- `POST /intake/drafts` + `PATCH /intake/drafts/{id}` + `POST /intake/drafts/{id}/commit`
+- Frontend [IntakeWizard.tsx](../frontend/src/pages/Intake/IntakeWizard.tsx) tem botão "💾 Salvar e continuar depois" + badge de rascunho com expiração
+
+#### ✅ CAM1-010 — Etapa "Entrada da demanda" como inicial
+- Enum `Macroetapa.entrada_demanda` em [app/models/macroetapa.py](../app/models/macroetapa.py)
+- [app/api/v1/intake.py:209-220](../app/api/v1/intake.py): Process nasce com `macroetapa=Macroetapa.entrada_demanda.value`
+- **Caveat aceito:** status legado `"triagem"` é mantido por retrocompat com máquina de estados. `STATUS_TO_MACROETAPA` vincula `triagem` → `entrada_demanda`.
+- Transição para `diagnostico_preliminar` é **explícita** via `advance_macroetapa` (sem auto-transição).
+
+#### ✅ CAM1-012 — Resumo da demanda separado de description
+- [app/models/process.py:125](../app/models/process.py) `initial_summary` — "resumo curto da demanda na voz do cliente"
+- [app/models/process.py:100](../app/models/process.py) `description` — "descrição técnica elaborada pelo consultor"
+- Schema `IntakeCreateCaseRequest` aceita ambos; frontend expõe os dois campos.
+
+### Gaps fechados na Sprint I — Bloco B
+
+#### Bloco B.1 — CAM1-011: Gate de prontidão no GET /processes/{id}
+
+**Problema:** o kanban (`GET /processes/kanban`) já tinha `has_minimal_base`, `has_complementary_base`, `missing_docs_count`, mas o detalhe individual (`GET /processes/{id}`) retornava o schema `Process` cru — sem os gates. Consultor vê os sinais no kanban mas perde quando abre o card de detalhe.
+
+**Mudança:**
+- Novo schema `ProcessDetail(Process)` em [app/schemas/process.py](../app/schemas/process.py) com 3 campos computados: `has_minimal_base`, `has_complementary_base`, `missing_docs_count`.
+- [app/api/v1/processes.py:238+](../app/api/v1/processes.py): `GET /processes/{id}` agora `response_model=ProcessDetail`. Computa os gates reusando a mesma semântica do kanban (cliente com contato + imóvel com nome; `≥1` doc no processo; itens obrigatórios `status=pending` no checklist).
+
+**Validação:** `GET /processes/18` retorna `{has_minimal_base: false, has_complementary_base: true, missing_docs_count: 4}` — consistente com o kanban.
+
+#### Bloco B.2 — CAM1-003 Opção B: Process nasce sempre com `demand_type=nao_identificado`
+
+**Decisão de produto (escolhida pelo user em 2026-04-20):** Opção B (meio-termo) — classificador continua rodando síncrono pra alimentar `initial_diagnosis` + checklist + process_type como **sugestões**, mas o `demand_type` **oficial** é forçado a `nao_identificado` na criação.
+
+**Justificativa:** respeita a premissa "IA não decide na Camada 1" da sócia (Process não nasce classificado oficialmente) sem quebrar o UX (consultor ainda recebe o diagnóstico sugerido e o checklist pronto).
+
+**Mudança:**
+- [app/api/v1/intake.py:189-197](../app/api/v1/intake.py): linha `demand_type_enum = DemandType.nao_identificado` hardcoded, com comentário longo explicando o trade-off.
+- `process_type=classification.demand_type` continua sendo gravado — é a **sugestão** (string).
+- `initial_diagnosis` + `suggested_checklist_template` também continuam — sugestões para o consultor.
+- O task Celery existente `run_llm_classification` em [app/workers/ai_tasks.py:76-77](../app/workers/ai_tasks.py) **só sobrescreve** `demand_type` se o valor atual for `nao_identificado` — ou seja, pode promover no futuro, mas nunca contradiz uma decisão manual do consultor.
+
+**Validação:** `create-case` com description "Licenciamento ambiental..." → response devolve `demand_type: "misto"` (sugestão), mas `GET /processes/{id}` mostra `demand_type: "nao_identificado"` (oficial) + `process_type: "misto"` (sugestão guardada).
+
+### Tickets adiados / fora de escopo Sprint I
+
+- **CAM1-004 / CAM1-005 / CAM1-007** (🟠 Sprint 2 do plano original) — Complementar base, importar docs com IA, upload multi-tipo. Ficam para Sprint J.
+- **CAM1-006** (🟠) — "Dados desejáveis vs mínimos" na UI. Ficam para Sprint J.
+- **CAM1-014** (🚫) — papel da IA / guard rail no agent_atendimento. Adiado por `feedback_agents_config_frozen`.
+- **Agente `atendimento` escreve de volta `demand_type`** — hoje `run_agent("atendimento")` executa mas não persiste a classificação no Process. O task `run_llm_classification` (outro caminho) sim. Unificar é refatoração de orchestration; fora do escopo Opção B.
+- **Caveat semântico `status="triagem"` vs `macroetapa="entrada_demanda"`** — aceito na Sprint I; futura limpeza pode adicionar `ProcessStatus.entrada_demanda` e migrar dados. Não é urgente.
+
+### Validações Sprint I
+
+- [x] Backend: `GET /processes/{id}` retorna `ProcessDetail` com os 3 gates (validado em processo 18)
+- [x] Backend: `create-case` persiste `demand_type=nao_identificado` mesmo com description rica (validado no processo 26, sugestão "misto")
+- [x] Backend: imports OK (rebuild + rollout sem erro)
+- [x] Frontend: nenhum arquivo alterado (schema extension é retrocompat; gates aparecem como campos extras ignoráveis)
 
 ---
 

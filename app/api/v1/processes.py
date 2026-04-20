@@ -35,7 +35,7 @@ from app.schemas.macroetapa import (
     StageOutputCreate,
     StageOutputResponse,
 )
-from app.schemas.process import Process, ProcessCreate, ProcessStatusUpdate, ProcessUpdate
+from app.schemas.process import Process, ProcessCreate, ProcessDetail, ProcessStatusUpdate, ProcessUpdate
 from app.services.macroetapa_engine import (
     advance_macroetapa,
     get_macroetapa_status,
@@ -235,15 +235,66 @@ def get_kanban_view(
     )
 
 
-@router.get("/{process_id}", response_model=Process)
+@router.get("/{process_id}", response_model=ProcessDetail)
 def get_process(
     process_id: int,
     db: Session = Depends(get_db),
     access_context: AccessContext = Depends(get_access_context),
 ) -> Any:
-    """Retorna um processo pelo ID."""
+    """Retorna um processo pelo ID.
+
+    CAM1-011 (Sprint I) — inclui gates de prontidão (`has_minimal_base`,
+    `has_complementary_base`, `missing_docs_count`) com a mesma semântica do
+    kanban, para o card de detalhe mostrar os mesmos indicadores.
+    """
+    from app.models.client import Client  # noqa: PLC0415
+    from app.models.document import Document  # noqa: PLC0415
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+    from app.models.property import Property  # noqa: PLC0415
+
     repo = ProcessRepository(db, access_context.tenant_id)
-    return repo.get_scoped_or_404(process_id, client_id=access_context.client_id)
+    process = repo.get_scoped_or_404(process_id, client_id=access_context.client_id)
+
+    # Gate: base mínima (cliente com contato + imóvel com nome)
+    client = db.query(Client).filter(Client.id == process.client_id).first() if process.client_id else None
+    prop = db.query(Property).filter(Property.id == process.property_id).first() if process.property_id else None
+    has_min = bool(
+        client
+        and client.full_name
+        and (client.phone or client.email)
+        and prop
+        and prop.name
+    )
+
+    # Gate: base complementada (≥1 documento)
+    doc_count = (
+        db.query(func.count(Document.id))
+        .filter(
+            Document.process_id == process.id,
+            Document.tenant_id == access_context.tenant_id,
+            Document.deleted_at.is_(None),
+        )
+        .scalar() or 0
+    )
+
+    # Gate: docs obrigatórios pendentes
+    missing_docs = 0
+    pc = (
+        db.query(ProcessChecklist)
+        .filter(ProcessChecklist.process_id == process.id)
+        .first()
+    )
+    if pc and pc.items:
+        for item in pc.items:
+            if item.get("required") and item.get("status") == "pending":
+                missing_docs += 1
+
+    # Pydantic converte ORM -> dict via from_attributes; adicionamos os gates computados.
+    detail = ProcessDetail.model_validate(process)
+    detail.has_minimal_base = has_min
+    detail.has_complementary_base = doc_count > 0
+    detail.missing_docs_count = missing_docs
+    return detail
 
 
 @router.put("/{process_id}", response_model=Process)

@@ -56,3 +56,11 @@ class Process(ProcessBase):
     updated_at: Optional[datetime]
 
     model_config = {"from_attributes": True}
+
+
+# CAM1-011 (Sprint I) — detalhe do processo com gates de prontidão.
+# Mesma semântica do KanbanProcessCard (paridade consultor vê os mesmos sinais).
+class ProcessDetail(Process):
+    has_minimal_base: bool = False            # cliente com contato + imóvel com nome
+    has_complementary_base: bool = False      # existe ≥1 documento vinculado
+    missing_docs_count: int = 0               # itens obrigatórios pendentes no checklist

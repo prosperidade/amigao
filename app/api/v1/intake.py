@@ -186,11 +186,15 @@ def create_case(
                 relevant_agencies=[],
             )
 
-        # Mapear demand_type para enum (fallback para nao_identificado)
-        try:
-            demand_type_enum = DemandType(classification.demand_type)
-        except ValueError:
-            demand_type_enum = DemandType.nao_identificado
+        # CAM1-003 Opção B (Sprint I) — Process SEMPRE nasce com demand_type=nao_identificado.
+        # O resultado do classificador (demand_type, initial_diagnosis, required_documents,
+        # suggested_next_steps) é tratado como SUGESTÃO: fica em process_type (string),
+        # initial_diagnosis e suggested_checklist_template — sem decidir a demanda oficialmente.
+        # A promoção para demand_type "de verdade" é responsabilidade do consultor (ação
+        # explícita) ou do task Celery run_llm_classification (que só sobrescreve quando
+        # o valor atual é "nao_identificado"). Respeita a premissa da sócia: "IA não decide
+        # na Camada 1 — organiza e prepara a próxima etapa."
+        demand_type_enum = DemandType.nao_identificado
 
         # Mapear source_channel para enum
         intake_source_enum: Optional[IntakeSource] = None
