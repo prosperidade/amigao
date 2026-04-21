@@ -203,6 +203,46 @@ MACROETAPA_AGENT_CHAIN: dict[Macroetapa, str | None] = {
 }
 
 
+# Regente CAM3WS-004 (Sprint N) — agentes por etapa: principal + secundários.
+# Representa "quem é disparado quando", sem alterar prompts/chains dos agentes.
+# Fonte: docs/MUDANCAS_REGENTE.md seção CAM3WS-004.
+MACROETAPA_AGENTS: dict[Macroetapa, dict[str, list[str]]] = {
+    Macroetapa.entrada_demanda: {
+        "primary": ["agent_atendimento"],
+        "secondary": ["agent_extrator", "agent_vigia"],
+    },
+    Macroetapa.diagnostico_preliminar: {
+        "primary": ["agent_atendimento", "agent_diagnostico"],
+        "secondary": ["agent_legislacao", "agent_extrator"],
+    },
+    Macroetapa.coleta_documental: {
+        "primary": ["agent_extrator"],
+        "secondary": ["agent_vigia", "agent_acompanhamento"],
+    },
+    Macroetapa.diagnostico_tecnico: {
+        "primary": ["agent_diagnostico"],
+        "secondary": ["agent_extrator", "agent_legislacao", "agent_redator"],
+    },
+    Macroetapa.caminho_regulatorio: {
+        "primary": ["agent_legislacao"],
+        "secondary": ["agent_diagnostico", "agent_redator", "agent_acompanhamento"],
+    },
+    Macroetapa.orcamento_negociacao: {
+        "primary": ["agent_orcamento", "agent_financeiro"],
+        "secondary": ["agent_redator", "agent_acompanhamento", "agent_vigia"],
+    },
+    Macroetapa.contrato_formalizacao: {
+        "primary": ["agent_redator", "agent_financeiro"],
+        "secondary": ["agent_legislacao", "agent_acompanhamento", "agent_vigia"],
+    },
+}
+
+
+def get_stage_agents(etapa: Macroetapa) -> dict[str, list[str]]:
+    """Retorna {primary: [...], secondary: [...]} para a etapa. Default vazio."""
+    return MACROETAPA_AGENTS.get(etapa, {"primary": [], "secondary": []})
+
+
 # ---------------------------------------------------------------------------
 # Checklist de acoes padrao por macroetapa (por demand_type)
 # ---------------------------------------------------------------------------

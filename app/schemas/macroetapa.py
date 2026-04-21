@@ -51,6 +51,9 @@ class MacroetapaStep(BaseModel):
     completion_pct: float
     actions: list[ActionItem]
     agent_chain: Optional[str] = None
+    # CAM3WS-004 (Sprint N) — agentes principais e secundários da etapa.
+    primary_agents: list[str] = []
+    secondary_agents: list[str] = []
 
 
 class MacroetapaStatusResponse(BaseModel):

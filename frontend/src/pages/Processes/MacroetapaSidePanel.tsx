@@ -1,17 +1,16 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
-  X, CheckSquare, Square, FileText, Clock, Sparkles, Loader2, Zap,
+  X, CheckSquare, Square, FileText, Clock, Sparkles,
   AlertTriangle, Target, ArrowUpRight, TrendingUp, Scale,
 } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import type { KanbanProcessCard, MacroetapaStatusResponse } from './quadro-types';
 import { URGENCY_BADGES, DEMAND_TYPE_LABELS, MACROETAPA_STATE_BADGE } from './quadro-types';
-import { CHAIN_LABELS } from '@/types/agent';
 import MacroetapaStepper from './MacroetapaStepper';
-import DocumentUpload from '@/components/DocumentUpload';
+// CAM3PR-001 (Sprint N): side panel virou preview read-only.
+// Upload de documento e toggle de ações vivem APENAS no Workspace (/processes/:id).
 
 interface Props {
   card: KanbanProcessCard;
@@ -65,7 +64,6 @@ interface ProcessDocument {
 }
 
 export default function MacroetapaSidePanel({ card, onClose }: Props) {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabId>('preview');
 
@@ -99,18 +97,6 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
     queryKey: ['documents', card.id],
     queryFn: () => api.get<ProcessDocument[]>(`/documents/?process_id=${card.id}`).then(r => r.data),
     enabled: activeTab === 'documents',
-  });
-
-  const toggleActionMutation = useMutation({
-    mutationFn: ({ actionId, completed }: { actionId: string; completed: boolean }) =>
-      api.patch(`/processes/${card.id}/macroetapa/${card.macroetapa}/actions`, {
-        action_id: actionId,
-        completed,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['macroetapa-status', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['kanban'] });
-    },
   });
 
   const currentStep = macroetapaStatus?.steps.find(s => s.status === 'active');
@@ -349,7 +335,8 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
             </div>
           )}
 
-          {/* Checklist tab */}
+          {/* Checklist tab — CAM3PR-001 (Sprint N): read-only no side panel.
+              Toggle de ações só acontece no Workspace. Side panel é preview. */}
           {activeTab === 'checklist' && currentStep && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -363,16 +350,9 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
 
               <div className="space-y-1.5">
                 {currentStep.actions.map(action => (
-                  <button
-                    type="button"
+                  <div
                     key={action.id}
-                    onClick={() =>
-                      toggleActionMutation.mutate({
-                        actionId: action.id,
-                        completed: !action.completed,
-                      })
-                    }
-                    className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left w-full"
+                    className="flex items-start gap-3 p-3 rounded-lg text-left w-full"
                   >
                     {action.completed ? (
                       <CheckSquare className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
@@ -388,14 +368,18 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
                     >
                       {action.label}
                     </span>
-                  </button>
+                  </div>
                 ))}
               </div>
 
-              {/* Agent chain trigger */}
-              {currentStep.agent_chain && (
-                <AgentChainButton processId={card.id} chainName={currentStep.agent_chain} />
-              )}
+              <button
+                type="button"
+                onClick={openWorkspace}
+                className="w-full flex items-center justify-center gap-2 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                Concluir ações e rodar IA no Workspace
+              </button>
             </div>
           )}
 
@@ -405,29 +389,38 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
             </p>
           )}
 
-          {/* Documents tab */}
+          {/* Documents tab — CAM3PR-001 (Sprint N): read-only no side panel.
+              Upload acontece só no Workspace (Cam3 princípio arquitetural). */}
           {activeTab === 'documents' && (
             <div className="space-y-4">
-              <DocumentUpload processId={card.id} />
-              {documents?.length === 0 && (
+              {documents?.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-4">Nenhum documento anexado.</p>
-              )}
-              {documents?.map(doc => (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-100 dark:border-zinc-800"
-                >
-                  <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                      {doc.filename}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
-                    </p>
+              ) : (
+                documents?.map(doc => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-100 dark:border-zinc-800"
+                  >
+                    <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {doc.filename}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
+              <button
+                type="button"
+                onClick={openWorkspace}
+                className="w-full flex items-center justify-center gap-2 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                Anexar documento no Workspace
+              </button>
             </div>
           )}
 
@@ -468,49 +461,3 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
   );
 }
 
-/** Botao para disparar chain de agentes a partir da macroetapa */
-function AgentChainButton({ processId, chainName }: { processId: number; chainName: string }) {
-  const queryClient = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: () =>
-      api.post('/agents/chain-async', {
-        chain_name: chainName,
-        process_id: processId,
-        metadata: {},
-        stop_on_review: true,
-      }).then(r => r.data),
-    onSuccess: () => {
-      toast.success('Chain de agentes enfileirada!');
-      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs', processId] }), 2000);
-    },
-    onError: () => {
-      toast.error('Erro ao executar chain de agentes.');
-    },
-  });
-
-  return (
-    <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-500/10 rounded-lg border border-purple-200 dark:border-purple-500/20">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300 mb-1">
-            <Sparkles className="w-4 h-4" />
-            {CHAIN_LABELS[chainName] ?? chainName}
-          </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400">
-            Agentes IA para esta etapa
-          </p>
-        </div>
-        <button
-          onClick={() => mutation.mutate()}
-          disabled={mutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors"
-        >
-          {mutation.isPending
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            : <Zap className="w-3.5 h-3.5" />}
-          Executar
-        </button>
-      </div>
-    </div>
-  );
-}

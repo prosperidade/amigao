@@ -103,14 +103,34 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
 // Visão geral / Ações / Documentos / Dados / IA / Histórico / Decisões / Saídas.
 // Comercial mantido como bloco condicional (sócia: etapa 6+7).
 // "Trilha" removida (duplicava o stepper horizontal do topo).
-export const TABS = [
-  { key: 'diagnosis',  label: 'Vis\u00e3o geral', icon: Stethoscope },
-  { key: 'tasks',      label: 'A\u00e7\u00f5es',       icon: ListChecks },
-  { key: 'documents',  label: 'Documentos',       icon: FolderOpen },
-  { key: 'dossier',    label: 'Dados',            icon: LayoutGrid },
-  { key: 'ai',         label: 'IA',               icon: Bot },
-  { key: 'timeline',   label: 'Hist\u00f3rico',      icon: CalendarDays },
-  { key: 'decisions',  label: 'Decis\u00f5es',       icon: Scale },
-  { key: 'saidas',     label: 'Sa\u00eddas',          icon: PackageCheck },
-  { key: 'commercial', label: 'Comercial',        icon: Briefcase },
+//
+// CAM3WS-002 (Sprint N) — Tipos de bloco Regente:
+//  - permanent : sempre visível, independente da etapa (identidade do caso, dados-base, histórico)
+//  - active    : relativo à etapa corrente — quando o consultor filtra por outra etapa via
+//                `viewingStage`, o conteúdo passa a ser tratado como "inherited" (histórico
+//                read-only), mas o tab continua visível.
+//  - conditional: só aparece quando a condição é atendida (ex.: Comercial só ≥ etapa 6).
+// `minStageIndex` é a condição mais comum (etapa mínima em MACROETAPA_ORDER).
+export type BlockType = 'permanent' | 'active' | 'conditional';
+
+export interface TabDef {
+  key: string;
+  label: string;
+  icon: typeof Stethoscope;
+  block_type: BlockType;
+  /** Só se aplica a block_type=conditional. Índice na MACROETAPA_ORDER a partir do qual o tab aparece. */
+  min_stage_index?: number;
+}
+
+export const TABS: TabDef[] = [
+  { key: 'diagnosis',  label: 'Vis\u00e3o geral', icon: Stethoscope,  block_type: 'permanent' },
+  { key: 'tasks',      label: 'A\u00e7\u00f5es',       icon: ListChecks,   block_type: 'active'    },
+  { key: 'documents',  label: 'Documentos',       icon: FolderOpen,   block_type: 'permanent' },
+  { key: 'dossier',    label: 'Dados',            icon: LayoutGrid,   block_type: 'permanent' },
+  { key: 'ai',         label: 'IA',               icon: Bot,          block_type: 'active'    },
+  { key: 'timeline',   label: 'Hist\u00f3rico',      icon: CalendarDays, block_type: 'permanent' },
+  { key: 'decisions',  label: 'Decis\u00f5es',       icon: Scale,        block_type: 'permanent' },
+  { key: 'saidas',     label: 'Sa\u00eddas',          icon: PackageCheck, block_type: 'active'    },
+  // Comercial — proposta/contrato aparecem só nas etapas 6 (orcamento_negociacao) e 7 (contrato_formalizacao).
+  { key: 'commercial', label: 'Comercial',        icon: Briefcase,    block_type: 'conditional', min_stage_index: 5 },
 ];

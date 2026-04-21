@@ -1695,18 +1695,68 @@ Antes, `/dashboard/alerts` cobria `doc_pendente`, `etapa_travada` e `proposta_se
 
 ---
 
-## PENDÊNCIAS PARA AMANHÃ — 2026-04-21
+## Sprint N — Refinamentos Camada 3 (2026-04-21)
 
-**Última sessão:** fechamos 7 sprints em sequência (G → H → I → J → K → L → M) cobrindo Camada 2 (Cliente/Imóvel Hub), Camada 1 (Cadastro + Enriquecimento), Camada 3 (Workspace polish + gates) e Dashboard executivo. Commits em `main`: `648646c` → `a2eeedd` → `df7b139` → (Sprint M na sequência).
+Fechamos os 3 tickets de refinamento da Camada 3 em um único sprint.
+
+### CAM3WS-002 — Tipos de blocos (permanente / ativo / herdado / condicional)
+
+**Antes:** workspace tinha 9 tabs mas **sem classificação semântica**. Comentário sobre "Comercial condicional" era apenas descritivo, sem enforcement.
+
+**Agora:**
+- [ProcessDetailTypes.ts](../frontend/src/pages/Processes/ProcessDetailTypes.ts) — nova tipagem `TabDef` com `block_type: 'permanent' | 'active' | 'conditional'` + `min_stage_index` opcional.
+- Mapeamento: Visão/Documentos/Dados/Histórico/Decisões = **permanent**; Ações/IA/Saídas = **active**; Comercial = **conditional** (min_stage_index=5, só aparece ≥ orcamento_negociacao).
+- [ProcessDetail.tsx](../frontend/src/pages/Processes/ProcessDetail.tsx) — menu lateral filtra condicionais e marca visualmente tabs "active" como **herdadas** (italic + label "herd.") quando `viewingStage` < `currentStage`. Pequena legenda no rodapé do menu.
+
+### CAM3WS-004 — Multi-agente por etapa (primary + secondary)
+
+**Antes:** `MACROETAPA_AGENT_CHAIN` em [macroetapa.py:195](../app/models/macroetapa.py) mapeia **1 chain** por etapa. Frontend tinha hardcode `PRIMARY_AGENT_BY_STAGE` só com primários. Sem secundários em lugar algum.
+
+**Agora (sem alterar prompts/chains — respeita `feedback_agents_config_frozen`):**
+- Novo `MACROETAPA_AGENTS: {etapa: {primary: [...], secondary: [...]}}` + helper `get_stage_agents()` em [macroetapa.py](../app/models/macroetapa.py). Mapeamento fiel ao Regente (tabela na seção CAM3WS-004 acima).
+- [macroetapa_engine.py:get_macroetapa_status](../app/services/macroetapa_engine.py) passa a expor `primary_agents` + `secondary_agents` por step. Schema `MacroetapaStep` em [schemas/macroetapa.py](../app/schemas/macroetapa.py) atualizado.
+- [WorkspaceRightPanel.tsx](../frontend/src/pages/Processes/WorkspaceRightPanel.tsx) — hardcode removido. Painel lateral renderiza "Principal" + "Secundários" como chips distintos.
+
+### CAM3PR-001 — Cadastro cria, Workspace executa, Fluxo coordena
+
+**Auditoria identificou 2 quebras do princípio:**
+
+1. **[MacroetapaSidePanel.tsx](../frontend/src/pages/Processes/MacroetapaSidePanel.tsx)** (drawer do Quadro de Ações):
+   - Tab Documentos tinha `<DocumentUpload>` → **upload profundo fora do Workspace**.
+   - Tab Checklist tinha `toggleActionMutation` → **edição de ações fora do Workspace**.
+   - **Fix:** ambas viraram **read-only** + CTA "Abrir Workspace". `toggleActionMutation` e função `AgentChainButton` removidas. Imports `DocumentUpload`, `useMutation`, `useQueryClient`, `toast`, `CHAIN_LABELS`, `Loader2`, `Zap` descartados.
+
+2. **[Processes/index.tsx](../frontend/src/pages/Processes/index.tsx)** (rota `/processes` — Kanban legado):
+   - `viewMode` default era `'kanban'` → usuário caía no Kanban legado (9 colunas status) em vez do Quadro de Ações (7 etapas Regente).
+   - Modal inline (~140 linhas) tinha tabs Detalhes/Tarefas/Timeline/**Docs c/ upload** — concorrente completo do Workspace.
+   - **Fix A:** `viewMode` default agora é `'quadro'` (lê localStorage p/ respeitar pref anterior). Kanban vira fallback opcional.
+   - **Fix B:** clicar no card do Kanban legado redireciona para `/processes/:id` (Workspace) em vez de abrir modal. Modal inline inteira removida (selectedProcess state, processTasks/Timeline/Documents queries, createTaskMutation, toggleTaskMutation, handleDownload, DocumentUpload import, TASK_STATUS_LABELS/PROGRESS_ORDER, getNextTaskStatus, isTaskDone — tudo fora).
+
+### Exceções deixadas em pé (justificadas)
+- **`IntakeWizard` + `DraftDocumentUploader`** — upload durante cadastro autorizado pela sócia em CAM1-005 (enriquecimento + gate de prontidão). Mantém.
+
+### Validações Sprint N
+- [x] `npx tsc --noEmit` limpo após todos os edits.
+- [x] `npm run build` ok (vite build, 40s, bundle 606kB).
+- [x] Backend rebuild da imagem Docker; `MACROETAPA_AGENTS` importável; `get_stage_agents()` OK p/ todas as etapas.
+- [x] `GET /api/v1/processes/7/macroetapa/status` retorna `primary_agents` + `secondary_agents` para todos os 7 steps.
+- [x] Frontend: `MacroetapaSidePanel` abre preview sem upload; CTA "Abrir Workspace" presente em docs + checklist.
+- [x] Frontend: `/processes` agora default p/ Quadro de Ações; Kanban legado redireciona clique p/ Workspace (modal inline removida).
+
+### Decisões de escopo (Sprint N)
+- ✅ **Manter** o Kanban legado (`viewMode='kanban'`) como fallback opcional (não remover ainda) — transição suave para usuários que memorizaram o comportamento antigo.
+- ❌ **Não** alterar `MACROETAPA_AGENT_CHAIN` (chains) — só adicionar metadata `MACROETAPA_AGENTS` novo. Dois mapeamentos convivem.
+- ❌ **Não** fazer `agent_vigia` / `agent_diagnostico` / demais rodarem automaticamente por etapa — metadata é **declarativo**, disparo continua manual via UI (respeita `feedback_agents_config_frozen`).
+
+---
+
+## PENDÊNCIAS PARA AMANHÃ — 2026-04-22
+
+**Última sessão:** Sprint N (CAM3WS-002 + CAM3WS-004 + CAM3PR-001) fechou a Camada 3 em 100%. Commits em `main`: Sprint M `630a249` → Sprint N (próximo).
 
 ### Próxima sessão (em ordem de prioridade)
 
-1. **Sprint N = Sprint 7 do plano — Refinamentos Camada 3** (~1-2h esperado pelo padrão G-M)
-   - **CAM3WS-002** — Tipos de blocos no workspace (permanente / ativo / herdado / condicional). Provavelmente já parcial no `WorkspaceRightPanel` e nos tabs; auditar.
-   - **CAM3WS-004** — Multi-agente por etapa (primary + secondary agents). Endpoint `/macroetapa/status` já tem `agent_chain: Optional[str]` — verificar se expõe primary/secondary.
-   - **CAM3PR-001** — Princípio arquitetural "Cadastro cria, Workspace executa, Fluxo coordena". Auditoria das rotas de UI para identificar operações "profundas" fora do Workspace e redirecionar. É o mais pesado — possível split em dois blocos.
-
-2. **Sprint O+ = Camada 4 — Agentes + Configurações** (escopo maior)
+1. **Sprint O = Camada 4 — Agentes + Configurações** (escopo maior)
    - Material da sócia disponível em [amigao_regente/](../amigao_regente/): `Camada 4 conifguracao e agente de ia.pdf` + `regente lovable 1.png` + `1 nucleo.jpeg`.
    - Sprint F Bloco 2 já entregou a UI de Configurações (6 abas). Falta a parte **Agentes** da Camada 4 (gestão de prompts, cadeias, observabilidade, telemetria).
    - ⚠️ Respeitar `feedback_agents_config_frozen`: **não alterar** prompts/chains dos agentes existentes. Pode construir UI de visualização/dashboard dos agentes (read-only) ou endpoints novos que consomem agentes.
@@ -1718,6 +1768,7 @@ Antes, `/dashboard/alerts` cobria `doc_pendente`, `etapa_travada` e `proposta_se
 - **CAM2D-002 agent_vigia** — alertas são determinísticos (regras SQL). `agent_vigia` existe mas não é chamado pelo endpoint. Integração respeitando `feedback_agents_config_frozen` seria apenas orquestração pós-agente.
 - **CAM2D-004 leitura IA real** — texto hoje é regras + concat. Upgrade pra LLM respeitando "1x/dia" da sócia (cache 24h já existe) + tracking de tokens/custo.
 - **Limpeza do doc** — as seções iniciais "CAMADA 1" → "CAMADA 4" listam tickets como "pendente/mudança necessária" que já foram entregues em G-M. Vale varrer e marcar status com 🔵 INFO linkando ao sprint de entrega.
+- **Kanban legado (`/processes` viewMode='kanban')** — Sprint N tornou Quadro de Ações default e removeu a modal profunda, mas o Kanban legado (9 colunas status) segue como fallback. Próxima onda: remover de vez e fazer `/processes` ir direto pro Quadro, junto com o botão "Voltar ao Kanban".
 
 ### Comandos úteis para retomar amanhã
 

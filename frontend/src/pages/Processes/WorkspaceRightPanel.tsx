@@ -17,17 +17,6 @@ import { CheckCircle2, AlertTriangle, ArrowRight, Bot, Target, Lock, Loader2, Ch
 import { api } from '@/lib/api';
 import { MACROETAPA_STATE_BADGE, MACROETAPA_LABELS } from './quadro-types';
 
-// Mapeamento agentes principais por etapa (Regente Cam3)
-const PRIMARY_AGENT_BY_STAGE: Record<string, string[]> = {
-  entrada_demanda:        ['agent_atendimento'],
-  diagnostico_preliminar: ['agent_atendimento', 'agent_diagnostico'],
-  coleta_documental:      ['agent_extrator'],
-  diagnostico_tecnico:    ['agent_diagnostico'],
-  caminho_regulatorio:    ['agent_legislacao'],
-  orcamento_negociacao:   ['agent_orcamento', 'agent_financeiro'],
-  contrato_formalizacao:  ['agent_redator', 'agent_financeiro'],
-};
-
 interface CanAdvance {
   can_advance: boolean;
   current_macroetapa: string | null;
@@ -47,10 +36,19 @@ interface ActionItem {
   validated_at: string | null;
 }
 
+interface MacroetapaStep {
+  macroetapa: string;
+  actions: ActionItem[];
+  status: string;
+  // CAM3WS-004 (Sprint N) — agentes da etapa vindos do backend.
+  primary_agents?: string[];
+  secondary_agents?: string[];
+}
+
 interface MacroetapaStatus {
   current_macroetapa: string | null;
   next_action: string | null;
-  steps: { macroetapa: string; actions: ActionItem[]; status: string }[];
+  steps: MacroetapaStep[];
 }
 
 interface Props {
@@ -98,12 +96,14 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
 
   const stateBadge = gate.current_state ? MACROETAPA_STATE_BADGE[gate.current_state] : null;
   const currentEtapa = gate.current_macroetapa ?? '';
-  const agents = PRIMARY_AGENT_BY_STAGE[currentEtapa] ?? [];
 
   const currentStep = status?.steps.find(s => s.macroetapa === currentEtapa);
   const pendingValidations = (currentStep?.actions ?? []).filter(
     a => a.completed && a.needs_human_validation && !a.validated_at,
   );
+  // CAM3WS-004 — agentes primários/secundários da etapa vindos do /macroetapa/status.
+  const primaryAgents = currentStep?.primary_agents ?? [];
+  const secondaryAgents = currentStep?.secondary_agents ?? [];
 
   return (
     <div className="space-y-4">
@@ -268,18 +268,49 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
         </div>
       )}
 
-      {/* Agente da etapa */}
-      {agents.length > 0 && (
-        <div className="rounded-2xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 p-4">
-          <div className="flex items-center gap-2 mb-1">
+      {/* Agentes da etapa — CAM3WS-004 (Sprint N): principais + secundários vindos da API */}
+      {(primaryAgents.length > 0 || secondaryAgents.length > 0) && (
+        <div className="rounded-2xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 p-4 space-y-2">
+          <div className="flex items-center gap-2">
             <Bot className="w-4 h-4 text-sky-600 dark:text-sky-400" />
             <span className="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-300 font-semibold">
-              Agente da etapa
+              Agentes da etapa
             </span>
           </div>
-          <p className="text-sm text-sky-900 dark:text-sky-100">
-            {agents.join(', ')}
-          </p>
+          {primaryAgents.length > 0 && (
+            <div>
+              <span className="block text-[10px] uppercase tracking-wide text-sky-700/80 dark:text-sky-300/80 font-semibold mb-0.5">
+                Principal
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {primaryAgents.map(a => (
+                  <span
+                    key={a}
+                    className="text-[11px] px-1.5 py-0.5 rounded-md bg-sky-200/60 dark:bg-sky-500/30 text-sky-900 dark:text-sky-100 font-medium"
+                  >
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {secondaryAgents.length > 0 && (
+            <div>
+              <span className="block text-[10px] uppercase tracking-wide text-sky-700/60 dark:text-sky-300/60 font-semibold mb-0.5">
+                Secundários
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {secondaryAgents.map(a => (
+                  <span
+                    key={a}
+                    className="text-[11px] px-1.5 py-0.5 rounded-md bg-sky-100/60 dark:bg-sky-500/10 text-sky-800 dark:text-sky-200 border border-sky-200 dark:border-sky-500/20"
+                  >
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

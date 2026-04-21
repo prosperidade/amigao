@@ -235,28 +235,63 @@ export default function ProcessDetail() {
       {/* Layout 3 colunas: menu lateral + área central + painel direito */}
       <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr_320px] gap-4">
 
-        {/* Área 3 — Menu lateral interno (vertical) */}
+        {/* Área 3 — Menu lateral interno (vertical).
+            CAM3WS-002 (Sprint N): filtra tabs conditionais (min_stage_index) e marca
+            tabs 'active' como "herdado" quando o usuário filtra por etapa passada
+            via stepper (viewingStage anterior ao currentStage). */}
         <aside className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 p-2 h-fit lg:sticky lg:top-4">
           <nav className="flex flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible">
             {TABS.map(tab => {
+              // Conditional: esconde se a etapa atual do processo ainda não atingiu min_stage_index.
+              if (tab.block_type === 'conditional' &&
+                  typeof tab.min_stage_index === 'number' &&
+                  currentIndex < tab.min_stage_index) {
+                return null;
+              }
               const Icon = tab.icon;
               const active = activeTab === tab.key;
+              // "Herdado": tab 'active' visualizado no contexto de uma etapa passada.
+              const viewingIdx = viewingStage
+                ? STAGE_ORDER.indexOf(viewingStage as typeof STAGE_ORDER[number])
+                : -1;
+              const isInherited = tab.block_type === 'active'
+                && viewingStage !== null
+                && viewingIdx >= 0
+                && viewingIdx < currentIndex;
               return (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key as TabKey)}
+                  title={
+                    isInherited
+                      ? `Herdado — conteúdo da etapa ${MACROETAPA_LABELS[viewingStage!]} (somente histórico)`
+                      : tab.block_type === 'conditional'
+                      ? 'Bloco condicional — ativo a partir desta etapa'
+                      : tab.block_type === 'active'
+                      ? 'Bloco ativo da etapa atual'
+                      : 'Bloco permanente'
+                  }
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
                     active
                       ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      : isInherited
+                      ? 'text-gray-400 dark:text-slate-500 italic hover:bg-gray-50 dark:hover:bg-white/5'
                       : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">{tab.label}</span>
+                  {isInherited && (
+                    <span className="ml-auto text-[9px] uppercase tracking-wide text-gray-400 dark:text-slate-500">herd.</span>
+                  )}
                 </button>
               );
             })}
           </nav>
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-white/10 px-1 text-[10px] text-gray-400 dark:text-slate-500 leading-snug hidden lg:block">
+            <span className="block">● permanente  ◐ ativo</span>
+            <span className="block">◇ condicional  · herdado</span>
+          </div>
         </aside>
 
         {/* Área 4 — Área central de trabalho */}

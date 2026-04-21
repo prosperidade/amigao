@@ -19,6 +19,7 @@ from app.models.macroetapa import (
     MACROETAPA_ORDER,
     Macroetapa,
     MacroetapaChecklist,
+    get_stage_agents,
     is_valid_macroetapa_transition,
 )
 from app.models.process import Process
@@ -275,6 +276,7 @@ def get_macroetapa_status(
         elif current and i == current_index:
             status = "active"
 
+        stage_agents = get_stage_agents(etapa)
         steps.append({
             "macroetapa": etapa.value,
             "label": MACROETAPA_LABELS[etapa],
@@ -283,6 +285,9 @@ def get_macroetapa_status(
             "completion_pct": cl.completion_pct if cl else 0.0,
             "actions": cl.actions if cl else [],
             "agent_chain": MACROETAPA_AGENT_CHAIN.get(etapa),
+            # CAM3WS-004 — agentes principais e secundários da etapa (metadado).
+            "primary_agents": stage_agents["primary"],
+            "secondary_agents": stage_agents["secondary"],
         })
 
     # Proxima acao: primeira acao nao concluida da etapa atual
