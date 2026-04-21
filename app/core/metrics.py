@@ -263,6 +263,24 @@ TASK_TRANSITIONS_TOTAL = CounterMetric(
     ("service", "from_status", "to_status", "result"),
 )
 
+# Sprint O (2026-04-21) — Observabilidade Camada 4. Labels: agent_name, result
+# (success|failure), tenant (id como string). Sem PII — apenas identificadores.
+AGENT_EXECUTIONS_TOTAL = CounterMetric(
+    "amigao_agent_executions_total",
+    "Execucoes de agentes IA por resultado",
+    ("service", "agent_name", "result", "tenant"),
+)
+AGENT_EXECUTION_DURATION_SECONDS = HistogramMetric(
+    "amigao_agent_execution_duration_seconds",
+    "Duracao das execucoes de agentes IA em segundos",
+    ("service", "agent_name"),
+)
+AGENT_EXECUTION_COST_USD = CounterMetric(
+    "amigao_agent_execution_cost_usd_total",
+    "Custo acumulado das execucoes de agentes em USD",
+    ("service", "agent_name", "tenant"),
+)
+
 _SHARED_WORKER_COUNTER_METRICS = {
     CELERY_TASKS_TOTAL.name: CELERY_TASKS_TOTAL,
     ALERTS_TOTAL.name: ALERTS_TOTAL,
@@ -504,6 +522,36 @@ def record_task_transition(from_status: str, to_status: str, result: str) -> Non
     ).inc()
 
 
+def record_agent_execution(
+    agent_name: str,
+    result: str,
+    duration_seconds: float | None = None,
+    *,
+    tenant_id: int | None = None,
+    cost_usd: float | None = None,
+) -> None:
+    """Sprint O — telemetria Prometheus por execução de agente IA."""
+    service_name = _service_name()
+    tenant_label = str(tenant_id) if tenant_id is not None else ""
+    AGENT_EXECUTIONS_TOTAL.labels(
+        service=service_name,
+        agent_name=agent_name,
+        result=result,
+        tenant=tenant_label,
+    ).inc()
+    if duration_seconds is not None:
+        AGENT_EXECUTION_DURATION_SECONDS.labels(
+            service=service_name,
+            agent_name=agent_name,
+        ).observe(duration_seconds)
+    if cost_usd is not None and cost_usd > 0:
+        AGENT_EXECUTION_COST_USD.labels(
+            service=service_name,
+            agent_name=agent_name,
+            tenant=tenant_label,
+        ).inc(cost_usd)
+
+
 def _queue_names() -> list[str]:
     return [queue.strip() for queue in settings.PROMETHEUS_QUEUE_NAMES.split(",") if queue.strip()]
 
@@ -552,6 +600,9 @@ def render_metrics() -> str:
         AI_SUMMARIES_TOTAL,
         AI_SUMMARY_DURATION_SECONDS,
         TASK_TRANSITIONS_TOTAL,
+        AGENT_EXECUTIONS_TOTAL,
+        AGENT_EXECUTION_DURATION_SECONDS,
+        AGENT_EXECUTION_COST_USD,
     )
     lines: list[str] = []
     for metric in metrics:

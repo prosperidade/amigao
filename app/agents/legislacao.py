@@ -95,9 +95,17 @@ class LegislacaoAgent(BaseAgent):
                 + memory_context
             )
 
-        # Decidir qual LLM usar baseado no tamanho do contexto
-        if legislation_context and len(legislation_context) > 100_000:
-            # Contexto grande: usar Gemini com janela de 2M tokens
+        # Sprint O (2026-04-21) — Gemini é o provider default do agente legislação.
+        # Claude continua como fallback para quando Gemini não tiver API key configurada
+        # (ou se a flag LEGISLATION_USE_GEMINI_DEFAULT for desativada pontualmente).
+        # O contexto grande (>100K chars) sempre vai pra Gemini (janela de 2M tokens).
+        large_context = bool(legislation_context and len(legislation_context) > 100_000)
+        use_gemini = (
+            large_context
+            or (settings.LEGISLATION_USE_GEMINI_DEFAULT and bool(settings.GEMINI_API_KEY))
+        )
+
+        if use_gemini:
             response = self.call_llm(
                 user_prompt,
                 system=system_prompt,
@@ -105,10 +113,10 @@ class LegislacaoAgent(BaseAgent):
                 max_tokens=settings.CLAUDE_LEGAL_MAX_TOKENS,
             )
         elif settings.ANTHROPIC_API_KEY:
-            # Contexto normal: usar Claude para raciocinio juridico
+            # Fallback: Claude via SDK quando Gemini não tiver API key.
             response = self._call_claude(user_prompt, system=system_prompt)
         else:
-            # Fallback: LiteLLM padrao
+            # Último fallback: LiteLLM padrao (outro provider configurado).
             response = self.call_llm(user_prompt, system=system_prompt)
 
         parsed = OutputValidationPipeline.parse_llm_json(response.content)

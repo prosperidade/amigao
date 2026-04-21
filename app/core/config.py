@@ -116,6 +116,10 @@ class Settings(BaseSettings):
     # Gemini (context loading de legislação)
     GEMINI_LEGAL_MODEL: str = "gemini/gemini-2.0-flash"
 
+    # Sprint O — Gemini como provider default do agente legislação (decisão da sócia 2026-04-21).
+    # Claude continua como fallback quando Gemini não estiver configurado.
+    LEGISLATION_USE_GEMINI_DEFAULT: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]

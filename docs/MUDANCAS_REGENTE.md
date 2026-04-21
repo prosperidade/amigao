@@ -1750,16 +1750,78 @@ Fechamos os 3 tickets de refinamento da Camada 3 em um único sprint.
 
 ---
 
+## Sprint O — Quick wins da Camada 4 (2026-04-21)
+
+Primeira entrega da Camada 4 (Inteligência e Governança). Dois blocos pequenos que destravam governança sem mexer em prompts/chains existentes.
+
+### Bloco 1 — Gemini como default para o agente legislação
+
+**Antes:** [legislacao.py:98-112](../app/agents/legislacao.py#L98-L112) escolhia LLM por tamanho: >100K chars → Gemini; senão → Claude (default). Sócia viu que Gemini "já estava pronto" mas só rodava como overflow.
+
+**Agora:**
+- Nova flag `LEGISLATION_USE_GEMINI_DEFAULT: bool = True` em [config.py](../app/core/config.py#L120).
+- Lógica invertida em `legislacao.py`: se a flag estiver ligada **e** `GEMINI_API_KEY` estiver setada, **Gemini é o default**. Contexto grande (>100K) continua indo pra Gemini automaticamente (overflow). Claude vira fallback quando Gemini não tiver key. LiteLLM padrão é último fallback.
+- Smoke: `settings.LEGISLATION_USE_GEMINI_DEFAULT == True` confirmado após rebuild.
+
+### Bloco 2 — Telemetria Prometheus por agente
+
+**Antes:** `/metrics` expunha `amigao_ai_summaries_total` (genérico, sem separar agente) + telemetria interna via `AIJob` (tabela) mas sem Prometheus por agente. Sem segmentação por tenant.
+
+**Agora (em [metrics.py](../app/core/metrics.py)):**
+- `amigao_agent_executions_total{agent_name,result,tenant}` — counter por execução (success/failure).
+- `amigao_agent_execution_duration_seconds{agent_name}` — histogram de duração.
+- `amigao_agent_execution_cost_usd_total{agent_name,tenant}` — counter acumulado de custo LLM em USD.
+- Helper `record_agent_execution()` com suporte a tenant_id + cost_usd.
+- Instrumentação em [base.py:BaseAgent.run()](../app/agents/base.py) tanto no path de sucesso quanto falha — usa `job.cost_usd` quando disponível.
+- Smoke: após disparar `vigia`, `/metrics` retorna `amigao_agent_executions_total{service="api",agent_name="vigia",result="success",tenant="2"} 1.0` e histogram count.
+
+### Decisões de escopo (Sprint O)
+- ✅ **Respeita `feedback_agents_config_frozen`** — nenhum prompt/chain alterado. Só flag de seleção de provider + telemetria nova.
+- ❌ **Não** alterar `AI_DEFAULT_MODEL` global — flag é específica para o agente legislação, não afeta os outros.
+- ❌ **Não** implementar dashboard de saúde dos agentes (Sprint Q). Esta sprint é apenas o "pipe" pra Prometheus; o dashboard consumidor virá depois.
+- ✅ **Label tenant vazio** quando tenant_id for None (ex: vigia scheduled-check sem contexto de usuário) — evita quebra de cardinalidade.
+
+### Nota sobre RAG ("híbrido")
+
+Durante a auditoria com a sócia (2026-04-21) confirmamos: o sistema **NÃO tem embeddings nem banco vetorial**. Realidade: `legislation_documents.full_text` em texto puro + decisão Claude/Gemini só por tamanho do contexto (>100K → Gemini). Não há `pgvector`, `chromadb`, `sentence-transformers` etc. MemPalace tem busca semântica, mas só para memória de execução de agente (não para base legal). RAG real com embeddings é um epic separado (**Sprint U+**, ~6-8h).
+
+### Validações Sprint O
+- [x] `settings.LEGISLATION_USE_GEMINI_DEFAULT` disponível no container rebuildado.
+- [x] `/agents/run` com `agent_name=vigia` → 200 + job_id gerado.
+- [x] `/metrics` exibe `amigao_agent_executions_total{...} 1.0` após a execução.
+- [x] `/metrics` exibe `amigao_agent_execution_duration_seconds_count{...} 1`.
+
+---
+
 ## PENDÊNCIAS PARA AMANHÃ — 2026-04-22
 
-**Última sessão:** Sprint N (CAM3WS-002 + CAM3WS-004 + CAM3PR-001) fechou a Camada 3 em 100%. Commits em `main`: Sprint M `630a249` → Sprint N (próximo).
+**Última sessão:** Sprint N (Camada 3 fechada) + Sprint O (Camada 4 quick wins: Gemini default + métricas por agente). Commits em `main`: Sprint M `630a249` → Sprint N `4b06b1b` → Sprint O (próximo).
 
-### Próxima sessão (em ordem de prioridade)
+### Plano da Camada 4 (em ordem de prioridade)
 
-1. **Sprint O = Camada 4 — Agentes + Configurações** (escopo maior)
-   - Material da sócia disponível em [amigao_regente/](../amigao_regente/): `Camada 4 conifguracao e agente de ia.pdf` + `regente lovable 1.png` + `1 nucleo.jpeg`.
-   - Sprint F Bloco 2 já entregou a UI de Configurações (6 abas). Falta a parte **Agentes** da Camada 4 (gestão de prompts, cadeias, observabilidade, telemetria).
-   - ⚠️ Respeitar `feedback_agents_config_frozen`: **não alterar** prompts/chains dos agentes existentes. Pode construir UI de visualização/dashboard dos agentes (read-only) ou endpoints novos que consomem agentes.
+1. **Sprint P = Editor de Prompts via UI** (~3-4h) — **decisão da sócia: editável por default**.
+   - Endpoints CRUD em `PromptTemplate` (POST/PATCH/novo-version/ativar).
+   - Página `/agents/prompts` com lista, editor, diff entre versões, botão de ativação.
+   - Validação de placeholders consistentes com fallback hardcoded de cada agente.
+
+2. **Sprint Q = Dashboard de saúde dos agentes + Audit trail UI** (~3h)
+   - Endpoint `/agents/health` agregando taxa de sucesso, custo USD, p95 latência por agente (24h/7d/30d).
+   - UI em `/agents` com cards de health + timeline auditável de execuções.
+   - Fonte: métricas já expostas no Sprint O + tabela `AIJob`.
+
+3. **Sprint R = Budget por tenant** (~2h)
+   - Setting `AI_BUDGET_USD_MONTHLY_PER_TENANT` + check em `BaseAgent.run()`.
+   - Alerta visual quando tenant atinge ≥80% do budget.
+
+4. **Sprint S = Approval workflow visual** (~3h)
+   - Fila dedicada para `requires_review=True`; UI aprovar/rejeitar com comentário.
+   - Routing automático por `confidence < threshold`.
+
+5. **Sprint T = Configuração LLM por agente via UI** (~2h)
+   - Ajuste de model/temperature/max_tokens por agente, persistido em DB.
+
+6. **Sprint U = RAG real com embeddings** (epic, ~6-8h) — separado, alinhar com sócia antes de atacar.
+   - pgvector + chunking + indexação de docs/legislação.
 
 ### Dívidas técnicas pequenas detectadas (polimento futuro)
 

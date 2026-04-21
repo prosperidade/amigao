@@ -125,6 +125,7 @@ class BaseAgent(ABC):
         7. Emite evento
         """
         from app.agents.events import emit_agent_event  # noqa: PLC0415
+        from app.core.metrics import record_agent_execution  # noqa: PLC0415
 
         # 1. Cost check
         check_tenant_cost_limit(self.ctx.tenant_id, self.ctx.session)
@@ -169,6 +170,15 @@ class BaseAgent(ABC):
             # 9. MemPalace: log execution to diary + knowledge graph
             self._mempalace_log(result, validated)
 
+            # 10. Sprint O — telemetria Prometheus por execução de agente
+            record_agent_execution(
+                agent_name=self.name,
+                result="success",
+                duration_seconds=elapsed_ms / 1000.0,
+                tenant_id=self.ctx.tenant_id,
+                cost_usd=float(job.cost_usd) if job and job.cost_usd else None,
+            )
+
             logger.info(
                 "agent.%s completed confidence=%s review=%s ms=%d job_id=%s",
                 self.name, confidence, requires_review, elapsed_ms, job.id if job else None,
@@ -182,6 +192,15 @@ class BaseAgent(ABC):
 
             # MemPalace: log failure
             self._mempalace_log_failure(str(exc), elapsed_ms)
+
+            # Sprint O — telemetria Prometheus (falha)
+            record_agent_execution(
+                agent_name=self.name,
+                result="failure",
+                duration_seconds=elapsed_ms / 1000.0,
+                tenant_id=self.ctx.tenant_id,
+                cost_usd=float(job.cost_usd) if job and job.cost_usd else None,
+            )
 
             logger.error("agent.%s failed error=%s ms=%d", self.name, exc, elapsed_ms)
             return AgentResult(
