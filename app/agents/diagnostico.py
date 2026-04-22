@@ -18,7 +18,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class DiagnosticoAgent(BaseAgent):
     name = "diagnostico"
-    description = "Analise da situacao do imovel com sugestoes de remediacao"
+    description = "Analisa a situação do imóvel e sugere ações de remediação"
     job_type = AIJobType.diagnostico_propriedade
     prompt_slugs = ["diagnostico_system", "diagnostico_user"]
     palace_room = "agent_diagnostico"

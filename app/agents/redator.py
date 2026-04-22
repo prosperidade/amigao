@@ -17,7 +17,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class RedatorAgent(BaseAgent):
     name = "redator"
-    description = "Geracao de documentos formais: PRAD, memorial descritivo, oficios, propostas"
+    description = "Gera documentos formais: PRAD, memorial descritivo, ofícios, propostas e contratos"
     job_type = AIJobType.gerar_documento
     palace_room = "agent_redator"
     prompt_slugs = [

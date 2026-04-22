@@ -169,7 +169,7 @@ export default function DecisionsTab({ processId, currentMacroetapa }: Props) {
         <div className="flex items-center gap-2">
           <Scale className="w-5 h-5 text-emerald-600" />
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Decis\u00f5es do caso
+            Decisões do caso
           </h2>
           <span className="text-xs text-gray-500">{decisions.length} registrada{decisions.length !== 1 ? 's' : ''}</span>
         </div>
@@ -258,9 +258,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="text-center py-12 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-xl">
       <Scale className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto mb-3" />
-      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Nenhuma decis\u00e3o registrada ainda</p>
+      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Nenhuma decisão registrada ainda</p>
       <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-        Registre escolhas cr\u00edticas que mudam o rumo do caso: hip\u00f3tese validada, rota regulat\u00f3ria,
+        Registre escolhas críticas que mudam o rumo do caso: hipótese validada, rota regulatória,
         ajustes de escopo, bloqueios e aceites formais.
       </p>
       <button
@@ -268,7 +268,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         onClick={onCreate}
         className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold"
       >
-        <Plus className="w-4 h-4" /> Registrar primeira decis\u00e3o
+        <Plus className="w-4 h-4" /> Registrar primeira decisão
       </button>
     </div>
   );
@@ -338,7 +338,7 @@ function DecisionForm({ defaultMacroetapa, initial, onSubmit, onCancel, submitti
             onChange={e => setStatus(e.target.value as DecisionStatus)}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
           >
-            <option value="proposta">Proposta (aguarda valida\u00e7\u00e3o)</option>
+            <option value="proposta">Proposta (aguarda validação)</option>
             <option value="validada">Validada</option>
           </select>
         </Field>
@@ -471,7 +471,7 @@ function DecisionCard({ decision: d, editing, onEdit, onCancelEdit, onSave, onDe
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge.cls}`}>
               {statusBadge.label}
             </span>
-            <span className="text-xs text-gray-500">\u00b7</span>
+            <span className="text-xs text-gray-500">·</span>
             <span className="text-xs text-gray-500">{etapaLabel}</span>
           </div>
           <p className="mt-2 text-sm text-gray-900 dark:text-gray-100 leading-relaxed">

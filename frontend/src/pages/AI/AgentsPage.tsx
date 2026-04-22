@@ -21,7 +21,7 @@ import {
   Search,
 } from 'lucide-react';
 import type { AgentInfo, AIJob } from '@/types/agent';
-import { AGENT_LABELS, CHAIN_LABELS, CONFIDENCE_STYLES } from '@/types/agent';
+import { AGENT_LABELS, CHAIN_LABELS, CONFIDENCE_STYLES, STATUS_LABELS, CONFIDENCE_LABELS } from '@/types/agent';
 import AgentResultRenderer from '@/components/AgentResultRenderer';
 
 // ---------------------------------------------------------------------------
@@ -136,43 +136,43 @@ export default function AgentsPage() {
           Agentes IA
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1 ml-14">
-          10 agentes, 9 chains, execucao automatica e manual
+          10 agentes e 9 cadeias trabalhando em conjunto — execução automática e manual
         </p>
       </div>
 
-      {/* Guia rapido */}
+      {/* Guia rápido */}
       <div className="rounded-xl bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-500/5 dark:to-blue-500/5 border border-purple-200 dark:border-purple-500/20 p-5">
         <h3 className="text-sm font-semibold text-purple-800 dark:text-purple-300 mb-2">Como usar os agentes?</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700 dark:text-slate-300">
           <div>
-            <p className="font-medium text-purple-700 dark:text-purple-300 mb-1">1. Automatico</p>
+            <p className="font-medium text-purple-700 dark:text-purple-300 mb-1">1. Automático</p>
             <p className="text-xs text-gray-500 dark:text-slate-400">
-              Agentes rodam sozinhos: ao criar um caso (intake), ao enviar documento, e ao avancar etapas do processo.
+              Os agentes rodam sozinhos: ao criar um caso, ao enviar um documento e ao avançar etapas do processo.
             </p>
           </div>
           <div>
-            <p className="font-medium text-purple-700 dark:text-purple-300 mb-1">2. Agente Individual</p>
+            <p className="font-medium text-purple-700 dark:text-purple-300 mb-1">2. Agente individual</p>
             <p className="text-xs text-gray-500 dark:text-slate-400">
-              Escolha um agente e clique Executar. Ideal para acoes pontuais como gerar um orcamento ou classificar uma demanda.
+              Escolha um agente e clique em Executar. Ideal para ações pontuais como gerar um orçamento ou classificar uma demanda.
             </p>
           </div>
           <div>
-            <p className="font-medium text-blue-700 dark:text-blue-300 mb-1">3. Chain (Sequencia)</p>
+            <p className="font-medium text-blue-700 dark:text-blue-300 mb-1">3. Cadeia (sequência de agentes)</p>
             <p className="text-xs text-gray-500 dark:text-slate-400">
-              Roda varios agentes em ordem. Ex: "Diagnostico Completo" executa Extrator, depois Legislacao, depois Diagnostico.
+              Roda vários agentes em ordem. Ex.: "Diagnóstico Completo" executa Extrator, depois Legislação e depois Diagnóstico.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Metricas (hoje) */}
+      {/* Métricas (hoje) */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: 'Execucoes Hoje', value: String(todayJobs.length), icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-          { label: 'Taxa Sucesso', value: `${successRate}%`, icon: Target, color: successRate >= 80 ? 'text-emerald-600' : 'text-amber-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-          { label: 'Custo Total', value: `$${totalCost.toFixed(4)}`, icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-500/10' },
-          { label: 'Revisao Pendente', value: String(needsReview), icon: Eye, color: needsReview > 0 ? 'text-amber-600' : 'text-gray-500', bg: 'bg-amber-50 dark:bg-amber-500/10' },
-          { label: 'Em Execucao', value: String(running), icon: Loader2, color: running > 0 ? 'text-blue-600' : 'text-gray-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
+          { label: 'Execuções hoje', value: String(todayJobs.length), icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-500/10' },
+          { label: 'Taxa de sucesso', value: `${successRate}%`, icon: Target, color: successRate >= 80 ? 'text-emerald-600' : 'text-amber-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+          { label: 'Custo total (hoje)', value: `$${totalCost.toFixed(4)}`, icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-500/10' },
+          { label: 'Aguardando revisão', value: String(needsReview), icon: Eye, color: needsReview > 0 ? 'text-amber-600' : 'text-gray-500', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+          { label: 'Em execução', value: String(running), icon: Loader2, color: running > 0 ? 'text-blue-600' : 'text-gray-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
         ].map(m => (
           <div key={m.label} className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-4">
             <div className="flex items-center justify-between mb-2">
@@ -217,8 +217,8 @@ export default function AgentsPage() {
                   <div className="flex items-center gap-2 shrink-0">
                     {agentJobs.length > 0 && (
                       <span className="text-xs text-gray-400">
-                        {agentCompleted > 0 && <span className="text-emerald-500">{agentCompleted}ok</span>}
-                        {agentFailed > 0 && <span className="text-red-500 ml-1">{agentFailed}err</span>}
+                        {agentCompleted > 0 && <span className="text-emerald-500">{agentCompleted} ok</span>}
+                        {agentFailed > 0 && <span className="text-red-500 ml-1">{agentFailed} falhas</span>}
                       </span>
                     )}
                   </div>
@@ -248,11 +248,11 @@ export default function AgentsPage() {
             </div>
           </div>
 
-          {/* Rodar Agente */}
+          {/* Executar agente individual */}
           <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
             <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
               <Zap className="w-4 h-4 text-purple-500" />
-              Rodar Agente
+              Executar agente
             </h2>
             <div className="flex gap-3">
               <select
@@ -260,7 +260,7 @@ export default function AgentsPage() {
                 onChange={e => setSelectedAgent(e.target.value)}
                 className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-800 dark:text-white"
               >
-                <option value="">Selecione...</option>
+                <option value="">Selecione um agente...</option>
                 {agents.map(a => (
                   <option key={a.name} value={a.name}>{AGENT_LABELS[a.name] ?? a.name}</option>
                 ))}
@@ -275,18 +275,18 @@ export default function AgentsPage() {
               </button>
             </div>
             {runAgentMutation.isSuccess && (
-              <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">Task enfileirada com sucesso.</p>
+              <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">Execução agendada com sucesso.</p>
             )}
             {runAgentMutation.isError && (
               <p className="mt-2 text-xs text-red-600 dark:text-red-400">Erro ao executar agente.</p>
             )}
           </div>
 
-          {/* Rodar Chain */}
+          {/* Executar cadeia (sequência de agentes) */}
           <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
             <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
               <Workflow className="w-4 h-4 text-blue-500" />
-              Rodar Chain
+              Executar cadeia
             </h2>
             <div className="flex gap-3">
               <select
@@ -294,7 +294,7 @@ export default function AgentsPage() {
                 onChange={e => setSelectedChain(e.target.value)}
                 className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-800 dark:text-white"
               >
-                <option value="">Selecione...</option>
+                <option value="">Selecione uma cadeia...</option>
                 {chainNames.map(c => (
                   <option key={c} value={c}>
                     {CHAIN_LABELS[c] ?? c} ({(chains[c] ?? []).join(' → ')})
@@ -311,21 +311,21 @@ export default function AgentsPage() {
               </button>
             </div>
             {runChainMutation.isSuccess && (
-              <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">Chain enfileirada com sucesso.</p>
+              <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">Cadeia agendada com sucesso.</p>
             )}
             {runChainMutation.isError && (
-              <p className="mt-2 text-xs text-red-600 dark:text-red-400">Erro ao executar chain.</p>
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">Erro ao executar cadeia.</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Historico Global */}
+      {/* Histórico global */}
       <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <Clock className="w-4 h-4 text-gray-400" />
-            Historico de Execucoes
+            Histórico de execuções
             {jobsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 ml-1" />}
           </h2>
           <select
@@ -341,7 +341,7 @@ export default function AgentsPage() {
         </div>
 
         {filteredJobs.length === 0 ? (
-          <p className="text-sm text-gray-400 dark:text-slate-500 text-center py-8">Nenhuma execucao registrada.</p>
+          <p className="text-sm text-gray-400 dark:text-slate-500 text-center py-8">Nenhuma execução registrada.</p>
         ) : (
           <div className="space-y-2">
             {filteredJobs.map(job => (
@@ -355,16 +355,16 @@ export default function AgentsPage() {
                     {job.agent_name ? (AGENT_LABELS[job.agent_name] ?? job.agent_name) : job.job_type}
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded border ${STATUS_BADGE[job.status] ?? ''}`}>
-                    {job.status}
+                    {STATUS_LABELS[job.status] ?? job.status}
                   </span>
                   {typeof job.result?.confidence === 'string' && (
                     <span className={`text-xs px-2 py-0.5 rounded border ${CONFIDENCE_STYLES[job.result.confidence] ?? ''}`}>
-                      {job.result.confidence}
+                      Confiança: {CONFIDENCE_LABELS[job.result.confidence] ?? job.result.confidence}
                     </span>
                   )}
                   {Boolean(job.result?.requires_review) && (
                     <span className="text-xs px-2 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30 flex items-center gap-1">
-                      <Eye className="w-3 h-3" /> Revisao
+                      <Eye className="w-3 h-3" /> Aguardando revisão
                     </span>
                   )}
                   {job.entity_id && (
@@ -390,12 +390,12 @@ export default function AgentsPage() {
                       {[
                         { label: 'Agente', value: job.agent_name ? (AGENT_LABELS[job.agent_name] ?? job.agent_name) : '—' },
                         { label: 'Modelo', value: job.model_used ?? '—' },
-                        { label: 'Provider', value: job.provider ?? '—' },
-                        { label: 'Duracao', value: job.duration_ms != null ? `${(job.duration_ms / 1000).toFixed(1)}s` : '—' },
-                        { label: 'Tokens In', value: job.tokens_in?.toLocaleString() ?? '—' },
-                        { label: 'Tokens Out', value: job.tokens_out?.toLocaleString() ?? '—' },
-                        { label: 'Custo', value: job.cost_usd != null ? `$${job.cost_usd.toFixed(5)}` : '—' },
-                        { label: 'Processo', value: job.entity_id ? `#${job.entity_id}` : '—' },
+                        { label: 'Provedor', value: job.provider ?? '—' },
+                        { label: 'Duração', value: job.duration_ms != null ? `${(job.duration_ms / 1000).toFixed(1)}s` : '—' },
+                        { label: 'Tokens enviados', value: job.tokens_in?.toLocaleString() ?? '—' },
+                        { label: 'Tokens recebidos', value: job.tokens_out?.toLocaleString() ?? '—' },
+                        { label: 'Custo (US$)', value: job.cost_usd != null ? `$${job.cost_usd.toFixed(5)}` : '—' },
+                        { label: 'Caso', value: job.entity_id ? `#${job.entity_id}` : '—' },
                       ].map(m => (
                         <div key={m.label} className="p-2 rounded-lg bg-white dark:bg-white/5">
                           <p className="text-xs text-gray-400 dark:text-slate-500">{m.label}</p>

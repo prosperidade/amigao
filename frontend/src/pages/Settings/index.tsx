@@ -115,9 +115,9 @@ export default function Settings() {
     <div className="max-w-4xl mx-auto space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Configura\u00e7\u00f5es</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Configurações</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Gerencie seu perfil, assinatura, notifica\u00e7\u00f5es e prefer\u00eancias de IA.
+          Gerencie seu perfil, assinatura, notificações e preferências de IA.
         </p>
       </div>
 
@@ -311,9 +311,9 @@ function BillingTab() {
     <Section title="Assinatura e Pagamento" description="Plano atual, forma de pagamento e hist\u00f3rico de cobran\u00e7a.">
       <div className="rounded-xl border border-dashed border-gray-200 dark:border-zinc-700 p-6 text-center">
         <CreditCard className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto mb-3" />
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Integra\u00e7\u00e3o com billing em breve</p>
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Integração com billing em breve</p>
         <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-          Plano, m\u00e9todo de pagamento (cart\u00e3o / PIX / boleto) e hist\u00f3rico de faturas ficar\u00e3o dispon\u00edveis nesta se\u00e7\u00e3o.
+          Plano, método de pagamento (cartão / PIX / boleto) e histórico de faturas ficarão disponíveis nesta seção.
         </p>
       </div>
     </Section>
@@ -361,7 +361,7 @@ function NotificationsTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => 
 
       <div className="pt-3 border-t border-gray-100 dark:border-zinc-800">
         <h3 className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">
-          Frequ\u00eancia
+          Frequência
         </h3>
         <Toggle
           label="Apenas alertas cr\u00edticos"
@@ -406,7 +406,7 @@ function OperationalTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => vo
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
           >
             <option value="dashboard">Dashboard</option>
-            <option value="quadro_acoes">Quadro de A\u00e7\u00f5es</option>
+            <option value="quadro_acoes">Quadro de Ações</option>
             <option value="cliente_hub">Cliente Hub</option>
           </select>
         </Field>
@@ -418,9 +418,9 @@ function OperationalTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => vo
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
           >
             <option value="priority">Prioridade</option>
-            <option value="urgency">Urg\u00eancia</option>
+            <option value="urgency">Urgência</option>
             <option value="date">Data</option>
-            <option value="responsible">Respons\u00e1vel</option>
+            <option value="responsible">Responsável</option>
           </select>
         </Field>
 
@@ -504,7 +504,7 @@ function AiTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }) {
           className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
         >
           <option value="short">Curtos</option>
-          <option value="medium">M\u00e9dios</option>
+          <option value="medium">Médios</option>
           <option value="detailed">Detalhados</option>
         </select>
       </Field>
@@ -618,7 +618,7 @@ function SecurityTab() {
           <Shield className="w-8 h-8 text-gray-300 dark:text-zinc-600 mx-auto mb-2" />
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">2FA em breve</p>
           <p className="text-xs text-gray-500 mt-1">
-            Em breve voc\u00ea poder\u00e1 ativar 2FA por app autenticador ou SMS.
+            Em breve você poderá ativar 2FA por app autenticador ou SMS.
           </p>
         </div>
       </Section>

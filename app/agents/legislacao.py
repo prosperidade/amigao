@@ -24,7 +24,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class LegislacaoAgent(BaseAgent):
     name = "legislacao"
-    description = "Enquadramento regulatorio com base legislativa e raciocinio juridico (Claude/Gemini)"
+    description = "Enquadramento regulatório com raciocínio jurídico apoiado por base de legislação"
     job_type = AIJobType.consulta_regulatoria
     prompt_slugs = ["legislacao_system", "legislacao_user"]
     palace_room = "agent_legislacao"

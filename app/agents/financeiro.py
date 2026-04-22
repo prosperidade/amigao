@@ -20,7 +20,7 @@ from app.models.ai_job import AIJob, AIJobType
 @AgentRegistry.register
 class FinanceiroAgent(BaseAgent):
     name = "financeiro"
-    description = "Analise financeira, projecao de custos, acompanhamento de pagamentos"
+    description = "Análise financeira: projeção de custos e acompanhamento de pagamentos"
     job_type = AIJobType.analise_financeira
     prompt_slugs = ["financeiro_system", "financeiro_user"]
     palace_room = "agent_financeiro"

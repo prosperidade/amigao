@@ -18,7 +18,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class AcompanhamentoAgent(BaseAgent):
     name = "acompanhamento"
-    description = "Monitoramento de email para respostas de orgaos, rastreamento de status"
+    description = "Monitora e-mails em busca de respostas de órgãos e rastreia o status dos processos"
     job_type = AIJobType.acompanhamento_processo
     prompt_slugs = ["acompanhamento_system", "acompanhamento_parse_email"]
     palace_room = "agent_acompanhamento"

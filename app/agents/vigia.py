@@ -17,7 +17,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class VigiaAgent(BaseAgent):
     name = "vigia"
-    description = "Monitoramento agendado: prazos, condicoes, alertas de cobranca"
+    description = "Monitora prazos, validade de documentos e processos parados — gera alertas automáticos"
     job_type = AIJobType.monitoramento_vigia
     prompt_slugs = ["vigia_system"]
     palace_room = "agent_vigia"

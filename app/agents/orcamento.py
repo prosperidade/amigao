@@ -18,7 +18,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class OrcamentoAgent(BaseAgent):
     name = "orcamento"
-    description = "Geracao de orcamento/proposta com escopo detalhado"
+    description = "Gera orçamento e proposta comercial com escopo detalhado"
     job_type = AIJobType.generate_proposal
     prompt_slugs = ["orcamento_system", "orcamento_user"]
     palace_room = "agent_orcamento"

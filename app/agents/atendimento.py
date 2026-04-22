@@ -16,7 +16,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class AtendimentoAgent(BaseAgent):
     name = "atendimento"
-    description = "Qualificacao de lead, classificacao de demanda, atendimento ao cliente"
+    description = "Qualifica leads, classifica a demanda e apoia o atendimento ao cliente"
     job_type = AIJobType.classify_demand
     prompt_slugs = ["classify_demand_system", "classify_demand_user"]
     palace_room = "agent_atendimento"

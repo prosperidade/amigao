@@ -16,7 +16,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class MarketingAgent(BaseAgent):
     name = "marketing"
-    description = "Geracao de conteudo para campanhas e marketing"
+    description = "Gera conteúdo para campanhas: posts, e-mails, WhatsApp, blog e banners"
     job_type = AIJobType.gerar_conteudo_marketing
     prompt_slugs = ["marketing_system", "marketing_post", "marketing_email", "marketing_whatsapp"]
     palace_room = "agent_marketing"

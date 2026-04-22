@@ -15,7 +15,7 @@ from app.models.ai_job import AIJobType
 @AgentRegistry.register
 class ExtratorAgent(BaseAgent):
     name = "extrator"
-    description = "Extracao de campos estruturados de documentos via OCR + LLM"
+    description = "Extrai dados estruturados de documentos enviados (matrícula, CAR, CCIR, etc.)"
     job_type = AIJobType.extract_document
     prompt_slugs = ["extract_document_system", "extract_matricula", "extract_car", "extract_ccir"]
     palace_room = "agent_extrator"

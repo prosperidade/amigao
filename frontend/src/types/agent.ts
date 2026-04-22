@@ -68,26 +68,41 @@ export interface AIJob {
 export const AGENT_LABELS: Record<string, string> = {
   atendimento: 'Atendimento',
   extrator: 'Extrator de Documentos',
-  diagnostico: 'Diagnostico Ambiental',
-  legislacao: 'Enquadramento Regulatorio',
+  diagnostico: 'Diagnóstico Ambiental',
+  legislacao: 'Enquadramento Regulatório',
   redator: 'Redator de Documentos',
-  orcamento: 'Orcamento',
-  financeiro: 'Analise Financeira',
+  orcamento: 'Orçamento',
+  financeiro: 'Análise Financeira',
   acompanhamento: 'Acompanhamento',
   vigia: 'Monitoramento',
   marketing: 'Marketing',
 };
 
 export const CHAIN_LABELS: Record<string, string> = {
-  intake: 'Classificacao de Demanda',
-  diagnostico_completo: 'Diagnostico Completo',
+  intake: 'Classificação de Demanda',
+  diagnostico_completo: 'Diagnóstico Completo',
   gerar_proposta: 'Gerar Proposta',
   gerar_documento: 'Gerar Documento',
-  analise_regulatoria: 'Analise Regulatoria',
-  enquadramento_regulatorio: 'Enquadramento Regulatorio',
-  analise_financeira: 'Analise Financeira',
+  analise_regulatoria: 'Análise Regulatória',
+  enquadramento_regulatorio: 'Enquadramento Regulatório',
+  analise_financeira: 'Análise Financeira',
   monitoramento: 'Monitoramento',
-  marketing_content: 'Conteudo Marketing',
+  marketing_content: 'Conteúdo de Marketing',
+};
+
+// Status de execução (label + cls para badge). Sócia vê o estado em PT, não em inglês.
+export const STATUS_LABELS: Record<string, string> = {
+  pending: 'Aguardando',
+  running: 'Em execução',
+  completed: 'Concluída',
+  failed: 'Falhou',
+};
+
+// Confiança do resultado em PT-BR.
+export const CONFIDENCE_LABELS: Record<string, string> = {
+  high: 'Alta',
+  medium: 'Média',
+  low: 'Baixa',
 };
 
 export const CONFIDENCE_STYLES: Record<string, string> = {

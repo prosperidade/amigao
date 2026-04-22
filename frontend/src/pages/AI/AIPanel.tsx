@@ -16,7 +16,7 @@ import {
 import type {
   AgentInfo, AgentRunResponse, AIJob, ChainRunResponse,
 } from '@/types/agent';
-import { AGENT_LABELS, CHAIN_LABELS, CONFIDENCE_STYLES } from '@/types/agent';
+import { AGENT_LABELS, CHAIN_LABELS, CONFIDENCE_STYLES, STATUS_LABELS, CONFIDENCE_LABELS } from '@/types/agent';
 import AgentResultRenderer from '@/components/AgentResultRenderer';
 
 interface AIPanelProps {
@@ -33,17 +33,17 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 };
 
 const JOB_TYPE_LABEL: Record<string, string> = {
-  classify_demand: 'Classificacao de Demanda',
-  extract_document: 'Extracao de Documento',
-  generate_proposal: 'Geracao de Proposta',
-  generate_dossier_summary: 'Resumo de Dossie',
-  diagnostico_propriedade: 'Diagnostico Ambiental',
-  consulta_regulatoria: 'Consulta Regulatoria',
-  gerar_documento: 'Geracao de Documento',
-  analise_financeira: 'Analise Financeira',
+  classify_demand: 'Classificação de Demanda',
+  extract_document: 'Extração de Documento',
+  generate_proposal: 'Geração de Proposta',
+  generate_dossier_summary: 'Resumo de Dossiê',
+  diagnostico_propriedade: 'Diagnóstico Ambiental',
+  consulta_regulatoria: 'Consulta Regulatória',
+  gerar_documento: 'Geração de Documento',
+  analise_financeira: 'Análise Financeira',
   acompanhamento_processo: 'Acompanhamento',
   monitoramento_vigia: 'Monitoramento',
-  gerar_conteudo_marketing: 'Conteudo Marketing',
+  gerar_conteudo_marketing: 'Conteúdo de Marketing',
 };
 
 export default function AIPanel({ processId, processDemandType, processDescription }: AIPanelProps) {
@@ -114,11 +114,11 @@ export default function AIPanel({ processId, processDemandType, processDescripti
   return (
     <div className="space-y-5">
 
-      {/* Rodar Agente */}
+      {/* Executar agente individual */}
       <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
         <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
           <Bot className="w-4 h-4 text-purple-500 dark:text-purple-400" />
-          Rodar Agente Individual
+          Executar agente individual
         </h4>
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[200px]">
@@ -149,7 +149,7 @@ export default function AIPanel({ processId, processDemandType, processDescripti
         </div>
         {runAgentMutation.isSuccess && (
           <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">
-            Task enfileirada — o resultado aparecera no historico em instantes.
+            Execução agendada — o resultado aparecerá no histórico em instantes.
           </p>
         )}
         {runAgentMutation.isError && (
@@ -159,21 +159,21 @@ export default function AIPanel({ processId, processDemandType, processDescripti
         )}
       </div>
 
-      {/* Rodar Chain */}
+      {/* Executar cadeia */}
       <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
         <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
           <Workflow className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-          Rodar Chain de Agentes
+          Executar cadeia de agentes
         </h4>
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[200px]">
-            <label className="text-xs text-gray-500 dark:text-slate-400 mb-1 block">Chain</label>
+            <label className="text-xs text-gray-500 dark:text-slate-400 mb-1 block">Cadeia</label>
             <select
               value={selectedChain}
               onChange={e => setSelectedChain(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-800 dark:text-white"
             >
-              <option value="">Selecione uma chain...</option>
+              <option value="">Selecione uma cadeia...</option>
               {chainNames.map(c => (
                 <option key={c} value={c}>
                   {CHAIN_LABELS[c] ?? c} ({(chains[c] ?? []).join(' → ')})
@@ -189,31 +189,31 @@ export default function AIPanel({ processId, processDemandType, processDescripti
             {runChainMutation.isPending
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Link2 className="w-4 h-4" />}
-            Executar Chain
+            Executar cadeia
           </button>
         </div>
         {runChainMutation.isSuccess && (
           <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">
-            Chain enfileirada — os agentes serao executados em sequencia.
+            Cadeia agendada — os agentes serão executados em sequência.
           </p>
         )}
         {runChainMutation.isError && (
           <p className="mt-3 text-sm text-red-600 dark:text-red-400 flex items-center gap-1.5">
-            <AlertCircle className="w-4 h-4" /> Erro ao executar chain.
+            <AlertCircle className="w-4 h-4" /> Erro ao executar cadeia.
           </p>
         )}
       </div>
 
-      {/* Historico de Jobs */}
+      {/* Histórico de execuções */}
       <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
         <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
           <Clock className="w-4 h-4 text-gray-400 dark:text-slate-400" />
-          Historico de Execucoes IA
+          Histórico de execuções de IA
           {jobsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 ml-1" />}
         </h4>
 
         {jobs.length === 0 ? (
-          <p className="text-sm text-gray-400 dark:text-slate-500">Nenhuma execucao de IA registrada para este processo.</p>
+          <p className="text-sm text-gray-400 dark:text-slate-500">Nenhuma execução de IA registrada para este caso.</p>
         ) : (
           <div className="space-y-2">
             {jobs.map(job => (
@@ -230,12 +230,12 @@ export default function AIPanel({ processId, processDemandType, processDescripti
                   </span>
                   {typeof job.result?.confidence === 'string' && (
                     <span className={`text-xs px-2 py-0.5 rounded border ${CONFIDENCE_STYLES[job.result.confidence] ?? ''}`}>
-                      {job.result.confidence}
+                      Confiança: {CONFIDENCE_LABELS[job.result.confidence] ?? job.result.confidence}
                     </span>
                   )}
                   {Boolean(job.result?.requires_review) && (
                     <span className="text-xs px-2 py-0.5 rounded border bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30 flex items-center gap-1">
-                      <Eye className="w-3 h-3" /> Revisao
+                      <Eye className="w-3 h-3" /> Aguardando revisão
                     </span>
                   )}
                   {job.cost_usd != null && (
@@ -255,7 +255,7 @@ export default function AIPanel({ processId, processDemandType, processDescripti
                   <div className="px-4 pb-4 border-t border-gray-100 dark:border-white/10 pt-3 space-y-2 bg-gray-50 dark:bg-black/10">
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
                       <span className="text-gray-500 dark:text-slate-400">Status</span>
-                      <span className="text-gray-800 dark:text-white capitalize font-medium">{job.status}</span>
+                      <span className="text-gray-800 dark:text-white font-medium">{STATUS_LABELS[job.status] ?? job.status}</span>
                       {job.agent_name && <>
                         <span className="text-gray-500 dark:text-slate-400">Agente</span>
                         <span className="text-gray-800 dark:text-white">{AGENT_LABELS[job.agent_name] ?? job.agent_name}</span>
@@ -265,19 +265,19 @@ export default function AIPanel({ processId, processDemandType, processDescripti
                         <span className="text-gray-800 dark:text-white">{job.model_used}</span>
                       </>}
                       {job.tokens_in != null && <>
-                        <span className="text-gray-500 dark:text-slate-400">Tokens entrada</span>
+                        <span className="text-gray-500 dark:text-slate-400">Tokens enviados</span>
                         <span className="text-gray-800 dark:text-white">{job.tokens_in.toLocaleString()}</span>
                       </>}
                       {job.tokens_out != null && <>
-                        <span className="text-gray-500 dark:text-slate-400">Tokens saida</span>
+                        <span className="text-gray-500 dark:text-slate-400">Tokens recebidos</span>
                         <span className="text-gray-800 dark:text-white">{job.tokens_out.toLocaleString()}</span>
                       </>}
                       {job.duration_ms != null && <>
-                        <span className="text-gray-500 dark:text-slate-400">Duracao</span>
+                        <span className="text-gray-500 dark:text-slate-400">Duração</span>
                         <span className="text-gray-800 dark:text-white">{(job.duration_ms / 1000).toFixed(1)}s</span>
                       </>}
                       {job.provider && <>
-                        <span className="text-gray-500 dark:text-slate-400">Provider</span>
+                        <span className="text-gray-500 dark:text-slate-400">Provedor</span>
                         <span className="text-gray-800 dark:text-white">{job.provider}</span>
                       </>}
                     </div>
