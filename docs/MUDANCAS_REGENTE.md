@@ -1793,35 +1793,51 @@ Durante a auditoria com a sócia (2026-04-21) confirmamos: o sistema **NÃO tem 
 
 ---
 
+## Refino UI — JSX text bug + termos PT-BR (2026-04-21)
+
+Fix entregue após o Sprint O. Sócia abriu `/settings` e viu **"Configura\u00e7\u00f5es"** literalmente na tela em vez de "Configurações". Investigação rápida descobriu um bug-padrão: **JSX text children não processam escape sequences** (só strings JS processam).
+
+### Bugs JSX corrigidos
+- 16 ocorrências em [Settings/index.tsx](../frontend/src/pages/Settings/index.tsx) e [DecisionsTab.tsx](../frontend/src/pages/Processes/DecisionsTab.tsx) onde texto era child direto de `<h1>`, `<p>`, `<option>`, `<span>` (sem `{...}` envolvendo). Substituídos por UTF-8 real. Casos dentro de strings JS, props ou template literals continuam OK.
+
+### Termos técnicos → PT-BR natural na UI dos agentes
+- [types/agent.ts](../frontend/src/types/agent.ts): `AGENT_LABELS` e `CHAIN_LABELS` ganham acentos ("Diagnóstico", "Análise", "Orçamento", "Conteúdo de Marketing"). Novos `STATUS_LABELS` (Aguardando/Em execução/Concluída/Falhou) e `CONFIDENCE_LABELS` (Alta/Média/Baixa) substituem os termos crus em inglês nas badges.
+- [AgentsPage.tsx](../frontend/src/pages/AI/AgentsPage.tsx) e [AIPanel.tsx](../frontend/src/pages/AI/AIPanel.tsx): "Rodar Agente/Chain" → "Executar agente/cadeia"; "Task enfileirada" → "Execução agendada"; "Provider/Duracao/Tokens In/Out" → "Provedor/Duração/Tokens enviados/recebidos"; métricas com acento.
+- 10 agentes em `app/agents/*.py` reescreveram `description` com PT-BR natural acentuado (vão pro frontend via `/agents/registry`). Smoke confirmou: API retorna "órgãos", "imóvel", "matrícula", "ofícios" etc.
+
+### Decisões revisadas da Camada 4
+A sócia recusou explicitamente certas direções que eu tinha proposto antes de filtrar pelo público real (ela é ambientalista, não programadora):
+- ❌ **Editor de prompts via UI cortado** — ela não vai editar prompts; viraria foot-gun. Edits de prompt continuam via código/seed.
+- ❌ **Configuração LLM por agente via UI cortado** — mesma razão.
+- ✅ **Dashboard de saúde + audit trail** — `AgentsPage` atual já cobre 80% do necessário (5 cards de métrica + lista c/ contagem ok/err + histórico filtrável c/ tokens/custo/duração). Não vira sprint próprio; só polish opcional de ~1h (janelas 7d/30d + nome de quem disparou).
+
+---
+
 ## PENDÊNCIAS PARA AMANHÃ — 2026-04-22
 
-**Última sessão:** Sprint N (Camada 3 fechada) + Sprint O (Camada 4 quick wins: Gemini default + métricas por agente). Commits em `main`: Sprint M `630a249` → Sprint N `4b06b1b` → Sprint O (próximo).
+**Última sessão:** Sprint N (Camada 3 fechada) → Sprint O (Camada 4 quick wins) → Refino UI.
+Commits em `main`: Sprint M `630a249` → Sprint N `4b06b1b` → Sprint O `b71307d` → Refino UI `5001a89`.
 
-### Plano da Camada 4 (em ordem de prioridade)
+### Plano da Camada 4 — REVISADO (após filtragem pelo público real)
 
-1. **Sprint P = Editor de Prompts via UI** (~3-4h) — **decisão da sócia: editável por default**.
-   - Endpoints CRUD em `PromptTemplate` (POST/PATCH/novo-version/ativar).
-   - Página `/agents/prompts` com lista, editor, diff entre versões, botão de ativação.
-   - Validação de placeholders consistentes com fallback hardcoded de cada agente.
+1. **Sprint R = Budget mensal por tenant** (~2-3h) — **prioridade da sócia**.
+   - Setting `AI_BUDGET_USD_MONTHLY_PER_TENANT_DEFAULT` (global, 0 = ilimitado).
+   - Campo opcional `Tenant.ai_monthly_budget_usd` (override por cliente).
+   - Helper `check_tenant_monthly_budget()` somando `AIJob.cost_usd` do mês corrente — chamado no `BaseAgent.run()` junto com o `check_tenant_cost_limit` horário existente.
+   - Endpoint `GET /agents/budget` → `{used, limit, pct, period_end}`.
+   - Card na `AgentsPage` mostrando uso/limite + alerta visual quando ≥80%.
+   - Hoje só temos: `AI_MAX_COST_PER_JOB_USD = 0.10` (por job) + `AI_HOURLY_COST_LIMIT_USD = 5.0` (por hora, hardcoded em [ai_gateway.py:38](../app/core/ai_gateway.py#L38)). Falta o mensal/tenant.
 
-2. **Sprint Q = Dashboard de saúde dos agentes + Audit trail UI** (~3h)
-   - Endpoint `/agents/health` agregando taxa de sucesso, custo USD, p95 latência por agente (24h/7d/30d).
-   - UI em `/agents` com cards de health + timeline auditável de execuções.
-   - Fonte: métricas já expostas no Sprint O + tabela `AIJob`.
+2. **Sprint U = RAG real com embeddings** (epic, ~6-8h, 3 sub-blocos) — **prioridade da sócia**.
+   - **U.1** (~1.5h) Stack: **pgvector** (Postgres 15 já temos — sem infra nova). Schema `legislation_chunks(id, document_id, ord, text, embedding vector(1536), token_count)`. Migration Alembic.
+   - **U.2** (~2h) Pipeline de indexação: chunking 800-1500 tokens c/ overlap; script `app/scripts/index_legislation.py`; provider de embedding (OpenAI text-embedding-3-small, $0.02/1M tokens).
+   - **U.3** (~2-3h) Retrieval híbrido: filtro keyword (UF/escopo/demand_type) + semantic top-K dentro do filtrado. Integrar no agente `legislacao` substituindo o dump de `full_text` por chunks relevantes (contexto vai de ~100K → ~10K tokens — economia gigante).
 
-3. **Sprint R = Budget por tenant** (~2h)
-   - Setting `AI_BUDGET_USD_MONTHLY_PER_TENANT` + check em `BaseAgent.run()`.
-   - Alerta visual quando tenant atinge ≥80% do budget.
-
-4. **Sprint S = Approval workflow visual** (~3h)
-   - Fila dedicada para `requires_review=True`; UI aprovar/rejeitar com comentário.
-   - Routing automático por `confidence < threshold`.
-
-5. **Sprint T = Configuração LLM por agente via UI** (~2h)
-   - Ajuste de model/temperature/max_tokens por agente, persistido em DB.
-
-6. **Sprint U = RAG real com embeddings** (epic, ~6-8h) — separado, alinhar com sócia antes de atacar.
-   - pgvector + chunking + indexação de docs/legislação.
+### Cortes deliberados (não fazer)
+- ❌ **Editor de prompts via UI** — público é ambientalista, não programador. Foot-gun.
+- ❌ **Config LLM por agente via UI** — mesma razão.
+- ❌ **Dashboard de saúde como sprint próprio** — `AgentsPage` atual já cobre o essencial (5 cards + lista c/ ok/err + histórico c/ tokens/custo). Polish opcional de ~1h se aparecer demanda real (janelas 7d/30d + nome de quem disparou).
+- ❌ **Approval workflow visual dedicado** — `requires_review=True` já é sinalizado no histórico. Não há demanda real de fila separada.
 
 ### Dívidas técnicas pequenas detectadas (polimento futuro)
 
