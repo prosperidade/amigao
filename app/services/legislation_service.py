@@ -12,6 +12,8 @@ import hashlib
 import logging
 from typing import Optional
 
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from app.models.legislation import LegislationDocument
@@ -26,8 +28,9 @@ logger = logging.getLogger(__name__)
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extrai texto de PDF usando pypdf."""
     try:
-        from pypdf import PdfReader
         import io
+
+        from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(file_bytes))
         pages = [page.extract_text() or "" for page in reader.pages]
         return "\n\n".join(pages)
@@ -151,6 +154,14 @@ def search_legislation(
         q = q.filter(LegislationDocument.scope == scope)
     if agency:
         q = q.filter(LegislationDocument.agency == agency)
+
+    # Sprint -1 C — filtro por demand_type no array JSONB demand_types.
+    # Docs com demand_types=NULL ficam FORA quando demand_type é especificado
+    # (prioriza diploma especializado sobre diploma genérico).
+    if demand_type:
+        q = q.filter(
+            cast(LegislationDocument.demand_types, JSONB).contains([demand_type])
+        )
 
     # Busca textual por keyword no titulo ou texto
     if keyword:

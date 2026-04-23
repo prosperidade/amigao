@@ -13,7 +13,12 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,11 @@ class AIResponse:
 class AIGatewayError(Exception):
     message: str
     last_error: Optional[str] = None
+    # Sprint -1 B — preserva métricas para auditoria quando o job é bloqueado por cost_exceeded
+    cost_usd: float = 0.0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    model_used: str = ""
 
 
 AI_HOURLY_COST_LIMIT_USD = 5.0  # limite padrão por tenant por hora
@@ -40,7 +50,7 @@ AI_HOURLY_COST_LIMIT_USD = 5.0  # limite padrão por tenant por hora
 
 def check_tenant_cost_limit(
     tenant_id: int,
-    db: "Session",
+    db: Session,
     limit_usd: float = AI_HOURLY_COST_LIMIT_USD,
 ) -> float:
     """Retorna custo acumulado na última hora. Levanta HTTPException se exceder limite."""
@@ -68,7 +78,7 @@ def check_tenant_cost_limit(
     return float(total_cost)
 
 
-def _month_window_utc() -> "tuple[datetime, datetime]":
+def _month_window_utc() -> tuple[datetime, datetime]:
     """Retorna (início do mês UTC, início do próximo mês UTC)."""
     from datetime import UTC, datetime
 
@@ -81,7 +91,7 @@ def _month_window_utc() -> "tuple[datetime, datetime]":
     return start, next_start
 
 
-def get_tenant_monthly_budget(tenant_id: int, db: "Session") -> float:
+def get_tenant_monthly_budget(tenant_id: int, db: Session) -> float:
     """Retorna o teto mensal vigente para o tenant (override > default global)."""
     from app.core.config import settings
     from app.models.tenant import Tenant
@@ -94,7 +104,7 @@ def get_tenant_monthly_budget(tenant_id: int, db: "Session") -> float:
     return float(settings.AI_BUDGET_USD_MONTHLY_PER_TENANT_DEFAULT)
 
 
-def get_tenant_monthly_spend(tenant_id: int, db: "Session") -> float:
+def get_tenant_monthly_spend(tenant_id: int, db: Session) -> float:
     """Retorna custo acumulado de IA do tenant no mês corrente (UTC)."""
     from sqlalchemy import func
 
@@ -113,7 +123,7 @@ def get_tenant_monthly_spend(tenant_id: int, db: "Session") -> float:
     return float(total or 0.0)
 
 
-def check_tenant_monthly_budget(tenant_id: int, db: "Session") -> float:
+def check_tenant_monthly_budget(tenant_id: int, db: Session) -> float:
     """
     Valida o teto mensal de IA do tenant. Retorna o custo acumulado no mês.
     Levanta HTTPException 429 se estourou. limit=0 ⇒ ilimitado.
@@ -205,6 +215,26 @@ def complete(
 
             provider = attempt_model.split("/")[0] if "/" in attempt_model else attempt_model.split("-")[0]
 
+            # Sprint -1 B — teto de custo por job.
+            # Só enforcado quando o provider informa custo (>0). Provider sem tabela de preço
+            # retorna 0.0 e o guardrail não dispara — custo real é monitorado pelos limites
+            # horário e mensal por tenant.
+            max_per_job = settings.AI_MAX_COST_PER_JOB_USD
+            if cost > 0 and max_per_job > 0 and cost > max_per_job:
+                logger.error(
+                    "ai_gateway.complete cost exceeded max per job: "
+                    "cost=%.4f max=%.4f model=%s tokens_in=%d tokens_out=%d",
+                    cost, max_per_job, attempt_model, tokens_in, tokens_out,
+                )
+                raise AIGatewayError(
+                    message=f"Job cost ${cost:.4f} exceeded max ${max_per_job:.4f}",
+                    last_error=f"cost_exceeded model={attempt_model}",
+                    cost_usd=cost,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    model_used=attempt_model,
+                )
+
             logger.info(
                 "ai_gateway.complete model=%s tokens_in=%d tokens_out=%d cost_usd=%.6f ms=%d",
                 attempt_model, tokens_in, tokens_out, cost, elapsed_ms,
@@ -220,6 +250,10 @@ def complete(
                 provider=provider,
             )
 
+        except AIGatewayError:
+            # Sprint -1 B — cost_exceeded deve fail-fast; não cair pra próximo provider
+            # porque o próximo pode custar o mesmo e o risco financeiro se acumula.
+            raise
         except Exception as exc:
             last_error = str(exc)
             logger.warning("ai_gateway.complete fallback model=%s error=%s", attempt_model, exc)

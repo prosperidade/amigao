@@ -5,6 +5,8 @@ entities.json
 # Mapa mental Regente v3 — PDFs/imagens fonte (nao commitar; 100MB+)
 regente_sass/
 amigao_regente/
+# Legislação bruta fornecida pela sócia (PDFs grandes; ingeridos em legislation_documents)
+legislacao/
 openapi_temp.json
 token_temp.txt
 

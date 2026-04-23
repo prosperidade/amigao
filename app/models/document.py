@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -65,6 +65,12 @@ class Document(Base):
     # Sprint 2 — vínculo com item de checklist e validade documental
     checklist_item_id = Column(String, nullable=True)   # id do item no ProcessChecklist.items[]
     expires_at = Column(DateTime(timezone=True), nullable=True)  # data de validade do documento
+
+    # Sprint -1 D — texto extraído do documento (OCR/PDF parse) disponível para o agente
+    # extrator. Hoje o fluxo passa `text` direto em metadata; a coluna permite
+    # chamadas com apenas document_id.
+    extracted_text = Column(Text, nullable=True)
+    extracted_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

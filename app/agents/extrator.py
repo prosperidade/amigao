@@ -25,6 +25,9 @@ class ExtratorAgent(BaseAgent):
         pass
 
     def execute(self) -> dict[str, Any]:
+        from datetime import UTC, datetime  # noqa: PLC0415
+
+        from app.models.document import Document  # noqa: PLC0415
         from app.services.document_extractor import extract_document_fields  # noqa: PLC0415
 
         text = self.ctx.metadata.get("text", "")
@@ -42,9 +45,9 @@ class ExtratorAgent(BaseAgent):
                 "reason": "Nenhum documento fornecido para extracao",
             }
 
-        # Se temos document_id mas nao text, buscar do banco
-        if document_id and not text:
-            from app.models.document import Document  # noqa: PLC0415
+        # Busca o Document quando há document_id (para leitura do extracted_text e/ou cache posterior)
+        doc: Document | None = None
+        if document_id:
             doc = (
                 self.ctx.session.query(Document)
                 .filter(Document.id == document_id, Document.tenant_id == self.ctx.tenant_id)
@@ -52,10 +55,20 @@ class ExtratorAgent(BaseAgent):
             )
             if doc is None:
                 raise ValueError(f"Documento {document_id} nao encontrado para tenant {self.ctx.tenant_id}")
-            text = getattr(doc, "extracted_text", "") or ""
+
+        # Se temos document_id mas nao text, buscar do banco (Sprint -1 D — coluna existe agora)
+        if doc is not None and not text:
+            text = doc.extracted_text or ""
             doc_type = doc.document_type or doc_type
             if not text.strip():
                 raise ValueError(f"Documento {document_id} nao possui texto extraido (OCR deve rodar primeiro)")
+
+        # Sprint -1 D — se o texto veio por metadata e há Document associado sem
+        # extracted_text cacheado, persiste para próximos usos (evita re-OCR).
+        if doc is not None and text and not doc.extracted_text:
+            doc.extracted_text = text
+            doc.extracted_at = datetime.now(UTC)
+            self.ctx.session.flush()
 
         fields, _ = extract_document_fields(
             text=text,

@@ -146,12 +146,23 @@ class TestPromptTemplateModel:
         assert loaded.output_schema["properties"]["confidence"]["enum"] == ["high", "medium", "low"]
 
     def test_enum_values(self):
-        """Todos os valores dos enums estao corretos."""
+        """Todos os valores dos enums estao corretos.
+
+        Sprint -1 — enum inclui as categorias originais (classify/extract/summarize/proposal)
+        + as 7 categorias dos agentes adicionadas junto com o sistema de agentes.
+        """
         assert set(PromptCategory) == {
             PromptCategory.classify,
             PromptCategory.extract,
             PromptCategory.summarize,
             PromptCategory.proposal,
+            PromptCategory.diagnostico,
+            PromptCategory.legislacao,
+            PromptCategory.redator,
+            PromptCategory.financeiro,
+            PromptCategory.acompanhamento,
+            PromptCategory.vigia,
+            PromptCategory.marketing,
         }
         assert set(PromptRole) == {
             PromptRole.system,

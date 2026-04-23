@@ -13,7 +13,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -390,16 +390,33 @@ class BaseAgent(ABC):
             logger.warning("agent.%s: falha ao completar AIJob %s: %s", self.name, job.id, exc)
 
     def _fail_job(self, job: AIJob | None, exc: Exception) -> None:
-        """Marca AIJob como failed."""
+        """Marca AIJob como failed.
+
+        Sprint -1 B — quando a falha é AIGatewayError (cost_exceeded), preserva
+        cost_usd/tokens/model para auditoria do limite financeiro.
+        """
         if job is None:
             return
         from datetime import UTC, datetime  # noqa: PLC0415
 
+        from app.core.ai_gateway import AIGatewayError  # noqa: PLC0415
+
         try:
             job.status = AIJobStatus.failed
-            job.error = str(exc)[:2000]
+            job.error = str(getattr(exc, "message", exc))[:2000]
             job.finished_at = datetime.now(UTC)
             job.duration_ms = int((time.monotonic() - self._started_at) * 1000)
+
+            if isinstance(exc, AIGatewayError):
+                if exc.cost_usd:
+                    job.cost_usd = exc.cost_usd
+                if exc.tokens_in:
+                    job.tokens_in = exc.tokens_in
+                if exc.tokens_out:
+                    job.tokens_out = exc.tokens_out
+                if exc.model_used:
+                    job.model_used = exc.model_used
+
             self.ctx.session.flush()
         except Exception as flush_exc:
             logger.warning("agent.%s: falha ao marcar AIJob %s como failed: %s", self.name, job.id, flush_exc)
