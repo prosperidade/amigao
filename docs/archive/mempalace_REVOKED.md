@@ -1,4 +1,18 @@
-# MemPalace — Memoria de Longo Prazo para IA
+# [REVOGADO 2026-04-23] MemPalace — Memoria de Longo Prazo para IA
+
+> ⚠️ **Este documento foi arquivado em 2026-04-23.** O pacote PyPI `mempalace`
+> foi abandonado por sinais fortes de supply-chain attack (49k stars em 18 dias,
+> wheel de 213 KB inconsistente com o escopo prometido, autor ofuscado, primeira
+> release em v2/v3). Ver decisão completa em
+> [docs/adr/adr_mempalace_REVOKED.md](../adr/adr_mempalace_REVOKED.md).
+>
+> O texto abaixo fica **apenas como registro histórico** do que foi proposto/usado
+> antes da revogação. NÃO seguir as instruções de instalação/uso daqui.
+>
+> Substituto planejado: pgvector (Sprint U/Week 1).
+
+---
+
 
 ## O que e
 

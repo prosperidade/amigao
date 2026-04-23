@@ -50,9 +50,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "python -m mempalace init --yes . 2>/dev/null || true && python -m app.db.init_db && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    volumes:
-      - mempalace_data:/root/.mempalace
+    # mempalace removido em 2026-04-23 (supply-chain red flags). Ver docs/adr/adr_mempalace_REVOKED.md.
+    command: sh -c "python -m app.db.init_db && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     environment:
@@ -118,8 +117,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: celery -A app.core.celery_app worker --loglevel=info --pool=solo
-    volumes:
-      - mempalace_data:/root/.mempalace
+    # mempalace volume removido em 2026-04-23 (supply-chain red flags).
     environment:
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       SERVICE_NAME: worker
@@ -194,4 +192,5 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
-  mempalace_data:
+  # mempalace_data removido em 2026-04-23 (supply-chain red flags). Volume remanescente em ambientes
+  # antigos pode ser purgado com: docker volume rm amigao_do_meio_ambiente_mempalace_data

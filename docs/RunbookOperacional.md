@@ -2095,27 +2095,19 @@ docker compose logs worker --tail 20 | grep "workers\."
 # Esperado: workers.run_agent, workers.run_agent_chain, workers.vigia_all_tenants, etc.
 ```
 
-### MemPalace
+### MemPalace — REVOGADO (2026-04-23)
 
-```bash
-# Re-indexar apos mudancas grandes no codigo
-docker compose exec api python -m mempalace mine .
-
-# Verificar palace
-docker compose exec api python -c "
-import sqlite3, os
-db = os.path.expanduser('~/.mempalace/palace/chroma.sqlite3')
-conn = sqlite3.connect(db)
-cur = conn.cursor()
-cur.execute('SELECT COUNT(*) FROM embeddings')
-print('Embeddings:', cur.fetchone()[0])
-"
-```
-
-O volume `mempalace_data` persiste entre rebuilds. Para backup:
-```bash
-docker run --rm -v amigao_do_meio_ambiente_mempalace_data:/data -v $(pwd):/backup alpine tar czf /backup/mempalace-backup.tar.gz /data
-```
+> ⚠️ O pacote PyPI `mempalace` foi abandonado em 2026-04-23 por sinais fortes de
+> supply-chain attack. Toda a seção abaixo está obsoleta.
+>
+> - Decisão completa: [docs/adr/adr_mempalace_REVOKED.md](adr/adr_mempalace_REVOKED.md)
+> - Referência arquivada: [docs/archive/mempalace_REVOKED.md](archive/mempalace_REVOKED.md)
+>
+> `app/agents/memory.py` foi convertido em stub no-op (não importa mais o pacote).
+> Em ambientes antigos, rodar `scripts/cleanup_mempalace_storage.ps1` para remover
+> o volume local `~/.mempalace/` e `docker volume rm amigao_do_meio_ambiente_mempalace_data`.
+>
+> Memória dos agentes será atendida por **pgvector** (Sprint U/Week 1).
 
 ### Celery Beat — 5 tasks agendadas
 
@@ -2202,9 +2194,9 @@ Funcionalidades:
 | Chains disponiveis | 9 |
 | Triggers automaticos | 5 |
 | Celery Beat tasks | 5 |
-| MemPalace embeddings | 588 |
-| Volume Docker | mempalace_data (persistente) |
-| MCP Server global | mempalace (Claude Code) |
+| MemPalace embeddings | ~~588~~ REVOGADO 2026-04-23 — ver docs/adr/adr_mempalace_REVOKED.md |
+| Volume Docker | ~~mempalace_data~~ REMOVIDO 2026-04-23 |
+| MCP Server global | ~~mempalace~~ REMOVIDO. Plugin `claude-mem@thedotmack` (diferente) segue ativo no Claude Code |
 | Frontend pagina | /agents + tab IA no processo |
 | IA providers | OpenAI (gpt-4o-mini) + Gemini (legislacao) |
 | Custo medio/execucao | ~$0.0004 - $0.0007 |
