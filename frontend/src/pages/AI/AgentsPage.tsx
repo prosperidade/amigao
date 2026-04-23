@@ -79,6 +79,21 @@ export default function AgentsPage() {
     },
   });
 
+  // Sprint R — Budget mensal do tenant
+  interface Budget {
+    used_usd: number;
+    limit_usd: number;
+    pct: number;
+    unlimited: boolean;
+    alert: boolean;
+    period_end: string;
+  }
+  const { data: budget } = useQuery<Budget>({
+    queryKey: ['agents-budget'],
+    queryFn: () => api.get('/agents/budget').then(r => r.data),
+    refetchInterval: 60_000,
+  });
+
   // --- Mutations ---
 
   const runAgentMutation = useMutation({
@@ -185,6 +200,71 @@ export default function AgentsPage() {
           </div>
         ))}
       </div>
+
+      {/* Sprint R — Orçamento mensal do tenant */}
+      {budget && (
+        <div
+          className={`rounded-xl border p-5 ${
+            budget.alert
+              ? 'bg-amber-50 dark:bg-amber-500/5 border-amber-300 dark:border-amber-500/40'
+              : 'bg-white dark:bg-white/5 border-gray-100 dark:border-white/10'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`p-1.5 rounded-lg ${budget.alert ? 'bg-amber-100 dark:bg-amber-500/20' : 'bg-emerald-50 dark:bg-emerald-500/10'}`}>
+                <DollarSign className={`w-4 h-4 ${budget.alert ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400'}`} />
+              </div>
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
+                Orçamento mensal de IA
+              </h3>
+              {budget.alert && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-medium">
+                  ATENÇÃO
+                </span>
+              )}
+            </div>
+            {budget.unlimited ? (
+              <span className="text-xs text-gray-500 dark:text-slate-400">Ilimitado</span>
+            ) : (
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                ${budget.used_usd.toFixed(4)} / ${budget.limit_usd.toFixed(2)}
+              </span>
+            )}
+          </div>
+
+          {!budget.unlimited && (
+            <>
+              <div className="h-2.5 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full transition-all ${
+                    budget.pct >= 100
+                      ? 'bg-red-500'
+                      : budget.alert
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(100, budget.pct)}%` }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
+                <span>{budget.pct.toFixed(1)}% usado</span>
+                <span>Renova em {new Date(budget.period_end).toLocaleDateString('pt-BR')}</span>
+              </div>
+              {budget.alert && (
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  Uso acima de 80% do orçamento mensal. Execuções são bloqueadas ao atingir 100%.
+                </p>
+              )}
+            </>
+          )}
+          {budget.unlimited && (
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              Sem teto mensal definido para este tenant. Gasto no mês: ${budget.used_usd.toFixed(4)}.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Grid: Agentes + Disparo */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

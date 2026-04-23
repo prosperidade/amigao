@@ -216,3 +216,34 @@ def list_agents(current_user: UserDep) -> list[AgentInfo]:
 def list_chains(current_user: UserDep) -> dict[str, list[str]]:
     """Lista todas as chains disponiveis."""
     return OrchestratorAgent.list_chains()
+
+
+# ---------------------------------------------------------------------------
+# Sprint R — Budget mensal por tenant
+# ---------------------------------------------------------------------------
+
+@router.get("/budget")
+def get_budget(db: DbDep, current_user: UserDep) -> dict[str, object]:
+    """
+    Retorna uso de IA do tenant no mês corrente vs teto mensal.
+
+    limit=0 ⇒ ilimitado (pct=0, alert=false).
+    """
+    from app.core.ai_gateway import _month_window_utc, get_tenant_monthly_budget, get_tenant_monthly_spend  # noqa: PLC0415
+
+    limit = get_tenant_monthly_budget(current_user.tenant_id, db)
+    used = get_tenant_monthly_spend(current_user.tenant_id, db)
+    _, period_end = _month_window_utc()
+
+    pct = 0.0
+    if limit > 0:
+        pct = min(100.0, round((used / limit) * 100.0, 2))
+
+    return {
+        "used_usd": round(used, 6),
+        "limit_usd": round(limit, 2),
+        "pct": pct,
+        "unlimited": limit <= 0,
+        "alert": limit > 0 and used >= limit * 0.8,
+        "period_end": period_end.isoformat(),
+    }

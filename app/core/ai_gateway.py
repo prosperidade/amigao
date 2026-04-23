@@ -68,6 +68,71 @@ def check_tenant_cost_limit(
     return float(total_cost)
 
 
+def _month_window_utc() -> "tuple[datetime, datetime]":
+    """Retorna (início do mês UTC, início do próximo mês UTC)."""
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        next_start = start.replace(year=start.year + 1, month=1)
+    else:
+        next_start = start.replace(month=start.month + 1)
+    return start, next_start
+
+
+def get_tenant_monthly_budget(tenant_id: int, db: "Session") -> float:
+    """Retorna o teto mensal vigente para o tenant (override > default global)."""
+    from app.core.config import settings
+    from app.models.tenant import Tenant
+
+    tenant_budget = (
+        db.query(Tenant.ai_monthly_budget_usd).filter(Tenant.id == tenant_id).scalar()
+    )
+    if tenant_budget is not None:
+        return float(tenant_budget)
+    return float(settings.AI_BUDGET_USD_MONTHLY_PER_TENANT_DEFAULT)
+
+
+def get_tenant_monthly_spend(tenant_id: int, db: "Session") -> float:
+    """Retorna custo acumulado de IA do tenant no mês corrente (UTC)."""
+    from sqlalchemy import func
+
+    from app.models.ai_job import AIJob
+
+    start, next_start = _month_window_utc()
+    total = (
+        db.query(func.coalesce(func.sum(AIJob.cost_usd), 0.0))
+        .filter(
+            AIJob.tenant_id == tenant_id,
+            AIJob.created_at >= start,
+            AIJob.created_at < next_start,
+        )
+        .scalar()
+    )
+    return float(total or 0.0)
+
+
+def check_tenant_monthly_budget(tenant_id: int, db: "Session") -> float:
+    """
+    Valida o teto mensal de IA do tenant. Retorna o custo acumulado no mês.
+    Levanta HTTPException 429 se estourou. limit=0 ⇒ ilimitado.
+    """
+    from fastapi import HTTPException
+
+    limit = get_tenant_monthly_budget(tenant_id, db)
+    if limit <= 0:
+        return get_tenant_monthly_spend(tenant_id, db)
+
+    spent = get_tenant_monthly_spend(tenant_id, db)
+    if spent >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Orçamento mensal de IA excedido: ${spent:.2f}/${limit:.2f} no mês corrente",
+        )
+    return spent
+
+
 def _build_model_list(settings) -> list[tuple[str, str]]:
     """Monta lista de (modelo, api_key) em ordem de preferência baseado nas chaves disponíveis."""
     candidates: list[tuple[str, str, str]] = [

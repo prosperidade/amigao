@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     AI_TIMEOUT_SECONDS: float = 30.0
     # Custo máximo por job (USD) — proteção contra prompt injection gigante
     AI_MAX_COST_PER_JOB_USD: float = 0.10
+    # Sprint R — teto mensal padrão por tenant (USD). 0 = ilimitado.
+    # Override por tenant em Tenant.ai_monthly_budget_usd.
+    AI_BUDGET_USD_MONTHLY_PER_TENANT_DEFAULT: float = 0.0
 
     # Legislação — Gemini context loading (sem chunking)
     LEGISLATION_MAX_CONTEXT_TOKENS: int = 500_000

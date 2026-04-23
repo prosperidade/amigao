@@ -18,7 +18,12 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.core.ai_gateway import AIResponse, check_tenant_cost_limit, complete
+from app.core.ai_gateway import (
+    AIResponse,
+    check_tenant_cost_limit,
+    check_tenant_monthly_budget,
+    complete,
+)
 from app.models.ai_job import AIJob, AIJobStatus, AIJobType
 from app.services.prompt_service import get_active_prompt, render_prompt
 
@@ -127,8 +132,9 @@ class BaseAgent(ABC):
         from app.agents.events import emit_agent_event  # noqa: PLC0415
         from app.core.metrics import record_agent_execution  # noqa: PLC0415
 
-        # 1. Cost check
+        # 1. Cost check (por hora) + Sprint R (teto mensal por tenant)
         check_tenant_cost_limit(self.ctx.tenant_id, self.ctx.session)
+        check_tenant_monthly_budget(self.ctx.tenant_id, self.ctx.session)
 
         # 2. Preconditions
         self.validate_preconditions()

@@ -88,11 +88,12 @@ def classify_demand(
     Classifica a demanda usando regras + LLM.
     Retorna classificação enriquecida e o ai_job_id se LLM foi usado.
     """
-    from app.core.ai_gateway import check_tenant_cost_limit  # noqa: PLC0415
+    from app.core.ai_gateway import check_tenant_cost_limit, check_tenant_monthly_budget  # noqa: PLC0415
     from app.services.llm_classifier import classify_demand_with_llm  # noqa: PLC0415
 
     if settings.ai_configured:
         check_tenant_cost_limit(current_user.tenant_id, db)
+        check_tenant_monthly_budget(current_user.tenant_id, db)
 
     result, ai_job_id = classify_demand_with_llm(
         description=body.description,
@@ -139,9 +140,10 @@ def extract_document(
             detail="IA não está configurada neste ambiente. Configure AI_ENABLED=true e ao menos uma chave de API.",
         )
 
-    from app.core.ai_gateway import check_tenant_cost_limit  # noqa: PLC0415
+    from app.core.ai_gateway import check_tenant_cost_limit, check_tenant_monthly_budget  # noqa: PLC0415
 
     check_tenant_cost_limit(current_user.tenant_id, db)
+    check_tenant_monthly_budget(current_user.tenant_id, db)
 
     if body.doc_type not in supported_doc_types():
         raise HTTPException(
@@ -175,13 +177,14 @@ def classify_async(
     current_user: UserDep,
 ) -> dict[str, Any]:
     """Dispara classificação LLM assíncrona via Celery para um processo existente."""
-    from app.core.ai_gateway import check_tenant_cost_limit  # noqa: PLC0415
+    from app.core.ai_gateway import check_tenant_cost_limit, check_tenant_monthly_budget  # noqa: PLC0415
     from app.workers.ai_tasks import run_llm_classification  # noqa: PLC0415
 
     if not settings.ai_configured:
         raise HTTPException(status_code=503, detail="IA não configurada.")
 
     check_tenant_cost_limit(current_user.tenant_id, db)
+    check_tenant_monthly_budget(current_user.tenant_id, db)
 
     task = run_llm_classification.delay(
         process_id=body.process_id,
@@ -202,13 +205,14 @@ def extract_async(
     current_user: UserDep,
 ) -> dict[str, Any]:
     """Dispara extração de documento LLM assíncrona via Celery."""
-    from app.core.ai_gateway import check_tenant_cost_limit  # noqa: PLC0415
+    from app.core.ai_gateway import check_tenant_cost_limit, check_tenant_monthly_budget  # noqa: PLC0415
     from app.workers.ai_tasks import run_document_extraction  # noqa: PLC0415
 
     if not settings.ai_configured:
         raise HTTPException(status_code=503, detail="IA não configurada.")
 
     check_tenant_cost_limit(current_user.tenant_id, db)
+    check_tenant_monthly_budget(current_user.tenant_id, db)
 
     task = run_document_extraction.delay(
         document_id=body.document_id,
