@@ -731,7 +731,7 @@ export default function Dashboard() {
             className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-lg shadow-emerald-500/20 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            Nova Demanda
+            Novo Caso
           </button>
           {/* CAM2D-007 — Ação rápida: Fluxo de trabalho */}
           <button

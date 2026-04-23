@@ -44,7 +44,7 @@ export default function PrivateLayout() {
 
   const menu = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-    { name: 'Processos', icon: Briefcase, path: '/processes' },
+    { name: 'Quadro de ações', icon: Briefcase, path: '/processes' },
     { name: 'Clientes', icon: Users, path: '/clients' },
     { name: 'Imóveis', icon: MapPin, path: '/properties' },
     { name: 'Propostas', icon: FileText, path: '/proposals' },

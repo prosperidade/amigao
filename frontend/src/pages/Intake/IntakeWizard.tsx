@@ -342,7 +342,7 @@ export default function IntakeWizard() {
         {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-white tracking-tight">
-            🌿 Nova Demanda
+            🌿 Novo Caso
           </h1>
           <p className="text-slate-400 mt-1">Cadastro guiado de caso ambiental</p>
           {/* Sprint F Bloco 3: rascunho expira em 15 dias */}

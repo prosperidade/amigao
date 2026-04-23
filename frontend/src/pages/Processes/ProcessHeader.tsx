@@ -9,7 +9,8 @@ interface ProcessHeaderProps {
 
 export default function ProcessHeader({ process, client, onBack }: ProcessHeaderProps) {
   const statusCfg = STATUS_CONFIG[process.status] ?? { label: process.status, dot: 'bg-gray-400', badge: 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-500/10 border-gray-300 dark:border-gray-500/20' };
-  const urgencyCfg = URGENCY_CONFIG[process.urgency ?? 'media'];
+  // Fallback p/ valores de urgency fora do enum (ex: "normal" no seed antigo).
+  const urgencyCfg = URGENCY_CONFIG[process.urgency ?? 'media'] ?? URGENCY_CONFIG.media;
   const demandLabel = process.demand_type ? DEMAND_LABELS[process.demand_type] : null;
 
   return (

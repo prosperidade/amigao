@@ -37,15 +37,15 @@ interface Props {
 function ConfidenceBadge({ confidence }: { confidence: string }) {
   const labels: Record<string, string> = {
     high: 'Alta',
-    medium: 'Media',
+    medium: 'Média',
     low: 'Baixa',
     alta: 'Alta',
-    media: 'Media',
+    media: 'Média',
     baixa: 'Baixa',
   };
   return (
     <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${CONFIDENCE_STYLES[confidence] ?? CONFIDENCE_STYLES.medium ?? ''}`}>
-      Confianca: {labels[confidence] ?? confidence}
+      Confiança: {labels[confidence] ?? confidence}
     </span>
   );
 }
@@ -53,7 +53,7 @@ function ConfidenceBadge({ confidence }: { confidence: string }) {
 function ReviewBadge() {
   return (
     <span className="text-xs px-2.5 py-1 rounded-full border font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30 flex items-center gap-1">
-      <Eye className="w-3 h-3" /> Requer revisao humana
+      <Eye className="w-3 h-3" /> Requer revisão humana
     </span>
   );
 }
@@ -113,7 +113,7 @@ function AtendimentoResult({ r }: { r: Record<string, unknown> }) {
         {typeof r.confidence === 'string' && <ConfidenceBadge confidence={r.confidence} />}
         {str(r.urgency_flag) && (
           <span className="text-xs px-2 py-1 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/30">
-            Urgencia: {str(r.urgency_flag)}
+            Urgência: {str(r.urgency_flag)}
           </span>
         )}
       </div>
@@ -125,19 +125,19 @@ function AtendimentoResult({ r }: { r: Record<string, unknown> }) {
       )}
 
       {arr(r.suggested_next_steps).length > 0 && (
-        <Section icon={ListChecks} title="Proximos Passos" color="text-emerald-600 dark:text-emerald-400">
+        <Section icon={ListChecks} title="Próximos Passos" color="text-emerald-600 dark:text-emerald-400">
           <BulletList items={arr(r.suggested_next_steps)} color="text-emerald-400" />
         </Section>
       )}
 
       {arr(r.required_documents).length > 0 && (
-        <Section icon={FileText} title="Documentos Necessarios" color="text-blue-600 dark:text-blue-400">
+        <Section icon={FileText} title="Documentos Necessários" color="text-blue-600 dark:text-blue-400">
           <BulletList items={arr(r.required_documents)} color="text-blue-400" />
         </Section>
       )}
 
       {arr(r.relevant_agencies).length > 0 && (
-        <Section icon={Building2} title="Orgaos Relevantes" color="text-indigo-600 dark:text-indigo-400">
+        <Section icon={Building2} title="Órgãos Relevantes" color="text-indigo-600 dark:text-indigo-400">
           <div className="flex flex-wrap gap-2">
             {arr(r.relevant_agencies).map((a, i) => (
               <span key={i} className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30">
@@ -151,7 +151,7 @@ function AtendimentoResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
-function DiagnosticoResult({ r }: { r: Record<string, unknown> }) {
+function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -181,7 +181,7 @@ function DiagnosticoResult({ r }: { r: Record<string, unknown> }) {
       )}
 
       {arr(r.acoes_remediacao).length > 0 && (
-        <Section icon={CheckCircle2} title="Acoes de Remediacao" color="text-emerald-600 dark:text-emerald-400">
+        <Section icon={CheckCircle2} title="Ações de Remediação" color="text-emerald-600 dark:text-emerald-400">
           <BulletList items={arr(r.acoes_remediacao)} color="text-emerald-400" />
         </Section>
       )}
@@ -193,7 +193,7 @@ function DiagnosticoResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
-function LegislacaoResult({ r }: { r: Record<string, unknown> }) {
+function LegislaçãoResult({ r }: { r: Record<string, unknown> }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -203,17 +203,17 @@ function LegislacaoResult({ r }: { r: Record<string, unknown> }) {
 
       {typeof r.caminho_regulatorio === 'string' && (
         <div className="bg-blue-50 dark:bg-blue-500/5 p-3 rounded-lg border border-blue-200 dark:border-blue-500/20">
-          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Caminho Regulatorio</p>
+          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Caminho Regulatório</p>
           <p className="text-sm text-gray-800 dark:text-slate-200 font-medium">{str(r.caminho_regulatorio)}</p>
         </div>
       )}
 
       {typeof r.orgao_competente === 'string' && (
-        <KeyValue label="Orgao Competente" value={str(r.orgao_competente)} />
+        <KeyValue label="Órgão Competente" value={str(r.orgao_competente)} />
       )}
 
       {objArr(r.etapas).length > 0 && (
-        <Section icon={ListChecks} title="Etapas Regulatorias" color="text-blue-600 dark:text-blue-400">
+        <Section icon={ListChecks} title="Etapas Regulatórias" color="text-blue-600 dark:text-blue-400">
           <div className="space-y-2">
             {objArr(r.etapas).map((etapa, i) => (
               <div key={i} className="flex items-start gap-3 p-2 bg-gray-50 dark:bg-white/5 rounded-lg">
@@ -232,13 +232,13 @@ function LegislacaoResult({ r }: { r: Record<string, unknown> }) {
       )}
 
       {arr(r.legislacao_aplicavel).length > 0 && (
-        <Section icon={BookOpen} title="Legislacao Aplicavel" color="text-purple-600 dark:text-purple-400">
+        <Section icon={BookOpen} title="Legislação Aplicável" color="text-purple-600 dark:text-purple-400">
           <BulletList items={arr(r.legislacao_aplicavel)} color="text-purple-400" />
         </Section>
       )}
 
       {arr(r.documentos_necessarios).length > 0 && (
-        <Section icon={FileText} title="Documentos Necessarios" color="text-indigo-600 dark:text-indigo-400">
+        <Section icon={FileText} title="Documentos Necessários" color="text-indigo-600 dark:text-indigo-400">
           <BulletList items={arr(r.documentos_necessarios)} color="text-indigo-400" />
         </Section>
       )}
@@ -260,7 +260,7 @@ function ExtratorResult({ r }: { r: Record<string, unknown> }) {
         <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 font-medium">
           Tipo: {str(r.doc_type ?? '—')}
         </span>
-        <span className="text-xs text-gray-500">{str(r.fields_count ?? 0)} campos extraidos</span>
+        <span className="text-xs text-gray-500">{str(r.fields_count ?? 0)} campos extraídos</span>
       </div>
 
       {fields && Object.keys(fields).length > 0 && (
@@ -274,7 +274,7 @@ function ExtratorResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
-function OrcamentoResult({ r }: { r: Record<string, unknown> }) {
+function OrçamentoResult({ r }: { r: Record<string, unknown> }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -290,7 +290,7 @@ function OrcamentoResult({ r }: { r: Record<string, unknown> }) {
       <div className="grid grid-cols-2 gap-3">
         {r.suggested_value_min != null && (
           <div className="bg-emerald-50 dark:bg-emerald-500/5 p-3 rounded-lg border border-emerald-200 dark:border-emerald-500/20">
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">Valor Minimo</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">Valor Mínimo</p>
             <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
               R$ {Number(r.suggested_value_min).toLocaleString('pt-BR')}
             </p>
@@ -298,7 +298,7 @@ function OrcamentoResult({ r }: { r: Record<string, unknown> }) {
         )}
         {r.suggested_value_max != null && (
           <div className="bg-emerald-50 dark:bg-emerald-500/5 p-3 rounded-lg border border-emerald-200 dark:border-emerald-500/20">
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">Valor Maximo</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">Valor Máximo</p>
             <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
               R$ {Number(r.suggested_value_max).toLocaleString('pt-BR')}
             </p>
@@ -311,7 +311,7 @@ function OrcamentoResult({ r }: { r: Record<string, unknown> }) {
       )}
 
       {objArr(r.scope_items).length > 0 && (
-        <Section icon={ListChecks} title="Escopo do Servico" color="text-emerald-600 dark:text-emerald-400">
+        <Section icon={ListChecks} title="Escopo do Serviço" color="text-emerald-600 dark:text-emerald-400">
           <div className="space-y-1.5">
             {objArr(r.scope_items).map((item, i) => (
               <div key={i} className="flex justify-between items-center text-sm py-1 border-b border-gray-100 dark:border-white/5 last:border-0">
@@ -386,7 +386,7 @@ function FinanceiroResult({ r }: { r: Record<string, unknown> }) {
       )}
 
       {arr(r.recommendations).length > 0 && (
-        <Section icon={CheckCircle2} title="Recomendacoes" color="text-emerald-600 dark:text-emerald-400">
+        <Section icon={CheckCircle2} title="Recomendações" color="text-emerald-600 dark:text-emerald-400">
           <BulletList items={arr(r.recommendations)} color="text-emerald-400" />
         </Section>
       )}
@@ -400,7 +400,7 @@ function AcompanhamentoResult({ r }: { r: Record<string, unknown> }) {
       <div className="flex items-center gap-2 flex-wrap">
         {r.is_agency_response === true && (
           <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/30 font-medium">
-            Resposta de Orgao
+            Resposta de Órgão
           </span>
         )}
         {typeof r.response_type === 'string' && (
@@ -415,7 +415,7 @@ function AcompanhamentoResult({ r }: { r: Record<string, unknown> }) {
         )}
         {r.action_required === true && (
           <span className="text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/10 dark:text-red-300 font-medium flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" /> Acao necessaria
+            <AlertTriangle className="w-3 h-3" /> Ação necessária
           </span>
         )}
       </div>
@@ -515,16 +515,16 @@ const AGENT_ICON: Record<string, React.ElementType> = {
 };
 
 const AGENT_TITLE: Record<string, string> = {
-  atendimento: 'Classificacao da Demanda',
-  extrator: 'Campos Extraidos do Documento',
-  diagnostico: 'Diagnostico Ambiental',
-  legislacao: 'Enquadramento Regulatorio',
+  atendimento: 'Classificação da Demanda',
+  extrator: 'Campos Extraídos do Documento',
+  diagnostico: 'Diagnóstico Ambiental',
+  legislacao: 'Enquadramento Regulatório',
   redator: 'Documento Gerado',
-  orcamento: 'Proposta de Orcamento',
-  financeiro: 'Analise Financeira',
-  acompanhamento: 'Analise de Acompanhamento',
+  orcamento: 'Proposta de Orçamento',
+  financeiro: 'Análise Financeira',
+  acompanhamento: 'Análise de Acompanhamento',
   vigia: 'Alertas de Monitoramento',
-  marketing: 'Conteudo de Marketing',
+  marketing: 'Conteúdo de Marketing',
 };
 
 // ---------------------------------------------------------------------------
@@ -533,7 +533,7 @@ const AGENT_TITLE: Record<string, string> = {
 
 export default function AgentResultRenderer({ agentName, result }: Props) {
   if (!result || Object.keys(result).length === 0) {
-    return <p className="text-sm text-gray-400 italic">Sem resultado disponivel.</p>;
+    return <p className="text-sm text-gray-400 italic">Sem resultado disponível.</p>;
   }
 
   const Icon = AGENT_ICON[agentName ?? ''] ?? Sparkles;
@@ -542,10 +542,10 @@ export default function AgentResultRenderer({ agentName, result }: Props) {
   const renderers: Record<string, (r: Record<string, unknown>) => React.ReactNode> = {
     atendimento: (r) => <AtendimentoResult r={r} />,
     extrator: (r) => <ExtratorResult r={r} />,
-    diagnostico: (r) => <DiagnosticoResult r={r} />,
-    legislacao: (r) => <LegislacaoResult r={r} />,
+    diagnostico: (r) => <DiagnósticoResult r={r} />,
+    legislacao: (r) => <LegislaçãoResult r={r} />,
     redator: (r) => <RedatorResult r={r} />,
-    orcamento: (r) => <OrcamentoResult r={r} />,
+    orcamento: (r) => <OrçamentoResult r={r} />,
     financeiro: (r) => <FinanceiroResult r={r} />,
     acompanhamento: (r) => <AcompanhamentoResult r={r} />,
     vigia: (r) => <VigiaResult r={r} />,
