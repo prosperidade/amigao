@@ -2095,6 +2095,34 @@ docker compose logs worker --tail 20 | grep "workers\."
 # Esperado: workers.run_agent, workers.run_agent_chain, workers.vigia_all_tenants, etc.
 ```
 
+### Desenvolvimento local — hot-reload e rebuild
+
+Desde 2026-04-23 o projeto tem `docker-compose.override.yml` na raiz que o Docker
+Compose carrega automaticamente em `docker compose up`. Ele monta `./app`,
+`./alembic`, `./scripts` e `./seed.py` como bind volumes nos containers `api` e
+`worker`, e roda o uvicorn com `--reload`. Consequências práticas:
+
+| Você mudou | Precisa rebuildar? | Precisa restart? |
+|---|---|---|
+| `.py` em `app/`, `scripts/`, ou `seed.py` | ❌ | ❌ (uvicorn reinicia sozinho; worker precisa `docker compose restart worker`) |
+| Nova migration em `alembic/versions/` | ❌ | ✅ `docker compose restart api` (init_db roda no boot do container) |
+| `requirements.txt` | ✅ `docker compose build api worker` | ✅ `docker compose up -d api worker` |
+| `Dockerfile` | ✅ | ✅ |
+
+**Incidente documentado:** em 2026-04-23 o container `api` entrou em crashloop
+porque migrations novas foram aplicadas no banco via `alembic upgrade head`
+rodado do host, mas a imagem Docker buildada antes não continha os arquivos
+`alembic/versions/*.py` das novas revisões. O banco persiste entre restarts
+(volume nomeado `postgres_data`), mas a imagem não atualiza sozinha.
+Sintoma: `CommandError: Can't locate revision identified by '<rev>'`. Correção:
+`docker compose build api worker && docker compose up -d api worker`.
+**O override de dev resolve isso** — migrations novas passam a estar imediatamente
+no container via bind mount, sem rebuild.
+
+**Em CI/produção** desabilite o override com `docker compose -f docker-compose.yml up -d`.
+
+---
+
 ### MemPalace — REVOGADO (2026-04-23)
 
 > ⚠️ O pacote PyPI `mempalace` foi abandonado em 2026-04-23 por sinais fortes de

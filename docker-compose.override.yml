@@ -1,0 +1,44 @@
+# docker-compose.override.yml — overrides de DESENVOLVIMENTO LOCAL
+#
+# Docker Compose carrega este arquivo automaticamente quando roda `docker compose up`
+# junto com o `docker-compose.yml` base. Em ambientes de CI/produção, desabilite com:
+#     docker compose -f docker-compose.yml up -d
+#
+# Objetivo: mudanças em código Python (app/, alembic/, scripts/, seed.py) refletem
+# imediatamente no container sem `docker compose build`. Adicionado em 2026-04-23
+# depois de um crashloop causado por migration nova no host + imagem antiga no
+# container (ver docs/sprints/sprint_0.md "Incidente API crashloop").
+#
+# Trade-off conhecido: paridade dev × produção fica menor. Em produção a imagem
+# buildada é imutável; aqui ela é "viva". A dependência de OS (apt/pip install)
+# ainda exige rebuild — apenas código Python é refletido no hot-reload.
+
+services:
+  api:
+    # --reload faz o uvicorn reiniciar sozinho em mudanças de .py
+    command: >-
+      sh -c "python -m app.db.init_db
+      && python seed.py
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      --reload-dir /app/app"
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+      - ./scripts:/app/scripts
+      - ./seed.py:/app/seed.py
+    environment:
+      # Identificação visual no log de que o override está ativo
+      DEV_OVERRIDE: "1"
+
+  worker:
+    # Celery com --pool=solo não tem reload automático; mudanças em workers
+    # exigem `docker compose restart worker` — aceitável porque workers Python
+    # não são editados com a mesma frequência que handlers de API.
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+      - ./scripts:/app/scripts
+    environment:
+      DEV_OVERRIDE: "1"
