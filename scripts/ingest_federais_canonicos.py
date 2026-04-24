@@ -110,7 +110,7 @@ CURATED_FEDERAIS: list[dict] = [
     # CONAMA — o portal Sisconama serve múltiplos IDs com conteúdo desalinhado.
     # Validação 2026-04-23: apenas id=23 retorna CONAMA 001/1986 corretamente;
     # id=745 retornou texto da 001 (não 237); id=489 retornou texto da 372 (não 369).
-    # Ver TODO ingest_federais_canonicos.py:CONAMA_TODO para URLs corretas.
+    # 2026-04-24: 237 via SUDEMA-PB e 369 via CETESB (mirrors oficiais que serviram).
     {
         "url": "https://conama.mma.gov.br/?option=com_sisconama&task=arquivo.download&id=23",
         "title": "Resolução CONAMA 001/1986 — EIA/RIMA",
@@ -122,9 +122,29 @@ CURATED_FEDERAIS: list[dict] = [
         # Palavra-chave que precisa aparecer no texto para confirmar que bateu com o diploma certo
         "validation_keyword": "Resolução CONAMA nº 1",
     },
-    # CONAMA_TODO — próximo round (URLs verificadas):
-    #   Res. CONAMA 237/1997 (licenciamento) — achar URL correta no MMA/in.gov.br
-    #   Res. CONAMA 369/2006 (APP) — achar URL correta no MMA/in.gov.br
+    {
+        # Testadas em 2026-04-24: IBAMA sophia (403), egov.df.gov.br (SSL quebrado),
+        # conama.mma.gov.br/sisconama (timeout). SUDEMA-PB (Plone @@download) funciona.
+        "url": "https://sudema.pb.gov.br/servicos/servicos-ao-publico/legislacao-ambienta/projur/resolucao-no-237-conama-licenciamento-ambiental.pdf/@@download/file",
+        "title": "Resolução CONAMA 237/1997 — Licenciamento Ambiental",
+        "identifier": "Res. CONAMA 237/1997",
+        "source_type": "resolucao",
+        "agency": "CONAMA",
+        "effective_date": "1997-12-19",
+        "demand_types": ["licenciamento"],
+        "validation_keyword": "19 de dezembro de 1997",
+    },
+    {
+        # CETESB (mirror oficial do órgão ambiental paulista).
+        "url": "https://licenciamento.cetesb.sp.gov.br/legislacao/federal/resolucoes/2006_res_conama_369.pdf",
+        "title": "Resolução CONAMA 369/2006 — Intervenção/Supressão em APP",
+        "identifier": "Res. CONAMA 369/2006",
+        "source_type": "resolucao",
+        "agency": "CONAMA",
+        "effective_date": "2006-03-28",
+        "demand_types": ["licenciamento", "compensacao"],
+        "validation_keyword": "28 de março de 2006",
+    },
 ]
 
 
