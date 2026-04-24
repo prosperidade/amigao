@@ -18,6 +18,10 @@ fpdf2
 litellm
 # mempalace removido em 2026-04-23 — supply-chain red flags (PyPI). Ver docs/adr/adr_mempalace_REVOKED.md
 httpx
+# Sprint 0 — extração de texto de PDFs/HTML para ingestão de legislação
+pypdf>=5.0
+beautifulsoup4>=4.12
+lxml>=5.0
 slowapi>=0.1.9
 pytest
 pytest-cov

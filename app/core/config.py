@@ -108,7 +108,12 @@ class Settings(BaseSettings):
     AI_BUDGET_USD_MONTHLY_PER_TENANT_DEFAULT: float = 0.0
 
     # Legislação — Gemini context loading (sem chunking)
-    LEGISLATION_MAX_CONTEXT_TOKENS: int = 500_000
+    # Sprint 0 (2026-04-23): Gemini 2.0 Flash tem janela de 1M tokens.
+    # Deixamos 900K como budget de contexto (10% de margem pra system prompt + memória).
+    LEGISLATION_MAX_CONTEXT_TOKENS: int = 900_000
+    # Sprint 0 — budget expandido quando o roteador escolhe Pro (janela 2M).
+    # Usado só em consultas com corpus muito grande (coletâneas completas).
+    LEGISLATION_MAX_CONTEXT_TOKENS_LONG: int = 1_900_000
     LEGISLATION_MAX_RESULTS: int = 20
 
     # Claude API (agente regulatório)
@@ -117,11 +122,22 @@ class Settings(BaseSettings):
     CLAUDE_LEGAL_TEMPERATURE: float = 0.1
 
     # Gemini (context loading de legislação)
+    # Default: Flash (1M tokens, $0.10/1M) — caso comum.
     GEMINI_LEGAL_MODEL: str = "gemini/gemini-2.0-flash"
+    # Sprint 0 — modelo para consultas com contexto >800K tokens (janela 2M).
+    # Custo: $1.25/1M até 200K / $2.50/1M acima. Só ativado quando a consulta exige.
+    GEMINI_LEGAL_LONG_MODEL: str = "gemini/gemini-1.5-pro"
+    # Threshold de contexto acima do qual o roteador troca Flash → Pro.
+    GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS: int = 3_200_000  # ~800K tokens
 
     # Sprint O — Gemini como provider default do agente legislação (decisão da sócia 2026-04-21).
     # Claude continua como fallback quando Gemini não estiver configurado.
     LEGISLATION_USE_GEMINI_DEFAULT: bool = True
+
+    # Sprint 0 — cost guard específico do agente legislação (docs grandes no Gemini).
+    # Flash default: $0.30. Override pra Pro quando contexto >800K: $5.00.
+    AI_MAX_COST_PER_JOB_USD_LEGISLACAO: float = 0.30
+    AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG: float = 5.00
 
     @property
     def cors_origins_list(self) -> list[str]:

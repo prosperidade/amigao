@@ -95,29 +95,57 @@ class LegislacaoAgent(BaseAgent):
                 + memory_context
             )
 
-        # Sprint O (2026-04-21) — Gemini é o provider default do agente legislação.
-        # Claude continua como fallback para quando Gemini não tiver API key configurada
-        # (ou se a flag LEGISLATION_USE_GEMINI_DEFAULT for desativada pontualmente).
-        # O contexto grande (>100K chars) sempre vai pra Gemini (janela de 2M tokens).
-        large_context = bool(legislation_context and len(legislation_context) > 100_000)
-        use_gemini = (
-            large_context
-            or (settings.LEGISLATION_USE_GEMINI_DEFAULT and bool(settings.GEMINI_API_KEY))
+        # Sprint O — Gemini é o provider default do agente legislação.
+        # Sprint 0 (2026-04-23) — roteamento dinâmico Flash → Pro:
+        #   - Flash 2.0 (janela 1M, $0.10/1M): caso comum, ~95% das chamadas.
+        #   - Pro 1.5 (janela 2M, $2.50/1M acima de 200K): só quando contexto
+        #     legislativo extrapola o limiar (coletâneas grandes, múltiplos
+        #     diplomas grandes na resposta do search_legislation).
+        context_chars = len(legislation_context) if legislation_context else 0
+        needs_long_window = context_chars > settings.GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS
+        gemini_available = (
+            settings.LEGISLATION_USE_GEMINI_DEFAULT and bool(settings.GEMINI_API_KEY)
         )
+        # "use_gemini" mantém compat com a decisão do Sprint O: qualquer contexto
+        # legislativo material (>100K chars) vai pro Gemini, mesmo que a flag esteja
+        # off (não queremos truncar legislação em modelos de janela pequena).
+        use_gemini = needs_long_window or context_chars > 100_000 or gemini_available
 
         if use_gemini:
+            # Roteamento Flash → Pro baseado no tamanho do contexto.
+            chosen_model = (
+                settings.GEMINI_LEGAL_LONG_MODEL
+                if needs_long_window
+                else settings.GEMINI_LEGAL_MODEL
+            )
+            cost_limit = (
+                settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG
+                if needs_long_window
+                else settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO
+            )
+            import logging as _log  # noqa: PLC0415
+
+            _log.getLogger(__name__).info(
+                "legislacao.route context_chars=%d needs_long=%s model=%s cost_limit=%.2f",
+                context_chars, needs_long_window, chosen_model, cost_limit,
+            )
             response = self.call_llm(
                 user_prompt,
                 system=system_prompt,
-                model=settings.GEMINI_LEGAL_MODEL,
+                model=chosen_model,
                 max_tokens=settings.CLAUDE_LEGAL_MAX_TOKENS,
+                max_cost_override_usd=cost_limit,
             )
         elif settings.ANTHROPIC_API_KEY:
             # Fallback: Claude via SDK quando Gemini não tiver API key.
             response = self._call_claude(user_prompt, system=system_prompt)
         else:
             # Último fallback: LiteLLM padrao (outro provider configurado).
-            response = self.call_llm(user_prompt, system=system_prompt)
+            response = self.call_llm(
+                user_prompt,
+                system=system_prompt,
+                max_cost_override_usd=settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO,
+            )
 
         parsed = OutputValidationPipeline.parse_llm_json(response.content)
 
@@ -156,7 +184,15 @@ class LegislacaoAgent(BaseAgent):
         demand_type: str | None,
         uf: str | None,
     ) -> str:
-        """Busca legislacao no banco e monta contexto textual."""
+        """Busca legislacao no banco e monta contexto textual.
+
+        Sprint 0 — usa o budget LONG (1.9M tokens) quando o agente roda Gemini Pro.
+        Como não sabemos a priori se vamos rodar Pro (depende do tamanho do contexto
+        montado), usamos sempre o budget LONG aqui e deixamos o roteamento decidir
+        o modelo. Se o contexto ficar abaixo do threshold, usa Flash; se ficar
+        acima, usa Pro. Ambos cabem na janela do modelo escolhido.
+        """
+        from app.core.config import settings  # noqa: PLC0415
         from app.services.legislation_service import build_legislation_context, search_legislation
 
         try:
@@ -164,6 +200,8 @@ class LegislacaoAgent(BaseAgent):
                 self.ctx.session,
                 uf=uf if uf else None,
                 demand_type=demand_type,
+                max_total_tokens=settings.LEGISLATION_MAX_CONTEXT_TOKENS_LONG,
+                max_results=settings.LEGISLATION_MAX_RESULTS,
             )
             if docs:
                 return build_legislation_context(docs)

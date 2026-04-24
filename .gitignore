@@ -43,3 +43,7 @@ coverage/
 
 # Test coverage artifacts
 .coverage
+
+# Sprint 0 — outputs gerados pelos scripts de ingestão (text preview é grande)
+ops/legislation_preview/
+ops/legislation_metadata.json

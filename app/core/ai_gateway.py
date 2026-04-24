@@ -166,12 +166,18 @@ def complete(
     model: Optional[str] = None,
     max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
+    max_cost_override_usd: Optional[float] = None,
 ) -> AIResponse:
     """
     Envia um prompt para o LLM e retorna AIResponse.
 
     Tenta os modelos em ordem de fallback. Lança AIGatewayError se todos falharem.
     Deve ser chamado somente quando settings.ai_configured == True.
+
+    Sprint 0 (2026-04-23): `max_cost_override_usd` permite que agentes com casos
+    especiais (ex: legislacao consultando coletâneas grandes via Gemini 1.5 Pro)
+    passem um teto maior que `AI_MAX_COST_PER_JOB_USD` global. O override é
+    enforcado do mesmo jeito — job acima dele levanta AIGatewayError.
     """
     # Import tardio para evitar erro de import quando IA desabilitada
     import litellm  # noqa: PLC0415
@@ -219,7 +225,13 @@ def complete(
             # Só enforcado quando o provider informa custo (>0). Provider sem tabela de preço
             # retorna 0.0 e o guardrail não dispara — custo real é monitorado pelos limites
             # horário e mensal por tenant.
-            max_per_job = settings.AI_MAX_COST_PER_JOB_USD
+            # Sprint 0 — override por chamada permite budgets maiores para casos específicos
+            # (ex: legislacao com Gemini 1.5 Pro em coletâneas grandes).
+            max_per_job = (
+                max_cost_override_usd
+                if max_cost_override_usd is not None
+                else settings.AI_MAX_COST_PER_JOB_USD
+            )
             if cost > 0 and max_per_job > 0 and cost > max_per_job:
                 logger.error(
                     "ai_gateway.complete cost exceeded max per job: "
