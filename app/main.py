@@ -20,6 +20,7 @@ from app.api.v1 import (
     documents,
     dossier,
     intake,
+    knowledge,
     legislation,
     legislation_alerts,
     processes,
@@ -148,6 +149,7 @@ app.include_router(agents.router, prefix=f"{settings.API_V1_STR}/agents", tags=[
 app.include_router(dashboard.router, prefix=f"{settings.API_V1_STR}/dashboard", tags=["Dashboard"])
 app.include_router(legislation.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Base Legislativa"])
 app.include_router(legislation_alerts.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Alertas Legislativos"])
+app.include_router(knowledge.router, prefix=f"{settings.API_V1_STR}/knowledge", tags=["Knowledge Catalog (RAG)"])
 app.include_router(websocket_router, tags=["Tempo Real"])
 
 

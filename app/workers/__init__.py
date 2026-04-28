@@ -15,3 +15,8 @@ from app.workers.agent_tasks import (  # noqa: F401
     acompanhamento_check_all,
 )
 from app.workers.webhook_tasks import send_webhook_alert  # noqa: F401
+from app.workers.knowledge_indexer import (  # noqa: F401
+    index_arbitrary_text_task,
+    index_legislation_document_task,
+    reindex_all_legislation,
+)

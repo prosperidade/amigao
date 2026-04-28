@@ -1,6 +1,9 @@
 services:
   db:
-    image: postgis/postgis:15-3.3
+    build:
+      context: .
+      dockerfile: docker/db/Dockerfile
+    image: amigao_do_meio_ambiente-db
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pgpass2026}"

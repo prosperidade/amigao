@@ -7,6 +7,7 @@ from app.models.contract import Contract
 from app.models.contract_template import ContractTemplate
 from app.models.document import Document
 from app.models.intake_draft import IntakeDraft, IntakeDraftState
+from app.models.knowledge_catalog import KnowledgeChunk, SourceType
 from app.models.legislation import LegislationDocument
 from app.models.legislation_alert import LegislationAlert
 from app.models.macroetapa import MacroetapaChecklist
