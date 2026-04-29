@@ -34,8 +34,15 @@ GEMINI_EMBED_URL = (
     f"{EMBEDDING_MODEL}:embedContent"
 )
 
-# Free tier permite ~100 RPM. 0.65s entre chamadas mantem margem segura.
-_THROTTLE_SECONDS = 0.65
+# Throttle entre chamadas. Documentado como ~100 RPM no free tier mas a janela
+# curta e mais agressiva — 0.65s causou 429 em meio a docs grandes. 1.0s = 60 RPM
+# regime estavel; combina com retry com backoff abaixo para sobreviver a picos.
+_THROTTLE_SECONDS = 1.0
+
+# Retry com backoff exponencial em 429 (rate limit) e 5xx (instabilidade do provider).
+# 5s, 10s, 20s, 40s, 80s = ate ~2.5 min de espera total antes de desistir.
+_MAX_RETRIES = 5
+_RETRY_BASE_SECONDS = 5.0
 
 
 class EmbeddingError(RuntimeError):
@@ -63,24 +70,46 @@ def _embed_single(
         "taskType": task_type,
         "outputDimensionality": EMBEDDING_DIM,
     }
-    try:
-        response = client.post(
-            GEMINI_EMBED_URL,
-            params={"key": key},
-            json=payload,
-        )
-        response.raise_for_status()
-        data = response.json()
-    except httpx.HTTPError as exc:
-        raise EmbeddingError(f"Falha HTTP ao embedar: {exc}") from exc
 
-    values = data.get("embedding", {}).get("values")
-    if not isinstance(values, list) or len(values) != EMBEDDING_DIM:
-        raise EmbeddingError(
-            f"Resposta invalida do Gemini: esperado embedding[{EMBEDDING_DIM}] "
-            f"recebido {len(values) if isinstance(values, list) else type(values).__name__}"
-        )
-    return values
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = client.post(
+                GEMINI_EMBED_URL,
+                params={"key": key},
+                json=payload,
+            )
+        except httpx.HTTPError as exc:
+            raise EmbeddingError(f"Falha HTTP ao embedar: {exc}") from exc
+
+        if response.status_code == 429 or response.status_code >= 500:
+            if attempt < _MAX_RETRIES:
+                delay = _RETRY_BASE_SECONDS * (2 ** attempt)
+                logger.warning(
+                    "gemini %d (rate limit/instavel), retry %d/%d em %.1fs",
+                    response.status_code, attempt + 1, _MAX_RETRIES, delay,
+                )
+                time.sleep(delay)
+                continue
+            raise EmbeddingError(
+                f"Esgotou {_MAX_RETRIES} retries com status {response.status_code}"
+            )
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise EmbeddingError(f"Falha HTTP ao embedar: {exc}") from exc
+
+        data = response.json()
+        values = data.get("embedding", {}).get("values")
+        if not isinstance(values, list) or len(values) != EMBEDDING_DIM:
+            raise EmbeddingError(
+                f"Resposta invalida do Gemini: esperado embedding[{EMBEDDING_DIM}] "
+                f"recebido {len(values) if isinstance(values, list) else type(values).__name__}"
+            )
+        return values
+
+    # Loop sai pelo continue/return; defensivo.
+    raise EmbeddingError("loop de retry encerrou sem resposta")
 
 
 def embed_text(text: str, *, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
