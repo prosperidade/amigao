@@ -42,13 +42,13 @@ export function useAgentEvents() {
         if (status === 'completed') {
           toast.success(`${label} concluido${confidence ? ` (confianca ${confidence})` : ''}`, {
             duration: 4000,
-            icon: '\u2705',
+            icon: '✅',
           });
         } else if (status === 'failed') {
           const error = (data?.payload?.error as string)?.slice(0, 100) || 'Erro desconhecido';
           toast.error(`${label} falhou: ${error}`, {
             duration: 6000,
-            icon: '\u274c',
+            icon: '❌',
           });
         }
 

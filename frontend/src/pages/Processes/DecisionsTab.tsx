@@ -59,12 +59,12 @@ interface CreatePayload {
 const DECISION_TYPE_LABELS: Record<string, string> = {
   triagem: 'Triagem',
   documental: 'Documental',
-  tecnica: 'T\u00e9cnica',
-  regulatoria: 'Regulat\u00f3ria',
+  tecnica: 'Técnica',
+  regulatoria: 'Regulatória',
   comercial: 'Comercial',
   contratual: 'Contratual',
   bloqueio: 'Bloqueio',
-  avanco_etapa: 'Avan\u00e7o de etapa',
+  avanco_etapa: 'Avanço de etapa',
 };
 
 const DECISION_TYPE_COLORS: Record<string, string> = {
@@ -82,7 +82,7 @@ const DECISION_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   proposta:    { label: 'Proposta',    cls: 'bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-gray-400' },
   validada:    { label: 'Validada',    cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
   revisada:    { label: 'Revisada',    cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
-  substituida: { label: 'Substitu\u00edda', cls: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400 line-through' },
+  substituida: { label: 'Substituída', cls: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400 line-through' },
 };
 
 const DECISION_TYPES: DecisionType[] = [
@@ -134,12 +134,12 @@ export default function DecisionsTab({ processId, currentMacroetapa }: Props) {
     mutationFn: (payload: CreatePayload) =>
       api.post(`/processes/${processId}/decisions`, payload),
     onSuccess: () => {
-      toast.success('Decis\u00e3o registrada');
+      toast.success('Decisão registrada');
       setCreating(false);
       invalidate();
     },
     onError: (err: AxiosError<{ detail?: string }>) => {
-      toast.error(err.response?.data?.detail ?? 'Erro ao registrar decis\u00e3o');
+      toast.error(err.response?.data?.detail ?? 'Erro ao registrar decisão');
     },
   });
 
@@ -147,7 +147,7 @@ export default function DecisionsTab({ processId, currentMacroetapa }: Props) {
     mutationFn: ({ id, payload }: { id: number; payload: Partial<CreatePayload> }) =>
       api.patch(`/processes/${processId}/decisions/${id}`, payload),
     onSuccess: () => {
-      toast.success('Decis\u00e3o atualizada');
+      toast.success('Decisão atualizada');
       setEditingId(null);
       invalidate();
     },
@@ -157,7 +157,7 @@ export default function DecisionsTab({ processId, currentMacroetapa }: Props) {
     mutationFn: (id: number) =>
       api.delete(`/processes/${processId}/decisions/${id}`),
     onSuccess: () => {
-      toast.success('Decis\u00e3o removida');
+      toast.success('Decisão removida');
       invalidate();
     },
   });
@@ -179,7 +179,7 @@ export default function DecisionsTab({ processId, currentMacroetapa }: Props) {
           className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-sm shadow-emerald-500/20 transition-colors"
         >
           {creating ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {creating ? 'Cancelar' : 'Nova decis\u00e3o'}
+          {creating ? 'Cancelar' : 'Nova decisão'}
         </button>
       </div>
 
@@ -239,7 +239,7 @@ export default function DecisionsTab({ processId, currentMacroetapa }: Props) {
               onCancelEdit={() => setEditingId(null)}
               onSave={payload => updateMutation.mutate({ id: d.id, payload })}
               onDelete={() => {
-                if (confirm('Remover esta decis\u00e3o? A a\u00e7\u00e3o pode ser desfeita manualmente pelo administrador.')) {
+                if (confirm('Remover esta decisão? A ação pode ser desfeita manualmente pelo administrador.')) {
                   deleteMutation.mutate(d.id);
                 }
               }}
@@ -293,7 +293,7 @@ function DecisionForm({ defaultMacroetapa, initial, onSubmit, onCancel, submitti
 
   const submit = () => {
     if (!decisionText.trim() || decisionText.trim().length < 3) {
-      toast.error('Descreva a decis\u00e3o com ao menos 3 caracteres.');
+      toast.error('Descreva a decisão com ao menos 3 caracteres.');
       return;
     }
     onSubmit({
@@ -344,11 +344,11 @@ function DecisionForm({ defaultMacroetapa, initial, onSubmit, onCancel, submitti
         </Field>
       </div>
 
-      <Field label="Decis\u00e3o tomada" required>
+      <Field label="Decisão tomada" required>
         <textarea
           value={decisionText}
           onChange={e => setDecisionText(e.target.value)}
-          placeholder="Ex: adotar licen\u00e7a corretiva como rota principal"
+          placeholder="Ex: adotar licença corretiva como rota principal"
           rows={2}
           className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200 resize-y"
         />
@@ -358,7 +358,7 @@ function DecisionForm({ defaultMacroetapa, initial, onSubmit, onCancel, submitti
         <textarea
           value={justification}
           onChange={e => setJustification(e.target.value)}
-          placeholder="Por que esta decis\u00e3o foi tomada? (evid\u00eancias, leituras IA, conversas)"
+          placeholder="Por que esta decisão foi tomada? (evidências, leituras IA, conversas)"
           rows={3}
           className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200 resize-y"
         />
@@ -374,7 +374,7 @@ function DecisionForm({ defaultMacroetapa, initial, onSubmit, onCancel, submitti
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200 resize-y"
           />
         </Field>
-        <Field label="Pr\u00f3ximo passo gerado">
+        <Field label="Próximo passo gerado">
           <textarea
             value={nextStep}
             onChange={e => setNextStep(e.target.value)}
@@ -401,7 +401,7 @@ function DecisionForm({ defaultMacroetapa, initial, onSubmit, onCancel, submitti
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50"
         >
           <Save className="w-4 h-4" />
-          {submitting ? 'Salvando...' : 'Salvar decis\u00e3o'}
+          {submitting ? 'Salvando...' : 'Salvar decisão'}
         </button>
       </div>
     </div>
@@ -531,7 +531,7 @@ function DecisionCard({ decision: d, editing, onEdit, onCancelEdit, onSave, onDe
             <DetailRow icon={AlertCircle} label="Impacto no caso" value={d.impact} />
           )}
           {d.next_step && (
-            <DetailRow icon={ArrowRight} label="Pr\u00f3ximo passo" value={d.next_step} />
+            <DetailRow icon={ArrowRight} label="Próximo passo" value={d.next_step} />
           )}
         </div>
       )}

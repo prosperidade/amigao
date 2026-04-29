@@ -70,10 +70,10 @@ const KPI_ACCENT: Record<string, { bg: string; fg: string }> = {
 };
 
 const PERIOD_OPTIONS: { value: number; label: string }[] = [
-  { value: 7,   label: '\u00daltimos 7 dias' },
-  { value: 30,  label: '\u00daltimos 30 dias' },
-  { value: 90,  label: '\u00daltimos 90 dias' },
-  { value: 180, label: '\u00daltimos 180 dias' },
+  { value: 7,   label: 'Últimos 7 dias' },
+  { value: 30,  label: 'Últimos 30 dias' },
+  { value: 90,  label: 'Últimos 90 dias' },
+  { value: 180, label: 'Últimos 180 dias' },
 ];
 
 // ─── Componente principal ────────────────────────────────────────────────────

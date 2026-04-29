@@ -78,8 +78,8 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className="text-xs text-gray-400 dark:text-slate-500">
                     {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
-                    {doc.document_type && ` \u00b7 ${doc.document_type}`}
-                    {' \u00b7 '}{new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                    {doc.document_type && ` · ${doc.document_type}`}
+                    {' · '}{new Date(doc.created_at).toLocaleDateString('pt-BR')}
                   </p>
                   {extractedDocIds.has(doc.id) && (
                     <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">

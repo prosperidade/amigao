@@ -113,7 +113,7 @@ export default function ProcessDetail() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <AlertCircle className="w-10 h-10 text-red-400" />
-        <p className="text-gray-500 dark:text-slate-400">{`Processo n\u00e3o encontrado.`}</p>
+        <p className="text-gray-500 dark:text-slate-400">{`Processo não encontrado.`}</p>
         <button onClick={() => navigate('/processes')} className="text-sm text-emerald-600 dark:text-emerald-400 underline">
           Voltar para processos
         </button>
@@ -137,7 +137,7 @@ export default function ProcessDetail() {
             </div>
             <div>
               <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Caso criado com sucesso!</p>
-              <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{`O diagn\u00f3stico inicial e checklist foram gerados automaticamente.`}</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{`O diagnóstico inicial e checklist foram gerados automaticamente.`}</p>
             </div>
           </div>
           <button onClick={() => setIntakeBanner(false)} className="p-1.5 rounded-lg text-gray-400 dark:text-slate-500 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">

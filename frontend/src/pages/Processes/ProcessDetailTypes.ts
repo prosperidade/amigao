@@ -61,35 +61,35 @@ export interface TimelineEntry {
 export const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
   lead:             { label: 'Lead',              dot: 'bg-gray-400',     badge: 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-500/10 border-gray-300 dark:border-gray-500/20' },
   triagem:          { label: 'Triagem',           dot: 'bg-blue-400',     badge: 'text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20' },
-  diagnostico:      { label: 'Diagn\u00f3stico',       dot: 'bg-indigo-400',   badge: 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20' },
+  diagnostico:      { label: 'Diagnóstico',       dot: 'bg-indigo-400',   badge: 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20' },
   planejamento:     { label: 'Planejamento',      dot: 'bg-purple-400',   badge: 'text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20' },
-  execucao:         { label: 'Execu\u00e7\u00e3o',          dot: 'bg-teal-400',     badge: 'text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20' },
+  execucao:         { label: 'Execução',          dot: 'bg-teal-400',     badge: 'text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20' },
   protocolo:        { label: 'Protocolo',         dot: 'bg-orange-400',   badge: 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20' },
-  aguardando_orgao: { label: 'Aguardando \u00d3rg\u00e3o', dot: 'bg-yellow-400',   badge: 'text-yellow-700 dark:text-yellow-300 bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20' },
-  pendencia_orgao:  { label: 'Pend\u00eancia \u00d3rg\u00e3o',  dot: 'bg-red-400',      badge: 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20' },
-  concluido:        { label: 'Conclu\u00eddo',         dot: 'bg-emerald-400',  badge: 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' },
+  aguardando_orgao: { label: 'Aguardando Órgão', dot: 'bg-yellow-400',   badge: 'text-yellow-700 dark:text-yellow-300 bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20' },
+  pendencia_orgao:  { label: 'Pendência Órgão',  dot: 'bg-red-400',      badge: 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20' },
+  concluido:        { label: 'Concluído',         dot: 'bg-emerald-400',  badge: 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' },
   arquivado:        { label: 'Arquivado',         dot: 'bg-slate-400',    badge: 'text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-500/10 border-slate-300 dark:border-slate-500/20' },
   cancelado:        { label: 'Cancelado',         dot: 'bg-rose-400',     badge: 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20' },
 };
 
 export const DEMAND_LABELS: Record<string, string> = {
-  car: '\ud83c\udf3f CAR',
-  retificacao_car: '\ud83d\udcdd Retifica\u00e7\u00e3o CAR',
-  licenciamento: '\ud83d\udccb Licenciamento',
-  regularizacao_fundiaria: '\ud83c\udfe1 Reg. Fundi\u00e1ria',
-  outorga: '\ud83d\udca7 Outorga',
-  defesa: '\u2696\ufe0f Defesa',
-  compensacao: '\ud83c\udf31 Compensa\u00e7\u00e3o/PRAD',
-  exigencia_bancaria: '\ud83c\udfe6 Exig\u00eancia Banc\u00e1ria',
-  misto: '\ud83d\udd00 Misto',
-  nao_identificado: '\u2753 N\u00e3o identificado',
+  car: '🌿 CAR',
+  retificacao_car: '📝 Retificação CAR',
+  licenciamento: '📋 Licenciamento',
+  regularizacao_fundiaria: '🏡 Reg. Fundiária',
+  outorga: '💧 Outorga',
+  defesa: '⚖️ Defesa',
+  compensacao: '🌱 Compensação/PRAD',
+  exigencia_bancaria: '🏦 Exigência Bancária',
+  misto: '🔀 Misto',
+  nao_identificado: '❓ Não identificado',
 };
 
 export const URGENCY_CONFIG: Record<string, { label: string; cls: string }> = {
-  baixa:   { label: '\ud83d\udfe2 Baixa',   cls: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' },
-  media:   { label: '\ud83d\udfe1 M\u00e9dia',   cls: 'text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20' },
-  alta:    { label: '\ud83d\udfe0 Alta',    cls: 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20' },
-  critica: { label: '\ud83d\udd34 Cr\u00edtica', cls: 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20' },
+  baixa:   { label: '🟢 Baixa',   cls: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' },
+  media:   { label: '🟡 Média',   cls: 'text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20' },
+  alta:    { label: '🟠 Alta',    cls: 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20' },
+  critica: { label: '🔴 Crítica', cls: 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20' },
 };
 
 export const TASK_PROGRESS_ORDER = ['backlog', 'a_fazer', 'em_progresso', 'aguardando', 'revisao', 'concluida'];
@@ -123,14 +123,14 @@ export interface TabDef {
 }
 
 export const TABS: TabDef[] = [
-  { key: 'diagnosis',  label: 'Vis\u00e3o geral', icon: Stethoscope,  block_type: 'permanent' },
-  { key: 'tasks',      label: 'A\u00e7\u00f5es',       icon: ListChecks,   block_type: 'active'    },
+  { key: 'diagnosis',  label: 'Visão geral', icon: Stethoscope,  block_type: 'permanent' },
+  { key: 'tasks',      label: 'Ações',       icon: ListChecks,   block_type: 'active'    },
   { key: 'documents',  label: 'Documentos',       icon: FolderOpen,   block_type: 'permanent' },
   { key: 'dossier',    label: 'Dados',            icon: LayoutGrid,   block_type: 'permanent' },
   { key: 'ai',         label: 'IA',               icon: Bot,          block_type: 'active'    },
-  { key: 'timeline',   label: 'Hist\u00f3rico',      icon: CalendarDays, block_type: 'permanent' },
-  { key: 'decisions',  label: 'Decis\u00f5es',       icon: Scale,        block_type: 'permanent' },
-  { key: 'saidas',     label: 'Sa\u00eddas',          icon: PackageCheck, block_type: 'active'    },
+  { key: 'timeline',   label: 'Histórico',      icon: CalendarDays, block_type: 'permanent' },
+  { key: 'decisions',  label: 'Decisões',       icon: Scale,        block_type: 'permanent' },
+  { key: 'saidas',     label: 'Saídas',          icon: PackageCheck, block_type: 'active'    },
   // Comercial — proposta/contrato aparecem só nas etapas 6 (orcamento_negociacao) e 7 (contrato_formalizacao).
   { key: 'commercial', label: 'Comercial',        icon: Briefcase,    block_type: 'conditional', min_stage_index: 5 },
 ];

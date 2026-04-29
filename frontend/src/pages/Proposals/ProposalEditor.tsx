@@ -342,7 +342,7 @@ export default function ProposalEditor() {
                   <div className="mt-1.5 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-xs">
                     <p className="font-medium text-emerald-700 dark:text-emerald-300">{clientInfo.full_name}</p>
                     <p className="text-gray-500 dark:text-slate-400 mt-0.5">
-                      {clientInfo.email ? `\u2709 ${clientInfo.email}` : 'Sem e-mail cadastrado'}
+                      {clientInfo.email ? `✉ ${clientInfo.email}` : 'Sem e-mail cadastrado'}
                     </p>
                   </div>
                 )}

@@ -82,10 +82,10 @@ type TabKey = 'profile' | 'billing' | 'notifications' | 'operational' | 'ai' | '
 const TABS: { key: TabKey; label: string; icon: typeof UserIcon }[] = [
   { key: 'profile',       label: 'Perfil',         icon: UserIcon },
   { key: 'billing',       label: 'Pagamento',      icon: CreditCard },
-  { key: 'notifications', label: 'Notifica\u00e7\u00f5es',   icon: Bell },
-  { key: 'operational',   label: 'Prefer\u00eancias',  icon: SlidersHorizontal },
+  { key: 'notifications', label: 'Notificações',   icon: Bell },
+  { key: 'operational',   label: 'Preferências',  icon: SlidersHorizontal },
   { key: 'ai',            label: 'IA',             icon: Sparkles },
-  { key: 'security',      label: 'Seguran\u00e7a',      icon: Shield },
+  { key: 'security',      label: 'Segurança',      icon: Shield },
 ];
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ function SaveButton({ onClick, pending, disabled }: { onClick: () => void; pendi
         className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-        {pending ? 'Salvando...' : 'Salvar altera\u00e7\u00f5es'}
+        {pending ? 'Salvando...' : 'Salvar alterações'}
       </button>
     </div>
   );
@@ -254,7 +254,7 @@ function ProfileTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }
   });
 
   return (
-    <Section title="Perfil" description="Suas informa\u00e7\u00f5es b\u00e1sicas e identidade dentro do Reg\u00eante.">
+    <Section title="Perfil" description="Suas informações básicas e identidade dentro do Regente.">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Nome completo">
           <input
@@ -272,7 +272,7 @@ function ProfileTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
           />
         </Field>
-        <Field label="Telefone" hint="Usado para notifica\u00e7\u00f5es por WhatsApp (futuro).">
+        <Field label="Telefone" hint="Usado para notificações por WhatsApp (futuro).">
           <input
             type="tel"
             value={phone}
@@ -281,7 +281,7 @@ function ProfileTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
           />
         </Field>
-        <Field label="Cargo ou fun\u00e7\u00e3o">
+        <Field label="Cargo ou função">
           <input
             type="text"
             value={role}
@@ -308,7 +308,7 @@ function ProfileTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }
 
 function BillingTab() {
   return (
-    <Section title="Assinatura e Pagamento" description="Plano atual, forma de pagamento e hist\u00f3rico de cobran\u00e7a.">
+    <Section title="Assinatura e Pagamento" description="Plano atual, forma de pagamento e histórico de cobrança.">
       <div className="rounded-xl border border-dashed border-gray-200 dark:border-zinc-700 p-6 text-center">
         <CreditCard className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto mb-3" />
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Integração com billing em breve</p>
@@ -327,11 +327,11 @@ function NotificationsTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => 
 
   const save = useMutation({
     mutationFn: () => api.patch('/auth/me/preferences', { notifications: prefs }),
-    onSuccess: () => { toast.success('Notifica\u00e7\u00f5es atualizadas'); onSaved(); },
+    onSuccess: () => { toast.success('Notificações atualizadas'); onSaved(); },
   });
 
   return (
-    <Section title="Notifica\u00e7\u00f5es" description="Escolha onde e quando receber alertas do Reg\u00eante.">
+    <Section title="Notificações" description="Escolha onde e quando receber alertas do Regente.">
       <div>
         <h3 className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">
           Canais
@@ -348,7 +348,7 @@ function NotificationsTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => 
           hint="Requer telefone cadastrado no Perfil."
         />
         <Toggle
-          label="Notifica\u00e7\u00f5es in-app"
+          label="Notificações in-app"
           checked={prefs.in_app}
           onChange={v => setPrefs({ ...prefs, in_app: v })}
         />
@@ -364,13 +364,13 @@ function NotificationsTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => 
           Frequência
         </h3>
         <Toggle
-          label="Apenas alertas cr\u00edticos"
+          label="Apenas alertas críticos"
           checked={prefs.critical_only}
           onChange={v => setPrefs({ ...prefs, critical_only: v })}
           hint="Filtra eventos de baixa prioridade."
         />
         <Toggle
-          label="Resumo di\u00e1rio"
+          label="Resumo diário"
           checked={prefs.daily_summary}
           onChange={v => setPrefs({ ...prefs, daily_summary: v })}
         />
@@ -393,11 +393,11 @@ function OperationalTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => vo
 
   const save = useMutation({
     mutationFn: () => api.patch('/auth/me/preferences', { operational: prefs }),
-    onSuccess: () => { toast.success('Prefer\u00eancias atualizadas'); onSaved(); },
+    onSuccess: () => { toast.success('Preferências atualizadas'); onSaved(); },
   });
 
   return (
-    <Section title="Prefer\u00eancias operacionais" description="Como voc\u00ea prefere operar dentro do Reg\u00eante.">
+    <Section title="Preferências operacionais" description="Como você prefere operar dentro do Regente.">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Tela inicial ao entrar">
           <select
@@ -411,7 +411,7 @@ function OperationalTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => vo
           </select>
         </Field>
 
-        <Field label="Ordena\u00e7\u00e3o padr\u00e3o no Quadro">
+        <Field label="Ordenação padrão no Quadro">
           <select
             value={prefs.default_sort}
             onChange={e => setPrefs({ ...prefs, default_sort: e.target.value as OperationalPrefs['default_sort'] })}
@@ -435,7 +435,7 @@ function OperationalTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => vo
           </select>
         </Field>
 
-        <Field label="UF padr\u00e3o" hint="Pr\u00e9-seleciona filtro se voc\u00ea s\u00f3 atua em uma UF.">
+        <Field label="UF padrão" hint="Pré-seleciona filtro se você só atua em uma UF.">
           <input
             type="text"
             value={prefs.default_state_uf ?? ''}
@@ -452,7 +452,7 @@ function OperationalTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => vo
           label="Modo compacto"
           checked={prefs.compact_mode}
           onChange={v => setPrefs({ ...prefs, compact_mode: v })}
-          hint="Cards e listagens mais densos para ganhar espa\u00e7o vertical."
+          hint="Cards e listagens mais densos para ganhar espaço vertical."
         />
       </div>
 
@@ -468,15 +468,15 @@ function AiTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }) {
 
   const save = useMutation({
     mutationFn: () => api.patch('/auth/me/preferences', { ai: prefs }),
-    onSuccess: () => { toast.success('Prefer\u00eancias de IA atualizadas'); onSaved(); },
+    onSuccess: () => { toast.success('Preferências de IA atualizadas'); onSaved(); },
   });
 
   return (
     <Section
-      title="Prefer\u00eancias de IA"
+      title="Preferências de IA"
       description='Como a IA deve se comportar no apoio ao seu trabalho. "Controle percebido com complexidade escondida".'
     >
-      <Field label="N\u00edvel de assist\u00eancia">
+      <Field label="Nível de assistência">
         <div className="grid grid-cols-3 gap-2 mt-1">
           {(['automatic', 'balanced', 'manual'] as const).map(level => (
             <button
@@ -489,7 +489,7 @@ function AiTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }) {
                   : 'border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-300 hover:border-gray-300'
               }`}
             >
-              {level === 'automatic' && 'Autom\u00e1tico'}
+              {level === 'automatic' && 'Automático'}
               {level === 'balanced' && 'Equilibrado'}
               {level === 'manual' && 'Controlado'}
             </button>
@@ -511,23 +511,23 @@ function AiTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }) {
 
       <div className="pt-3 border-t border-gray-100 dark:border-zinc-800">
         <Toggle
-          label="Mostrar sugest\u00f5es da IA no fluxo"
+          label="Mostrar sugestões da IA no fluxo"
           checked={prefs.show_suggestions_in_flow}
           onChange={v => setPrefs({ ...prefs, show_suggestions_in_flow: v })}
         />
         <Toggle
-          label="Exibir resumos autom\u00e1ticos"
+          label="Exibir resumos automáticos"
           checked={prefs.show_auto_summaries}
           onChange={v => setPrefs({ ...prefs, show_auto_summaries: v })}
         />
         <Toggle
-          label="Exigir valida\u00e7\u00e3o humana antes de avan\u00e7ar etapa"
+          label="Exigir validação humana antes de avançar etapa"
           checked={prefs.require_human_validation_before_advance}
           onChange={v => setPrefs({ ...prefs, require_human_validation_before_advance: v })}
-          hint="Recomendado para manter rastreabilidade e governan\u00e7a."
+          hint="Recomendado para manter rastreabilidade e governança."
         />
         <Toggle
-          label="Salvar hist\u00f3rico das leituras da IA"
+          label="Salvar histórico das leituras da IA"
           checked={prefs.save_ai_readings_history}
           onChange={v => setPrefs({ ...prefs, save_ai_readings_history: v })}
         />
@@ -578,7 +578,7 @@ function SecurityTab() {
               className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
             />
           </Field>
-          <Field label="Nova senha" hint="M\u00ednimo 8 caracteres.">
+          <Field label="Nova senha" hint="Mínimo 8 caracteres.">
             <input
               type="password"
               value={newPassword}
@@ -613,7 +613,7 @@ function SecurityTab() {
         />
       </Section>
 
-      <Section title="Autentica\u00e7\u00e3o em dois fatores (2FA)" description="Camada extra de seguran\u00e7a ao fazer login.">
+      <Section title="Autenticação em dois fatores (2FA)" description="Camada extra de segurança ao fazer login.">
         <div className="rounded-xl border border-dashed border-gray-200 dark:border-zinc-700 p-5 text-center">
           <Shield className="w-8 h-8 text-gray-300 dark:text-zinc-600 mx-auto mb-2" />
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">2FA em breve</p>

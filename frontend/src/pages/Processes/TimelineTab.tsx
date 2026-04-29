@@ -34,7 +34,7 @@ export default function TimelineTab({ processId }: TimelineTabProps) {
               {log.action === 'status_changed' && (
                 <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
                   <span className="text-gray-600 dark:text-slate-300">{log.old_value}</span>
-                  {' \u2192 '}
+                  {' → '}
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{log.new_value}</span>
                 </p>
               )}
