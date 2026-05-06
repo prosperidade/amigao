@@ -22,6 +22,11 @@ class DocumentSource(str, enum.Enum):
     integration = "integration"
     generated_ai = "generated_ai"
     field_app = "field_app"
+    # Sprint V (2026-04-29) — origem "wizard de Intake": diferencia documentos
+    # anexados durante o cadastro inicial dos uploads feitos no Workspace depois
+    # do caso criado. Habilita Cliente/Imóvel Hub a destacarem documentos vindos
+    # do onboarding e o auditor_imovel a priorizar fontes da abertura do caso.
+    intake = "intake"
 
 
 class Document(Base):
