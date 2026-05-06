@@ -32,6 +32,29 @@ interface ClientHubHeader {
   status_label: string;
   source_channel: string | null;
   created_at: string | null;
+  // Sprint V (F2) — proveniência por campo: "raw" | "ai_extracted" | "human_validated"
+  field_sources: Record<string, string>;
+}
+
+// Sprint V (F2) — espelha PropertyHub: badge de origem do campo.
+const FIELD_SOURCE_BADGE: Record<string, { icon: string; label: string; cls: string }> = {
+  raw:              { icon: '📥', label: 'Bruto',           cls: 'bg-gray-100 text-gray-600' },
+  ai_extracted:     { icon: '🤖', label: 'Extraído por IA', cls: 'bg-sky-100 text-sky-700' },
+  human_validated:  { icon: '✓',  label: 'Validado',        cls: 'bg-emerald-100 text-emerald-700' },
+};
+
+function FieldSourceBadge({ source }: { source?: string }) {
+  if (!source) return null;
+  const badge = FIELD_SOURCE_BADGE[source];
+  if (!badge) return null;
+  return (
+    <span
+      title={badge.label}
+      className={`text-[9px] px-1 py-0 rounded font-medium ${badge.cls}`}
+    >
+      {badge.icon}
+    </span>
+  );
 }
 
 interface ClientHubChips {
@@ -222,10 +245,21 @@ export default function ClientHub() {
               {chips.is_pj ? '🏢' : '👤'}
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white truncate">{header.full_name}</h1>
-              <p className="text-xs text-gray-500 dark:text-slate-400">
-                ID #{header.id} · {header.client_type === 'pj' ? 'Pessoa Jurídica' : 'Pessoa Física'}
-                {header.cpf_cnpj && ` · ${header.cpf_cnpj}`}
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white truncate flex items-center gap-1.5">
+                <span className="truncate">{header.full_name}</span>
+                <FieldSourceBadge source={header.field_sources?.full_name} />
+              </h1>
+              <p className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1.5 flex-wrap">
+                <span>ID #{header.id} · {header.client_type === 'pj' ? 'Pessoa Jurídica' : 'Pessoa Física'}</span>
+                {header.cpf_cnpj && (
+                  <>
+                    <span>·</span>
+                    <span className="inline-flex items-center gap-1">
+                      {header.cpf_cnpj}
+                      <FieldSourceBadge source={header.field_sources?.cpf_cnpj} />
+                    </span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -245,12 +279,14 @@ export default function ClientHub() {
             <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200 min-w-0">
               <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />
               <span className="truncate">{header.email}</span>
+              <FieldSourceBadge source={header.field_sources?.email} />
             </div>
           )}
           {header.phone && (
             <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
               <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
               <span>{header.phone}</span>
+              <FieldSourceBadge source={header.field_sources?.phone} />
             </div>
           )}
           {header.source_channel && (
