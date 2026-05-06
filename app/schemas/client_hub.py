@@ -28,6 +28,8 @@ class ClientHubHeader(BaseModel):
     status_label: str = "Ativo"                  # label operacional Regente (CAM2CH-002)
     source_channel: Optional[str] = None
     created_at: Optional[datetime] = None
+    # Sprint V (F2) — proveniência por campo: {campo: "raw"|"ai_extracted"|"human_validated"}.
+    field_sources: dict = {}
 
 
 # CAM2CH-003 — Bloco 2: Dashboard resumido

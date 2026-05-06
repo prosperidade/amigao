@@ -259,6 +259,7 @@ def get_client_hub_summary(
         status_label=_compute_status_label(c.status or ClientStatus.lead, cases_active),
         source_channel=c.source_channel,
         created_at=c.created_at,
+        field_sources=c.field_sources or {},
     )
 
     return ClientHubSummary(header=header, chips=chips, kpis=kpis, state=state)

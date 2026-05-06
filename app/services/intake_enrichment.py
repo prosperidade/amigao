@@ -223,6 +223,7 @@ def enrich_from_intake_extraction(
             .first()
         )
         if cli:
+            client_sources = dict(getattr(cli, "field_sources", None) or {})
             for col, candidates in _CLIENT_KEY_MAP.items():
                 current = getattr(cli, col, None)
                 if current not in (None, ""):
@@ -237,7 +238,10 @@ def enrich_from_intake_extraction(
                 if coerced in (None, ""):
                     continue
                 setattr(cli, col, coerced)
+                client_sources[col] = "ai_extracted"
                 filled["client"].append(col)
+            if filled["client"]:
+                cli.field_sources = client_sources
 
     if filled["property"] or filled["client"]:
         logger.info(
