@@ -3,12 +3,18 @@ LegislacaoAgent — Enquadramento regulatorio com base de conhecimento legislati
 
 Arquitetura:
 1. Carrega contexto do processo (demand_type, UF, municipio, propriedade)
-2. Busca documentos legislativos relevantes por metadados no banco
-3. Envia legislacao COMPLETA no contexto do LLM (Gemini 2M tokens ou Claude)
-4. LLM analisa o caso contra a legislacao e retorna caminho regulatorio
+2. Busca **trechos hiper-relevantes** via RAG semantico (knowledge_catalog/pgvector)
+3. Busca documentos legislativos relevantes por metadados no banco
+4. Envia legislacao no contexto do LLM (Gemini 2M tokens ou Claude)
+5. LLM analisa o caso contra a legislacao e retorna caminho regulatorio
 
-Usa Claude Sonnet para raciocinio juridico por padrao.
-Fallback para Gemini (context loading grande) quando legislacao e extensa.
+Sprint V (2026-04-29) — agente passou a consumir o knowledge_catalog
+(RAG entregue na Sprint U). Os top-k chunks mais similares ao caso entram no
+prompt antes do dump completo, ancorando o raciocinio juridico em texto
+recuperado por similaridade vetorial. O dump completo permanece como
+fallback quando o RAG nao retorna chunks relevantes.
+
+Usa Gemini Flash/Pro por padrao (Sprint O) com fallback Claude Sonnet.
 """
 
 from __future__ import annotations
@@ -62,7 +68,13 @@ class LegislacaoAgent(BaseAgent):
         if not settings.ai_configured:
             return self._rules_based_response(demand_type, state)
 
-        # Buscar legislacao relevante no banco
+        # Sprint V — RAG semantico: trechos hiper-relevantes do knowledge_catalog.
+        rag_chunks = self._load_rag_chunks(
+            query=query, demand_type=demand_type, uf=state,
+        )
+        rag_context = self._format_rag_context(rag_chunks)
+
+        # Buscar legislacao relevante por metadados (dump completo como fallback amplo)
         legislation_context = self._load_legislation_context(
             demand_type=demand_type,
             uf=state,
@@ -85,8 +97,18 @@ class LegislacaoAgent(BaseAgent):
             "demand_type": demand_type or "nao_identificado",
             "state": state or "nao_informado",
             "context": json.dumps(process_context, ensure_ascii=False, default=str),
+            "rag_chunks": rag_context or "(nenhum trecho relevante recuperado)",
             "legislation": legislation_context,
         })
+
+        # Defensivo: se o template salvo no banco for da versao antiga e nao incluir
+        # {rag_chunks}, anexamos os trechos manualmente ao final do prompt.
+        if rag_context and "TRECHOS LEGISLATIVOS HIPER-RELEVANTES" not in user_prompt:
+            user_prompt += (
+                "\n\nTRECHOS LEGISLATIVOS HIPER-RELEVANTES (recuperados por similaridade "
+                "vetorial — use como fonte primaria e cite em legislacao_aplicavel):\n"
+                + rag_context
+            )
 
         # Anexar contexto historico do MemPalace ao prompt
         if memory_context.strip():
@@ -162,6 +184,18 @@ class LegislacaoAgent(BaseAgent):
             "recomendacoes": parsed.get("recomendacoes", []),
             "confidence": parsed.get("confianca", "medium"),
             "requires_review": True,
+            # Sprint V — chunks recuperados via RAG; util pra UI exibir citacoes.
+            "chunks_referenced": [
+                {
+                    "id": c.id,
+                    "source_ref": c.source_ref,
+                    "title": c.title,
+                    "section": c.section,
+                    "identifier": c.identifier,
+                    "similarity": round(c.similarity, 3),
+                }
+                for c in rag_chunks
+            ],
             # Backward compat com formato antigo
             "normas_estaduais": parsed.get("normas_estaduais", []),
             "risco_legal": parsed.get("risco_legal", parsed.get("confianca", "medio")),
@@ -178,6 +212,73 @@ class LegislacaoAgent(BaseAgent):
         response = client.complete(prompt, system=system)
         self._llm_response = response
         return response
+
+    def _load_rag_chunks(
+        self,
+        *,
+        query: str,
+        demand_type: str | None,
+        uf: str | None,
+    ) -> list:
+        """Sprint V — busca top-k trechos legislativos via RAG semantico.
+
+        Retorna lista de SearchResult (vazia em caso de falha ou catalogo sem dados).
+        Combina o query do usuario com demand_type e uf para enriquecer a consulta:
+        consultas curtas como "Qual o caminho regulatorio?" ficam mais especificas.
+        """
+        from app.core.config import settings  # noqa: PLC0415
+        from app.services.knowledge_catalog import search
+
+        # Compor query enriquecida quando o input vier curto
+        parts = [p for p in [query, demand_type, uf] if p]
+        composed = " ".join(parts).strip()
+        if not composed:
+            return []
+
+        try:
+            results = search(
+                self.ctx.session,
+                composed,
+                limit=getattr(settings, "LEGISLATION_RAG_TOP_K", 8),
+                source_type="legislation",
+                uf=uf if uf else None,
+                tenant_id=self.ctx.tenant_id,
+                min_similarity=0.0,
+            )
+            # Sem resultados com filtro de UF? tenta uma busca global (legislacao federal).
+            if not results and uf:
+                results = search(
+                    self.ctx.session,
+                    composed,
+                    limit=getattr(settings, "LEGISLATION_RAG_TOP_K", 8),
+                    source_type="legislation",
+                    tenant_id=self.ctx.tenant_id,
+                    min_similarity=0.0,
+                )
+            return results
+        except Exception as exc:
+            import logging  # noqa: PLC0415
+            logging.getLogger(__name__).warning(
+                "legislacao.rag falha na busca semantica: %s", exc,
+            )
+            return []
+
+    def _format_rag_context(self, chunks: list) -> str:
+        """Formata trechos RAG como blocos numerados pra inserir no prompt."""
+        if not chunks:
+            return ""
+        lines: list[str] = []
+        for i, c in enumerate(chunks, 1):
+            header_bits = [c.title or c.source_ref]
+            if c.section:
+                header_bits.append(c.section)
+            if c.identifier:
+                header_bits.append(c.identifier)
+            header = " — ".join(b for b in header_bits if b)
+            lines.append(f"[{i}] {header}  (similarity={c.similarity:.3f})")
+            lines.append(c.chunk_text.strip())
+            lines.append("")
+        return "\n".join(lines).strip()
 
     def _load_legislation_context(
         self,
@@ -303,8 +404,12 @@ class LegislacaoAgent(BaseAgent):
                 "TIPO DE DEMANDA: {demand_type}\n"
                 "ESTADO (UF): {state}\n"
                 "DADOS DO CASO: {context}\n\n"
-                "BASE LEGISLATIVA DISPONIVEL:\n{legislation}\n\n"
-                "Com base na legislacao acima e no seu conhecimento, "
-                "retorne o JSON com o enquadramento regulatorio completo."
+                "TRECHOS LEGISLATIVOS HIPER-RELEVANTES (recuperados por similaridade vetorial — "
+                "use estes como fonte primaria e cite explicitamente em legislacao_aplicavel):\n"
+                "{rag_chunks}\n\n"
+                "BASE LEGISLATIVA AMPLA (referencia complementar):\n{legislation}\n\n"
+                "Com base nos TRECHOS HIPER-RELEVANTES (prioritarios) e na BASE AMPLA, "
+                "retorne o JSON com o enquadramento regulatorio completo. "
+                "Cite artigos, paragrafos e incisos especificos sempre que possivel."
             ),
         }

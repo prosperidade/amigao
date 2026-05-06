@@ -116,6 +116,12 @@ class Settings(BaseSettings):
     LEGISLATION_MAX_CONTEXT_TOKENS_LONG: int = 1_900_000
     LEGISLATION_MAX_RESULTS: int = 20
 
+    # Sprint V (2026-04-29) — top-k chunks RAG (knowledge_catalog) injetados no
+    # prompt do agente legislação como "trechos hiper-relevantes". Complementa o
+    # dump completo (que entra como contexto amplo). 8 = ~6k tokens extras, custo
+    # marginal em Flash, ROI alto na precisão das citações.
+    LEGISLATION_RAG_TOP_K: int = 8
+
     # Claude API (agente regulatório)
     CLAUDE_LEGAL_MODEL: str = "claude-sonnet-4-20250514"
     CLAUDE_LEGAL_MAX_TOKENS: int = 4096
