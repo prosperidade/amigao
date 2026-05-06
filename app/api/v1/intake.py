@@ -980,6 +980,24 @@ def commit_draft(
         )
     )
 
+    # Sprint V (A1) — enriquece Property/Client com dados que o agente extrator
+    # já extraiu durante o Intake. Só preenche campos vazios (não sobrescreve)
+    # e marca origem em Property.field_sources["<campo>"]="ai_extracted" pra UI.
+    from app.services.intake_enrichment import enrich_from_intake_extraction  # noqa: PLC0415
+    try:
+        enrich_from_intake_extraction(
+            db,
+            draft_id=draft_id,
+            process_id=response.process_id,
+            client_id=response.client_id,
+            property_id=response.property_id,
+            tenant_id=current_user.tenant_id,
+        )
+    except Exception:
+        # Não bloqueia o commit do caso por falha de enriquecimento.
+        import logging  # noqa: PLC0415
+        logging.getLogger(__name__).exception("intake.commit: enrichment falhou")
+
     # Marca draft como committed
     draft.state = IntakeDraftState.card_criado
     draft.linked_process_id = response.process_id
