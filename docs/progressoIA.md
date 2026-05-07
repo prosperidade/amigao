@@ -178,7 +178,86 @@ Todos os 20 arquivos passaram na verificacao AST em 08/04/2026.
 
 ---
 
-## Backlog IA (proximas sprints)
+## Sprint V — RAG ao vivo + auto-fill de Hub (06/05/2026)
+
+### Motivacao
+
+A auditoria de 2026-04-29 listou 13 gaps. Os 3 bloqueios criticos eram **#4 (IA → dados estruturados), #7 (Hubs auto-alimentados) e #8 (separacao cadastro/diagnostico)**. Sprint V destrava #4 e #7 sem migration nova de modelo (so adiciona enum value e coluna JSONB).
+
+### O que foi feito
+
+| ID | Item | Commit | Descricao |
+|---|---|---|---|
+| **I1** | RAG no agente `legislacao` | `3b6a6c5` | Agente passou a chamar `knowledge_catalog.search()` antes do prompt. Top-k=8 chunks com filtro de UF + fallback global, output expoe `chunks_referenced` (id, source_ref, similarity) pra UI. Prompt user separa "TRECHOS HIPER-RELEVANTES" (RAG, prioritario) de "BASE LEGISLATIVA AMPLA" (dump por metadados). Settings `LEGISLATION_RAG_TOP_K=8`. |
+| **A4** | `DocumentSource.intake` | `1fc40cb` | Novo valor no enum + migration `b3d5c7e9f1a2` (`autocommit_block` pra rodar `ALTER TYPE ... ADD VALUE` fora de transacao). Upload do Intake seta `source=DocumentSource.intake`, distinguindo cadastro de uploads do Workspace. |
+| **A1** | Hook auto-enrich Property/Client | `4206dbe` | Novo `app/services/intake_enrichment.py` — apos `commit_draft` migrar docs do rascunho pro processo, agrega extracoes do agente extrator (mesma logica de `/drafts/{id}/extraction-results`) e preenche apenas campos vazios. Property: `registry_number, car_code, ccir, nirf, total_area_ha, app_area_ha, municipality, state`. Coercao: areas aceitam "1.234,56"/numerico; UF normaliza pra 2 letras. Marca `Property.field_sources[campo]="ai_extracted"` pra UI. Falhas no enrichment nao bloqueiam o commit. |
+| **Backend Client.field_sources** | Coluna + schema + endpoint | `65110a0` | `Client.field_sources` (PortableJSON) + migration `c4e6f8a0d2b3`. `ClientHubHeader.field_sources` exposto via `/clients/{id}/hub`. Enrichment grava no client tambem. |
+| **F2** | Badge "extraido pela IA" no Cliente Hub | `93355c3` | Componente `FieldSourceBadge` (espelho do PropertyHub/CAM2IH-007). Aplicado em `full_name, cpf_cnpj, email, phone`. PropertyHub ja tinha o componente desde Sprint H — ativado pelo backend de A1. |
+
+### Decisoes de arquitetura
+
+- **Auto-fill conservador**: nunca sobrescreve campo ja preenchido, mesmo se a origem anterior for `ai_extracted`. Protege qualquer ajuste manual feito pelo consultor entre upload e commit.
+- **Proveniencia explicita**: `field_sources[campo] = "raw"|"ai_extracted"|"human_validated"` permite UI distinguir origem visual e ainda permite endpoint `/properties/{id}/validate-fields` (existente) marcar como validado humano.
+- **RAG com fallback amplo**: Mesmo com chunks recuperados, o dump por metadados continua entrando como contexto complementar — robustez se o RAG retorna pouco.
+- **Migration enum em autocommit**: `ALTER TYPE ... ADD VALUE` requer fora de transacao em algumas versoes do PG; usamos `op.get_context().autocommit_block()`.
+
+### Mudancas no banco
+
+```
+documentsource enum:
+  + intake  (Sprint V — origem "wizard de Intake")
+
+clients (nova coluna):
+  + field_sources  PortableJSON  default {}
+```
+
+Migrations: `b3d5c7e9f1a2` (intake enum) → `c4e6f8a0d2b3` (clients.field_sources).
+
+### Arquivos criados (3)
+
+```
+app/services/intake_enrichment.py
+alembic/versions/b3d5c7e9f1a2_sprint_v_document_source_intake.py
+alembic/versions/c4e6f8a0d2b3_sprint_v_client_field_sources.py
+```
+
+### Arquivos modificados (8)
+
+```
+app/agents/legislacao.py            — RAG semantico antes do prompt
+app/core/config.py                   — LEGISLATION_RAG_TOP_K=8
+app/models/document.py               — DocumentSource.intake
+app/models/client.py                 — field_sources column
+app/api/v1/intake.py                 — upload seta source=intake; commit chama enrichment
+app/api/v1/clients.py                — get_client_hub_summary expoe field_sources
+app/schemas/client_hub.py            — ClientHubHeader.field_sources
+frontend/src/pages/Clients/ClientHub.tsx — FieldSourceBadge nos campos do header
+docker-compose.yml                   — porta exposta do db: 5433 → 55432 (conflito com vereda_postgres)
+```
+
+### Pontos criticos da auditoria 2026-04-29
+
+| # | Ponto | Antes | Depois |
+|---|---|---|---|
+| #1 | Docs Intake → caso criado | UPDATE migrava sem origem clara | A4 marca `source=intake`, rastreavel |
+| #4 | IA → dados estruturados | Extrator existia, sem fluxo pos-commit | I1 + A1: extracao alimenta Hubs automaticamente |
+| #7 | Hubs auto-alimentados | Criacao manual pelo consultor | A1 popula Property+Client; F2 mostra badge |
+
+### Validacao em ambiente local
+
+- `alembic upgrade head` aplicou as 2 migrations sem erro. Head atual: `c4e6f8a0d2b3`.
+- `/health` retorna 200 OK.
+- Stack docker-compose subiu com 6 servicos (db, redis, minio, api, worker, client-portal).
+- Teste end-to-end pelo wizard ainda pendente (sera feito em 2026-05-07).
+
+### Pendencias da Sprint V
+
+- Teste manual end-to-end pelo Intake → criar caso → conferir badges nos Hubs.
+- Opcional: testar I1 chamando `/api/v1/agents/run` com `agent_name=legislacao` e validar que `chunks_referenced` vem populado.
+
+---
+
+
 
 ### Sprint IA-3 — Consolidacao e Testes
 - [ ] Testes unitarios para cada agente com mock de ai_gateway

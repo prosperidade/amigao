@@ -9,7 +9,10 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pgpass2026}"
       POSTGRES_DB: "${POSTGRES_DB:-amigao_db}"
     ports:
-      - "5433:5432"
+      # Host port 5433 e 5434 conflitavam com outros projetos. Default 55432.
+      # Override via .env se precisar: HOST_DB_PORT=XXXX. O api/worker conectam
+      # internamente via service name (db:5432), então isto só muda o acesso do host.
+      - "${HOST_DB_PORT:-55432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
