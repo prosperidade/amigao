@@ -776,8 +776,13 @@ def import_draft_documents(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     """
-    CAM1-005: dispara agent_extrator (via Celery) em cada doc do draft.
-    Usa o agente existente — não altera config de agentes.
+    CAM1-005: dispara o pipeline OCR + extrator (via Celery) em cada doc do draft.
+
+    Sprint V hardening (2026-05-08): cada documento agora passa pela task
+    `workers.ocr_then_extract` que (a) garante texto em `Document.extracted_text`
+    via pypdf/Gemini Vision com cache SHA-256, (b) respeita o budget mensal de
+    IA do tenant antes de chamar Gemini, (c) persiste `AIJob` para audit, e só
+    depois despacha o agente extrator com a mesma metadata anterior.
     """
     from app.models.document import Document, OcrStatus  # noqa: PLC0415
 
@@ -804,26 +809,23 @@ def import_draft_documents(
         )
 
     task_ids: list[str] = []
-    from app.workers.agent_tasks import run_agent  # noqa: PLC0415
+    from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
     for doc in docs:
-        doc.ocr_status = OcrStatus.processing
+        # ocr_then_extract atualiza ocr_status internamente conforme o estágio
+        # (processing → done/failed). Mantemos pending aqui pra refletir
+        # "fila" caso o worker demore a pegar.
+        doc.ocr_status = OcrStatus.pending
         db.add(doc)
         try:
-            t = run_agent.delay(
-                agent_name="extrator",
+            t = ocr_then_extract.delay(
+                doc_id=doc.id,
                 tenant_id=current_user.tenant_id,
                 user_id=current_user.id,
-                process_id=None,
-                metadata={
-                    "document_id": doc.id,
-                    "storage_key": doc.storage_key,
-                    "document_type": doc.document_type,
-                    "intake_draft_id": draft_id,
-                },
+                draft_id=draft_id,
             )
             task_ids.append(t.id)
         except Exception as exc:
-            logger.warning("Falha ao enfileirar extrator para doc_id=%s: %s", doc.id, exc)
+            logger.warning("Falha ao enfileirar ocr_then_extract para doc_id=%s: %s", doc.id, exc)
     db.commit()
 
     return IntakeImportResponse(

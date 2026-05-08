@@ -135,6 +135,10 @@ export default function IntakeWizard() {
   const [draftId, setDraftId] = useState<number | null>(null);
   const [draftExpiresAt, setDraftExpiresAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // LGPD — consultor confirma ciência/consentimento do cliente antes de enviar
+  // PDFs ao Gemini (sub-processador estrangeiro). Gate puramente de UI; o
+  // consentimento juridicamente vinculante vem do contrato/termo do cliente.
+  const [lgpdAck, setLgpdAck] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     entry_type: 'novo_cliente_novo_imovel',
@@ -591,8 +595,44 @@ export default function IntakeWizard() {
                   Upload opcional dos documentos iniciais. Regra Regente: o card nasce mesmo sem docs completos — isso aqui só pré-alimenta a base.
                 </p>
               </div>
+
+              {/* Aviso LGPD — uploads disparam OCR/extração via IA externa (Gemini/OpenAI) */}
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="text-amber-300 text-lg leading-none mt-0.5">🛡️</div>
+                  <div className="space-y-2 text-sm">
+                    <p className="font-semibold text-amber-200">Tratamento de dados — LGPD</p>
+                    <p className="text-amber-100/90 leading-relaxed">
+                      Documentos enviados aqui passam por <strong>extração automática de texto e dados</strong> usando provedores de IA externos (Google Gemini e/ou OpenAI). Isso pode incluir CPF, dados fundiários e ambientais do cliente.
+                    </p>
+                    <ul className="text-amber-100/80 text-xs list-disc pl-5 space-y-0.5">
+                      <li>Os dados são processados fora do Brasil em servidores da Google/OpenAI.</li>
+                      <li>Apenas campos extraídos são salvos na base; os arquivos originais ficam no nosso storage.</li>
+                      <li>O cliente deve estar ciente desse processamento conforme contrato/termo de consentimento.</li>
+                    </ul>
+                  </div>
+                </div>
+                <label className="flex items-start gap-3 cursor-pointer select-none pt-2 border-t border-amber-500/20">
+                  <input
+                    type="checkbox"
+                    checked={lgpdAck}
+                    onChange={e => setLgpdAck(e.target.checked)}
+                    className="mt-1 w-4 h-4 rounded accent-amber-400 cursor-pointer"
+                  />
+                  <span className="text-sm text-amber-100">
+                    Confirmo que o cliente foi informado e consente com o tratamento dos documentos por IA externa.
+                  </span>
+                </label>
+              </div>
+
               {draftId ? (
-                <DraftDocumentUploader draftId={draftId} />
+                lgpdAck ? (
+                  <DraftDocumentUploader draftId={draftId} />
+                ) : (
+                  <div className="p-6 rounded-xl bg-slate-800/30 border border-dashed border-white/10 text-center text-sm text-slate-400">
+                    Marque a confirmação acima para liberar o upload de documentos.
+                  </div>
+                )
               ) : (
                 <div className="p-4 rounded-xl bg-slate-800/50 border border-white/10 text-sm text-slate-300">
                   Preparando rascunho... <button

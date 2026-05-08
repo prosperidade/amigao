@@ -20,6 +20,7 @@ litellm
 httpx
 # Sprint 0 — extração de texto de PDFs/HTML para ingestão de legislação
 pypdf>=5.0
+pypdfium2>=4.30  # rasteriza PDFs em imagens para OpenAI Vision (fallback OCR)
 beautifulsoup4>=4.12
 lxml>=5.0
 slowapi>=0.1.9
