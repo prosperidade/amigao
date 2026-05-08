@@ -120,6 +120,10 @@ class Process(Base):
     intake_source = Column(Enum(IntakeSource), nullable=True)  # canal de entrada
     entry_type = Column(Enum(EntryType), nullable=True)         # cenário Regente Cam1
     demand_type = Column(Enum(DemandType), nullable=True)       # tipo de demanda classificado
+    # legacy field — fonte canônica do diagnóstico regulatório é
+    # app/models/regulatory.py:RegulatoryDiagnosis (versionado, JSONB).
+    # Sprint A1 D — coexistência permitida; manter este campo enquanto a UI antiga
+    # não migrar.
     initial_diagnosis = Column(Text, nullable=True)             # pré-diagnóstico por regras
     suggested_checklist_template = Column(String, nullable=True) # demand_type do template sugerido
     initial_summary = Column(Text, nullable=True)               # resumo curto da demanda (voz do cliente)

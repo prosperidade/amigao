@@ -16,6 +16,12 @@ from app.models.process_decision import ProcessDecision
 from app.models.prompt_template import PromptTemplate
 from app.models.property import Property
 from app.models.proposal import Proposal
+from app.models.regulatory import (
+    RegulatoryDiagnosis,
+    RegulatoryIssue,
+    RegulatoryIssueSeverity,
+    RegulatoryIssueType,
+)
 from app.models.stage_output import StageOutput
 from app.models.task import Task
 from app.models.tenant import Tenant
