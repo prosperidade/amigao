@@ -268,10 +268,69 @@ class BaseAgent(ABC):
         return content
 
     def call_llm(self, prompt: str, *, system: str = "", **kwargs: Any) -> AIResponse:
-        """Wrapper sobre ai_gateway.complete(). Armazena resposta em _llm_response."""
-        response = complete(prompt, system=system, **kwargs)
+        """Wrapper sobre ai_gateway.complete(). Armazena resposta em _llm_response.
+
+        Sprint A1 A — antes de chamar o gateway, injeta no ``system`` as skills
+        procedurais que casarem com o contexto atual (``ctx.metadata`` + ``self.name``).
+        Quando nenhuma skill casa, comportamento idêntico ao anterior.
+        """
+        composed_system = self._compose_system_with_skills(system)
+        response = complete(prompt, system=composed_system, **kwargs)
         self._llm_response = response
         return response
+
+    # --- Skills (Sprint A1 A) ----------------------------------------------
+
+    def _load_skills_for_context(self) -> list:
+        """Retorna a lista de skills aplicáveis ao agente + ``ctx.metadata`` atual.
+
+        Lê de ``self.name`` e ``self.ctx.metadata`` (sem dict paralelo). Falhas no
+        registry são silenciadas para não derrubar o agente.
+        """
+        from app.skills import (  # noqa: PLC0415
+            SkillContent,
+            discover_skills,
+            load_skill,
+        )
+        from app.skills._registry import matches_context  # noqa: PLC0415
+
+        try:
+            catalog = discover_skills()
+        except Exception as exc:
+            logger.warning("agent.%s: skill discovery falhou: %s", self.name, exc)
+            return []
+
+        ctx_meta = self.ctx.metadata or {}
+        applicable: list[SkillContent] = []
+        for meta in catalog.values():
+            if not matches_context(meta, agent=self.name, ctx_metadata=ctx_meta):
+                continue
+            try:
+                content = load_skill(meta.name)
+            except Exception as exc:
+                logger.warning(
+                    "agent.%s: skill '%s' inválida em %s: %s",
+                    self.name, meta.name, meta.path, exc,
+                )
+                continue
+            if content is not None:
+                applicable.append(content)
+        return applicable
+
+    def _compose_system_with_skills(self, base_system: str) -> str:
+        """Anexa skills aplicáveis ao system prompt, preservando o original."""
+        skills = self._load_skills_for_context()
+        if not skills:
+            return base_system
+
+        parts: list[str] = [base_system.rstrip()] if base_system else []
+        parts.append("<!-- skills:start -->")
+        for skill in skills:
+            header = f"=== Skill: {skill.metadata.name} v{skill.metadata.version} ==="
+            parts.append(header)
+            parts.append(skill.body)
+        parts.append("<!-- skills:end -->")
+        return "\n\n".join(p for p in parts if p)
 
     # --- MemPalace integration -----------------------------------------------
 

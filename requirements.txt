@@ -23,6 +23,7 @@ pypdf>=5.0
 pypdfium2>=4.30  # rasteriza PDFs em imagens para OpenAI Vision (fallback OCR)
 beautifulsoup4>=4.12
 lxml>=5.0
+PyYAML>=6.0  # Sprint A1 — front-matter de SKILL.md (já vinha como transitivo via uvicorn[standard])
 slowapi>=0.1.9
 pytest
 pytest-cov
