@@ -329,15 +329,45 @@ function OrçamentoResult({ r }: { r: Record<string, unknown> }) {
 }
 
 function RedatorResult({ r }: { r: Record<string, unknown> }) {
+  // Sprint A2-redator-B: lê r.template (PecaJuridicaContent.template) com
+  // fallback para r.document_type (formato dict legado de AIJobs antigos +
+  // alias computed_field na schema). Frontend cobre os dois shapes.
+  const templateValue =
+    (typeof r.template === 'string' && r.template) ||
+    (typeof r.document_type === 'string' && r.document_type) ||
+    null;
+  const addressee = typeof r.addressee === 'string' ? r.addressee : null;
+  const citationTotal = typeof r.citation_total === 'number' ? r.citation_total : null;
+  const citationValid = typeof r.citation_valid === 'boolean' ? r.citation_valid : null;
+  const citationCoverage =
+    typeof r.citation_coverage_ratio === 'number' ? r.citation_coverage_ratio : null;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
-        {typeof r.document_type === 'string' && (
+        {templateValue && (
           <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30 font-medium uppercase">
-            {str(r.document_type)}
+            {templateValue}
+          </span>
+        )}
+        {addressee && (
+          <span className="text-xs px-2.5 py-1 rounded-full bg-gray-50 dark:bg-white/5 text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-white/10">
+            Para: {addressee}
           </span>
         )}
         {r.requires_review === true && <ReviewBadge />}
+        {citationValid === false && citationTotal !== null && (
+          <span
+            className="text-xs px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 font-medium"
+            title={
+              citationCoverage !== null
+                ? `Cobertura: ${(citationCoverage * 100).toFixed(0)}%`
+                : undefined
+            }
+          >
+            Citações suspeitas
+          </span>
+        )}
       </div>
 
       {typeof r.content === 'string' && (
