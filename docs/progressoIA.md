@@ -285,3 +285,50 @@ docker-compose.yml                   — porta exposta do db: 5433 → 55432 (co
 - [ ] Classificacao automatica de email recebido (trigger de AcompanhamentoAgent)
 - [ ] Integracao com MapBiomas API para enriquecimento de diagnostico
 - [ ] Geracao de relatorios PDF a partir do output do RedatorAgent
+
+---
+
+## Sprint A1 — Arquitetura procedural (08/05/2026)
+
+**Status:** ⚠️ Em andamento — 5/5 tarefas técnicas mergeadas (A, C, D1, D2, B). Tarefa E destrancada com sinal "vai E" do solicitante.
+**Doc completo:** [`docs/sprints/sprint_a1.md`](sprints/sprint_a1.md).
+**Fase 0 report:** [`SPRINT_A1_FASE0_REPORT.md`](../SPRINT_A1_FASE0_REPORT.md) (raiz).
+**Prompt:** [`SPRINT_A1_REGENTE_AMBIENTAL.md`](../SPRINT_A1_REGENTE_AMBIENTAL.md) (raiz).
+
+### Motivacao
+
+Sprint 1 original (Skills) ficava bloqueada em gate de PDFs-gabarito da socia desde 23/04. A Sprint A1 separa **infraestrutura procedural** de **skills de dominio** — constroi tudo que A3 (Skills) precisa e nao depende dos PDFs.
+
+### O que foi entregue (5 commits)
+
+| Tarefa | Commit | Descricao | Testes |
+|---|---|---|---|
+| **A** | `100f7da` | `app/skills/` — registry filesystem (Forma B) + integracao no `BaseAgent.call_llm` (`<!-- skills:start -->` markers). Placeholders `_template/SKILL.md` para redator + extrator. | 26 |
+| **C** | `8001fc7` | `app/schemas/stage_output.py` (Pydantic v2): `StageOutputContent` base + `DiagnosticoPreliminarContent` + `PecaJuridicaContent` + `RespostaNotificacaoContent`. Tipo canonico `CitationRef(kind, numero, ano, raw, chunk_id?, jurisdicao?, artigo?)` reusado em B. | 32 |
+| **D1** | `5756e9d` | `app/models/regulatory.py` — `RegulatoryDiagnosis` (versionado por processo) + `RegulatoryIssue` (vinculado a property + opcional document). Migration `a8e1d4c7f3b6` (up/down testados). **Sem tabela N–N** (Q4). | 10 |
+| **D2** | `dc165c7` | `app/api/v1/regulatory.py` — 3 endpoints REST read-only: `/processes/{id}/diagnoses`, `/processes/{id}/diagnoses/{version}`, `/properties/{id}/issues?status=...`. Smoke validado live (auth, 404, 422, tenant isolation). | 15 |
+| **B** | `09e6f85` | `app/services/citation_evaluator.py` — extract_citations (regex multi-formato) + validate_citations (sem novas chamadas RAG) + hook em RedatorAgent. Detecta normas inventadas no output do LLM, marca `requires_review=True` + `citation_issues` no `AIJob.result`. **Nao bloqueia.** | 35 |
+
+### Decisoes arquiteturais aplicadas (Fase 0)
+
+- **Q1:** `AIJob.result["citation_issues"]` (nao `output_data` — campo nao existe).
+- **Q4:** sem tabela N–N entre Diagnosis e Issue. Diagnostico referencia issues via `content["issue_ids"]`.
+- **Q5:** naming `StageOutputContent` (nao `StageOutputBase`) — evita colisao com ORM `StageOutput`.
+- **Q6:** testes nao usam Alembic; validacao manual da migration documentada na docstring.
+- **Q7:** `_load_skills_for_context(self)` sem dict paralelo — alinha com `AgentContext`.
+- **Q8:** tabela dedicada `intake_classification_feedback` (Tarefa E em andamento).
+- Sequencia reordenada `A → C → D1 → D2 → B → E` (C antes de B fixa `CitationRef` antes de B reusar).
+
+### Bugs fixados durante implementacao
+
+- D1/D2: `relationship(..., backref=...)` causa `ArgumentError: property of that name exists on mapper` em hot-reload do uvicorn — substituido por `foreign_keys=[...]` puro.
+- B: regex `(\d{2}|\d{4})` capturava so "20" para "2012" — invertido para `(\d{4}|\d{2})` (re alternation e leftmost).
+
+### Metricas (5/5 tarefas tecnicas, antes de E)
+
+- 5 commits, **+3.319 / −6 linhas**, **118 testes novos** (103 rodaveis no container, 15 exigem pytest no host por causa de Testcontainers + DB real).
+- Lint `ruff check` limpo em todos os arquivos tocados.
+
+### Tarefa E — em andamento
+
+Plano B confirmado pela investigacao Q3: nenhum endpoint hoje muda `Process.demand_type` post-commit. Cria `POST /api/v1/processes/{id}/classify` como ponto canonico de classificacao + tabela `intake_classification_feedback` + hook automatico que compara IA × consultor + endpoint `GET /admin/intake-feedback/stats`.
