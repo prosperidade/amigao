@@ -20,6 +20,7 @@ from app.api.v1 import (
     documents,
     dossier,
     intake,
+    intake_feedback,
     knowledge,
     legislation,
     legislation_alerts,
@@ -145,6 +146,8 @@ app.include_router(dossier.router, prefix=f"{settings.API_V1_STR}/processes", ta
 app.include_router(decisions.router, prefix=f"{settings.API_V1_STR}/processes", tags=["Decisões do Caso"])
 app.include_router(regulatory.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Diagnóstico Regulatório"])
 app.include_router(regulatory.property_router, prefix=f"{settings.API_V1_STR}/properties", tags=["Diagnóstico Regulatório"])
+app.include_router(intake_feedback.classify_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Classificação de Demanda"])
+app.include_router(intake_feedback.admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["Admin / Métricas"])
 app.include_router(proposals.router, prefix=f"{settings.API_V1_STR}/proposals", tags=["Propostas Comerciais"])
 app.include_router(contracts.router, prefix=f"{settings.API_V1_STR}/contracts", tags=["Contratos"])
 app.include_router(ai.router, prefix=f"{settings.API_V1_STR}", tags=["IA"])
