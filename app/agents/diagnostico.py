@@ -3,16 +3,49 @@ DiagnosticoAgent — Analise da situacao do imovel com sugestoes de remediacao.
 
 Combina dados da propriedade, documentos extraidos e inconsistencias
 do dossie para produzir diagnostico completo e sugestoes de acao.
+
+Sprint A2-diagnostico: o output passa a ser um ``DiagnosticoPreliminarContent``
+serializado, com **dual-emit** das chaves antigas (``situacao_geral``,
+``passivos_identificados``, ``acoes_remediacao``, ``prioridade_acoes``,
+``risco_estimado``, ``observacoes``) preservadas no payload final que vai
+para ``AIJob.result``. Garante que:
+
+* ``RedatorAgent`` continua recebendo o dict via ``chain_data["diagnostico"]``;
+* Frontend ``DiagnósticoResult`` continua renderizando sem patch;
+* Schema novo é validado em runtime + carrega ``hipoteses``, ``lacunas``,
+  ``riscos`` (objetos), ``checklist_documental`` e ``sources``.
+
+A migração cobre 2 paths:
+
+* ``execute()`` (path IA) — ler JSON do LLM e construir o `Content`.
+* ``_rules_based_diagnosis()`` (path fallback sem IA) — idem, com
+  ``Source(type="manual", ref="rules_engine")``.
+
+Plano de deprecação das chaves antigas: ver ``docs/sprints/sprint_a2_diagnostico.md``.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
+
+from pydantic import ValidationError
 
 from app.agents.base import AgentRegistry, BaseAgent
 from app.agents.validators import OutputValidationPipeline
 from app.models.ai_job import AIJobType
+from app.schemas.stage_output import (
+    DiagnosticoPreliminarContent,
+    Risco,
+    Source,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class DiagnosticoOutputValidationError(ValueError):
+    """Erro tipado quando o output do diagnóstico falha a validação Pydantic."""
 
 
 @AgentRegistry.register
@@ -46,7 +79,7 @@ class DiagnosticoAgent(BaseAgent):
         prop = process_data.get("property", {})
         recall_query = f"diagnostico {prop.get('state', '')} {prop.get('biome', '')} {process_data.get('process', {}).get('demand_type', '')}"
         recall = self.recall_memory(recall_query)
-        if recall.get("recent_diary"):
+        if isinstance(recall, dict) and recall.get("recent_diary"):
             entries = [e.get("entry", "") if isinstance(e, dict) else str(e) for e in recall["recent_diary"][:3]]
             memory_hint = "\n".join(f"- {e}" for e in entries if e)
 
@@ -69,15 +102,29 @@ class DiagnosticoAgent(BaseAgent):
         response = self.call_llm(user_prompt, system=system_prompt)
         parsed = OutputValidationPipeline.parse_llm_json(response.content)
 
-        return {
-            "situacao_geral": parsed.get("situacao_geral", ""),
-            "passivos_identificados": parsed.get("passivos_identificados", []),
-            "acoes_remediacao": parsed.get("acoes_remediacao", []),
-            "prioridade_acoes": parsed.get("prioridade_acoes", []),
-            "risco_estimado": parsed.get("risco_estimado", "medio"),
-            "observacoes": parsed.get("observacoes", ""),
-            "requires_review": True,  # Diagnostico sempre precisa de validacao humana
-        }
+        # Sprint A2-diagnostico-A.1 (path IA) — extrai chaves brutas do JSON do LLM
+        # e constrói DiagnosticoPreliminarContent com dual-emit das chaves antigas.
+        situacao_geral = parsed.get("situacao_geral", "") or ""
+        passivos = list(parsed.get("passivos_identificados", []) or [])
+        acoes = list(parsed.get("acoes_remediacao", []) or [])
+        prioridades = list(parsed.get("prioridade_acoes", []) or [])
+        risco_estimado = parsed.get("risco_estimado", "medio") or "medio"
+        observacoes = parsed.get("observacoes", "") or ""
+
+        sources = self._derive_sources(
+            documents=process_data.get("documents", []),
+            legal_data=legal_data,
+            origin="ai",
+        )
+        return self._build_payload(
+            situacao_geral=situacao_geral,
+            passivos=passivos,
+            acoes=acoes,
+            prioridades=prioridades,
+            risco_estimado=risco_estimado,
+            observacoes=observacoes,
+            sources=sources,
+        )
 
     def _load_process_data(self) -> dict[str, Any]:
         """Carrega dados do processo, propriedade e documentos."""
@@ -139,9 +186,14 @@ class DiagnosticoAgent(BaseAgent):
         return data
 
     def _rules_based_diagnosis(self, process_data: dict[str, Any]) -> dict[str, Any]:
-        """Diagnostico basico sem LLM."""
-        passivos = []
-        acoes = []
+        """Diagnostico basico sem LLM.
+
+        Sprint A2-diagnostico-A.2 — emite ``DiagnosticoPreliminarContent`` com
+        ``Source(type="manual", ref="rules_engine")`` para satisfazer o validator
+        ``_sources_non_empty``. Mantém dual-emit das chaves antigas no payload.
+        """
+        passivos: list[str] = []
+        acoes: list[str] = []
         prop = process_data.get("property", {})
 
         if prop.get("has_embargo"):
@@ -155,13 +207,155 @@ class DiagnosticoAgent(BaseAgent):
             passivos.append("CAR com pendencias")
             acoes.append("Resolver pendencias no SICAR")
 
-        return {
-            "situacao_geral": "Diagnostico baseado em regras (IA indisponivel)",
+        return self._build_payload(
+            situacao_geral="Diagnostico baseado em regras (IA indisponivel)",
+            passivos=passivos,
+            acoes=acoes,
+            prioridades=[],
+            risco_estimado="alto" if prop.get("has_embargo") else "medio",
+            observacoes="Diagnostico simplificado. Ative a IA para analise completa.",
+            sources=[
+                Source(
+                    type="manual",
+                    ref="rules_engine",
+                    excerpt="diagnóstico produzido por regras determinísticas (LLM indisponível)",
+                )
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # Helpers Sprint A2-diagnostico-A
+    # ------------------------------------------------------------------
+
+    def _derive_sources(
+        self,
+        *,
+        documents: list[dict[str, Any]],
+        legal_data: dict[str, Any],
+        origin: str,
+    ) -> list[Source]:
+        """Constrói lista de ``Source`` em cascata.
+
+        1. Cada documento analisado vira ``Source(type="document", ref=str(id))``
+           (até 10 itens — diagnósticos podem ter base documental rica).
+        2. Itens de ``legal_data["legislacao_aplicavel"]`` viram
+           ``Source(type="legislation", ref=str(...))`` (até 5 itens).
+        3. Se ambos vierem vazios, fallback ``Source(type="manual",
+           ref="agent_diagnostico", excerpt="no_evidence_available")`` + log
+           warning sinalizando "diagnóstico sem evidência documental".
+        """
+        sources: list[Source] = []
+
+        if isinstance(documents, list):
+            for doc in documents[:10]:
+                if not isinstance(doc, dict):
+                    continue
+                doc_id = doc.get("id")
+                if doc_id is None:
+                    continue
+                excerpt = (doc.get("document_type") or "").strip() or None
+                sources.append(Source(
+                    type="document",
+                    ref=str(doc_id),
+                    excerpt=excerpt,
+                ))
+
+        if isinstance(legal_data, dict):
+            for item in (legal_data.get("legislacao_aplicavel") or [])[:5]:
+                if not item:
+                    continue
+                sources.append(Source(type="legislation", ref=str(item)))
+
+        if not sources:
+            logger.warning(
+                "diagnostico.sources_fallback origin=%s — diagnóstico produzido "
+                "sem evidência documental nem contexto legal", origin,
+            )
+            sources.append(Source(
+                type="manual",
+                ref="agent_diagnostico",
+                excerpt="no_evidence_available",
+            ))
+        return sources
+
+    def _build_payload(
+        self,
+        *,
+        situacao_geral: str,
+        passivos: list[str],
+        acoes: list[str],
+        prioridades: list[str],
+        risco_estimado: str,
+        observacoes: str,
+        sources: list[Source],
+    ) -> dict[str, Any]:
+        """Monta DiagnosticoPreliminarContent + dual-emit das chaves antigas.
+
+        Mapeamento:
+        * ``situacao_geral`` → ``content`` (e dual-emit)
+        * ``passivos_identificados`` → ``hipoteses`` (e dual-emit)
+        * ``acoes_remediacao`` → ``checklist_documental`` (e dual-emit)
+        * ``risco_estimado`` (string) → ``riscos: [Risco(descricao=situacao[:200],
+          severidade=risco_estimado)]`` (e dual-emit como string)
+        * ``prioridade_acoes`` → ``metadata["prioridade_acoes"]`` (e dual-emit)
+        * ``observacoes`` → ``metadata["observacoes"]`` (e dual-emit)
+        * ``lacunas`` → ``[]`` (V1 — log INFO; ver Q2 da Fase 0)
+        """
+        # Garantia mínima de não-vazio em ``content`` (validator do schema)
+        content_text = situacao_geral or "Diagnóstico sem síntese textual."
+
+        # severidade do Risco precisa estar no enum {baixo, medio, alto}
+        normalized_severidade = (risco_estimado or "medio").strip().lower()
+        if normalized_severidade not in {"baixo", "medio", "alto"}:
+            logger.warning(
+                "diagnostico.invalid_severidade '%s' → fallback 'medio'", risco_estimado,
+            )
+            normalized_severidade = "medio"
+
+        # Mapping risco_estimado (string única) → riscos (list[Risco])
+        riscos = [
+            Risco(
+                descricao=(situacao_geral or "Risco preliminar identificado")[:200],
+                severidade=normalized_severidade,  # type: ignore[arg-type]
+            )
+        ]
+
+        # Sprint A2-diagnostico Q2 (i): lacunas é schema-only em V1.
+        lacunas: list[str] = []
+        logger.info(
+            "diagnostico.lacunas_empty schema-only field — populated in Sprint A3+ "
+            "when redator skills consume lacunas from the prompt"
+        )
+
+        try:
+            diag = DiagnosticoPreliminarContent(
+                content=content_text,
+                metadata={
+                    "prioridade_acoes": prioridades,
+                    "observacoes": observacoes,
+                },
+                sources=sources,
+                hipoteses=passivos,
+                lacunas=lacunas,
+                riscos=riscos,
+                checklist_documental=acoes,
+            )
+        except ValidationError as exc:
+            raise DiagnosticoOutputValidationError(
+                f"DiagnosticoPreliminarContent inválido: {exc}"
+            ) from exc
+
+        # Dual-emit (γ): chaves antigas preservadas no payload final pra
+        # backward-compat com frontend DiagnósticoResult e logs existentes.
+        # Plano de deprecação: ver docs/sprints/sprint_a2_diagnostico.md.
+        return diag.model_dump(mode="json") | {
+            "requires_review": True,  # Diagnóstico SEMPRE precisa de validação humana
+            "situacao_geral": situacao_geral,
             "passivos_identificados": passivos,
             "acoes_remediacao": acoes,
-            "prioridade_acoes": [],
-            "risco_estimado": "alto" if prop.get("has_embargo") else "medio",
-            "observacoes": "Diagnostico simplificado. Ative a IA para analise completa.",
+            "prioridade_acoes": prioridades,
+            "risco_estimado": normalized_severidade,
+            "observacoes": observacoes,
         }
 
     def _fallback_prompts(self) -> dict[str, str]:
