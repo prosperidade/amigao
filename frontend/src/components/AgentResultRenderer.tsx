@@ -152,42 +152,85 @@ function AtendimentoResult({ r }: { r: Record<string, unknown> }) {
 }
 
 function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
+  // Sprint A2-diagnostico-B: leitura aditiva, dual-emit-aware.
+  // - Chaves NOVAS (DiagnosticoPreliminarContent): content, hipoteses, lacunas,
+  //   riscos (objetos), checklist_documental, sources, metadata.
+  // - Chaves ANTIGAS (dual-emit): situacao_geral, passivos_identificados,
+  //   acoes_remediacao, prioridade_acoes, risco_estimado, observacoes.
+  // Para AIJobs históricos (pré-A2-diagnostico) sem chaves novas, lê apenas
+  // chaves antigas — defesa em profundidade.
+  const situacaoText =
+    (typeof r.content === 'string' && r.content) ||
+    (typeof r.situacao_geral === 'string' && r.situacao_geral) ||
+    null;
+  const hipoteses = arr(r.hipoteses ?? r.passivos_identificados);
+  const checklist = arr(r.checklist_documental ?? r.acoes_remediacao);
+  const lacunas = arr(r.lacunas);
+  const riscosArr = arr(r.riscos);
+  // risco_estimado (string única, dual-emit) tem precedência visual no badge
+  // de header; se ausente, deriva da maior severidade entre riscos[*].severidade.
+  const riscoEstimado =
+    (typeof r.risco_estimado === 'string' && r.risco_estimado) ||
+    (riscosArr.length > 0 && typeof (riscosArr[0] as Record<string, unknown>).severidade === 'string'
+      ? ((riscosArr[0] as Record<string, unknown>).severidade as string)
+      : null);
+  const observacoesText =
+    (typeof r.observacoes === 'string' && r.observacoes) ||
+    (typeof (r.metadata as Record<string, unknown> | undefined)?.observacoes === 'string'
+      ? ((r.metadata as Record<string, unknown>).observacoes as string)
+      : null);
+  const prioridades = arr(
+    r.prioridade_acoes ?? (r.metadata as Record<string, unknown> | undefined)?.prioridade_acoes,
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         {typeof r.confidence === 'string' && <ConfidenceBadge confidence={r.confidence} />}
-        {typeof r.risco_estimado === 'string' && (
+        {riscoEstimado && (
           <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
-            r.risco_estimado === 'alto' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30'
-            : r.risco_estimado === 'medio' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30'
+            riscoEstimado === 'alto' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30'
+            : riscoEstimado === 'medio' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30'
             : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30'
           }`}>
-            Risco: {str(r.risco_estimado)}
+            Risco: {riscoEstimado}
           </span>
         )}
         {r.requires_review === true && <ReviewBadge />}
       </div>
 
-      {str(r.situacao_geral) && (
+      {situacaoText && (
         <p className="text-sm text-gray-700 dark:text-slate-200 leading-relaxed bg-gray-50 dark:bg-white/5 p-3 rounded-lg">
-          {str(r.situacao_geral)}
+          {situacaoText}
         </p>
       )}
 
-      {arr(r.passivos_identificados).length > 0 && (
-        <Section icon={AlertTriangle} title="Passivos Identificados" color="text-red-600 dark:text-red-400">
-          <BulletList items={arr(r.passivos_identificados)} color="text-red-400" />
+      {hipoteses.length > 0 && (
+        <Section icon={AlertTriangle} title="Hipóteses / Passivos" color="text-red-600 dark:text-red-400">
+          <BulletList items={hipoteses} color="text-red-400" />
         </Section>
       )}
 
-      {arr(r.acoes_remediacao).length > 0 && (
-        <Section icon={CheckCircle2} title="Ações de Remediação" color="text-emerald-600 dark:text-emerald-400">
-          <BulletList items={arr(r.acoes_remediacao)} color="text-emerald-400" />
+      {lacunas.length > 0 && (
+        <Section icon={AlertTriangle} title="Lacunas Documentais" color="text-amber-600 dark:text-amber-400">
+          <BulletList items={lacunas} color="text-amber-400" />
         </Section>
       )}
 
-      {str(r.observacoes) && (
-        <p className="text-xs text-gray-500 dark:text-slate-400 italic mt-2">{str(r.observacoes)}</p>
+      {checklist.length > 0 && (
+        <Section icon={CheckCircle2} title="Ações / Checklist" color="text-emerald-600 dark:text-emerald-400">
+          <BulletList items={checklist} color="text-emerald-400" />
+        </Section>
+      )}
+
+      {prioridades.length > 0 && (
+        <Section icon={CheckCircle2} title="Prioridades" color="text-blue-600 dark:text-blue-400">
+          <BulletList items={prioridades} color="text-blue-400" />
+        </Section>
+      )}
+
+      {observacoesText && (
+        <p className="text-xs text-gray-500 dark:text-slate-400 italic mt-2">{observacoesText}</p>
       )}
     </div>
   );
