@@ -382,3 +382,60 @@ A1 entregou `StageOutputContent` mas adocao ficou opt-in. A2-redator e a primeir
 ### Proximo agente recomendado a migrar
 
 **`DiagnosticoAgent` → `DiagnosticoPreliminarContent`** (Sprint A2-diagnostico). Razao: output do diagnostico e input para a peca do redator — formalizar a saida melhora a entrada do agente que acabamos de migrar. Risco medio (chain `diagnostico_completo` e a mais usada).
+
+---
+
+## Sprint A2-diagnostico — Adocao de DiagnosticoPreliminarContent (09/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — 4/4 tarefas mergeadas (A, B, C1, C2).
+**Doc completo:** [`docs/sprints/sprint_a2_diagnostico.md`](sprints/sprint_a2_diagnostico.md).
+**Smoke real:** [`docs/sprints/sprint_a2_diagnostico_smoke.md`](sprints/sprint_a2_diagnostico_smoke.md).
+
+### Motivacao
+
+Continuacao natural da A2-redator. Output do `DiagnosticoAgent` alimenta o redator na chain `diagnostico_completo` — formalizar a saida melhora a entrada do agente recem-migrado. Aproveita schema `DiagnosticoPreliminarContent` ja entregue na A1 (sem custo extra de criacao).
+
+### O que foi entregue (4 commits)
+
+| Tarefa | Commit | Descricao | Testes |
+|---|---|---|---|
+| **A** | `8bd6885` | Migracao A.1 (path IA) + A.2 (rules-based fallback) num so commit. Helpers `_derive_sources` (cascata docs → legislation → manual fallback) e `_build_payload` (mapeamento + dual-emit). Excecao tipada `DiagnosticoOutputValidationError`. | 15 unit |
+| **B** | `f4854a7` | Frontend `DiagnósticoResult` aditivo: le `r.content \|\| r.situacao_geral`, `r.hipoteses \|\| r.passivos_identificados`, etc. Novas secoes "Lacunas Documentais" + "Prioridades". | typecheck |
+| **C1** | `ba5e4a4` | Bateria E2E paramétrica × 4 cenarios (AI on simples/medio/completo + AI off rules-based) + 3 testes especificos. | 7 E2E |
+| **C2** | `ab0ef0c` | Smoke real com gpt-4o-mini × 2 cenarios (AI on rich context + AI off). Custo `$0.0002`. 2/2 ✅. Confirma dual-emit em runtime real. | manual |
+
+### Decisoes da Fase 0 aplicadas (todas)
+
+- **Q1: γ dual-emit** — schema novo + 6 chaves antigas coexistem. Frontend nao quebra.
+- **Q2: lacunas = []** em V1 + log INFO. Evolucao em A3+ quando skills do redator consumirem lacunas.
+- **Q3:** prioridade_acoes/observacoes em `metadata` + dual-emit.
+- **Q4:** `_rules_based_diagnosis` migra junto. Sem split AI-on/AI-off.
+- **Q5:** smoke com mock pesado de `_load_process_data`. Preserva isolamento de DB.
+- **Q6:** gpt-4o-mini para comparabilidade cross-sprint.
+
+### Bugs/armadilhas
+
+- `recall_memory` sofre o mesmo MagicMock truthy bug do `get_active_prompt` (descoberto em A2-redator-C2). Patch em `_enter_smoke_patches`.
+- `_load_process_data` faz query SQL real — mock pesado obrigatorio.
+- Severidade fora do enum normalizada para `"medio"` + log warning.
+- `content` vazio recebe placeholder + dual-emit preserva o vazio original.
+
+### Metricas
+
+- 4 commits feature, **+1.406 / −32 linhas**, **22 testes Python** + 7 E2E + smoke real.
+- Lint `ruff check` limpo.
+- 156/156 verde (regressao zero — A1 + A2-redator + A2-diagnostico).
+- `requires_review=True` em 2/2 cenarios — por design (hardcoded).
+- Dual-emit confirmado em runtime real (2/2 cenarios preservam 6 chaves antigas).
+
+### Plano de deprecacao das chaves antigas (futuro)
+
+Estrategia γ deixa chaves antigas no payload pra backward compat. Deprecacao em 2 sprints:
+1. **Frontend follow-up:** confirmar 0 uso em logs/observabilidade. Ja le schema novo com fallback (Tarefa B).
+2. **Sprint cleanup:** remover dual-emit do `_build_payload`. Frontend mantem fallback pra AIJobs historicos.
+
+Registrado como divida de simplificacao em `docs/sprints/sprint_a2_diagnostico.md`.
+
+### Proximo agente recomendado a migrar
+
+**`LegislacaoAgent` → criar `LegislationContextContent`** (Sprint A2-legislacao). Custo extra de schema novo (vs A2-diagnostico que reaproveitou existente). Alto valor — legislacao alimenta tanto redator quanto diagnostico.
