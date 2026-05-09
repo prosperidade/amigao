@@ -338,3 +338,47 @@ Sprint 1 original (Skills) ficava bloqueada em gate de PDFs-gabarito da socia de
 - **Sprint A3** — Skills de dominio (chega quando os PDFs-gabarito da socia chegarem). Cria os arquivos `.md` em `app/skills/redator/` e `app/skills/extrator/`. A infra ja existe (Tarefa A).
 - **Sprint Y** — Auditor de inconsistencias C6 (depende de `Property.geom` populado + parser shapefile). Modelos `RegulatoryIssue` ja existem; falta o agente `auditor_imovel` + endpoint `POST /properties/{id}/audit`.
 - **Sprint W4** — OCR worker (paralelo, ja priorizado).
+
+---
+
+## Sprint A2-redator — Adocao de PecaJuridicaContent (09/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — 4/4 tarefas mergeadas (A, B, C1, C2).
+**Doc completo:** [`docs/sprints/sprint_a2_redator.md`](sprints/sprint_a2_redator.md).
+**Smoke real:** [`docs/sprints/sprint_a2_redator_smoke.md`](sprints/sprint_a2_redator_smoke.md).
+
+### Motivacao
+
+A1 entregou `StageOutputContent` mas adocao ficou opt-in. A2-redator e a primeira adocao real, escolhida pelo redator porque (1) ja tinha `CitationRef` integrado da A1-B, (2) e o agente mais arriscado (pecas vao pra orgao regulador), (3) destrava A3 (skills de dominio) sem refator quando os PDFs da socia chegarem.
+
+### O que foi entregue (4 commits)
+
+| Tarefa | Commit | Descricao | Testes |
+|---|---|---|---|
+| **A** | `1e8566f` | RedatorAgent emite `PecaJuridicaContent` serializado. Helpers `_derive_sources` (cascata legal_data → manual), `_resolve_addressee` (cascata metadata → process), `_build_peca` (subclass enriched ou fallback). Parsers regex `_parse_prazo_dias`/`_parse_ato_regulatorio`. `CitationValidationResult.all_citations` (extensao aditiva). | 32 unit |
+| **B** | `0acbb8f` | Frontend `RedatorResult` le `r.template \|\| r.document_type` (defesa em profundidade — alias computed_field na schema + fallback no front). Badges `addressee` e "Citacoes suspeitas". | typecheck |
+| **C1** | `d0e0c4f` | Bateria E2E paramétrica × 7 templates com LLM stubado. Pipeline `run()` → `AgentResult` → JSON dump round-trip. | 9 E2E |
+| **C2** | `12ca673` | Smoke real com gpt-4o-mini × 7 templates, custo `$0.0030` (100× abaixo do orcamento `$0.35`). 7/7 ✅. Relatorio em `docs/sprints/sprint_a2_redator_smoke.md`. | manual |
+
+### Decisoes da Fase 0 aplicadas (todas)
+
+- **Q1:** migrar todos os 7 templates (`proposta`/`contrato` com log INFO marcando rota concorrente).
+- **Q2:** defesa em profundidade — `@computed_field document_type` no schema + frontend lendo ambos.
+- **Q3:** `RespostaNotificacaoContent` com fallback gracioso pra `PecaJuridicaContent` puro quando `prazo_dias`/`ato_regulatorio` faltam (cascata metadata → parse content → fallback).
+- **Q4/Q5/Q6:** C1 stubado pra CI + C2 manual com LLM real, sem flag `legacy_dict_output`, C dividida em C1+C2.
+
+### Bugs fixados
+
+- C2: imports tardios (`emit_agent_event`/`record_agent_execution`) → patch no modulo de origem.
+- C2: `MagicMock(session)` faz `get_active_prompt()` retornar mock truthy → patch `get_active_prompt → None` força fallback hardcoded. Pattern documentado no docstring de `_enter_smoke_patches` para reuso em sprints futuras.
+
+### Metricas
+
+- 4 commits feature, **+1.453 / −16 linhas**, **41 testes Python** + 9 E2E + smoke real.
+- Lint `ruff check` limpo.
+- 134/134 verde (regressao zero — A1 inteira preservada).
+- `requires_review=True` em 7/7 templates — por design (hardcoded para pecas formais).
+
+### Proximo agente recomendado a migrar
+
+**`DiagnosticoAgent` → `DiagnosticoPreliminarContent`** (Sprint A2-diagnostico). Razao: output do diagnostico e input para a peca do redator — formalizar a saida melhora a entrada do agente que acabamos de migrar. Risco medio (chain `diagnostico_completo` e a mais usada).
