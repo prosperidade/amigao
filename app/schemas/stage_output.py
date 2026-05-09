@@ -45,6 +45,8 @@ CitationKind = Literal[
     "outro",
 ]
 
+CitationJurisdicao = Literal["federal", "estadual", "municipal", "outro"]
+
 SourceKind = Literal["legislation", "document", "manual"]
 RiscoSeveridade = Literal["baixo", "medio", "alto"]
 
@@ -69,6 +71,12 @@ class CitationRef(_StrictModel):
     Reusada pelo evaluator de citação (Tarefa B): sai do regex já normalizada
     para ``kind/numero/ano`` e opcionalmente carrega o ``chunk_id`` quando o
     cruzamento contra ``knowledge_catalog`` der match.
+
+    Sprint A1 B — incluídos campos opcionais ``jurisdicao`` (ortogonal ao
+    ``kind`` — evita explosão combinatória "lei_estadual/decreto_estadual/
+    portaria_estadual...") e ``artigo`` (capturado em extração; consumido
+    como informação descritiva por enquanto, base para cruzamento por
+    artigo em V2).
     """
 
     kind: CitationKind
@@ -78,6 +86,14 @@ class CitationRef(_StrictModel):
     chunk_id: int | None = Field(
         default=None,
         description="ID em knowledge_catalog quando a citação é validada; None quando não confirmada.",
+    )
+    jurisdicao: CitationJurisdicao | None = Field(
+        default=None,
+        description="Esfera da norma — populado em validação a partir do chunk; None na extração crua.",
+    )
+    artigo: str | None = Field(
+        default=None,
+        description="Artigo/parágrafo citado (ex.: '7º', 'art. 12, § 2º'); descritivo em V1.",
     )
 
 

@@ -59,12 +59,54 @@ class RedatorAgent(BaseAgent):
 
         response = self.call_llm(user_prompt, system=system_prompt, max_tokens=4096)
 
-        return {
+        # Sprint A1 B — evaluator de citação legal: detecta normas inventadas no
+        # output e marca review obrigatória + citation_issues no AIJob.result.
+        # Não bloqueia: o documento ainda chega ao consultor, com badge.
+        citation_eval = self._evaluate_citations(response.content, legal_data)
+
+        result: dict[str, Any] = {
             "document_type": doc_template,
             "content": response.content,
             "requires_review": True,  # Documentos formais SEMPRE precisam de revisao humana
             "confidence": "medium",
         }
+        if citation_eval is not None:
+            result["citation_issues"] = [c.model_dump() for c in citation_eval.invalid]
+            result["citation_total"] = citation_eval.total
+            result["citation_coverage_ratio"] = citation_eval.coverage_ratio
+            result["citation_valid"] = citation_eval.valid
+        return result
+
+    def _evaluate_citations(self, text: str, legal_data: dict[str, Any]) -> Any | None:
+        """Roda o evaluator de citação contra o legislation_context já carregado.
+
+        Retorna ``None`` quando não há contexto legislativo nessa execução
+        (ex.: redator chamado fora da chain). Nesse caso, o caller decidiu
+        prescindir do RAG, então não temos verdade a confrontar.
+        """
+        from app.services.citation_evaluator import (  # noqa: PLC0415
+            extract_citations,
+            validate_citations,
+        )
+
+        context: list[Any] = []
+        # legislacao_aplicavel + normas_estaduais são listas de strings tipo "Lei 12.651/2012"
+        for key in ("legislacao_aplicavel", "normas_estaduais"):
+            value = legal_data.get(key) if isinstance(legal_data, dict) else None
+            if isinstance(value, list):
+                context.extend(str(item) for item in value if item)
+        # rag_chunks_meta — espaço para Sprint A2 expor SearchResult; aceito hoje se já vier
+        chunks = legal_data.get("rag_chunks_meta") if isinstance(legal_data, dict) else None
+        if isinstance(chunks, list):
+            context.extend(chunks)
+
+        if not context:
+            return None
+
+        citations = extract_citations(text)
+        if not citations:
+            return None
+        return validate_citations(citations, context)
 
     def _load_process_context(self) -> dict[str, Any]:
         from app.models.process import Process  # noqa: PLC0415
