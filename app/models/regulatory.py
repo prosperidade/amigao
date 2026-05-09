@@ -111,7 +111,7 @@ class RegulatoryDiagnosis(Base):
         onupdate=func.now(),
     )
 
-    process = relationship("Process", backref="regulatory_diagnoses")
+    process = relationship("Process", foreign_keys=[process_id])
     validated_by = relationship("User", foreign_keys=[validated_by_user_id])
 
 
@@ -168,5 +168,5 @@ class RegulatoryIssue(Base):
     )
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
-    property = relationship("Property", backref="regulatory_issues")
+    property = relationship("Property", foreign_keys=[property_id])
     document = relationship("Document", foreign_keys=[document_id])

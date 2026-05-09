@@ -26,6 +26,7 @@ from app.api.v1 import (
     processes,
     properties,
     proposals,
+    regulatory,
     tasks,
     threads,
     workflows,
@@ -142,6 +143,8 @@ app.include_router(workflows.router, prefix=f"{settings.API_V1_STR}/workflows", 
 app.include_router(workflows.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Trilha Regulatória"])
 app.include_router(dossier.router, prefix=f"{settings.API_V1_STR}/processes", tags=["Dossiê Técnico"])
 app.include_router(decisions.router, prefix=f"{settings.API_V1_STR}/processes", tags=["Decisões do Caso"])
+app.include_router(regulatory.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Diagnóstico Regulatório"])
+app.include_router(regulatory.property_router, prefix=f"{settings.API_V1_STR}/properties", tags=["Diagnóstico Regulatório"])
 app.include_router(proposals.router, prefix=f"{settings.API_V1_STR}/proposals", tags=["Propostas Comerciais"])
 app.include_router(contracts.router, prefix=f"{settings.API_V1_STR}/contracts", tags=["Contratos"])
 app.include_router(ai.router, prefix=f"{settings.API_V1_STR}", tags=["IA"])
