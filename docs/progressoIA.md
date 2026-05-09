@@ -290,7 +290,7 @@ docker-compose.yml                   — porta exposta do db: 5433 → 55432 (co
 
 ## Sprint A1 — Arquitetura procedural (08/05/2026)
 
-**Status:** ⚠️ Em andamento — 5/5 tarefas técnicas mergeadas (A, C, D1, D2, B). Tarefa E destrancada com sinal "vai E" do solicitante.
+**Status:** ✅ **CONCLUÍDA** — 6/6 tarefas mergeadas (A, C, D1, D2, B, E).
 **Doc completo:** [`docs/sprints/sprint_a1.md`](sprints/sprint_a1.md).
 **Fase 0 report:** [`SPRINT_A1_FASE0_REPORT.md`](../SPRINT_A1_FASE0_REPORT.md) (raiz).
 **Prompt:** [`SPRINT_A1_REGENTE_AMBIENTAL.md`](../SPRINT_A1_REGENTE_AMBIENTAL.md) (raiz).
@@ -308,15 +308,17 @@ Sprint 1 original (Skills) ficava bloqueada em gate de PDFs-gabarito da socia de
 | **D1** | `5756e9d` | `app/models/regulatory.py` — `RegulatoryDiagnosis` (versionado por processo) + `RegulatoryIssue` (vinculado a property + opcional document). Migration `a8e1d4c7f3b6` (up/down testados). **Sem tabela N–N** (Q4). | 10 |
 | **D2** | `dc165c7` | `app/api/v1/regulatory.py` — 3 endpoints REST read-only: `/processes/{id}/diagnoses`, `/processes/{id}/diagnoses/{version}`, `/properties/{id}/issues?status=...`. Smoke validado live (auth, 404, 422, tenant isolation). | 15 |
 | **B** | `09e6f85` | `app/services/citation_evaluator.py` — extract_citations (regex multi-formato) + validate_citations (sem novas chamadas RAG) + hook em RedatorAgent. Detecta normas inventadas no output do LLM, marca `requires_review=True` + `citation_issues` no `AIJob.result`. **Nao bloqueia.** | 35 |
+| **E** | `3a8e1f8` | `app/api/v1/intake_feedback.py` + `app/models/intake_classification_feedback.py` + migration `b9d2e5a8f4c1`. Plano B da Q3: `POST /processes/{id}/classify` como ponto canonico de classificacao + log automatico de divergencia IA × consultor + `GET /admin/intake-feedback/stats` (tenant-scoped). | 10 |
 
 ### Decisoes arquiteturais aplicadas (Fase 0)
 
 - **Q1:** `AIJob.result["citation_issues"]` (nao `output_data` — campo nao existe).
+- **Q3:** Plano B confirmado — novo endpoint `POST /processes/{id}/classify` (nao havia ponto de captura natural).
 - **Q4:** sem tabela N–N entre Diagnosis e Issue. Diagnostico referencia issues via `content["issue_ids"]`.
 - **Q5:** naming `StageOutputContent` (nao `StageOutputBase`) — evita colisao com ORM `StageOutput`.
 - **Q6:** testes nao usam Alembic; validacao manual da migration documentada na docstring.
 - **Q7:** `_load_skills_for_context(self)` sem dict paralelo — alinha com `AgentContext`.
-- **Q8:** tabela dedicada `intake_classification_feedback` (Tarefa E em andamento).
+- **Q8:** tabela dedicada `intake_classification_feedback` (mais explicito que reuso de `audit_log`).
 - Sequencia reordenada `A → C → D1 → D2 → B → E` (C antes de B fixa `CitationRef` antes de B reusar).
 
 ### Bugs fixados durante implementacao
@@ -324,11 +326,15 @@ Sprint 1 original (Skills) ficava bloqueada em gate de PDFs-gabarito da socia de
 - D1/D2: `relationship(..., backref=...)` causa `ArgumentError: property of that name exists on mapper` em hot-reload do uvicorn — substituido por `foreign_keys=[...]` puro.
 - B: regex `(\d{2}|\d{4})` capturava so "20" para "2012" — invertido para `(\d{4}|\d{2})` (re alternation e leftmost).
 
-### Metricas (5/5 tarefas tecnicas, antes de E)
+### Metricas finais (6/6 tarefas)
 
-- 5 commits, **+3.319 / −6 linhas**, **118 testes novos** (103 rodaveis no container, 15 exigem pytest no host por causa de Testcontainers + DB real).
+- 6 commits feature + 1 commit doc, **+4.163 / −6 linhas**, **128 testes novos** (103 rodaveis no container, 25 exigem pytest no host por causa de Testcontainers + DB real).
 - Lint `ruff check` limpo em todos os arquivos tocados.
+- Smoke tests live: todos os endpoints novos validados contra a API rodando.
 
-### Tarefa E — em andamento
+### Proximos passos (FORA da Sprint A1)
 
-Plano B confirmado pela investigacao Q3: nenhum endpoint hoje muda `Process.demand_type` post-commit. Cria `POST /api/v1/processes/{id}/classify` como ponto canonico de classificacao + tabela `intake_classification_feedback` + hook automatico que compara IA × consultor + endpoint `GET /admin/intake-feedback/stats`.
+- **Sprint A2** — adocao gradual de `StageOutputContent` nos 5 agentes (extrator → atendimento → diagnostico → redator → legislacao). Cada um vira sub-commit; os outros continuam aceitando `dict` enquanto nao migram.
+- **Sprint A3** — Skills de dominio (chega quando os PDFs-gabarito da socia chegarem). Cria os arquivos `.md` em `app/skills/redator/` e `app/skills/extrator/`. A infra ja existe (Tarefa A).
+- **Sprint Y** — Auditor de inconsistencias C6 (depende de `Property.geom` populado + parser shapefile). Modelos `RegulatoryIssue` ja existem; falta o agente `auditor_imovel` + endpoint `POST /properties/{id}/audit`.
+- **Sprint W4** — OCR worker (paralelo, ja priorizado).

@@ -1,7 +1,7 @@
 # Sprint A1 — Arquitetura procedural (sem skills de domínio)
 
 **Data:** 2026-05-08
-**Status:** ⚠️ Em andamento — 5/5 tarefas técnicas feitas (A, C, D1, D2, B). **Tarefa E aguardando confirmação do solicitante** (cenário Q3 — plano B confirmado, pendente "vai E").
+**Status:** ✅ **CONCLUÍDA** — 6/6 tarefas mergeadas (A, C, D1, D2, B, E).
 **Branch:** `main` (commits diretos)
 **Fase 0 report:** [`SPRINT_A1_FASE0_REPORT.md`](../../SPRINT_A1_FASE0_REPORT.md) (raiz)
 **Prompt origem:** [`SPRINT_A1_REGENTE_AMBIENTAL.md`](../../SPRINT_A1_REGENTE_AMBIENTAL.md) (raiz)
@@ -19,9 +19,9 @@ Sequência aprovada na Fase 0: **A → C → D1 → D2 → B → E** (alteraçã
 | **D1** — Modelos `RegulatoryDiagnosis`/`Issue` + migration | `5756e9d` | ✅ done | 10 | +631 |
 | **D2** — Endpoints REST read-only | `dc165c7` | ✅ done | 15 | +499/−2 |
 | **B** — Citation evaluator + hook RedatorAgent | `09e6f85` | ✅ done | 35 | +746/−1 |
-| **E** — Feedback loop AtendimentoAgent | (pendente) | ⏸ aguardando "vai E" | — | — |
+| **E** — Feedback loop AtendimentoAgent | `3a8e1f8` | ✅ done | 10 | +844 |
 
-**Total acumulado até aqui:** 5 commits, **+3.319 / −6 linhas**, **118 testes novos**, lint limpo em todos os arquivos tocados.
+**Total final:** 6 commits feature + 1 commit doc, **+4.163 / −6 linhas**, **128 testes novos**, lint limpo em todos os arquivos tocados.
 
 ---
 
@@ -282,56 +282,78 @@ Acréscimos antes de B começar:
 
 ## Tarefa E — Feedback loop AtendimentoAgent
 
-**Status:** ⏸ **Aguardando "vai E" + decisões sobre 4 detalhes secundários.**
+**Commit:** `3a8e1f8` — `feat(sprint-a1-E): feedback loop AtendimentoAgent + endpoint de stats`
 
-### Investigação Q3 — cenário encontrado
+### Investigação Q3 — Plano B confirmado
 
-❌ **Plano B necessário.** Justificativa:
+❌ Plano A (instrumentar PATCH posterior em `Process.demand_type`) inviável: `PUT /processes/{id}` existe mas `ProcessUpdate` só expõe `title`, `process_type`, `description`, `status`. Não há nenhum endpoint hoje que atualize `demand_type`. **Plano B aplicado**: novo endpoint canônico `/processes/{id}/classify`.
 
-1. `PUT /api/v1/processes/{id}` ([app/api/v1/processes.py:300](../../app/api/v1/processes.py#L300)) existe, mas o body `ProcessUpdate` ([app/schemas/process.py:34](../../app/schemas/process.py#L34)) só permite alterar `title`, `process_type`, `description`, `status`. **`demand_type` não está exposto.**
-2. `POST /api/v1/processes/{id}/status` só altera `status` (máquina de estados).
-3. Não há outro endpoint hoje que mude `Process.demand_type` — a única forma é manipulação direta no banco ou em UI ainda não implementada.
-4. O comentário em [intake.py:191-199](../../app/api/v1/intake.py#L191) diz "promoção é responsabilidade do consultor (ação posterior)", mas essa ação **ainda não existe na API**.
+### Entrega
 
-### Plano de implementação confirmado
+**Modelo** `app/models/intake_classification_feedback.py`:
+- `IntakeClassificationFeedback(tenant_id, process_id FK CASCADE, intake_draft_id? FK SET NULL, ai_demand_type, ai_confidence?, ai_run_id? FK SET NULL, corrected_demand_type, corrected_by_user_id? FK SET NULL, corrected_at)`.
+- 3 índices (`tenant_id`, `process_id`, `intake_draft_id`).
 
-- **Novo endpoint `POST /api/v1/processes/{process_id}/classify`** (ponto canônico de classificação).
-- **Hook automático** captura: lê `Process.demand_type` atual + último `AIJob` `agent_name='atendimento'` ligado ao processo (via `intake_draft.linked_process_id`); compara após o update.
-- **Tabela nova `intake_classification_feedback`** (Q8 confirmada — tabela dedicada > reuso de `audit_log`):
-  ```
-  id, intake_draft_id (nullable, FK SET NULL),
-  process_id (FK CASCADE),
-  ai_demand_type, ai_confidence (nullable), ai_run_id (FK ai_jobs SET NULL nullable),
-  corrected_demand_type, corrected_by_user_id (FK SET NULL),
-  corrected_at (default now)
-  ```
-- **`GET /api/v1/admin/intake-feedback/stats`** com `total_classifications`, `total_corrections`, `accuracy_overall`, `accuracy_by_demand_type`, `top_corrections`.
-- **Migration alembic** + testes em `tests/api/test_classify_endpoint.py` e `tests/api/test_intake_feedback_stats.py`.
+**Migration** `b9d2e5a8f4c1` (down_revision = `a8e1d4c7f3b6`). Validada manualmente up/down/up no Postgres real.
 
-Resolve o Risco #6 (denominador enviesado): só conta correções **explícitas**, exatamente o sinal desejado.
+**Endpoints** (`app/api/v1/intake_feedback.py`, auth: `internal`):
+- `POST /api/v1/processes/{id}/classify` — body `{demand_type}`. Atualiza `Process.demand_type` e grava log **sempre** (cada call é evento). Hook automático lê o último `AIJob` com `agent_name='atendimento'` vinculado ao mesmo `intake_draft` (via `entity_id`) e captura `ai_demand_type`/`ai_confidence`/`ai_run_id`. Resposta inclui `previous_demand_type`, `new_demand_type`, `feedback_id`, `ai_demand_type`, `diverged_from_ai`. Sem máquina-de-estados — qualquer transição aceita. Trilha auditoria espelhada em `audit_log` (`action="demand_type_classified"`).
+- `GET /api/v1/admin/intake-feedback/stats` — métricas tenant-scoped:
+  - `total_classifications`: nº de processos com pelo menos 1 log.
+  - `total_corrections`: nº de processos onde IA divergiu (último log por processo).
+  - `accuracy_overall = 1 - corrections/classifications`.
+  - `accuracy_by_demand_type`: precisão por tipo humano final.
+  - `top_corrections`: até 10 pares `"X -> Y"` mais frequentes.
 
-### 4 detalhes pendentes de decisão antes de iniciar E
+### Decisões aplicadas (defaults dos 4 detalhes pendentes)
 
-1. **Idempotência:** `/classify` chamado 2x gera 2 logs (cada correção é evento)? `accuracy_overall` usa último log por processo?
-2. **`/classify` aceita qualquer transição** (até voltar para `nao_identificado`)? Sem máquina-de-estados em `demand_type`?
-3. **Permissão `/admin/intake-feedback/stats`:** `internal` qualquer ou `is_superuser=True`?
-4. **Top corrections:** lista `[["X -> Y", count], ...]` — default 10 itens?
+1. **Idempotência:** cada `/classify` gera 1 log; `accuracy_overall` usa **último** log por processo (consultor pode reclassificar várias vezes — só a decisão final entra na métrica).
+2. **Sem máquina-de-estados** em `demand_type` — aceita qualquer transição (até voltar a `nao_identificado`).
+3. **`/admin/stats`** com `get_current_internal_user` (qualquer interno do tenant; não exige `is_superuser`).
+4. **`top_corrections`** limitado a 10 itens.
+
+Resolve **Risk #6** (denominador enviesado): só conta correções **explícitas**, não casos abandonados sem classificação.
+
+### Smoke test live (api container, contra dados reais)
+
+| # | Cenário | Resultado |
+|---|---|---|
+| 1 | `GET /admin/intake-feedback/stats` (tenant sem logs) | `{total_classifications:0, ...}` 200 |
+| 2 | `POST /processes/9999/classify` | 404 |
+| 3 | `POST /processes/9999/classify` body `{"demand_type":"naoexiste"}` | 422 |
+| 4 | `POST /processes/3/classify {"demand_type":"retificacao_car"}` (AIJob histórico tinha `misto`) | 200, `diverged_from_ai=true`, log gravado |
+| 5 | stats após call 4 | `accuracy=0.0`, `top_corrections=[["misto -> retificacao_car", 1]]` |
+| 6 | `POST /processes/3/classify {"demand_type":"misto"}` (consultor reclassifica) | 200, `feedback_id=2`, `diverged_from_ai=false` |
+| 7 | stats após call 6 (último log = misto, IA = misto) | `accuracy=1.0`, `top_corrections=[]` — **idempotência confirmada** |
+| 8 | `GET /processes/3` | `demand_type: "misto"` — Process efetivamente atualizado |
+
+Logs de smoke removidos do banco antes do commit (`DELETE FROM intake_classification_feedback WHERE id IN (1,2)`).
+
+### Testes
+
+10 novos em `tests/api/test_intake_feedback.py`:
+- `TestClassifyEndpoint × 6`: 401, 404, 422, atualiza+loga+captura AI, sem AI rodada (graceful), idempotência (2 calls = 2 logs preservados em ordem), tenant isolation cross-tenant.
+- `TestStatsEndpoint × 4`: 401, vazio = zeros, último-log-por-processo drives accuracy (3 processos, p3 reclassificado 2x), tenant isolation.
+
+⚠️ Mesma limitação ambiental das outras tarefas — exigem `pytest` no host.
 
 ---
 
-## Métricas acumuladas (5/5 tarefas técnicas, antes de E)
+## Métricas finais (6/6 tarefas)
 
 | Métrica | Valor |
 |---|---|
-| Commits | 5 (`100f7da`, `8001fc7`, `5756e9d`, `dc165c7`, `09e6f85`) |
-| Linhas adicionadas | **+3.319** |
+| Commits feature | 6 (`100f7da`, `8001fc7`, `5756e9d`, `dc165c7`, `09e6f85`, `3a8e1f8`) |
+| Commits doc | 1 (`1169521`) |
+| Linhas adicionadas | **+4.163** |
 | Linhas removidas | −6 |
-| Arquivos novos | 18 (5 código + 1 migration + 8 testes + 4 docs/READMEs/init) |
-| Arquivos modificados | 6 (`app/agents/base.py`, `app/agents/redator.py`, `app/main.py`, `app/models/__init__.py`, `app/models/process.py`, `requirements.txt`, `app/schemas/stage_output.py`) |
-| Testes novos | **118** (26 skills + 32 schemas + 10 modelos + 15 API regulatory + 30 evaluator + 5 hook redator) |
+| Arquivos novos | 23 (8 código + 2 migrations + 9 testes + 4 docs) |
+| Arquivos modificados | 7 (`app/agents/base.py`, `app/agents/redator.py`, `app/main.py`, `app/models/__init__.py`, `app/models/process.py`, `requirements.txt`, `app/schemas/stage_output.py`) |
+| Testes novos | **128** (26 skills + 32 schemas + 10 regulatory models + 15 regulatory API + 30 evaluator + 5 hook redator + 10 intake_feedback) |
 | Testes verde no container | **103** (rodáveis sem DB real) |
-| Testes que requerem pytest no host | **15** (modelos + API regulatory — Testcontainers + Postgres) |
+| Testes que requerem pytest no host | **25** (regulatory models/API + intake_feedback API — Testcontainers + Postgres) |
 | Lint `ruff check` | ✅ limpo em todos os arquivos tocados |
+| Smoke tests live | ✅ todos os endpoints novos validados contra a API rodando |
 
 ---
 
@@ -340,25 +362,25 @@ Resolve o Risco #6 (denominador enviesado): só conta correções **explícitas*
 | # | Decisão | Aplicada? |
 |---|---|---|
 | Q1 | `AIJob.result` em vez de `output_data` | ✅ B usa `result["citation_issues"]` |
-| Q2 | Endpoint `/commit` não `/confirm` | ⏸ aplica em E |
-| Q3 | Captura via `Process.demand_type` posterior | ⏸ Plano B confirmado, aguarda "vai E" |
+| Q2 | Endpoint `/commit` não `/confirm` | ✅ E referencia `/commit` real (não criou `/confirm`) |
+| Q3 | Captura via `Process.demand_type` posterior | ✅ Plano B aplicado: novo `POST /processes/{id}/classify` |
 | Q4 | Sem tabela N–N entre Diagnosis e Issue | ✅ D1 |
 | Q5 | `StageOutputContent` (não `StageOutputBase`) | ✅ C |
-| Q6 | Testes não usam Alembic; validação manual documentada | ✅ D1 |
+| Q6 | Testes não usam Alembic; validação manual documentada | ✅ D1 + E |
 | Q7 | `_load_skills_for_context(self)` sem dict paralelo | ✅ A |
-| Q8 | Tabela dedicada `intake_classification_feedback` | ⏸ aplica em E |
+| Q8 | Tabela dedicada `intake_classification_feedback` | ✅ E |
 | Risk #1/#2 | `# TODO(perf)` no `_registry.py` | ✅ A |
 | Risk #3 | Regex evaluator cobre ~80% | ✅ B |
 | Risk #4 | Comentário "legacy" em `Process.initial_diagnosis` | ✅ D1 |
 | Risk #5 | Sem N–N (drop tabela associativa) | ✅ D1 |
-| Risk #6 | Captura via correção explícita | ⏸ resolvido em E |
+| Risk #6 | Captura via correção explícita | ✅ E (denominador = só correções explícitas) |
 
 ---
 
 ## Pontos de pausa explícitos (do prompt)
 
-✅ Pausa antes de B — reportei tipo `CitationRef`. Solicitante aprovou com 2 ajustes (`jurisdicao` + `artigo`) já incorporados.
-✅ Pausa antes de E — reportei cenário Q3 (Plano B necessário). Aguardando "vai E" + 4 detalhes secundários.
+✅ Pausa antes de B — reportei tipo `CitationRef`. Solicitante aprovou com 2 ajustes (`jurisdicao` + `artigo`) incorporados.
+✅ Pausa antes de E — reportei cenário Q3 (Plano B necessário). Solicitante aprovou com sinal "vai E"; 4 detalhes secundários resolvidos com defaults documentados.
 
 ---
 
