@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 # Templates suportados pelo RedatorAgent — ver app/agents/redator.py:VALID_TEMPLATES
 PecaTemplate = Literal[
@@ -153,11 +153,33 @@ class DiagnosticoPreliminarContent(StageOutputContent):
 
 
 class PecaJuridicaContent(StageOutputContent):
-    """Conteúdo de peça jurídica gerada pelo RedatorAgent."""
+    """Conteúdo de peça jurídica gerada pelo RedatorAgent.
+
+    Sprint A2-redator: ``extra="ignore"`` (override do default ``forbid`` em
+    ``_StrictModel``) é proposital — round-trip via ``model_dump()`` inclui o
+    ``computed_field document_type`` (alias deprecated para ``template``);
+    em ``model_validate(dump)`` esse campo viraria input desconhecido e o
+    "forbid" estouraria. Tradeoff aceitável: a anti-drift continua via
+    typing rigoroso de ``template`` (Literal de 7 valores) e do enum-like
+    ``CitationKind``.
+    """
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
     template: PecaTemplate
     legal_citations: list[CitationRef] = Field(default_factory=list)
     addressee: str | None = Field(default=None, description="Órgão/pessoa destinatária da peça")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def document_type(self) -> str:
+        """Alias deprecated para ``template`` — backward compat com frontend
+        (``AgentResultRenderer.tsx::RedatorResult``) e AIJobs históricos.
+
+        Sprint A2-redator-B faz o frontend ler ``r.template || r.document_type``;
+        em sprint posterior, depois de medir 0 uso desse alias, ele pode sumir.
+        """
+        return self.template
 
 
 class RespostaNotificacaoContent(PecaJuridicaContent):

@@ -44,12 +44,19 @@ class CitationValidationResult:
         invalid: lista de ``CitationRef`` não confirmadas.
         coverage_ratio: fração validada (1.0 quando não há citações ou
             quando todas casaram).
+        all_citations: lista completa (válidas + inválidas), com ``chunk_id``
+            e ``jurisdicao`` populados quando o cruzamento contra o contexto
+            foi bem-sucedido. Sprint A2-redator-A — usado pelo
+            ``RedatorAgent`` para emitir ``PecaJuridicaContent.legal_citations``.
+            Extensão aditiva sobre A1 (default lista vazia preserva
+            chamadores existentes).
     """
 
     valid: bool
     total: int
     invalid: list[CitationRef] = field(default_factory=list)
     coverage_ratio: float = 1.0
+    all_citations: list[CitationRef] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -354,4 +361,5 @@ def validate_citations(
         total=total,
         invalid=invalid,
         coverage_ratio=coverage,
+        all_citations=enriched,
     )
