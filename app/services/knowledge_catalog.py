@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from app.models.knowledge_catalog import KnowledgeChunk
 from app.models.legislation import LegislationDocument
 from app.services.chunking import TextChunk, chunk_text
-from app.services.embeddings import EMBEDDING_DIM, EMBEDDING_MODEL, embed_batch, embed_text
+from app.services.embeddings import EMBEDDING_DIM, current_model, embed_batch, embed_text
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ def _insert_chunks(
             "identifier": base_metadata.get("identifier"),
             "effective_date": base_metadata.get("effective_date"),
             "embedding": _vector_literal(vector),
-            "embedding_model": EMBEDDING_MODEL,
+            "embedding_model": current_model(),
             "embedding_dim": EMBEDDING_DIM,
             "content_hash": _hash_chunk(source_type, source_ref, chunk.index, chunk.text),
             "extra_metadata": _json.dumps(extra_metadata) if extra_metadata else None,
