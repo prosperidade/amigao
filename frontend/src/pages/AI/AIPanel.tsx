@@ -51,6 +51,8 @@ export default function AIPanel({ processId, processDemandType, processDescripti
   const [expandedJob, setExpandedJob] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState('');
   const [selectedChain, setSelectedChain] = useState('');
+  // Sprint W (2026-05-14) — filtro do histórico por agente. '' = todos.
+  const [filterAgent, setFilterAgent] = useState('');
 
   // --- Queries ---
 
@@ -206,17 +208,49 @@ export default function AIPanel({ processId, processDemandType, processDescripti
 
       {/* Histórico de execuções */}
       <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
-        <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-gray-400 dark:text-slate-400" />
-          Histórico de execuções de IA
-          {jobsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 ml-1" />}
-        </h4>
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <h4 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <Clock className="w-4 h-4 text-gray-400 dark:text-slate-400" />
+            Histórico de execuções de IA
+            {jobsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 ml-1" />}
+          </h4>
+          {/* Sprint W — filtro por agente */}
+          {jobs.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500 dark:text-slate-400">Filtrar:</label>
+              <select
+                value={filterAgent}
+                onChange={e => setFilterAgent(e.target.value)}
+                className="text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-200"
+              >
+                <option value="">Todos os agentes ({jobs.length})</option>
+                {Array.from(new Set(jobs.map(j => j.agent_name).filter(Boolean))).map(name => {
+                  const count = jobs.filter(j => j.agent_name === name).length;
+                  return (
+                    <option key={name as string} value={name as string}>
+                      {AGENT_LABELS[name as string] ?? name} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+        </div>
 
-        {jobs.length === 0 ? (
-          <p className="text-sm text-gray-400 dark:text-slate-500">Nenhuma execução de IA registrada para este caso.</p>
-        ) : (
+        {(() => {
+          const filteredJobs = filterAgent ? jobs.filter(j => j.agent_name === filterAgent) : jobs;
+          if (filteredJobs.length === 0) {
+            return (
+              <p className="text-sm text-gray-400 dark:text-slate-500">
+                {filterAgent
+                  ? `Nenhuma execução do agente ${AGENT_LABELS[filterAgent] ?? filterAgent} para este caso.`
+                  : 'Nenhuma execução de IA registrada para este caso.'}
+              </p>
+            );
+          }
+          return (
           <div className="space-y-2">
-            {jobs.map(job => (
+            {filteredJobs.map(job => (
               <div key={job.id} className="border border-gray-100 dark:border-white/10 rounded-xl overflow-hidden">
                 <button
                   onClick={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
@@ -296,7 +330,8 @@ export default function AIPanel({ processId, processDemandType, processDescripti
               </div>
             ))}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

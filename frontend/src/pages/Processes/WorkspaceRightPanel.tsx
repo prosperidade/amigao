@@ -10,12 +10,16 @@
  *  - Travas/blockers
  *  - Agente principal da etapa
  */
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
-import { CheckCircle2, AlertTriangle, ArrowRight, Bot, Target, Lock, Loader2, ChevronRight } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, ArrowRight, Bot, Target, Lock, Loader2, ChevronRight, Plus, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MACROETAPA_STATE_BADGE, MACROETAPA_LABELS } from './quadro-types';
+import { AGENT_LABELS } from '@/types/agent';
+
+interface AgentInfo { name: string; description: string }
 
 interface CanAdvance {
   can_advance: boolean;
@@ -86,6 +90,36 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
     onError: (err: AxiosError<{ detail?: string }>) => {
       toast.error(err.response?.data?.detail ?? 'Erro ao avançar etapa');
     },
+  });
+
+  // Sprint W (2026-05-14) — disparar qualquer agente direto do painel lateral.
+  // Antes, os agentes da etapa eram só badges informativos. Agora viraram
+  // botões que postam /agents/run-async (assíncrono — resultado no histórico
+  // do AIPanel/aba IA).
+  const { data: allAgents = [] } = useQuery<AgentInfo[]>({
+    queryKey: ['agents-registry'],
+    queryFn: () => api.get('/agents/registry').then(r => r.data),
+    staleTime: 300_000,
+  });
+  const [showExtraAgents, setShowExtraAgents] = useState(false);
+  const [runningAgent, setRunningAgent] = useState<string | null>(null);
+
+  const runAgentMutation = useMutation({
+    mutationFn: (agentName: string) =>
+      api.post('/agents/run-async', {
+        agent_name: agentName,
+        process_id: processId,
+        metadata: {},
+      }),
+    onMutate: (agentName) => setRunningAgent(agentName),
+    onSuccess: (_data, agentName) => {
+      toast.success(`Agente ${AGENT_LABELS[agentName] ?? agentName} disparado — veja a aba IA`);
+      queryClient.invalidateQueries({ queryKey: ['ai-jobs', processId] });
+    },
+    onError: (err: AxiosError<{ detail?: string }>) => {
+      toast.error(err.response?.data?.detail ?? 'Erro ao executar agente');
+    },
+    onSettled: () => setRunningAgent(null),
   });
 
   if (!gate) {
@@ -268,51 +302,99 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
         </div>
       )}
 
-      {/* Agentes da etapa — CAM3WS-004 (Sprint N): principais + secundários vindos da API */}
-      {(primaryAgents.length > 0 || secondaryAgents.length > 0) && (
-        <div className="rounded-2xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 p-4 space-y-2">
-          <div className="flex items-center gap-2">
-            <Bot className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-            <span className="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-300 font-semibold">
-              Agentes da etapa
+      {/* Agentes da etapa — CAM3WS-004 (Sprint N) + Sprint W (2026-05-14):
+          principais + secundários da etapa viraram botões clicáveis. Disparam
+          /agents/run-async; resultado aparece no histórico da aba IA. */}
+      <div className="rounded-2xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <Bot className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+          <span className="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-300 font-semibold">
+            Agentes da etapa
+          </span>
+        </div>
+        {primaryAgents.length > 0 && (
+          <div>
+            <span className="block text-[10px] uppercase tracking-wide text-sky-700/80 dark:text-sky-300/80 font-semibold mb-1">
+              Principal
             </span>
-          </div>
-          {primaryAgents.length > 0 && (
-            <div>
-              <span className="block text-[10px] uppercase tracking-wide text-sky-700/80 dark:text-sky-300/80 font-semibold mb-0.5">
-                Principal
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {primaryAgents.map(a => (
-                  <span
-                    key={a}
-                    className="text-[11px] px-1.5 py-0.5 rounded-md bg-sky-200/60 dark:bg-sky-500/30 text-sky-900 dark:text-sky-100 font-medium"
-                  >
-                    {a}
-                  </span>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-1.5">
+              {primaryAgents.map(a => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => runAgentMutation.mutate(a)}
+                  disabled={runningAgent === a}
+                  title={`Executar agente ${AGENT_LABELS[a] ?? a}`}
+                  className="text-[11px] px-2 py-1 rounded-md bg-sky-200/80 hover:bg-sky-300 dark:bg-sky-500/30 dark:hover:bg-sky-500/40 text-sky-900 dark:text-sky-100 font-medium inline-flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {runningAgent === a
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Zap className="w-3 h-3" />}
+                  {AGENT_LABELS[a] ?? a}
+                </button>
+              ))}
             </div>
-          )}
-          {secondaryAgents.length > 0 && (
-            <div>
-              <span className="block text-[10px] uppercase tracking-wide text-sky-700/60 dark:text-sky-300/60 font-semibold mb-0.5">
-                Secundários
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {secondaryAgents.map(a => (
-                  <span
-                    key={a}
-                    className="text-[11px] px-1.5 py-0.5 rounded-md bg-sky-100/60 dark:bg-sky-500/10 text-sky-800 dark:text-sky-200 border border-sky-200 dark:border-sky-500/20"
+          </div>
+        )}
+        {secondaryAgents.length > 0 && (
+          <div>
+            <span className="block text-[10px] uppercase tracking-wide text-sky-700/60 dark:text-sky-300/60 font-semibold mb-1">
+              Secundários
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {secondaryAgents.map(a => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => runAgentMutation.mutate(a)}
+                  disabled={runningAgent === a}
+                  title={`Executar agente ${AGENT_LABELS[a] ?? a}`}
+                  className="text-[11px] px-2 py-1 rounded-md bg-sky-100/80 hover:bg-sky-200 dark:bg-sky-500/10 dark:hover:bg-sky-500/20 text-sky-800 dark:text-sky-200 border border-sky-200 dark:border-sky-500/20 inline-flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {runningAgent === a
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Zap className="w-3 h-3" />}
+                  {AGENT_LABELS[a] ?? a}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Sprint W — "outros agentes" abre dropdown com TODOS os agentes do registry,
+            inclusive os fora da macroetapa atual (ex: legislacao em uma etapa que não
+            lista ele como primário/secundário, ou marketing fora do funil comercial). */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowExtraAgents(v => !v)}
+            className="text-[11px] text-sky-700 dark:text-sky-300 hover:underline inline-flex items-center gap-1 mt-1"
+          >
+            <Plus className="w-3 h-3" />
+            {showExtraAgents ? 'Ocultar outros agentes' : 'Outros agentes'}
+          </button>
+          {showExtraAgents && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {allAgents
+                .filter(a => !primaryAgents.includes(a.name) && !secondaryAgents.includes(a.name))
+                .map(a => (
+                  <button
+                    key={a.name}
+                    type="button"
+                    onClick={() => runAgentMutation.mutate(a.name)}
+                    disabled={runningAgent === a.name}
+                    title={a.description}
+                    className="text-[11px] px-2 py-1 rounded-md bg-white/80 hover:bg-white dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-slate-200 border border-gray-200 dark:border-white/10 inline-flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {a}
-                  </span>
+                    {runningAgent === a.name
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Zap className="w-3 h-3" />}
+                    {AGENT_LABELS[a.name] ?? a.name}
+                  </button>
                 ))}
-              </div>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
