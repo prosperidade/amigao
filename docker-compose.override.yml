@@ -27,6 +27,11 @@ services:
       - ./alembic.ini:/app/alembic.ini
       - ./scripts:/app/scripts
       - ./seed.py:/app/seed.py
+      # Sprint W ingest — corpora estaduais MS/MT (compêndios da sócia).
+      # Read-only para o container não escrever de volta. Os nomes originais
+      # têm "ç/ã" e espaço, então o destino é normalizado pra ASCII.
+      - "./legislação ms/MATOGROSSODOSUL:/app/legislacao_estadual/MS:ro"
+      - "./legislação mt/MATOGROSSO:/app/legislacao_estadual/MT:ro"
     environment:
       # Identificação visual no log de que o override está ativo
       DEV_OVERRIDE: "1"

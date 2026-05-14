@@ -35,14 +35,17 @@ GEMINI_EMBED_URL = (
 )
 
 # Throttle entre chamadas. Documentado como ~100 RPM no free tier mas a janela
-# curta e mais agressiva — 0.65s causou 429 em meio a docs grandes. 1.0s = 60 RPM
-# regime estavel; combina com retry com backoff abaixo para sobreviver a picos.
-_THROTTLE_SECONDS = 1.0
+# curta e mais agressiva — 0.65s causou 429 em meio a docs grandes; 1.0s causou
+# 429 em doc com 466 chunks. 2.0s = 30 RPM, regime conservador alinhado com o
+# free tier sem saturar a janela curta. Combina com retry/backoff abaixo.
+_THROTTLE_SECONDS = 2.0
 
 # Retry com backoff exponencial em 429 (rate limit) e 5xx (instabilidade do provider).
-# 5s, 10s, 20s, 40s, 80s = ate ~2.5 min de espera total antes de desistir.
+# Base 30s → 30s, 60s, 120s, 240s, 480s = ate ~15 min antes de desistir.
+# Necessario porque o limite do Gemini e por minuto e o 429 frequentemente
+# precisa da janela inteira esvaziar. Tradeoff de tempo aceito vs failure rate.
 _MAX_RETRIES = 5
-_RETRY_BASE_SECONDS = 5.0
+_RETRY_BASE_SECONDS = 30.0
 
 
 class EmbeddingError(RuntimeError):
@@ -118,7 +121,7 @@ def embed_text(text: str, *, task_type: str = "RETRIEVAL_DOCUMENT") -> list[floa
         raise EmbeddingError("Texto vazio nao pode ser embedado.")
 
     key = _ensure_key()
-    with httpx.Client(timeout=30.0) as client:
+    with httpx.Client(timeout=60.0) as client:
         return _embed_single(client, text, key=key, task_type=task_type)
 
 
@@ -136,7 +139,7 @@ def embed_batch(
     out: list[list[float]] = []
     total = len(items)
 
-    with httpx.Client(timeout=30.0) as client:
+    with httpx.Client(timeout=60.0) as client:
         for idx, text in enumerate(items):
             try:
                 values = _embed_single(client, text, key=key, task_type=task_type)
