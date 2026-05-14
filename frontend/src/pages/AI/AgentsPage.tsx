@@ -96,10 +96,13 @@ export default function AgentsPage() {
 
   // --- Mutations ---
 
+  // Sprint W (2026-05-14) — mutationFn agora aceita o nome do agente como
+  // argumento. Permite tanto o dropdown ("Executar agente") quanto botões
+  // diretos nos cards da lista usarem a mesma mutation sem disputar `selectedAgent`.
   const runAgentMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (agentName: string) =>
       api.post('/agents/run-async', {
-        agent_name: selectedAgent,
+        agent_name: agentName,
         process_id: processIdInput ? parseInt(processIdInput) : null,
         metadata: {},
       }).then(r => r.data),
@@ -301,6 +304,20 @@ export default function AgentsPage() {
                         {agentFailed > 0 && <span className="text-red-500 ml-1">{agentFailed} falhas</span>}
                       </span>
                     )}
+                    {/* Sprint W (2026-05-14) — botão Executar direto no card.
+                        Antes era preciso usar o dropdown abaixo; agora basta clicar. */}
+                    <button
+                      type="button"
+                      onClick={() => runAgentMutation.mutate(a.name)}
+                      disabled={runAgentMutation.isPending && runAgentMutation.variables === a.name}
+                      title={processIdInput ? `Executar para o processo #${processIdInput}` : 'Executar (sem contexto de processo)'}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
+                    >
+                      {runAgentMutation.isPending && runAgentMutation.variables === a.name
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <Zap className="w-3 h-3" />}
+                      Executar
+                    </button>
                   </div>
                 </div>
               );
@@ -346,7 +363,7 @@ export default function AgentsPage() {
                 ))}
               </select>
               <button
-                onClick={() => runAgentMutation.mutate()}
+                onClick={() => selectedAgent && runAgentMutation.mutate(selectedAgent)}
                 disabled={!selectedAgent || runAgentMutation.isPending}
                 className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors"
               >
