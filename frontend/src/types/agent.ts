@@ -69,7 +69,7 @@ export const AGENT_LABELS: Record<string, string> = {
   atendimento: 'Atendimento',
   extrator: 'Extrator de Documentos',
   diagnostico: 'Diagnóstico Ambiental',
-  legislacao: 'Enquadramento Regulatório',
+  legislacao: 'Legislação',
   redator: 'Redator de Documentos',
   orcamento: 'Orçamento',
   financeiro: 'Análise Financeira',
