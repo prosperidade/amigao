@@ -257,7 +257,84 @@ docker-compose.yml                   — porta exposta do db: 5433 → 55432 (co
 
 ---
 
+## Sprint W — RAG estadual MS/MT + embeddings OpenAI + UI dos agentes (14/05/2026)
 
+### Motivacao
+
+A Sprint V destravou RAG no agente `legislacao` mas o corpus tinha so federal + GO. A socia entregou compendios tematicos de MS (8 PDFs) e MT (11 PDFs) — material da pratica regulatoria de cada estado, organizado por nucleo (Constitucional, Territorial, Florestal/CAR, Licenciamento, Hidrico, Infracoes, Credito, Biomas, Fogo, Fauna, Ativos de Carbono).
+
+Plano original: ingerir LegislationDocument → reindexar no knowledge_catalog com Gemini embeddings. **Plano se desfez** quando o reindex estourou a cota diaria do free tier do Gemini logo no segundo doc da fila. Sprint pivotou pra OpenAI embeddings.
+
+### Decisoes-chave
+
+1. **OpenAI `text-embedding-3-small` (dim=768) substitui Gemini `gemini-embedding-001` como default de embedding.** Mantem schema `vector(768)` sem migration; batch nativo (ate 100 inputs/request); 34x mais rapido no smoke test (151s → 4.5s pro mesmo doc). Custo ~$0.13 pra reindexar tudo.
+2. **Vetores entre provedores sao incompativeis.** Trocar exigiu apagar todos os 2.130 chunks de legislacao existentes e re-embedar tudo. Documentado no docstring do `embeddings.py` para evitar mistura acidental.
+3. **LLM do agente legislacao migrado para Gemini 2.5 Flash/Pro** (era 2.0-flash/1.5-pro — descontinuados para contas com billing novo). Necessario apos socia ativar billing.
+4. **max_tokens do agente legislacao subiu para 8192** (era 4096). Gemini 2.5 Flash e verboso e estava truncando o JSON antes do fechamento, quebrando o parser.
+
+### O que foi feito
+
+| ID | Item | Commit | Descricao |
+|---|---|---|---|
+| W.1 | Ingest LegislationDocument MS/MT | `e26e6be` | Novo `scripts/ingest_legislacao_estadual.py` deriva metadata do nome do arquivo (NUC + tema). 19 docs inseridos (8 MS + 11 MT), 5.3M tokens. Bind-mount das pastas legislacao ms/mt no container api via `docker-compose.override.yml`. |
+| W.2 | Refator embeddings multi-provider | `c7f19fe` | `embeddings.py` suporta OpenAI (default se `OPENAI_API_KEY`) e Gemini. Saida 768 dim nos dois via `dimensions` (OpenAI) e `outputDimensionality` (Gemini). OpenAI usa batch nativo. `current_model()` exposto para `knowledge_catalog` persistir o nome do modelo por chunk. |
+| W.3 | Reindex completo MS/MT | `c7f19fe` | Apagados 2130 chunks Gemini. Re-embedados todos 42 docs com OpenAI: 22.573 chunks, zero falhas, ~10 min total. Distribuicao: MS 4587 / MT 13411 / GO 3855 / Federal 720. |
+| W.4 | UI: agentes da etapa viraram botoes + filtro | `9e1618a` | `WorkspaceRightPanel` — primary/secondary_agents agora sao botoes que disparam `/agents/run-async`. Novo "Outros agentes" com TODOS os 10 do registry. `AIPanel` — filtro de agente no historico com contagem por agente. |
+| W.5 | UI: botao Executar em cada card de /agents | `7991b1f` | `runAgentMutation` refatorada para aceitar `agentName` como argumento. Cada card ganhou botao "Executar" proprio com loading state por agente. |
+| W.6 | UI: rename label legislacao | `3527d8c` | "Enquadramento Regulatorio" → "Legislacao" em `AGENT_LABELS`. |
+
+### Mudancas pendentes de commit (entrelacadas com Sprint B1)
+
+`app/core/config.py` tem mudancas misturadas. Linhas da Sprint W aguardando commit junto com a B1:
+
+- L114: `AI_FALLBACK_MODEL = "gemini/gemini-2.5-flash"` (era 1.5-flash)
+- L141-143: `CLAUDE_LEGAL_MAX_TOKENS = 8192` (era 4096)
+- L148-151: `GEMINI_LEGAL_MODEL = "gemini/gemini-2.5-flash"` e `GEMINI_LEGAL_LONG_MODEL = "gemini/gemini-2.5-pro"`
+
+### Validacao em ambiente local
+
+Teste E2E do agente `legislacao` apos billing Gemini ativado:
+
+- Query: "licenciamento simplificado para atividade agropecuaria de pequeno porte em Mato Grosso" / state=MT
+- Resultado: `success=True`, `confidence=alta`, **8 `chunks_referenced`** todos da legislacao MT
+- LLM citou normas reais: LC 592/2017 (PRA+CAR+Licenciamento MT), Decreto 697/2020 (procedimento SEMA-MT), Decreto 1.268/2022 (taxas), Decreto 1807/2026 (Autorizacao Provisoria)
+- Caminho regulatorio recomendado: LAC (Licenca por Adesao e Compromisso)
+
+### Configuracao de provider de embeddings
+
+Auto-detect: usa OpenAI se `OPENAI_API_KEY` presente; senao Gemini. Override explicito: `EMBEDDING_PROVIDER=openai|gemini`.
+
+⚠ **Trocar provider exige re-embedar TODOS os chunks** — vetores de provedores diferentes vivem em espacos incompativeis. Procedimento:
+```bash
+docker compose exec db psql -U postgres -d amigao_db -c "DELETE FROM knowledge_catalog WHERE source_type='legislation';"
+docker compose exec api python scripts/reindex_sync.py
+```
+
+### Arquivos criados
+
+```
+scripts/ingest_legislacao_estadual.py
+```
+
+### Arquivos modificados (commitados)
+
+```
+docker-compose.override.yml
+app/services/embeddings.py
+app/services/knowledge_catalog.py
+frontend/src/pages/Processes/WorkspaceRightPanel.tsx
+frontend/src/pages/AI/AIPanel.tsx
+frontend/src/pages/AI/AgentsPage.tsx
+frontend/src/types/agent.ts
+```
+
+### Pendencias
+
+- Commit das mudancas no `config.py` (Gemini 2.5 + max_tokens) — aguardando fechar Sprint B1
+- Testar query com `state=MS` para validar que chunks MS tambem voltam
+- Sprint W original (StageGap + Schemas de Saida + aba Checklist) ainda pendente
+
+---
 
 ### Sprint IA-3 — Consolidacao e Testes
 - [ ] Testes unitarios para cada agente com mock de ai_gateway
