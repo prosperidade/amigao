@@ -7,11 +7,14 @@ regente_sass/
 amigao_regente/
 # Legislação bruta fornecida pela sócia (PDFs grandes; ingeridos em legislation_documents)
 legislacao/
+legislação ms/
+legislação mt/
 openapi_temp.json
 token_temp.txt
 
 # Ambiente Python
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -19,6 +22,10 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre_configuration
 
 # Ambiente
 .env
@@ -30,7 +37,15 @@ build/
 
 # Logs
 *.log
+api_logs.txt
+worker_logs.txt
 ops/runtime/
+
+# Hotfix scripts pontuais (efêmeros)
+.fix.py
+
+# MemPalace residual (revogado em 23/04 — Sprint Z)
+mempalace.yaml
 
 # Node / Frontend
 **/node_modules/
