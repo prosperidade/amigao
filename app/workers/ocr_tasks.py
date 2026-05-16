@@ -1,16 +1,18 @@
 """
 ocr_tasks — Task Celery que roda OCR antes do agente extrator.
 
-Sprint V hardening (2026-05-08). Substitui o `run_agent.delay("extrator", ...)`
-direto que o `/intake/drafts/{id}/import` fazia. Agora cada documento passa por:
+Sprint V hardening (2026-05-08). Auto-trigger em /confirm-upload (2026-05-16):
+todo PDF persistido passa por esta task; o frontend acompanha via WebSocket.
 
-  1. Cache self: skip se Document.extracted_text já está populado.
+Pipeline:
+  1. Cache self: skip se Document.extracted_text já populado (a menos que force=True).
   2. Cache twin: skip se outro Document do mesmo tenant com mesmo SHA-256
      já tem texto extraído (re-upload do mesmo arquivo).
   3. Budget guard: respeita o teto mensal de IA do tenant antes de chamar Gemini.
-  4. OCR via app.services.ocr_pdf (pypdf grátis + Gemini Vision fallback).
+  4. OCR via app.services.ocr_pdf (pypdf → Gemini Vision → OpenAI Vision).
   5. AIJob persistido (job_type=extract_document, agent_name='ocr_pdf') para audit.
-  6. Despacha o agente extrator com a mesma metadata do fluxo original.
+  6. Evento WebSocket document.ocr.completed / document.ocr.failed por tenant.
+  7. Despacha o agente extrator com metadata padronizada.
 """
 
 from __future__ import annotations
@@ -39,10 +41,12 @@ def ocr_then_extract(
     tenant_id: int,
     user_id: int,
     draft_id: Optional[int] = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     from app.core.ai_gateway import check_tenant_monthly_budget  # noqa: PLC0415
     from app.models.ai_job import AIJob, AIJobStatus, AIJobType  # noqa: PLC0415
     from app.models.document import Document, OcrStatus  # noqa: PLC0415
+    from app.services.notifications import publish_realtime_event  # noqa: PLC0415
     from app.services.ocr_pdf import compute_sha256, extract_text_from_pdf  # noqa: PLC0415
     from app.services.storage import get_storage_service  # noqa: PLC0415
     from app.workers.agent_tasks import run_agent  # noqa: PLC0415
@@ -61,11 +65,16 @@ def ocr_then_extract(
             )
             return {"status": "not_found", "doc_id": doc_id}
 
-        # 1) Cache self — texto já existe
-        if (doc.extracted_text or "").strip():
+        # 1) Cache self — texto já existe (force=True bypassa pra re-OCR)
+        if (doc.extracted_text or "").strip() and not force:
             logger.info(
                 "ocr_then_extract: doc=%s cache_hit_self chars=%d",
                 doc_id, len(doc.extracted_text),
+            )
+            _emit_ocr_event(
+                publish_realtime_event, tenant_id, doc,
+                status_label="completed", method="cache_self",
+                chars=len(doc.extracted_text), cost_usd=0.0,
             )
             _dispatch_extrator(run_agent, doc, draft_id, tenant_id, user_id)
             return {
@@ -88,6 +97,11 @@ def ocr_then_extract(
             logger.warning(
                 "ocr_then_extract: storage_key=%s sem bytes (MinIO)",
                 doc.storage_key,
+            )
+            _emit_ocr_event(
+                publish_realtime_event, tenant_id, doc,
+                status_label="failed", method="none",
+                chars=0, cost_usd=0.0, error="no_bytes",
             )
             return {"status": "no_bytes", "doc_id": doc_id}
 
@@ -122,6 +136,12 @@ def ocr_then_extract(
                 "ocr_then_extract: doc=%s cache_hit_twin twin=%s chars=%d",
                 doc_id, twin.id, len(twin.extracted_text),
             )
+            _emit_ocr_event(
+                publish_realtime_event, tenant_id, doc,
+                status_label="completed", method="cache_twin",
+                chars=len(twin.extracted_text), cost_usd=0.0,
+                twin_id=twin.id,
+            )
             _dispatch_extrator(run_agent, doc, draft_id, tenant_id, user_id)
             return {
                 "status": "cache_hit_twin",
@@ -140,6 +160,11 @@ def ocr_then_extract(
             logger.warning(
                 "ocr_then_extract: budget guard rejeitou tenant=%s doc=%s: %s",
                 tenant_id, doc_id, exc,
+            )
+            _emit_ocr_event(
+                publish_realtime_event, tenant_id, doc,
+                status_label="skipped_budget", method="none",
+                chars=0, cost_usd=0.0, error=str(exc),
             )
             return {
                 "status": "budget_exceeded",
@@ -209,7 +234,18 @@ def ocr_then_extract(
             result.duration_ms, ai_job.id,
         )
 
-        _dispatch_extrator(run_agent, doc, draft_id, tenant_id, user_id)
+        _emit_ocr_event(
+            publish_realtime_event, tenant_id, doc,
+            status_label="completed" if result.text else "failed",
+            method=result.method,
+            chars=result.chars,
+            cost_usd=result.cost_usd,
+            ai_job_id=ai_job.id,
+            error=result.error if not result.text else None,
+        )
+
+        if result.text:
+            _dispatch_extrator(run_agent, doc, draft_id, tenant_id, user_id)
         return {
             "status": "ocr_ok" if result.text else "ocr_failed",
             "doc_id": doc_id,
@@ -244,3 +280,49 @@ def _dispatch_extrator(run_agent, doc, draft_id, tenant_id, user_id) -> None:
             "intake_draft_id": draft_id,
         },
     )
+
+
+def _emit_ocr_event(
+    publish_realtime_event,
+    tenant_id: int,
+    doc,
+    *,
+    status_label: str,
+    method: str,
+    chars: int,
+    cost_usd: float,
+    ai_job_id: Optional[int] = None,
+    twin_id: Optional[int] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Emite document.ocr.completed (sucesso/cache) ou document.ocr.failed.
+
+    Falha de publicação é logada e absorvida — nunca derruba a task de OCR.
+    """
+    event_type = "document.ocr.failed" if status_label in ("failed", "skipped_budget") else "document.ocr.completed"
+    payload: dict[str, Any] = {
+        "document_id": doc.id,
+        "process_id": doc.process_id,
+        "client_id": doc.client_id,
+        "status": status_label,
+        "method": method,
+        "chars": chars,
+        "cost_usd": cost_usd,
+    }
+    if ai_job_id is not None:
+        payload["ai_job_id"] = ai_job_id
+    if twin_id is not None:
+        payload["twin_id"] = twin_id
+    if error:
+        payload["error"] = error
+    try:
+        publish_realtime_event(
+            tenant_id=tenant_id,
+            event_type=event_type,
+            payload=payload,
+        )
+    except Exception as exc:  # noqa: BLE001 — defensive: WS failure shouldn't fail OCR
+        logger.warning(
+            "ocr_then_extract: falha ao publicar %s para doc=%s: %s",
+            event_type, doc.id, exc,
+        )
