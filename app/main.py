@@ -30,6 +30,7 @@ from app.api.v1 import (
     regulatory,
     tasks,
     threads,
+    waitlist,
     workflows,
 )
 from app.api.websockets import manager as websocket_manager
@@ -156,6 +157,7 @@ app.include_router(dashboard.router, prefix=f"{settings.API_V1_STR}/dashboard", 
 app.include_router(legislation.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Base Legislativa"])
 app.include_router(legislation_alerts.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Alertas Legislativos"])
 app.include_router(knowledge.router, prefix=f"{settings.API_V1_STR}/knowledge", tags=["Knowledge Catalog (RAG)"])
+app.include_router(waitlist.router, prefix=f"{settings.API_V1_STR}/waitlist", tags=["Waitlist (Regente)"])
 app.include_router(websocket_router, tags=["Tempo Real"])
 
 

@@ -27,6 +27,8 @@ PyYAML>=6.0  # Sprint A1 — front-matter de SKILL.md (já vinha como transitivo
 slowapi>=0.1.9
 pytest
 pytest-cov
+pytest-httpx>=0.30  # Sprint B1 — mock da API Resend nos testes
+pytest-celery>=1.0  # Sprint B1 — execução eager de tasks em testes (PR 3)
 testcontainers[postgres]
 ruff
 mypy

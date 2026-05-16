@@ -88,6 +88,16 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     EMAILS_FROM_EMAIL: EmailStr = "noreply@amigao.com"
     EMAILS_FROM_NAME: str = "Amigão do Meio Ambiente"
+
+    # RESEND (Sprint B1 — waitlist do Regente)
+    # Coexiste com SMTP: SMTP segue cobrindo emails do portal interno;
+    # Resend cobre exclusivamente o fluxo da waitlist (send + Audience).
+    # Migração completa do EmailService para Resend fica para sprint dedicada.
+    RESEND_API_KEY: str = ""
+    RESEND_AUDIENCE_ID: str = ""
+    RESEND_FROM_EMAIL: EmailStr = "contato@regenteambiental.com.br"
+    RESEND_FROM_NAME: str = "Regente Ambiental"
+
     CLIENT_PORTAL_URL: str = "http://localhost:3000/dashboard"
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://172.31.32.1:3000"
 
@@ -96,8 +106,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    # Sprint W (2026-05-14) — provedor de embeddings: "openai" | "gemini".
+    # Vazio = auto-detecta (OpenAI se key, senão Gemini). Trocar exige
+    # re-embedar TODOS os chunks (vetores entre provedores são incompatíveis).
+    EMBEDDING_PROVIDER: str = ""
     AI_DEFAULT_MODEL: str = "gpt-4o-mini"
-    AI_FALLBACK_MODEL: str = "gemini/gemini-1.5-flash"
+    AI_FALLBACK_MODEL: str = "gemini/gemini-2.5-flash"
     AI_MAX_TOKENS: int = 2048
     AI_TEMPERATURE: float = 0.2
     AI_TIMEOUT_SECONDS: float = 30.0
@@ -124,15 +138,19 @@ class Settings(BaseSettings):
 
     # Claude API (agente regulatório)
     CLAUDE_LEGAL_MODEL: str = "claude-sonnet-4-20250514"
-    CLAUDE_LEGAL_MAX_TOKENS: int = 4096
+    # Sprint W (2026-05-14): subido de 4096 para 8192. Gemini 2.5 Flash é
+    # verboso e estava truncando o JSON antes do fechamento, quebrando o parser.
+    CLAUDE_LEGAL_MAX_TOKENS: int = 8192
     CLAUDE_LEGAL_TEMPERATURE: float = 0.1
 
     # Gemini (context loading de legislação)
-    # Default: Flash (1M tokens, $0.10/1M) — caso comum.
-    GEMINI_LEGAL_MODEL: str = "gemini/gemini-2.0-flash"
-    # Sprint 0 — modelo para consultas com contexto >800K tokens (janela 2M).
-    # Custo: $1.25/1M até 200K / $2.50/1M acima. Só ativado quando a consulta exige.
-    GEMINI_LEGAL_LONG_MODEL: str = "gemini/gemini-1.5-pro"
+    # Default: Flash (1M tokens) — caso comum.
+    # Sprint W (2026-05-14): migrado de gemini-2.0-flash (descontinuado para
+    # contas com billing novo) para gemini-2.5-flash.
+    GEMINI_LEGAL_MODEL: str = "gemini/gemini-2.5-flash"
+    # Modelo para consultas com contexto >800K tokens (janela 2M).
+    # Sprint W: migrado de gemini-1.5-pro para gemini-2.5-pro.
+    GEMINI_LEGAL_LONG_MODEL: str = "gemini/gemini-2.5-pro"
     # Threshold de contexto acima do qual o roteador troca Flash → Pro.
     GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS: int = 3_200_000  # ~800K tokens
 
@@ -252,6 +270,13 @@ class Settings(BaseSettings):
 
         if self.is_production and not self.EMAILS_FROM_NAME.strip():
             raise ValueError("EMAILS_FROM_NAME não pode ser vazio em produção.")
+
+        # Sprint B1 — Resend é obrigatório em produção para o fluxo de waitlist.
+        # API key fica vazia em dev (skip silencioso no client); valida só em prod.
+        if self.is_production and not self.RESEND_API_KEY.strip():
+            raise ValueError(
+                "RESEND_API_KEY deve estar configurado em produção (sprint B1 — waitlist)."
+            )
 
         if self.alert_webhook_auth_token and not self.alert_webhook_auth_header:
             raise ValueError(
