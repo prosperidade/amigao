@@ -88,7 +88,7 @@ React 18 + Vite + TypeScript + TailwindCSS. Stack frontend foi escolhida em 2026
 - **Form/validação:** react-hook-form + Zod
 - **Animação:** framer-motion
 
-38 telas em 10 áreas: Auth, Clients, Processes, Properties, Intake, Contracts, Proposals, Dashboard, AI, Settings.
+36 telas em 10 áreas: Auth, Clients, Processes, Properties, Intake, Contracts, Proposals, Dashboard, AI, Settings.
 
 ### Banco de dados — Postgres + extensões
 
@@ -144,7 +144,7 @@ Toda escrita relevante (mudança de status, atribuição de tarefa, geração de
 
 10 agentes herdam de `BaseAgent` (`app/agents/base.py`). Cada um tem `name`, `palace_room` (vestígio do MemPalace, em remoção), e um método `_run_internal` que executa a tarefa. O `BaseAgent.run()` cuida do lifecycle: criar `AIJob`, validar cost cap, executar, registrar custo/tokens, emitir evento realtime, marcar `requires_review` quando aplicável.
 
-Agentes não chamam outros agentes diretamente — encadeamento acontece via `app/agents/orchestrator.py` (8 chains pré-definidas).
+Agentes não chamam outros agentes diretamente — encadeamento acontece via `app/agents/orchestrator.py` (9 chains pré-definidas: `intake`, `diagnostico_completo`, `gerar_proposta`, `gerar_documento`, `analise_regulatoria`, `enquadramento_regulatorio`, `analise_financeira`, `monitoramento`, `marketing_content`).
 
 ### RAG via pgvector com busca por cosseno
 
