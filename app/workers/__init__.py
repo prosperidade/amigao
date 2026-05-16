@@ -21,3 +21,7 @@ from app.workers.knowledge_indexer import (  # noqa: F401
     index_legislation_document_task,
     reindex_all_legislation,
 )
+from app.workers.waitlist_tasks import (  # noqa: F401
+    send_welcome_email,
+    sync_resend_audience,
+)
