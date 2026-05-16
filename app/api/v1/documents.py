@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import AccessContext, get_access_context, get_current_internal_user, get_db
@@ -135,7 +135,11 @@ def get_upload_url(
     return result
 
 
-@router.post("/confirm-upload", response_model=DocumentResponse)
+@router.post(
+    "/confirm-upload",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def confirm_upload(
     body: DocumentConfirmRequest,
     db: Session = Depends(get_db),
@@ -143,7 +147,14 @@ def confirm_upload(
 ):
     """
     Etapa 2: Confirma metadados após upload direto ao MinIO.
-    Persiste o registro do documento no banco.
+
+    Persiste o Document e enfileira o pipeline de extração de texto:
+    - PDFs → `ocr_then_extract` (OCR cascata pypdf→Gemini→OpenAI + dispatch do extrator)
+    - Não-PDFs extractable → `run_agent('extrator')` direto (sem etapa de OCR)
+
+    Retorna 202 Accepted: o documento está persistido e processado em background.
+    O frontend acompanha o progresso via WebSocket (`document.ocr.completed`) ou
+    polling em `Document.ocr_status`.
     """
     proc_repo = ProcessRepository(db, access_context.tenant_id)
     process = proc_repo.get_scoped_or_404(body.process_id, client_id=access_context.client_id)
@@ -201,9 +212,23 @@ def confirm_upload(
             exc,
         )
 
-    # Trigger Agente Extrator para doc_types extraiveis (async, fire-and-forget)
+    # Pipeline de extração textual. PDFs passam pelo OCR cascata (pypdf → Gemini →
+    # OpenAI Vision) que persiste `Document.extracted_text` antes de despachar o
+    # agente extrator. Outros formatos extraíveis (imagens) caem direto no extrator
+    # — ocr_pdf não rasteriza imagens isoladas.
     EXTRACTABLE_DOC_TYPES = {"matricula", "car", "ccir", "auto_infracao", "licenca"}
-    if body.document_type and body.document_type in EXTRACTABLE_DOC_TYPES:
+    if body.content_type == "application/pdf":
+        try:
+            from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
+            ocr_then_extract.delay(
+                doc_id=db_doc.id,
+                tenant_id=access_context.tenant_id,
+                user_id=access_context.user.id,
+            )
+            logger.info("Pipeline OCR enfileirado para document_id=%s", db_doc.id)
+        except Exception as exc:
+            logger.warning("Falha ao enfileirar OCR para document_id=%s: %s", db_doc.id, exc)
+    elif body.document_type and body.document_type in EXTRACTABLE_DOC_TYPES:
         try:
             from app.workers.agent_tasks import run_agent  # noqa: PLC0415
             run_agent.delay(
@@ -216,7 +241,7 @@ def confirm_upload(
                     "doc_type": body.document_type,
                 },
             )
-            logger.info("Agente extrator enfileirado para document_id=%s", db_doc.id)
+            logger.info("Agente extrator enfileirado (não-PDF) para document_id=%s", db_doc.id)
         except Exception as exc:
             logger.warning("Falha ao enfileirar agente extrator para document_id=%s: %s", db_doc.id, exc)
 
