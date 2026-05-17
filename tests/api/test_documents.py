@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+import app.workers.ocr_tasks as ocr_tasks
 import app.workers.tasks as worker_tasks
 from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
@@ -53,11 +54,16 @@ def test_confirm_upload_enqueues_portal_notification(client: TestClient, db_sess
     db_session.commit()
 
     captured: dict[str, object] = {}
+    ocr_captured: dict[str, object] = {}
 
     def fake_delay(**kwargs):
         captured.update(kwargs)
 
+    def fake_ocr_delay(**kwargs):
+        ocr_captured.update(kwargs)
+
     monkeypatch.setattr(worker_tasks.notify_document_uploaded, "delay", fake_delay)
+    monkeypatch.setattr(ocr_tasks.ocr_then_extract, "delay", fake_ocr_delay)
 
     headers = _login(client, "cliente.documento@example.com", "cliente123")
     response = client.post(
@@ -74,7 +80,7 @@ def test_confirm_upload_enqueues_portal_notification(client: TestClient, db_sess
         headers=headers,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     body = response.json()
     assert captured == {
         "tenant_id": tenant.id,
@@ -82,4 +88,9 @@ def test_confirm_upload_enqueues_portal_notification(client: TestClient, db_sess
         "document_id": body["id"],
         "actor_user_id": portal_user.id,
         "source": "client_portal",
+    }
+    assert ocr_captured == {
+        "doc_id": body["id"],
+        "tenant_id": tenant.id,
+        "user_id": portal_user.id,
     }
