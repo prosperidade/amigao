@@ -19,7 +19,6 @@ class AtendimentoAgent(BaseAgent):
     description = "Qualifica leads, classifica a demanda e apoia o atendimento ao cliente"
     job_type = AIJobType.classify_demand
     prompt_slugs = ["classify_demand_system", "classify_demand_user"]
-    palace_room = "agent_atendimento"
 
     def validate_preconditions(self) -> None:
         desc = self.ctx.metadata.get("description", "")

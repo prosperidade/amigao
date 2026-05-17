@@ -42,7 +42,6 @@ class RedatorAgent(BaseAgent):
     name = "redator"
     description = "Gera documentos formais: PRAD, memorial descritivo, ofícios, propostas e contratos"
     job_type = AIJobType.gerar_documento
-    palace_room = "agent_redator"
     prompt_slugs = [
         "redator_system", "redator_prad", "redator_memorial",
         "redator_oficio", "redator_proposta", "redator_resposta_notificacao",

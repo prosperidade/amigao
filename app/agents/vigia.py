@@ -20,7 +20,6 @@ class VigiaAgent(BaseAgent):
     description = "Monitora prazos, validade de documentos e processos parados — gera alertas automáticos"
     job_type = AIJobType.monitoramento_vigia
     prompt_slugs = ["vigia_system"]
-    palace_room = "agent_vigia"
 
     def execute(self) -> dict[str, Any]:
         """Executa verificacoes sem LLM — apenas queries e regras."""

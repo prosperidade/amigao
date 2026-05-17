@@ -18,7 +18,6 @@ class ExtratorAgent(BaseAgent):
     description = "Extrai dados estruturados de documentos enviados (matrícula, CAR, CCIR, etc.)"
     job_type = AIJobType.extract_document
     prompt_slugs = ["extract_document_system", "extract_matricula", "extract_car", "extract_ccir"]
-    palace_room = "agent_extrator"
 
     def validate_preconditions(self) -> None:
         # Quando rodando dentro de chain sem documento, permite pular

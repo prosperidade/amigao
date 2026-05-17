@@ -33,7 +33,6 @@ class LegislacaoAgent(BaseAgent):
     description = "Enquadramento regulatório com raciocínio jurídico apoiado por base de legislação"
     job_type = AIJobType.consulta_regulatoria
     prompt_slugs = ["legislacao_system", "legislacao_user"]
-    palace_room = "agent_legislacao"
 
     def validate_preconditions(self) -> None:
         query = self.ctx.metadata.get("query", "")

@@ -23,7 +23,6 @@ class FinanceiroAgent(BaseAgent):
     description = "Análise financeira: projeção de custos e acompanhamento de pagamentos"
     job_type = AIJobType.analise_financeira
     prompt_slugs = ["financeiro_system", "financeiro_user"]
-    palace_room = "agent_financeiro"
 
     def execute(self) -> dict[str, Any]:
         from app.core.config import settings  # noqa: PLC0415

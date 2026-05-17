@@ -21,7 +21,6 @@ class OrcamentoAgent(BaseAgent):
     description = "Gera orçamento e proposta comercial com escopo detalhado"
     job_type = AIJobType.generate_proposal
     prompt_slugs = ["orcamento_system", "orcamento_user"]
-    palace_room = "agent_orcamento"
 
     def validate_preconditions(self) -> None:
         if not self.ctx.process_id and not self.ctx.metadata.get("demand_type"):

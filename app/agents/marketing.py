@@ -19,7 +19,6 @@ class MarketingAgent(BaseAgent):
     description = "Gera conteúdo para campanhas: posts, e-mails, WhatsApp, blog e banners"
     job_type = AIJobType.gerar_conteudo_marketing
     prompt_slugs = ["marketing_system", "marketing_post", "marketing_email", "marketing_whatsapp"]
-    palace_room = "agent_marketing"
 
     VALID_CONTENT_TYPES = {"post", "email", "whatsapp", "blog", "banner"}
 
