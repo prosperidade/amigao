@@ -109,7 +109,6 @@ class BaseAgent(ABC):
     job_type: AIJobType
     prompt_slugs: list[str] = []
     confidence_threshold: float = 0.7
-    palace_room: str = "agents_core"  # MemPalace room — override per agent
 
     def __init__(self, ctx: AgentContext) -> None:
         self.ctx = ctx
@@ -173,10 +172,7 @@ class BaseAgent(ABC):
             # 8. Emit event
             emit_agent_event(self.name, "completed", self.ctx, result=result)
 
-            # 9. MemPalace: log execution to diary + knowledge graph
-            self._mempalace_log(result, validated)
-
-            # 10. Sprint O — telemetria Prometheus por execução de agente
+            # 9. Sprint O — telemetria Prometheus por execução de agente
             record_agent_execution(
                 agent_name=self.name,
                 result="success",
@@ -195,9 +191,6 @@ class BaseAgent(ABC):
             elapsed_ms = int((time.monotonic() - self._started_at) * 1000)
             self._fail_job(job, exc)
             emit_agent_event(self.name, "failed", self.ctx, error=str(exc))
-
-            # MemPalace: log failure
-            self._mempalace_log_failure(str(exc), elapsed_ms)
 
             # Sprint O — telemetria Prometheus (falha)
             record_agent_execution(
@@ -331,75 +324,6 @@ class BaseAgent(ABC):
             parts.append(skill.body)
         parts.append("<!-- skills:end -->")
         return "\n\n".join(p for p in parts if p)
-
-    # --- MemPalace integration -----------------------------------------------
-
-    def recall_memory(self, query: str | None = None) -> dict[str, Any]:
-        """
-        Recall context from MemPalace for this agent.
-
-        Returns recent diary entries and optional semantic search results.
-        Agents can call this in execute() to enrich prompts with history.
-        """
-        from app.agents.memory import recall_agent_context  # noqa: PLC0415
-        return recall_agent_context(self.name, query=query)
-
-    def remember(self, content: str, topic: str = "general") -> None:
-        """Manually save something to this agent's diary."""
-        from app.agents.memory import diary_write  # noqa: PLC0415
-        diary_write(self.name, content, topic=topic)
-
-    def remember_fact(self, subject: str, predicate: str, obj: str) -> None:
-        """Add a fact to the knowledge graph."""
-        from app.agents.memory import kg_add  # noqa: PLC0415
-        kg_add(subject, predicate, obj, source=f"agent_{self.name}")
-
-    def _mempalace_log(self, result: AgentResult, data: dict[str, Any]) -> None:
-        """Log successful execution to MemPalace. Fire-and-forget."""
-        from app.agents.memory import log_agent_execution  # noqa: PLC0415
-
-        ctx_summary = self._build_ctx_summary()
-        result_keys = list(data.keys())[:10]
-        result_summary = f"keys={result_keys} confidence={result.confidence}"
-
-        log_agent_execution(
-            agent_name=self.name,
-            palace_room=self.palace_room,
-            ctx_summary=ctx_summary,
-            result_summary=result_summary,
-            success=True,
-            confidence=result.confidence,
-            duration_ms=result.duration_ms,
-            process_id=self.ctx.process_id,
-        )
-
-    def _mempalace_log_failure(self, error: str, elapsed_ms: int) -> None:
-        """Log failed execution to MemPalace. Fire-and-forget."""
-        from app.agents.memory import log_agent_execution  # noqa: PLC0415
-
-        log_agent_execution(
-            agent_name=self.name,
-            palace_room=self.palace_room,
-            ctx_summary=self._build_ctx_summary(),
-            result_summary=f"ERROR: {error[:300]}",
-            success=False,
-            confidence="low",
-            duration_ms=elapsed_ms,
-            process_id=self.ctx.process_id,
-        )
-
-    def _build_ctx_summary(self) -> str:
-        """Build a compact summary of the agent context for MemPalace."""
-        parts = [f"tenant={self.ctx.tenant_id}"]
-        if self.ctx.process_id:
-            parts.append(f"process={self.ctx.process_id}")
-        if self.ctx.metadata:
-            meta_keys = list(self.ctx.metadata.keys())[:5]
-            parts.append(f"meta_keys={meta_keys}")
-        if self.ctx.chain_data:
-            chain_agents = list(self.ctx.chain_data.keys())
-            parts.append(f"chain_from={chain_agents}")
-        return " ".join(parts)
 
     # --- Internals ---------------------------------------------------------
 
