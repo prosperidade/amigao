@@ -124,21 +124,17 @@ def _ctx(*, chain_data: dict[str, Any]) -> AgentContext:
 def _enter_smoke_patches(stack: ExitStack, *, process_data: dict[str, Any], ai_on: bool):
     """Mesma família de patches do A2-redator-C2 + adições para diagnostico:
     - _load_process_data (Q5: mock pesado, preserva isolamento de DB).
-    - recall_memory retorna {} (MagicMock truthy bug).
     - settings.ai_configured = False quando ai_on=False (path A.2).
     """
     stack.enter_context(patch("app.agents.base.check_tenant_cost_limit"))
     stack.enter_context(patch("app.agents.base.check_tenant_monthly_budget"))
     stack.enter_context(patch.object(DiagnosticoAgent, "_create_running_job", return_value=None))
-    stack.enter_context(patch.object(DiagnosticoAgent, "_mempalace_log"))
-    stack.enter_context(patch.object(DiagnosticoAgent, "_mempalace_log_failure"))
     stack.enter_context(patch("app.agents.events.emit_agent_event"))
     stack.enter_context(patch("app.core.metrics.record_agent_execution"))
     stack.enter_context(patch("app.agents.base.get_active_prompt", return_value=None))
     stack.enter_context(patch.object(
         DiagnosticoAgent, "_load_process_data", return_value=process_data,
     ))
-    stack.enter_context(patch.object(DiagnosticoAgent, "recall_memory", return_value={}))
     if not ai_on:
         mock_settings = MagicMock()
         mock_settings.ai_configured = False

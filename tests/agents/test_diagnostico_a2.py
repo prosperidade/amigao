@@ -53,7 +53,7 @@ def _ctx(*, chain_data: dict | None = None, metadata: dict | None = None) -> Age
 
 
 def _enter_default_patches(stack: ExitStack):
-    """Bypass dos checks de cost + recall_memory (MagicMock truthy bug do A2-redator-C2)."""
+    """Bypass dos checks de cost (MagicMock truthy bug do A2-redator-C2)."""
     stack.enter_context(patch("app.agents.base.check_tenant_cost_limit"))
     stack.enter_context(patch("app.agents.base.check_tenant_monthly_budget"))
     # _load_process_data faz query real; por padrão retornamos dict vazio
@@ -61,8 +61,6 @@ def _enter_default_patches(stack: ExitStack):
         DiagnosticoAgent, "_load_process_data",
         return_value={"process": {"id": 42}, "property": {}, "documents": []},
     ))
-    # recall_memory (MemPalace) — mockar pra evitar MagicMock truthy
-    stack.enter_context(patch.object(DiagnosticoAgent, "recall_memory", return_value={}))
     # get_active_prompt → None força fallback hardcoded (mesmo bug do A2-redator-C2)
     stack.enter_context(patch("app.agents.base.get_active_prompt", return_value=None))
 

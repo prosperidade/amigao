@@ -147,8 +147,6 @@ def _enter_smoke_patches(stack: ExitStack):
     stack.enter_context(patch("app.agents.base.check_tenant_cost_limit"))
     stack.enter_context(patch("app.agents.base.check_tenant_monthly_budget"))
     stack.enter_context(patch.object(RedatorAgent, "_create_running_job", return_value=None))
-    stack.enter_context(patch.object(RedatorAgent, "_mempalace_log"))
-    stack.enter_context(patch.object(RedatorAgent, "_mempalace_log_failure"))
     stack.enter_context(patch("app.agents.events.emit_agent_event"))
     stack.enter_context(patch("app.core.metrics.record_agent_execution"))
     stack.enter_context(patch("app.agents.base.get_active_prompt", return_value=None))
