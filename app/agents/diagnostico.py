@@ -74,16 +74,9 @@ class DiagnosticoAgent(BaseAgent):
         if not settings.ai_configured:
             return self._rules_based_diagnosis(process_data)
 
-        # 4. MemPalace: buscar diagnosticos anteriores similares
-        memory_hint = ""
         prop = process_data.get("property", {})
-        recall_query = f"diagnostico {prop.get('state', '')} {prop.get('biome', '')} {process_data.get('process', {}).get('demand_type', '')}"
-        recall = self.recall_memory(recall_query)
-        if isinstance(recall, dict) and recall.get("recent_diary"):
-            entries = [e.get("entry", "") if isinstance(e, dict) else str(e) for e in recall["recent_diary"][:3]]
-            memory_hint = "\n".join(f"- {e}" for e in entries if e)
 
-        # 5. Chamar LLM para diagnostico completo
+        # 4. Chamar LLM para diagnostico completo
         system_prompt = self.get_prompt("diagnostico_system")
         user_prompt = self.get_prompt("diagnostico_user", {
             "property_data": json.dumps(prop, ensure_ascii=False, default=str),
@@ -92,12 +85,6 @@ class DiagnosticoAgent(BaseAgent):
             "extracted_fields": json.dumps(extracted_data, ensure_ascii=False, default=str),
             "legal_context": json.dumps(legal_data, ensure_ascii=False, default=str),
         })
-
-        if memory_hint.strip():
-            user_prompt += (
-                "\n\nDIAGNOSTICOS ANTERIORES SIMILARES (referencia interna):\n"
-                + memory_hint
-            )
 
         response = self.call_llm(user_prompt, system=system_prompt)
         parsed = OutputValidationPipeline.parse_llm_json(response.content)

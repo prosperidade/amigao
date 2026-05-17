@@ -80,16 +80,6 @@ class LegislacaoAgent(BaseAgent):
             uf=state,
         )
 
-        # MemPalace: enriquecer com casos passados similares
-        memory_context = ""
-        recall = self.recall_memory(f"legislacao {demand_type} {state}")
-        if recall.get("recent_diary"):
-            entries = [e.get("entry", "") if isinstance(e, dict) else str(e) for e in recall["recent_diary"][:3]]
-            memory_context = "\n".join(f"- {e}" for e in entries if e)
-        if recall.get("search_results"):
-            hits = [r.get("text", "")[:200] if isinstance(r, dict) else str(r)[:200] for r in recall["search_results"][:3]]
-            memory_context += "\n" + "\n".join(f"- {h}" for h in hits if h)
-
         # Montar prompts
         system_prompt = self.get_prompt("legislacao_system")
         user_prompt = self.get_prompt("legislacao_user", {
@@ -108,13 +98,6 @@ class LegislacaoAgent(BaseAgent):
                 "\n\nTRECHOS LEGISLATIVOS HIPER-RELEVANTES (recuperados por similaridade "
                 "vetorial — use como fonte primaria e cite em legislacao_aplicavel):\n"
                 + rag_context
-            )
-
-        # Anexar contexto historico do MemPalace ao prompt
-        if memory_context.strip():
-            user_prompt += (
-                "\n\nCASOS ANTERIORES SIMILARES (base de conhecimento interna):\n"
-                + memory_context
             )
 
         # Sprint O — Gemini é o provider default do agente legislação.
