@@ -122,7 +122,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 |---|---|---|
 | Skills procedurais (redator + extrator) | Aguardando PDFs-gabarito da sócia (reunião 16/05) | Curto |
 | Sprint A2-legislacao | Sem bloqueio externo | Curto |
-| Cirurgia MemPalace | Sem bloqueio externo | Curto |
+| Cirurgia MemPalace (rodada dedicada — amanhã cedo 17/05) | Hook `.git/hooks/post-commit` já removido em 16/05 (era inofensivo: chamava `python -m mempalace save` que falhava silencioso, mas trocava de branch via side-effects de outros agentes — não, isso era race condition). Falta: (1) refatorar `app/agents/base.py` removendo `_mempalace_log`, `_mempalace_log_failure`, `recall_memory` + os 5 imports inline de `app.agents.memory`; (2) remover `from app.agents.memory import ...` em `app/agents/orchestrator.py:180`; (3) remover `palace_room = "agent_X"` dos 10 agentes; (4) remover chamadas `self.recall_memory(...)` em `app/agents/diagnostico.py:77` e `app/agents/legislacao.py:84` (são no-op hoje mas o caller usa o dict retornado); (5) deletar `app/agents/memory.py` por último. Ordem importa pra não quebrar import. | Curto |
 | Renomeação visível Amigão→Regente | Patch sendo preparado | Curto |
 | Property.geom populado | Falta parser shapefile + ingestão de KML/SHP | Médio |
 | Agente auditor_imovel | Depende de geom populado | Médio |
