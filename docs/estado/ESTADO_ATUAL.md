@@ -129,6 +129,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Crawlers DOU/DOE ativados em prod | Apenas esqueleto pronto | Médio |
 | Connector e-mail inbound (acompanhamento) | Sem integração de inbound hoje | Médio |
 | Hardening de produção (secrets, CORS, Swagger desabilitado) | Checklist em `ops/production-secrets-checklist.md` | Curto |
+| Pytest e2e bloqueado em CI/local | Testcontainers requer Docker socket no container `api` (não montado hoje) ou venv host saudável (quebrado pelo rename de pasta `Amigo_*`→`Amigao_*`). Sprint B1 (Waitlist) validada via smoke real (4/4 verdes 2026-05-16). Resolver antes do deploy de produção real (semana 19-23/05). | Curto |
 
 ## Próximos marcos
 
