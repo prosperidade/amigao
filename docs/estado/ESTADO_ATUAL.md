@@ -1,6 +1,6 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-15
+**Data do instantâneo:** 2026-05-18
 **Próxima atualização:** ao fechamento da próxima sprint
 **Responsável de atualização:** quem fechar a próxima sprint
 
@@ -40,7 +40,7 @@
 | atendimento | `app/agents/atendimento.py` | dict legado | baixo (4 execuções) |
 | extrator | `app/agents/extrator.py` | dict legado | 51 execuções históricas — mais usado |
 | diagnostico | `app/agents/diagnostico.py` | ✅ A2 (DiagnosticoPreliminarContent) | $0.0002 smoke |
-| legislacao | `app/agents/legislacao.py` | A2-legislacao pendente | $0.0047 acumulado (Gemini 2.0 Flash) |
+| legislacao | `app/agents/legislacao.py` | ✅ A2 (EnquadramentoRegulatorioContent) | $0.0047 acumulado (Gemini 2.0 Flash) |
 | redator | `app/agents/redator.py` | ✅ A2 (PecaJuridicaContent) | $0.0030 smoke 7 templates |
 | orcamento | `app/agents/orcamento.py` | dict legado | baixo |
 | financeiro | `app/agents/financeiro.py` | dict legado | baixo |
@@ -108,6 +108,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Sprint A1 (infra) | `app/skills/`, `StageOutputContent`, RegulatoryDiagnosis, CitationEvaluator | ✅ |
 | Sprint A2-redator | RedatorAgent emite `PecaJuridicaContent` (7 templates) | ✅ |
 | Sprint A2-diagnostico | DiagnosticoAgent emite `DiagnosticoPreliminarContent` | ✅ |
+| Sprint A2-legislacao | LegislacaoAgent emite `EnquadramentoRegulatorioContent` (18 testes A2) | ✅ |
 
 ## Sprints em curso
 
@@ -120,7 +121,6 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Item | Bloqueio | Janela |
 |---|---|---|
 | Skills procedurais (redator + extrator) | Aguardando PDFs-gabarito da sócia (reunião 16/05) | Curto |
-| Sprint A2-legislacao | Sem bloqueio externo | Curto |
 | Renomeação visível Amigão→Regente | Patch sendo preparado | Curto |
 | Property.geom populado | Falta parser shapefile + ingestão de KML/SHP | Médio |
 | Agente auditor_imovel | Depende de geom populado | Médio |
