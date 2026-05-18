@@ -12,7 +12,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-BUCKET_NAME = "amigao-docs"
+BUCKET_NAME = "regente-docs"
 
 class StorageService:
     _bucket_ready = False

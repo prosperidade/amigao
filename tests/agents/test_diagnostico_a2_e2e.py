@@ -47,7 +47,6 @@ def _enter_default_patches(stack: ExitStack, *, process_data: dict, ai_on: bool)
     stack.enter_context(patch.object(
         DiagnosticoAgent, "_load_process_data", return_value=process_data,
     ))
-    stack.enter_context(patch.object(DiagnosticoAgent, "recall_memory", return_value={}))
     stack.enter_context(patch("app.agents.base.get_active_prompt", return_value=None))
     if not ai_on:
         mock_settings = MagicMock()

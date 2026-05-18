@@ -59,9 +59,14 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "password"
     POSTGRES_DB: str = "amigao_db"
     POSTGRES_PORT: str = "5432"
+    # Single-string override usado em deploy (Render + Supabase pooler 6543).
+    # Tem precedência sobre POSTGRES_* quando setado.
+    DATABASE_URL: str = ""
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        if self.DATABASE_URL.strip():
+            return self.DATABASE_URL.strip()
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # REDIS

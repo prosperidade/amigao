@@ -6,6 +6,17 @@ runs inside a transaction that is rolled back at the end, ensuring full
 isolation without the overhead of recreating the database.
 """
 
+import os
+import sys
+
+# Windows + Docker Desktop: o SDK Python (docker 7.x) usado pelo Testcontainers
+# não respeita o `docker context` ativo — cai no pipe default `npipe:////./pipe/docker_engine`.
+# Sem essa variável, em Windows o SDK tenta `dockerDesktopLinuxEngine` que retorna 500
+# por mismatch de API version com Docker Desktop 4.46. Setar antes de qualquer import
+# que carregue `docker` ou `testcontainers`.
+if sys.platform == "win32":
+    os.environ.setdefault("DOCKER_HOST", "npipe:////./pipe/docker_engine")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -105,3 +116,22 @@ def client(db_session):
 
     websockets.manager.connect_redis = original_connect_redis
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_slowapi_limiter():
+    """Reseta o storage in-memory do slowapi antes de cada teste.
+
+    slowapi.Limiter() sem storage_uri usa MemoryStorage (in-process), que
+    acumula contadores ao longo da suite e provoca 429 em testes que de
+    outra forma passariam (state-leakage entre testes). Reset no setup
+    deixa cada teste começar do zero — testes que precisam estourar o
+    limite (ex.: `test_signup_rate_limit_blocks_after_10`) continuam
+    funcionando, pois fazem todas as chamadas dentro do mesmo teste.
+    """
+    from app.core.rate_limit import limiter
+    try:
+        limiter.reset()
+    except Exception:  # noqa: BLE001 — alguns backends não expõem reset
+        pass
+    yield

@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -13,7 +14,12 @@ from app import models as model_registry  # noqa: F401
 # access to the values within the .ini file in use.
 config = context.config
 
-config.set_main_option("sqlalchemy.url", settings.SQLALCHEMY_DATABASE_URI)
+# Em deploy (Render), MIGRATE_DATABASE_URL aponta pro Supabase direct (5432),
+# enquanto o app usa pooler (6543) via DATABASE_URL. Sem override = usa Settings.
+config.set_main_option(
+    "sqlalchemy.url",
+    os.getenv("MIGRATE_DATABASE_URL") or settings.SQLALCHEMY_DATABASE_URI,
+)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

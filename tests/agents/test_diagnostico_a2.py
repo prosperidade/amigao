@@ -135,7 +135,6 @@ class TestPathIA:
                     ],
                 },
             ))
-            stack.enter_context(patch.object(DiagnosticoAgent, "recall_memory", return_value={}))
             stack.enter_context(patch("app.agents.base.get_active_prompt", return_value=None))
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response({

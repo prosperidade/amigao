@@ -42,15 +42,7 @@ def _stub_celery_enqueue(monkeypatch):
     )
 
 
-@pytest.fixture(autouse=True)
-def _reset_rate_limit():
-    """Reseta o storage in-memory do slowapi entre testes."""
-    from app.core.rate_limit import limiter
-    yield
-    try:
-        limiter.reset()
-    except Exception:  # noqa: BLE001 — slowapi storage pode não expor reset em todos os backends
-        pass
+# Rate-limit reset agora vive em conftest.py:_reset_slowapi_limiter (autouse global).
 
 
 # ---------------------------------------------------------------------------

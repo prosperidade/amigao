@@ -41,6 +41,10 @@ Para o "porquê" completo: `docs/manifesto/01-VISAO_PRODUTO.md`.
 docker compose up --build -d
 ```
 
+> **Porta do Postgres no host:** o serviço `db` expõe `55432` no host (não 5433 — conflitava com outros projetos do dev). Dentro do compose, `api`/`worker` conectam via service name `db:5432`. Se rodar `alembic`/`seed.py` do venv host, o `.env` deve apontar `POSTGRES_SERVER=127.0.0.1` e `POSTGRES_PORT=55432`. Override com `HOST_DB_PORT=XXXX` no `.env`.
+>
+> **Sintoma "could not translate host name 'db'"** dentro do container API significa que o serviço `db` não está up — `docker compose up -d db`. Não é problema de rede; o `db` está no mesmo network e tem `depends_on` correto.
+
 ### Subir local (dev sem Docker)
 
 ```bash

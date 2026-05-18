@@ -24,6 +24,10 @@ celery_app.conf.update(
     timezone="America/Sao_Paulo",
     enable_utc=False,
     task_track_started=True,
+    # Upstash/Redis cloud: visibility_timeout cobre tasks longas (OCR ~3min) e
+    # retry_on_startup tolera o primeiro connect lento de provider gerenciado.
+    broker_transport_options={"visibility_timeout": 3600},
+    broker_connection_retry_on_startup=True,
     beat_schedule={
         "monitor-legislation-dou-daily": {
             "task": "workers.monitor_legislation_dou",

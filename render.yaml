@@ -1,0 +1,176 @@
+# ============================================================================
+# Regente Ambiental — render.yaml
+# ============================================================================
+# Spec: render.com/docs/blueprint-spec
+#
+# Stack:
+#   - regente-api    : Web Service, plan Starter ($7/mês), 512 MB
+#   - regente-worker : Background Worker, plan Standard ($25/mês), 2 GB
+#                      (com beat embarcado via -B — ver docs/DEPLOY_REGENTE.md
+#                      seção "Débito técnico — beat embarcado")
+#
+# Dependências externas (NÃO declaradas aqui — provisionadas manualmente):
+#   - Supabase Pro     : Postgres 15 + pgvector + PostGIS (~$25/mês)
+#   - Upstash Redis    : free tier para o piloto
+#   - Cloudflare R2    : storage S3-compat (~$0-2/mês)
+#   - Resend           : emails transacionais (já contratado)
+#
+# Region: ohio (Render us-east-2). Alinhada com Supabase us-east-1 (Virginia)
+# → latência API↔DB <30ms. Decisão: priorizar latência sobre soberania de dados
+# no piloto; compliance LGPD tratado por DPAs + política (ver DEPLOY_REGENTE.md
+# seção "Compliance LGPD — pré-primeiro cliente").
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # API HTTP (FastAPI / uvicorn)
+  # --------------------------------------------------------------------------
+  - type: web
+    name: regente-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: ohio
+    branch: main
+    autoDeploy: true
+    # Render injeta $PORT. Bind explícito; init_db/seed.py NÃO rodam aqui
+    # (migrations são manuais via Render Shell — runbook passo f).
+    dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: regente-shared
+      - key: SERVICE_NAME
+        value: api
+      # CORS: lista CSV. Atualizar quando o domínio mudar.
+      - key: BACKEND_CORS_ORIGINS
+        value: "https://app.regenteambiental.com.br,https://regenteambiental.com.br,https://www.regenteambiental.com.br"
+      - key: CLIENT_PORTAL_URL
+        value: "https://app.regenteambiental.com.br"
+
+  # --------------------------------------------------------------------------
+  # Worker Celery + Beat embarcado
+  # --------------------------------------------------------------------------
+  - type: worker
+    name: regente-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    region: ohio
+    branch: main
+    autoDeploy: true
+    # --pool=solo: concurrency=1, OCR sequencial (aceitável piloto).
+    # -B: beat scheduler embarcado (DOU/DOE/vigia/acompanhamento/cleanup).
+    # IMPORTANTE: -B só é seguro com 1 instância. Ao escalar, migrar pra
+    # celery-redbeat ou serviço regente-beat dedicado (ver runbook).
+    dockerCommand: celery -A app.core.celery_app worker --pool=solo --loglevel=info -B
+    envVars:
+      - fromGroup: regente-shared
+      - key: SERVICE_NAME
+        value: worker
+
+# ============================================================================
+# Env Var Groups
+# ============================================================================
+# Cada `sync: false` precisa ser preenchido no Render Dashboard antes do
+# primeiro deploy. `generateValue: true` é auto-gerado pelo Render (32 chars
+# random). Valores literais são commitados aqui.
+# ============================================================================
+envVarGroups:
+  - name: regente-shared
+    envVars:
+      # --- Ambiente ---
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PROMETHEUS_QUEUE_NAMES
+        value: celery
+      # Informativo apenas — código não lê esta var. Documenta a região do
+      # Supabase pra rastreabilidade de incident response e compliance.
+      - key: SUPABASE_REGION
+        value: us-east-1
+
+      # --- Database (Supabase) ---
+      # DATABASE_URL = pooler transaction (porta 6543) pra app
+      # MIGRATE_DATABASE_URL = direct (porta 5432) pra alembic
+      - key: DATABASE_URL
+        sync: false
+      - key: MIGRATE_DATABASE_URL
+        sync: false
+
+      # --- Redis (Upstash, scheme rediss://) ---
+      - key: REDIS_URL
+        sync: false
+
+      # --- Storage (Cloudflare R2 via API S3-compat) ---
+      - key: MINIO_SERVER
+        sync: false              # <acct>.r2.cloudflarestorage.com
+      - key: MINIO_PUBLIC_URL
+        sync: false              # mesmo endpoint do MINIO_SERVER
+      - key: MINIO_ACCESS_KEY
+        sync: false
+      - key: MINIO_SECRET_KEY
+        sync: false
+      - key: MINIO_SECURE
+        value: "True"
+
+      # --- JWT ---
+      - key: SECRET_KEY
+        generateValue: true      # Render gera 32-char random
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+
+      # --- SMTP (transacional interno) ---
+      - key: SMTP_TLS
+        value: "True"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAILS_FROM_EMAIL
+        value: noreply@regenteambiental.com.br
+      - key: EMAILS_FROM_NAME
+        value: "Regente Ambiental"
+
+      # --- Resend (waitlist) ---
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_AUDIENCE_ID
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        value: contato@regenteambiental.com.br
+      - key: RESEND_FROM_NAME
+        value: "Regente Ambiental"
+
+      # --- IA / LLM ---
+      - key: AI_ENABLED
+        value: "True"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AI_DEFAULT_MODEL
+        value: gpt-4o-mini
+      - key: AI_FALLBACK_MODEL
+        value: gemini/gemini-2.5-flash
+      - key: AI_MAX_COST_PER_JOB_USD
+        value: "0.10"
+      - key: LEGISLATION_USE_GEMINI_DEFAULT
+        value: "true"
+      - key: EMBEDDING_PROVIDER
+        value: openai
+
+      # --- Alerts operacionais ---
+      # Deixar URL vazia até integrar destino (Slack/PagerDuty/BetterStack).
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      - key: ALERT_WEBHOOK_MIN_SEVERITY
+        value: error
