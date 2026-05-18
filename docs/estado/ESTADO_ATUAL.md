@@ -29,7 +29,6 @@
 **O que está em transição:**
 
 - Renomeação Amigão → Regente (camadas visíveis) — em execução
-- Cirurgia MemPalace (remover stub no-op e referências) — pendente
 - Skills procedurais do agente Redator — aguardando reunião de 16/05 com a sócia
 
 ## Backend
@@ -122,7 +121,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 |---|---|---|
 | Skills procedurais (redator + extrator) | Aguardando PDFs-gabarito da sócia (reunião 16/05) | Curto |
 | Sprint A2-legislacao | Sem bloqueio externo | Curto |
-| Cirurgia MemPalace (rodada dedicada — amanhã cedo 17/05) | Hook `.git/hooks/post-commit` já removido em 16/05 (era inofensivo: chamava `python -m mempalace save` que falhava silencioso, mas trocava de branch via side-effects de outros agentes — não, isso era race condition). Falta: (1) refatorar `app/agents/base.py` removendo `_mempalace_log`, `_mempalace_log_failure`, `recall_memory` + os 5 imports inline de `app.agents.memory`; (2) remover `from app.agents.memory import ...` em `app/agents/orchestrator.py:180`; (3) remover `palace_room = "agent_X"` dos 10 agentes; (4) remover chamadas `self.recall_memory(...)` em `app/agents/diagnostico.py:77` e `app/agents/legislacao.py:84` (são no-op hoje mas o caller usa o dict retornado); (5) deletar `app/agents/memory.py` por último. Ordem importa pra não quebrar import. | Curto |
+| Flake de `json_parse` no agente legislacao | Gemini 2.5 Flash às vezes retorna JSON truncado dentro de bloco markdown ```json...```; parser falha mesmo com `CLAUDE_LEGAL_MAX_TOKENS=8192`. Mitigação: tentar de novo a chamada. Resolver pelo parser sendo mais tolerante a JSON truncado, ou subir max_tokens para 16384, ou trocar pra response schema estruturada do Gemini. | Curto |
 | Renomeação visível Amigão→Regente | Patch sendo preparado | Curto |
 | Property.geom populado | Falta parser shapefile + ingestão de KML/SHP | Médio |
 | Agente auditor_imovel | Depende de geom populado | Médio |
