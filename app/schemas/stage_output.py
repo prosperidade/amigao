@@ -192,3 +192,43 @@ class RespostaNotificacaoContent(PecaJuridicaContent):
     template: Literal["resposta_notificacao"] = "resposta_notificacao"
     prazo_dias: int = Field(..., ge=0, description="Prazo concedido pelo órgão (em dias corridos)")
     ato_regulatorio: str = Field(..., min_length=1, description="Identificação do ato/notificação que está sendo respondido")
+
+
+class Etapa(_StrictModel):
+    """Etapa do caminho regulatório proposto pelo LegislacaoAgent."""
+
+    ordem: int = Field(..., ge=1)
+    titulo: str = Field(..., min_length=1)
+    descricao: str | None = None
+    prazo_estimado_dias: int | None = Field(default=None, ge=0)
+    orgao: str | None = None
+
+
+class EnquadramentoRegulatorioContent(StageOutputContent):
+    """Conteúdo do enquadramento regulatório emitido pelo LegislacaoAgent.
+
+    Sprint A2-legislacao: o agente passa a emitir este Content (antes era dict
+    cru). Mapeamento das chaves antigas:
+
+    * ``caminho_regulatorio`` → campo próprio (e dual-emit)
+    * ``justificativa`` → ``content`` (e dual-emit)
+    * ``orgao_competente`` → campo próprio (e dual-emit)
+    * ``etapas`` (list[dict]) → ``etapas: list[Etapa]`` (e dual-emit)
+    * ``legislacao_aplicavel`` (list[dict|str]) → preservada via dual-emit;
+      ``legal_citations`` carrega versão normalizada (``CitationRef``) quando
+      possível, vazia caso contrário.
+    * ``riscos`` (list[dict]) → ``riscos: list[Risco]`` (e dual-emit)
+    * ``documentos_necessarios`` → campo próprio (e dual-emit)
+    * ``recomendacoes`` → campo próprio (e dual-emit)
+    * ``prazos_estimados`` (dict) → ``metadata["prazos_estimados"]`` (e dual-emit)
+    * ``chunks_referenced`` → ``sources`` (cada chunk vira ``Source(type="legislation")``)
+      e ``metadata["chunks_referenced"]`` (preserva detalhes para a UI).
+    """
+
+    caminho_regulatorio: str = Field(..., min_length=1)
+    orgao_competente: str | None = None
+    etapas: list[Etapa] = Field(default_factory=list)
+    legal_citations: list[CitationRef] = Field(default_factory=list)
+    riscos: list[Risco] = Field(default_factory=list)
+    documentos_necessarios: list[str] = Field(default_factory=list)
+    recomendacoes: list[str] = Field(default_factory=list)

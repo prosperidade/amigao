@@ -20,11 +20,63 @@ Usa Gemini Flash/Pro por padrao (Sprint O) com fallback Claude Sonnet.
 from __future__ import annotations
 
 import json
+import logging
+import re
 from typing import Any
+
+from pydantic import ValidationError
 
 from app.agents.base import AgentRegistry, BaseAgent
 from app.agents.validators import OutputValidationPipeline
 from app.models.ai_job import AIJobType
+from app.schemas.stage_output import (
+    CitationRef,
+    EnquadramentoRegulatorioContent,
+    Etapa,
+    Risco,
+    Source,
+)
+
+logger = logging.getLogger(__name__)
+
+_CONFIANCA_TO_CONFIDENCE = {"baixa": 0.3, "media": 0.6, "alta": 0.9}
+_VALID_SEVERIDADES = {"baixo", "medio", "alto"}
+
+# Captura "Lei 12.651/2012", "LC 140/2011", "Decreto 7.830/2012", "Resolução CONAMA 237/1997",
+# "IN IBAMA 02/2014", "Portaria 123/2020", "MP 2.166/2001"
+_CITATION_REGEX = re.compile(
+    r"(?P<raw>"
+    r"(?P<kind>Lei Complementar|LC|Lei|Decreto-Lei|Decreto|Resolução CONAMA|"
+    r"Resolu[cç][aã]o\s+CONAMA|Resolu[cç][aã]o|IN(?:strução Normativa)?(?:\s+\w+)?|"
+    r"Instru[cç][aã]o\s+Normativa|Portaria|MP|Medida\s+Provis[oó]ria)"
+    r"\s*n?[º°.]?\s*"
+    r"(?P<numero>[\d.]+)\s*/\s*(?P<ano>\d{4})"
+    r")",
+    re.IGNORECASE,
+)
+
+_CITATION_KIND_MAP = {
+    "lei": "lei",
+    "lei complementar": "lei_complementar",
+    "lc": "lei_complementar",
+    "decreto": "decreto",
+    "decreto-lei": "decreto_lei",
+    "resolução conama": "resolucao_conama",
+    "resolucao conama": "resolucao_conama",
+    "resolução": "outro",
+    "resolucao": "outro",
+    "instrução normativa": "instrucao_normativa",
+    "instrucao normativa": "instrucao_normativa",
+    "in": "instrucao_normativa",
+    "portaria": "portaria",
+    "mp": "medida_provisoria",
+    "medida provisória": "medida_provisoria",
+    "medida provisoria": "medida_provisoria",
+}
+
+
+class LegislacaoOutputValidationError(ValueError):
+    """Erro tipado quando o output do enquadramento regulatório falha a validação Pydantic."""
 
 
 @AgentRegistry.register
@@ -153,39 +205,40 @@ class LegislacaoAgent(BaseAgent):
 
         parsed = OutputValidationPipeline.parse_llm_json(response.content)
 
-        result = {
-            "caminho_regulatorio": parsed.get("caminho_regulatorio", ""),
-            "orgao_competente": parsed.get("orgao_competente", ""),
-            "etapas": parsed.get("etapas", []),
-            "legislacao_aplicavel": parsed.get("legislacao_aplicavel", []),
-            "riscos": parsed.get("riscos", []),
-            "documentos_necessarios": parsed.get("documentos_necessarios", []),
-            "prazos_estimados": parsed.get("prazos_estimados", {}),
-            "confianca": parsed.get("confianca", "media"),
-            "justificativa": parsed.get("justificativa", ""),
-            "recomendacoes": parsed.get("recomendacoes", []),
-            "confidence": parsed.get("confianca", "medium"),
-            "requires_review": True,
-            # Sprint V — chunks recuperados via RAG; util pra UI exibir citacoes.
-            "chunks_referenced": [
-                {
-                    "id": c.id,
-                    "source_ref": c.source_ref,
-                    "title": c.title,
-                    "section": c.section,
-                    "identifier": c.identifier,
-                    "similarity": round(c.similarity, 3),
-                }
-                for c in rag_chunks
-            ],
-            # Backward compat com formato antigo
-            "normas_estaduais": parsed.get("normas_estaduais", []),
-            "risco_legal": parsed.get("risco_legal", parsed.get("confianca", "medio")),
-            "prazos_legais": parsed.get("prazos_legais", []),
-        }
-
+        sources = self._derive_sources(
+            rag_chunks=rag_chunks,
+            legislacao_aplicavel=parsed.get("legislacao_aplicavel", []),
+            origin="ai",
+        )
+        chunks_referenced = [
+            {
+                "id": c.id,
+                "source_ref": c.source_ref,
+                "title": c.title,
+                "section": c.section,
+                "identifier": c.identifier,
+                "similarity": round(c.similarity, 3),
+            }
+            for c in rag_chunks
+        ]
         self.requires_review = True  # sempre requer revisao humana (consequencias juridicas)
-        return result
+        return self._build_payload(
+            caminho_regulatorio=str(parsed.get("caminho_regulatorio", "") or ""),
+            orgao_competente=str(parsed.get("orgao_competente", "") or ""),
+            etapas_raw=parsed.get("etapas", []) or [],
+            legislacao_aplicavel_raw=parsed.get("legislacao_aplicavel", []) or [],
+            riscos_raw=parsed.get("riscos", []) or [],
+            documentos_necessarios=list(parsed.get("documentos_necessarios", []) or []),
+            prazos_estimados=parsed.get("prazos_estimados", {}) or {},
+            recomendacoes=list(parsed.get("recomendacoes", []) or []),
+            confianca=str(parsed.get("confianca", "media") or "media"),
+            justificativa=str(parsed.get("justificativa", "") or ""),
+            sources=sources,
+            chunks_referenced=chunks_referenced,
+            normas_estaduais=list(parsed.get("normas_estaduais", []) or []),
+            risco_legal=str(parsed.get("risco_legal", parsed.get("confianca", "medio")) or "medio"),
+            prazos_legais=list(parsed.get("prazos_legais", []) or []),
+        )
 
     def _call_claude(self, prompt: str, *, system: str = "") -> Any:
         """Chama Claude diretamente via Anthropic SDK."""
@@ -328,7 +381,11 @@ class LegislacaoAgent(BaseAgent):
         return ctx
 
     def _rules_based_response(self, demand_type: str | None, state: str) -> dict[str, Any]:
-        """Resposta basica sem LLM com legislacao federal padrao."""
+        """Resposta basica sem LLM com legislacao federal padrao.
+
+        Sprint A2-legislacao: passa a emitir ``EnquadramentoRegulatorioContent``
+        com ``Source(type="manual", ref="rules_engine")``.
+        """
         legislacao = {
             "car": ["Lei 12.651/2012 (Codigo Florestal)", "Decreto 7.830/2012 (SICAR)"],
             "retificacao_car": ["Lei 12.651/2012", "Decreto 7.830/2012", "IN IBAMA 02/2014"],
@@ -340,21 +397,284 @@ class LegislacaoAgent(BaseAgent):
             "regularizacao_fundiaria": ["Lei 13.465/2017", "Lei 12.651/2012"],
             "exigencia_bancaria": ["Resolucao CMN 4.327/2014", "Resolucao BCB 140/2021"],
         }
-        return {
-            "caminho_regulatorio": f"Verificar legislacao para {demand_type or 'tipo nao identificado'}",
-            "orgao_competente": "A definir conforme UF e tipo",
-            "etapas": [],
-            "legislacao_aplicavel": legislacao.get(demand_type or "", ["Consulte legislacao especifica"]),
-            "riscos": [],
-            "documentos_necessarios": [],
-            "prazos_estimados": {},
-            "confianca": "baixa",
-            "justificativa": "Resposta baseada em regras — IA nao configurada",
-            "recomendacoes": ["Habilitar IA para analise regulatoria completa"],
-            "normas_estaduais": [f"Verificar legislacao estadual para {state or 'UF nao informada'}"],
-            "risco_legal": "medio",
-            "prazos_legais": [],
-            "confidence": "low",
+        legislacao_aplicavel = legislacao.get(demand_type or "", ["Consulte legislacao especifica"])
+        self.requires_review = True
+        return self._build_payload(
+            caminho_regulatorio=f"Verificar legislacao para {demand_type or 'tipo nao identificado'}",
+            orgao_competente="A definir conforme UF e tipo",
+            etapas_raw=[],
+            legislacao_aplicavel_raw=legislacao_aplicavel,
+            riscos_raw=[],
+            documentos_necessarios=[],
+            prazos_estimados={},
+            recomendacoes=["Habilitar IA para analise regulatoria completa"],
+            confianca="baixa",
+            justificativa="Resposta baseada em regras — IA nao configurada",
+            sources=[
+                Source(
+                    type="manual",
+                    ref="rules_engine",
+                    excerpt="enquadramento produzido por regras determinísticas (LLM indisponível)",
+                )
+            ],
+            chunks_referenced=[],
+            normas_estaduais=[f"Verificar legislacao estadual para {state or 'UF nao informada'}"],
+            risco_legal="medio",
+            prazos_legais=[],
+        )
+
+    # ------------------------------------------------------------------
+    # Helpers Sprint A2-legislacao
+    # ------------------------------------------------------------------
+
+    def _derive_sources(
+        self,
+        *,
+        rag_chunks: list,
+        legislacao_aplicavel: list,
+        origin: str,
+    ) -> list[Source]:
+        """Constrói lista de ``Source`` priorizando chunks RAG.
+
+        1. Cada ``rag_chunks[i]`` vira ``Source(type="legislation", ref=str(chunk.id))``
+           (até 10 — sources já condensam o que importa).
+        2. Se não houver chunks, cai pra ``legislacao_aplicavel`` (até 5 itens).
+        3. Se ainda vazio, fallback ``Source(type="manual", ref="agent_legislacao",
+           excerpt="no_legal_context_available")`` + log warning.
+        """
+        sources: list[Source] = []
+        for chunk in (rag_chunks or [])[:10]:
+            chunk_id = getattr(chunk, "id", None)
+            if chunk_id is None:
+                continue
+            excerpt_bits = [
+                getattr(chunk, "title", None),
+                getattr(chunk, "section", None),
+                getattr(chunk, "identifier", None),
+            ]
+            excerpt = " — ".join(b for b in excerpt_bits if b) or None
+            sources.append(Source(
+                type="legislation",
+                ref=str(chunk_id),
+                excerpt=excerpt,
+            ))
+
+        if not sources:
+            for item in (legislacao_aplicavel or [])[:5]:
+                ref = self._citation_ref_from_raw(item)
+                if not ref:
+                    continue
+                sources.append(Source(type="legislation", ref=ref))
+
+        if not sources:
+            logger.warning(
+                "legislacao.sources_fallback origin=%s — enquadramento produzido "
+                "sem chunks RAG nem citações estruturadas", origin,
+            )
+            sources.append(Source(
+                type="manual",
+                ref="agent_legislacao",
+                excerpt="no_legal_context_available",
+            ))
+        return sources
+
+    @staticmethod
+    def _citation_ref_from_raw(item: Any) -> str | None:
+        """Normaliza um item de legislacao_aplicavel (str ou dict) para uma ref textual."""
+        if not item:
+            return None
+        if isinstance(item, str):
+            return item.strip() or None
+        if isinstance(item, dict):
+            for key in ("identificador", "raw", "titulo", "norma"):
+                value = item.get(key)
+                if value:
+                    return str(value).strip() or None
+        return None
+
+    def _normalize_etapas(self, etapas_raw: list) -> list[Etapa]:
+        """Aceita list[dict] do LLM e mapeia para list[Etapa]; ignora itens malformados."""
+        out: list[Etapa] = []
+        for i, raw in enumerate(etapas_raw or [], start=1):
+            if not isinstance(raw, dict):
+                continue
+            titulo = (raw.get("titulo") or raw.get("title") or "").strip()
+            if not titulo:
+                continue
+            try:
+                prazo = raw.get("prazo_estimado_dias")
+                prazo_int = int(prazo) if prazo is not None and str(prazo).strip() != "" else None
+                out.append(Etapa(
+                    ordem=int(raw.get("ordem", i)),
+                    titulo=titulo,
+                    descricao=(raw.get("descricao") or None),
+                    prazo_estimado_dias=prazo_int,
+                    orgao=(raw.get("orgao") or None),
+                ))
+            except (ValueError, TypeError, ValidationError) as exc:
+                logger.warning("legislacao.etapa_skipped raw=%r err=%s", raw, exc)
+        return out
+
+    def _normalize_riscos(self, riscos_raw: list) -> list[Risco]:
+        """Mapeia list[dict] do LLM (campos `descricao`, `severidade`, `mitigacao`)
+        para list[Risco] do schema (`mitigacao_sugerida`)."""
+        out: list[Risco] = []
+        for raw in riscos_raw or []:
+            if not isinstance(raw, dict):
+                continue
+            descricao = (raw.get("descricao") or raw.get("description") or "").strip()
+            if not descricao:
+                continue
+            severidade = (raw.get("severidade") or raw.get("severity") or "medio").strip().lower()
+            if severidade not in _VALID_SEVERIDADES:
+                logger.warning("legislacao.invalid_severidade '%s' → fallback 'medio'", severidade)
+                severidade = "medio"
+            mitigacao = raw.get("mitigacao_sugerida") or raw.get("mitigacao") or None
+            try:
+                out.append(Risco(
+                    descricao=descricao,
+                    severidade=severidade,  # type: ignore[arg-type]
+                    mitigacao_sugerida=mitigacao,
+                ))
+            except ValidationError as exc:
+                logger.warning("legislacao.risco_skipped raw=%r err=%s", raw, exc)
+        return out
+
+    def _extract_citations(self, legislacao_aplicavel: list) -> list[CitationRef]:
+        """Tenta extrair CitationRef estruturadas via regex em itens de
+        legislacao_aplicavel. Itens não parseáveis são ignorados — `legal_citations`
+        é best-effort; o dual-emit preserva a forma original."""
+        citations: list[CitationRef] = []
+        seen: set[tuple[str, str, int]] = set()
+        for item in legislacao_aplicavel or []:
+            raw_text = self._citation_ref_from_raw(item)
+            if not raw_text:
+                continue
+            match = _CITATION_REGEX.search(raw_text)
+            if not match:
+                continue
+            kind_raw = (match.group("kind") or "").strip().lower()
+            # IN tem variações ("IN IBAMA 02/2014"): caputra só os primeiros 2 chars do prefixo
+            if kind_raw.startswith("in "):
+                kind_raw = "in"
+            kind = _CITATION_KIND_MAP.get(kind_raw, "outro")
+            numero = match.group("numero")
+            try:
+                ano = int(match.group("ano"))
+            except (TypeError, ValueError):
+                continue
+            key = (kind, numero, ano)
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                citations.append(CitationRef(
+                    kind=kind,  # type: ignore[arg-type]
+                    numero=numero,
+                    ano=ano,
+                    raw=match.group("raw").strip(),
+                ))
+            except ValidationError as exc:
+                logger.warning("legislacao.citation_skipped raw=%r err=%s", raw_text, exc)
+        return citations
+
+    def _build_payload(
+        self,
+        *,
+        caminho_regulatorio: str,
+        orgao_competente: str,
+        etapas_raw: list,
+        legislacao_aplicavel_raw: list,
+        riscos_raw: list,
+        documentos_necessarios: list[str],
+        prazos_estimados: dict[str, Any],
+        recomendacoes: list[str],
+        confianca: str,
+        justificativa: str,
+        sources: list[Source],
+        chunks_referenced: list[dict[str, Any]],
+        normas_estaduais: list[str],
+        risco_legal: str,
+        prazos_legais: list,
+    ) -> dict[str, Any]:
+        """Monta EnquadramentoRegulatorioContent + dual-emit das chaves antigas.
+
+        Mapeamento:
+        * ``justificativa`` (ou ``caminho_regulatorio`` como fallback) → ``content``.
+        * ``confianca`` (string baixa|media|alta) → ``confidence`` (float 0..1).
+        * ``prazos_estimados`` (dict) → ``metadata["prazos_estimados"]``.
+        * ``chunks_referenced`` → ``metadata["chunks_referenced"]`` (preserva
+          payload da UI; ``sources`` carrega versão normalizada).
+        * Demais campos viram fields próprios do schema.
+
+        Dual-emit no payload final: chaves antigas (``caminho_regulatorio``,
+        ``orgao_competente``, ``etapas`` como list[dict], ``legislacao_aplicavel``
+        bruto, ``riscos`` bruto, ``confianca`` string, ``prazos_estimados``, etc.)
+        ficam acessíveis para o frontend e o DiagnosticoAgent downstream.
+        """
+        # content não pode ser vazio — usa justificativa, ou caminho como fallback
+        content_text = (justificativa or caminho_regulatorio or "Enquadramento regulatório preliminar.").strip()
+        if not content_text:
+            content_text = "Enquadramento regulatório preliminar."
+
+        # caminho_regulatorio é obrigatório no schema; fallback se LLM devolveu vazio
+        caminho_final = caminho_regulatorio.strip() or "Caminho regulatório a definir após análise complementar."
+
+        # confianca (string) → confidence (float)
+        confianca_norm = (confianca or "media").strip().lower()
+        confidence_float = _CONFIANCA_TO_CONFIDENCE.get(confianca_norm, 0.6)
+
+        etapas = self._normalize_etapas(etapas_raw)
+        riscos = self._normalize_riscos(riscos_raw)
+        legal_citations = self._extract_citations(legislacao_aplicavel_raw)
+
+        metadata: dict[str, Any] = {
+            "prazos_estimados": prazos_estimados or {},
+            "confianca": confianca_norm,
+        }
+        if chunks_referenced:
+            metadata["chunks_referenced"] = chunks_referenced
+
+        try:
+            enq = EnquadramentoRegulatorioContent(
+                content=content_text,
+                metadata=metadata,
+                sources=sources,
+                confidence=confidence_float,
+                caminho_regulatorio=caminho_final,
+                orgao_competente=(orgao_competente.strip() or None),
+                etapas=etapas,
+                legal_citations=legal_citations,
+                riscos=riscos,
+                documentos_necessarios=list(documentos_necessarios),
+                recomendacoes=list(recomendacoes),
+            )
+        except ValidationError as exc:
+            raise LegislacaoOutputValidationError(
+                f"EnquadramentoRegulatorioContent inválido: {exc}"
+            ) from exc
+
+        # Dual-emit (γ): chaves antigas preservadas pra backward-compat com frontend,
+        # DiagnosticoAgent downstream (lê chain_data["legislacao"]["legislacao_aplicavel"]),
+        # e logs/auditoria existentes. Plano de deprecação: ver sprint_a2_legislacao.md.
+        return enq.model_dump(mode="json") | {
+            "requires_review": True,  # decisão jurídica SEMPRE precisa de revisão humana
+            "caminho_regulatorio": caminho_final,
+            "orgao_competente": orgao_competente,
+            "etapas": list(etapas_raw),  # preserva forma original (dict cru)
+            "legislacao_aplicavel": list(legislacao_aplicavel_raw),
+            "riscos": list(riscos_raw),
+            "documentos_necessarios": list(documentos_necessarios),
+            "prazos_estimados": prazos_estimados or {},
+            "confianca": confianca_norm,
+            "justificativa": justificativa,
+            "recomendacoes": list(recomendacoes),
+            # Sprint V — chunks_referenced no top-level também (compat com UI/legislation_alerts)
+            "chunks_referenced": list(chunks_referenced),
+            # Backward compat com formato anterior à Sprint V
+            "normas_estaduais": list(normas_estaduais),
+            "risco_legal": risco_legal,
+            "prazos_legais": list(prazos_legais),
         }
 
     def _fallback_prompts(self) -> dict[str, str]:
