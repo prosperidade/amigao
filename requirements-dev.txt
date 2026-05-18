@@ -1,0 +1,17 @@
+# Dev / test / lint dependencies.
+# Não vão pro container de runtime (Dockerfile usa requirements.txt).
+# Instalar no venv local com: pip install -r requirements-dev.txt
+# (esta linha já puxa runtime via -r requirements.txt)
+
+-r requirements.txt
+
+# Testing
+pytest
+pytest-cov
+pytest-httpx>=0.30          # Sprint B1 — mock da API Resend nos testes
+pytest-celery>=1.0          # Sprint B1 — execução eager de tasks em testes (PR 3)
+testcontainers[postgres]    # Postgres ephemeral por sessão de teste
+
+# Linting / typing
+ruff
+mypy

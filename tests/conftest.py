@@ -21,19 +21,46 @@ from app.models.base import Base
 
 @pytest.fixture(scope="session")
 def _pg_container():
-    """Start a PostgreSQL container once for the entire test session."""
-    with PostgresContainer("postgis/postgis:15-3.3", driver="psycopg2") as pg:
+    """Start a PostgreSQL container once for the entire test session.
+
+    Usamos a imagem customizada do projeto (`amigao_do_meio_ambiente-db`)
+    construída via `docker/db/Dockerfile`, que parte de postgis/postgis:15-3.3
+    e adiciona o `postgresql-15-pgvector`. É a mesma imagem que roda em dev
+    via docker-compose.
+
+    Build local exigido: `docker compose build db` (ou um `docker compose up
+    -d --build db` qualquer no histórico do projeto). Em CI: passo dedicado
+    de build da imagem antes do pytest.
+
+    Fallback: se a imagem customizada não estiver presente, cai pra
+    `pgvector/pgvector:pg15` (oficial do pgvector). Ela tem pgvector mas
+    NÃO tem postgis — alguns testes que dependem de postgis vão falhar.
+    """
+    import docker as _docker_sdk  # noqa: PLC0415
+
+    image = "amigao_do_meio_ambiente-db:latest"
+    try:
+        _docker_sdk.from_env().images.get(image)
+    except Exception:
+        image = "pgvector/pgvector:pg15"
+
+    with PostgresContainer(image, driver="psycopg2") as pg:
         yield pg
 
 
 @pytest.fixture(scope="session")
 def db_engine(_pg_container):
-    """Create engine + schema on the session-scoped Postgres container."""
+    """Create engine + schema on the session-scoped Postgres container.
+
+    Habilita extensões postgis e pgvector antes do create_all. Tabela
+    knowledge_catalog tem coluna `embedding vector(768)` que requer pgvector.
+    """
     url = _pg_container.get_connection_url()
     engine = create_engine(url, pool_pre_ping=True)
 
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
     Base.metadata.create_all(bind=engine)
     yield engine

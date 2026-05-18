@@ -14,6 +14,8 @@ def build_settings(**overrides) -> Settings:
         "SMTP_HOST": "smtp.amigao.com",
         "SMTP_USER": "mailer",
         "SMTP_PASSWORD": "mailer-secret",
+        # Sprint B1 (2026-05-16) — validate_security em prod exige RESEND_API_KEY.
+        "RESEND_API_KEY": "re_test_dummy_key_for_settings_validation",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

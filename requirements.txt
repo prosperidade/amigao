@@ -1,3 +1,6 @@
+# Runtime dependencies — instaladas no container Docker (Dockerfile)
+# e no venv local. Dev/test/lint deps ficam em requirements-dev.txt.
+
 fastapi
 uvicorn[standard]
 pydantic
@@ -16,19 +19,13 @@ boto3
 GeoAlchemy2
 fpdf2
 litellm
-# mempalace removido em 2026-04-23 — supply-chain red flags (PyPI). Ver docs/adr/adr_mempalace_REVOKED.md
+# mempalace removido em 2026-04-23 — supply-chain red flags (PyPI).
+# Ver docs/adr/003-mempalace-REVOKED.md
 httpx
 # Sprint 0 — extração de texto de PDFs/HTML para ingestão de legislação
 pypdf>=5.0
 pypdfium2>=4.30  # rasteriza PDFs em imagens para OpenAI Vision (fallback OCR)
 beautifulsoup4>=4.12
 lxml>=5.0
-PyYAML>=6.0  # Sprint A1 — front-matter de SKILL.md (já vinha como transitivo via uvicorn[standard])
+PyYAML>=6.0  # Sprint A1 — front-matter de SKILL.md
 slowapi>=0.1.9
-pytest
-pytest-cov
-pytest-httpx>=0.30  # Sprint B1 — mock da API Resend nos testes
-pytest-celery>=1.0  # Sprint B1 — execução eager de tasks em testes (PR 3)
-testcontainers[postgres]
-ruff
-mypy
