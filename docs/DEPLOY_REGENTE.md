@@ -9,8 +9,8 @@
 
 | Camada | Provider | Plano | Custo/mês | Observação |
 |---|---|---|---|---|
-| Compute API | Render Web Service (Ohio) | Starter | $7 | 512 MB, always-on, $PORT |
-| Compute Worker | Render Background Worker (Ohio) | Standard | $25 | 2 GB, `-B` beat embarcado |
+| Compute API | Render Web Service (Virginia) | Starter | $7 | 512 MB, always-on, $PORT |
+| Compute Worker | Render Background Worker (Virginia) | Standard | $25 | 2 GB, `-B` beat embarcado |
 | Banco | Supabase (us-east-1 Virginia) | Pro | $25 | Postgres 15 + pgvector + PostGIS |
 | Redis | Upstash (us-east-1) | Free | $0 | TLS (`rediss://`), 10k cmds/dia |
 | Storage | Cloudflare R2 | Pay-as-you-go | ~$0-2 | S3-compat, zero egress |
@@ -40,7 +40,7 @@ não dias. Rotacione a chave comprometida ANTES de qualquer outra ação.
    - **Nome:** `regente-ambiental-prod`
    - **Organização:** sua org pessoal (ou criar uma nova "Regente")
    - **Senha do banco:** gerar 32 chars random e guardar no password manager
-   - **Região:** **`East US (North Virginia) — us-east-1`** (alinhada com Render Ohio → latência intra-região <5ms vs. ~180ms transcontinental se fôssemos pra `sa-east-1`).
+   - **Região:** **`East US (North Virginia) — us-east-1`** (alinhada com Render Virginia, mesma AZ AWS → latência API↔DB <5ms vs. ~180ms transcontinental se fôssemos pra `sa-east-1`).
    - **Justificativa LGPD:** o piloto é B2B com consultor ambiental, sem exigência contratual escrita de residência de dados no Brasil. Transferência internacional coberta por DPA + **Cláusulas-Padrão Contratuais ANPD (Resolução CD/ANPD nº 19/2024)**. Migração futura para `sa-east-1` São Paulo fica como item de revisão quando aparecer cliente govtech com exigência contratual de soberania de dados. Checklist completo na seção "Compliance LGPD — pré-primeiro cliente real" no final deste documento.
    - **Plan:** Pro ($25/mês).
 
@@ -103,7 +103,7 @@ Deve retornar 2 linhas. Se `vector` faltar, o alembic vai falhar na migration `f
 1. Acesse https://console.upstash.com → Create Database.
    - Nome: `regente-prod`
    - Type: `Regional` (não Global — não precisamos do extra cost).
-   - Region: `us-east-1` (alinhar com Render Ohio + Supabase us-east-1).
+   - Region: `us-east-1` (alinhar com Render Virginia + Supabase us-east-1 — mesma AZ AWS, latência <2ms).
    - **TLS: enabled** (obrigatório — Celery vai usar `rediss://`).
 
 2. Copie a **TLS connection string** (não a non-TLS):
@@ -359,3 +359,58 @@ Itens conhecidos mas **não bloqueantes para subir infra**. Anotar e endereçar 
 3. **Configurar BetterStack** (uptime + logs). Free tier comporta o piloto, alerta em <30s se `/health` cair.
 
 4. **Migrar de `--pool=solo`** quando volume exigir paralelismo de OCR. `--pool=prefork --concurrency=2` no Standard 2GB cabe; revalidar memória antes.
+
+---
+
+## Apêndice — Template de credenciais externas
+
+> Use este bloco quando estiver coletando os valores dos provedores externos
+> (passos `a`, `c`, `d` do runbook). Cola num password manager seguro — **nunca
+> commita preenchido**. Quando todos os valores estiverem coletados, transfere
+> para o Render Dashboard preenchendo os campos `sync: false` do envVarGroup
+> `regente-shared` (passo `e`).
+
+```bash
+# Supabase (passo a — Connection strings em Project Settings → Database)
+SUPABASE_PROJECT_REF=                                           # informativo, vai pra SUPABASE_REGION docs
+DATABASE_URL=postgresql://postgres.PROJECT_REF:PASS@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+MIGRATE_DATABASE_URL=postgresql://postgres:PASS@db.PROJECT_REF.supabase.co:5432/postgres
+
+# Upstash Redis (passo d — TLS connection string, NÃO a non-TLS)
+REDIS_URL=rediss://default:TOKEN@xxx.upstash.io:6379
+
+# Cloudflare R2 (passo c — Manage R2 API Tokens → Create API Token)
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_SERVER=https://ACCOUNT_ID.r2.cloudflarestorage.com
+MINIO_PUBLIC_URL=https://ACCOUNT_ID.r2.cloudflarestorage.com    # mesmo valor do MINIO_SERVER no R2
+
+# LLM providers
+ANTHROPIC_API_KEY=                                              # sk-ant-api03-...
+OPENAI_API_KEY=                                                 # sk-proj-...
+GEMINI_API_KEY=                                                 # AIza... — NÃO é GOOGLE_API_KEY (Settings espera GEMINI_*)
+
+# Email transacional (Resend SMTP ou outro provider)
+SMTP_HOST=
+SMTP_USER=
+SMTP_PASSWORD=
+RESEND_API_KEY=                                                 # re_...
+RESEND_AUDIENCE_ID=                                             # uuid do Audience criado no Resend
+
+# Alerts operacionais (deixar vazio até integrar Slack/PagerDuty)
+ALERT_WEBHOOK_URL=
+```
+
+### Pegadinhas que custam tempo
+
+- **`GEMINI_API_KEY`**, não `GOOGLE_API_KEY`. O Settings tem `extra="ignore"`, então uma var com nome errado é silenciosamente descartada e o agente legislação falha no boot por falta de chave.
+- **`MINIO_PUBLIC_URL` separado de `MINIO_SERVER`.** No R2 ambos apontam pro mesmo endpoint, mas o código usa propriedades distintas (`minio_internal_endpoint` para boto3, `minio_public_endpoint` para presigned URLs). Setar só `MINIO_SERVER` funciona via fallback, mas é frágil.
+- **`rediss://` (com duplo `s`)** no Upstash — schema TLS. Sem isso o Celery tenta conexão plain e o Upstash rejeita.
+- **`MIGRATE_DATABASE_URL` aponta pro Supabase direct (5432), NÃO pooler (6543).** Pooler em transaction mode quebra DDL — alembic precisa de sessão estável.
+- **`DATABASE_URL` no Supabase pooler tem prefixo `postgres.<ref>` no user** (`postgres.abcdefg`), não só `postgres`. Esse prefixo é o que faz o pooler identificar o projeto.
+
+### Vars preenchidas automaticamente (não precisa coletar)
+
+- `SECRET_KEY` — Render gera via `generateValue: true` no envVarGroup.
+- `ENVIRONMENT`, `LOG_LEVEL`, `SUPABASE_REGION`, `EMAILS_FROM_*`, `RESEND_FROM_*`, `AI_DEFAULT_MODEL`, `AI_FALLBACK_MODEL`, `AI_MAX_COST_PER_JOB_USD`, `LEGISLATION_USE_GEMINI_DEFAULT`, `MINIO_SECURE`, `SMTP_PORT`, `SMTP_TLS`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `ALGORITHM`, `PROMETHEUS_QUEUE_NAMES`, `ALERT_WEBHOOK_MIN_SEVERITY`, `AI_ENABLED`, `EMBEDDING_PROVIDER` — valores literais hardcoded no [render.yaml](../render.yaml).
+- `BACKEND_CORS_ORIGINS`, `CLIENT_PORTAL_URL` — hardcoded no service `regente-api` (não no envVarGroup compartilhado).

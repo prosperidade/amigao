@@ -15,10 +15,10 @@
 #   - Cloudflare R2    : storage S3-compat (~$0-2/mês)
 #   - Resend           : emails transacionais (já contratado)
 #
-# Region: ohio (Render us-east-2). Alinhada com Supabase us-east-1 (Virginia)
-# → latência API↔DB <30ms. Decisão: priorizar latência sobre soberania de dados
-# no piloto; compliance LGPD tratado por DPAs + política (ver DEPLOY_REGENTE.md
-# seção "Compliance LGPD — pré-primeiro cliente").
+# Region: virginia (Render us-east-1, mesma AZ AWS do Supabase Virginia).
+# Latência intra-região API↔DB <5ms. Decisão: priorizar latência sobre
+# soberania de dados no piloto; compliance LGPD tratado por DPAs + política
+# (ver DEPLOY_REGENTE.md seção "Compliance LGPD — pré-primeiro cliente real").
 # ============================================================================
 
 services:
@@ -30,7 +30,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: starter
-    region: ohio
+    region: virginia
     branch: main
     autoDeploy: true
     # Render injeta $PORT. Bind explícito; init_db/seed.py NÃO rodam aqui
@@ -55,7 +55,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
-    region: ohio
+    region: virginia
     branch: main
     autoDeploy: true
     # --pool=solo: concurrency=1, OCR sequencial (aceitável piloto).
