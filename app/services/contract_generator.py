@@ -42,7 +42,7 @@ def fill_contract_template(
     raw = template.content_template
 
     # Dados da empresa (tenant) — valores padrão se não configurados
-    raw = raw.replace("{{empresa.nome}}", "Amigão do Meio Ambiente")
+    raw = raw.replace("{{empresa.nome}}", "Regente Ambiental")
     raw = raw.replace("{{empresa.cnpj}}", "00.000.000/0001-00")
     raw = raw.replace("{{empresa.municipio}}", "")
 
@@ -183,7 +183,7 @@ def render_pdf(contract: Contract, filled_content: str) -> bytes:
     pdf.set_font("Helvetica", size=8)
     pdf.set_text_color(150, 150, 150)
     footer_text = _latin1_safe(
-        f"Documento gerado em {datetime.now(UTC).strftime('%d/%m/%Y as %H:%M')} UTC - Amigao do Meio Ambiente"
+        f"Documento gerado em {datetime.now(UTC).strftime('%d/%m/%Y as %H:%M')} UTC - Regente Ambiental"
     )
     pdf.cell(content_w, 5, footer_text, align="C", new_x="LMARGIN", new_y="NEXT")
 

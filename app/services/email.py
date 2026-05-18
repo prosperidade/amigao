@@ -83,7 +83,7 @@ def _base_template(title: str, intro: str, body_html: str, footer: str) -> str:
     return f"""
     <html>
       <body style="font-family: Arial, sans-serif; color: #333; max-width: 640px; margin: auto; padding: 24px; border: 1px solid #eaeaea; border-radius: 12px; background-color: #ffffff;">
-        <h2 style="color: #059669; margin-top: 0;">Amigão do Meio Ambiente</h2>
+        <h2 style="color: #059669; margin-top: 0;">Regente Ambiental</h2>
         <h3 style="color: #111827;">{title}</h3>
         <p>{intro}</p>
         <div style="background-color: #f9fafb; padding: 16px; border-radius: 10px; margin: 20px 0; border: 1px solid #e5e7eb;">

@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     ALERT_WEBHOOK_SIGNING_SECRET: str = ""
     ALERT_WEBHOOK_MIN_SEVERITY: Literal["info", "warning", "error", "critical"] = "error"
     PROMETHEUS_QUEUE_NAMES: str = "celery"
-    PROJECT_NAME: str = "Amigão do Meio Ambiente"
+    PROJECT_NAME: str = "Regente Ambiental"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
 
@@ -86,8 +86,8 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "sandbox.smtp.mailtrap.io"
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    EMAILS_FROM_EMAIL: EmailStr = "noreply@amigao.com"
-    EMAILS_FROM_NAME: str = "Amigão do Meio Ambiente"
+    EMAILS_FROM_EMAIL: EmailStr = "noreply@regenteambiental.com.br"
+    EMAILS_FROM_NAME: str = "Regente Ambiental"
 
     # RESEND (Sprint B1 — waitlist do Regente)
     # Coexiste com SMTP: SMTP segue cobrindo emails do portal interno;

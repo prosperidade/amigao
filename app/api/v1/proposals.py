@@ -309,7 +309,7 @@ def _proposal_email_html(proposal: Proposal) -> str:
     return f"""
 <html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;">
   <div style="background:#1a7a3c;padding:20px;border-radius:8px 8px 0 0;">
-    <h2 style="color:white;margin:0">Amigão do Meio Ambiente</h2>
+    <h2 style="color:white;margin:0">Regente Ambiental</h2>
     <p style="color:#a7f3d0;margin:4px 0 0">Consultoria e Regularização Ambiental</p>
   </div>
   <div style="padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">

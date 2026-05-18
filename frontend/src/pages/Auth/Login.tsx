@@ -68,7 +68,7 @@ export default function Login() {
           <div className="bg-primary/10 p-4 rounded-full mb-4">
             <Leaf className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Amigão do Meio Ambiente</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Regente Ambiental</h1>
           <p className="text-sm text-gray-500 text-center">Software de Gestão Ambiental e Fundiária</p>
         </div>
 

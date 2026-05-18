@@ -186,7 +186,7 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> dict[str, 
 
         pdf.section_title("Fechamento")
         pdf.paragraph(
-            "Documento gerado automaticamente pelo motor do Amigao do Meio Ambiente para consolidacao do atendimento tecnico."
+            "Documento gerado automaticamente pelo motor do Regente Ambiental para consolidacao do atendimento tecnico."
         )
 
         # O retorno do FPDF pode variar entre str e bytearray conforme a versão.

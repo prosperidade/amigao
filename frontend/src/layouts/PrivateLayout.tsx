@@ -63,7 +63,7 @@ export default function PrivateLayout() {
           <div className="bg-primary/10 p-1.5 rounded-md mr-3">
             <Leaf className="w-5 h-5 text-primary" />
           </div>
-          <span className="font-bold text-gray-900 dark:text-white tracking-tight">Amigão</span>
+          <span className="font-bold text-gray-900 dark:text-white tracking-tight">Regente</span>
         </div>
 
         {/* Nav */}
@@ -116,7 +116,7 @@ export default function PrivateLayout() {
           <div className="bg-primary/10 p-1.5 rounded-md mr-3">
             <Leaf className="w-5 h-5 text-primary" />
           </div>
-          <span className="font-bold text-gray-900 dark:text-white">Amigão</span>
+          <span className="font-bold text-gray-900 dark:text-white">Regente</span>
         </header>
 
         {/* Page Content */}
