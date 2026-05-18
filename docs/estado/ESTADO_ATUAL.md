@@ -127,7 +127,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Crawlers DOU/DOE ativados em prod | Apenas esqueleto pronto | Médio |
 | Connector e-mail inbound (acompanhamento) | Sem integração de inbound hoje | Médio |
 | Hardening de produção (secrets, CORS, Swagger desabilitado) | Checklist em `ops/production-secrets-checklist.md` | Curto |
-| Pytest e2e bloqueado em CI/local | Testcontainers requer Docker socket no container `api` (não montado hoje) ou venv host saudável (quebrado pelo rename de pasta `Amigo_*`→`Amigao_*`). Sprint B1 (Waitlist) validada via smoke real (4/4 verdes 2026-05-16). Resolver antes do deploy de produção real (semana 19-23/05). | Curto |
+| State-leakage entre testes (29 fails na suite, passam isolados) | Pytest e2e foi desbloqueado em 2026-05-17 (commit `0e17ebd`): venv host saudável + Testcontainers usando imagem `amigao_do_meio_ambiente-db` (postgis+pgvector). **339 testes passam**. Sobram 29 que falham só em suite — slowapi rate-limit state vaza entre testes, alguns testes committam transações. Sprint dedicada de saneamento: fixture `autouse=True` que reseta `slowapi.Limiter._storage` + auditar testes que committam manualmente. Não bloqueia deploy (suite roda localmente; mostra testes verdes isolados). | Curto |
 
 ## Próximos marcos
 
