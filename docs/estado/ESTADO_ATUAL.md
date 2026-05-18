@@ -121,7 +121,6 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 |---|---|---|
 | Skills procedurais (redator + extrator) | Aguardando PDFs-gabarito da sócia (reunião 16/05) | Curto |
 | Sprint A2-legislacao | Sem bloqueio externo | Curto |
-| Flake de `json_parse` no agente legislacao | Gemini 2.5 Flash às vezes retorna JSON truncado dentro de bloco markdown ```json...```; parser falha mesmo com `CLAUDE_LEGAL_MAX_TOKENS=8192`. Mitigação: tentar de novo a chamada. Resolver pelo parser sendo mais tolerante a JSON truncado, ou subir max_tokens para 16384, ou trocar pra response schema estruturada do Gemini. | Curto |
 | Renomeação visível Amigão→Regente | Patch sendo preparado | Curto |
 | Property.geom populado | Falta parser shapefile + ingestão de KML/SHP | Médio |
 | Agente auditor_imovel | Depende de geom populado | Médio |
