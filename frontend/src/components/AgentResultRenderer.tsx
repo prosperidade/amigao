@@ -166,13 +166,13 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
   const hipoteses = arr(r.hipoteses ?? r.passivos_identificados);
   const checklist = arr(r.checklist_documental ?? r.acoes_remediacao);
   const lacunas = arr(r.lacunas);
-  const riscosArr = arr(r.riscos);
+  const riscosArr = objArr(r.riscos);
   // risco_estimado (string única, dual-emit) tem precedência visual no badge
   // de header; se ausente, deriva da maior severidade entre riscos[*].severidade.
   const riscoEstimado =
     (typeof r.risco_estimado === 'string' && r.risco_estimado) ||
-    (riscosArr.length > 0 && typeof (riscosArr[0] as Record<string, unknown>).severidade === 'string'
-      ? ((riscosArr[0] as Record<string, unknown>).severidade as string)
+    (riscosArr.length > 0 && typeof riscosArr[0].severidade === 'string'
+      ? (riscosArr[0].severidade as string)
       : null);
   const observacoesText =
     (typeof r.observacoes === 'string' && r.observacoes) ||
