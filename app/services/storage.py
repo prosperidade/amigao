@@ -20,6 +20,11 @@ BUCKET_NAME = "regente-docs"
 # travado, credenciais inválidas em endpoint legacy) congelam o worker por
 # 60s+ esperando os retries default do botocore.
 _S3_BOTO_CONFIG = BotoConfig(
+    # Cloudflare R2 só aceita Signature V4. Sem isso, boto3 gera URL com
+    # SigV2 em endpoint customizado e o R2 responde 401 (mascarado como
+    # erro CORS no navegador, pois a resposta de erro não traz headers
+    # de Access-Control-Allow-Origin).
+    signature_version="s3v4",
     connect_timeout=5,
     read_timeout=10,
     retries={"max_attempts": 2, "mode": "standard"},
