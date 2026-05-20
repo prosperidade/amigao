@@ -5,7 +5,8 @@ from functools import lru_cache
 from threading import Lock
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import UploadFile
 
 from app.core.config import settings
@@ -13,6 +14,17 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 BUCKET_NAME = "regente-docs"
+
+# Limita o tempo que uma chamada ao MinIO/R2 pode bloquear o request HTTP
+# do FastAPI. Sem isso, falhas de rede para o endpoint S3 (R2 offline, DNS
+# travado, credenciais inválidas em endpoint legacy) congelam o worker por
+# 60s+ esperando os retries default do botocore.
+_S3_BOTO_CONFIG = BotoConfig(
+    connect_timeout=5,
+    read_timeout=10,
+    retries={"max_attempts": 2, "mode": "standard"},
+)
+
 
 class StorageService:
     _bucket_ready = False
@@ -24,7 +36,8 @@ class StorageService:
             endpoint_url=settings.minio_internal_endpoint,
             aws_access_key_id=settings.MINIO_ACCESS_KEY,
             aws_secret_access_key=settings.MINIO_SECRET_KEY,
-            region_name="us-east-1"
+            region_name="us-east-1",
+            config=_S3_BOTO_CONFIG,
         )
         self.presign_client = self.s3_client
         if settings.minio_public_endpoint != settings.minio_internal_endpoint:
@@ -33,9 +46,13 @@ class StorageService:
                 endpoint_url=settings.minio_public_endpoint,
                 aws_access_key_id=settings.MINIO_ACCESS_KEY,
                 aws_secret_access_key=settings.MINIO_SECRET_KEY,
-                region_name="us-east-1"
+                region_name="us-east-1",
+                config=_S3_BOTO_CONFIG,
             )
-        self._ensure_bucket_exists()
+        # Bucket check é LAZY — não roda no __init__ pra não bloquear
+        # endpoints que só assinam URL (operação offline). Operações que
+        # tocam o bucket (put/get server-side) chamam _ensure_bucket_exists()
+        # explicitamente.
 
     def _ensure_bucket_exists(self):
         if self.__class__._bucket_ready:
@@ -46,8 +63,20 @@ class StorageService:
                 return
             try:
                 self.s3_client.head_bucket(Bucket=BUCKET_NAME)
-            except ClientError:
-                self.s3_client.create_bucket(Bucket=BUCKET_NAME)
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in ("404", "NoSuchBucket", "NotFound"):
+                    self.s3_client.create_bucket(Bucket=BUCKET_NAME)
+                else:
+                    # 403 normalmente significa que o bucket existe mas a
+                    # credencial não tem head_bucket; segue mesmo assim.
+                    logger.warning("head_bucket retornou %s — assumindo bucket existente.", code)
+            except BotoCoreError as exc:
+                # Falha de rede/timeout: não marca bucket como pronto,
+                # mas também não derruba o serviço. A próxima chamada
+                # tenta de novo.
+                logger.error("Falha de conexão ao validar bucket %s: %s", BUCKET_NAME, exc)
+                raise
             self.__class__._bucket_ready = True
 
     def _build_key(self, tenant_id: int, process_id: int, filename: str) -> str:
@@ -105,6 +134,7 @@ class StorageService:
 
     def upload_file(self, file: UploadFile, tenant_id: int, process_id: int) -> dict:
         """Upload direto (mantido como fallback interno)."""
+        self._ensure_bucket_exists()
         key = self._build_key(tenant_id, process_id, file.filename)
 
         file.file.seek(0)
@@ -133,6 +163,7 @@ class StorageService:
 
     def upload_bytes(self, content: bytes, filename: str, content_type: str, tenant_id: int, process_id: int) -> dict:
         """Upload interno direto de bytes gerados pelo sistema."""
+        self._ensure_bucket_exists()
         key = self._build_key(tenant_id, process_id, filename)
         file_size = len(content)
         checksum = hashlib.sha256(content).hexdigest()

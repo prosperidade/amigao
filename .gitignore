@@ -27,9 +27,14 @@ build/
 .mypy_cache/
 .pyre_configuration
 
-# Ambiente
+# Ambiente — qualquer .env* fica bloqueado, exceto os templates .example.
+# (NUNCA cole secrets reais em arquivos .example — eles SÃO commitados.)
 .env
+.env.*
 *.env
+!.env.example
+!.env.production.example
+!_env.example
 
 # IDE
 .vscode/

@@ -123,40 +123,82 @@ export default function DraftDocumentUploader({ draftId, onChange, onApplySugges
     if (!files.length) return;
     setUploading(true);
     setError(null);
-    try {
-      for (const file of Array.from(files)) {
+    // Timeout do PUT direto ao storage. Sem isso, se o R2/MinIO travar
+    // a UI fica presa pra sempre (fetch não tem timeout default).
+    const PUT_TIMEOUT_MS = 45_000;
+    // Timeout pra chamadas do backend (presign + confirm). Cobre cold
+    // start do Render e travamento em head_bucket.
+    const BACKEND_TIMEOUT_MS = 20_000;
+    const failures: string[] = [];
+
+    for (const file of Array.from(files)) {
+      try {
         // 1) Pedir presigned URL
-        const { data: presigned } = await api.post(`/intake/drafts/${draftId}/upload-url`, {
-          filename: file.name,
-          content_type: file.type || 'application/octet-stream',
-          document_type: pendingType || null,
-        });
-        // 2) PUT direto ao MinIO (fora do axios, sem auth)
-        const putRes = await fetch(presigned.upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
-          body: file,
-        });
-        if (!putRes.ok) throw new Error(`Upload falhou (HTTP ${putRes.status})`);
+        const { data: presigned } = await api.post(
+          `/intake/drafts/${draftId}/upload-url`,
+          {
+            filename: file.name,
+            content_type: file.type || 'application/octet-stream',
+            document_type: pendingType || null,
+          },
+          { timeout: BACKEND_TIMEOUT_MS },
+        );
+        // 2) PUT direto ao MinIO/R2 (fora do axios, sem auth) com timeout
+        const putController = new AbortController();
+        const putTimer = window.setTimeout(() => putController.abort(), PUT_TIMEOUT_MS);
+        let putRes: Response;
+        try {
+          putRes = await fetch(presigned.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+            body: file,
+            signal: putController.signal,
+          });
+        } catch (putErr: unknown) {
+          const isAbort = (putErr as { name?: string })?.name === 'AbortError';
+          throw new Error(
+            isAbort
+              ? `Tempo esgotado enviando "${file.name}" pro storage (${PUT_TIMEOUT_MS / 1000}s). Verifique conexão ou CORS do bucket.`
+              : `Falha ao enviar "${file.name}" pro storage: ${(putErr as Error)?.message ?? 'erro desconhecido'}. Pode ser CORS bloqueando.`,
+          );
+        } finally {
+          window.clearTimeout(putTimer);
+        }
+        if (!putRes.ok) {
+          throw new Error(`Upload de "${file.name}" rejeitado pelo storage (HTTP ${putRes.status}).`);
+        }
         // 3) Confirmar no backend
-        await api.post(`/intake/drafts/${draftId}/documents`, {
-          storage_key: presigned.storage_key,
-          filename: file.name,
-          content_type: file.type || 'application/octet-stream',
-          file_size_bytes: file.size,
-          document_type: pendingType || null,
-        });
+        await api.post(
+          `/intake/drafts/${draftId}/documents`,
+          {
+            storage_key: presigned.storage_key,
+            filename: file.name,
+            content_type: file.type || 'application/octet-stream',
+            file_size_bytes: file.size,
+            document_type: pendingType || null,
+          },
+          { timeout: BACKEND_TIMEOUT_MS },
+        );
+      } catch (err: unknown) {
+        const ax = err as { code?: string; response?: { data?: { detail?: string } }; message?: string };
+        const detail = ax?.response?.data?.detail;
+        let msg: string;
+        if (ax?.code === 'ECONNABORTED') {
+          msg = `Tempo esgotado pedindo URL de upload pra "${file.name}". Backend pode estar travado no storage.`;
+        } else {
+          msg = detail ?? ax?.message ?? `Erro no upload de "${file.name}"`;
+        }
+        failures.push(msg);
       }
-      await refresh();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail
-        ?? (err as { message?: string })?.message
-        ?? 'Erro no upload';
-      setError(msg);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+
+    // Atualiza a lista mesmo se algum arquivo falhou (os que passaram já estão lá)
+    await refresh();
+    if (failures.length) {
+      setError(failures.join(' · '));
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const triggerImport = async () => {
