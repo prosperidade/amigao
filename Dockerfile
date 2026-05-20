@@ -12,6 +12,7 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+COPY scripts ./scripts
 COPY seed.py ./
 
 RUN useradd --create-home --shell /bin/bash appuser \
