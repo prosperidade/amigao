@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { FileText, Download, Sparkles } from 'lucide-react';
+import { FileText, Download, Sparkles, Trash2 } from 'lucide-react';
 import { Document } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
 import ProcessChecklist from './ProcessChecklist';
@@ -12,6 +12,7 @@ interface DocumentsTabProps {
 }
 
 export default function DocumentsTab({ processId }: DocumentsTabProps) {
+  const queryClient = useQueryClient();
   const { data: documents, refetch: refetchDocuments } = useQuery({
     queryKey: ['documents', processId],
     queryFn: async () => {
@@ -20,6 +21,29 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
     },
     enabled: !!processId,
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      await api.delete(`/documents/${docId}`);
+    },
+    onSuccess: () => {
+      toast.success('Documento excluido.');
+      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+      queryClient.invalidateQueries({ queryKey: ['checklist', processId] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? 'Erro ao excluir documento.';
+      toast.error(msg);
+    },
+  });
+
+  const handleDelete = (docId: number, filename: string) => {
+    const ok = window.confirm(
+      `Excluir "${filename}"? O documento sera marcado como removido mas o arquivo original fica preservado no storage.`,
+    );
+    if (ok) deleteMutation.mutate(docId);
+  };
 
   // Buscar jobs do extrator para mostrar badge de campos extraidos
   const { data: aiJobs = [] } = useQuery<AIJob[]>({
@@ -88,12 +112,22 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => handleDownload(doc.id, doc.filename || doc.original_file_name || 'download')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 text-sm transition-all"
-              >
-                <Download className="w-3.5 h-3.5" /> Baixar
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleDownload(doc.id, doc.filename || doc.original_file_name || 'download')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 text-sm transition-all"
+                >
+                  <Download className="w-3.5 h-3.5" /> Baixar
+                </button>
+                <button
+                  onClick={() => handleDelete(doc.id, doc.filename || doc.original_file_name || 'documento')}
+                  disabled={deleteMutation.isPending}
+                  title="Excluir documento"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10 hover:border-red-200 dark:hover:border-red-500/30 text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

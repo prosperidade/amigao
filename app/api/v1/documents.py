@@ -264,3 +264,29 @@ def get_download_url(
 
     url = _get_storage_service().generate_presigned_get_url(doc.storage_key)
     return {"download_url": url, "expires_in": 300}
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Soft-delete de documento (marca `deleted_at`). Restrito ao consultor."""
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    doc_repo = DocumentRepository(db, current_user.tenant_id)
+    doc = doc_repo.get_scoped(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    doc.deleted_at = datetime.now(timezone.utc)
+    db.add(doc)
+    doc_repo.add_audit(
+        user_id=current_user.id,
+        document=doc,
+        action="deleted",
+        details=f"Documento '{doc.filename or doc.original_file_name}' marcado como excluido (soft delete).",
+    )
+    db.commit()
+    return None
