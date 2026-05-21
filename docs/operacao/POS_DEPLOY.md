@@ -3,7 +3,7 @@
 > Fonte de verdade pós-deploy. Documenta a stack real, bugs encontrados, fixes aplicados e métodos de debug validados em prod.
 > Adicione novas seções por baixo, em ordem cronológica. Quando algo virar conhecimento estável, promova pra `RUNBOOK_OPS.md` ou ADR.
 
-**Última atualização:** 2026-05-20
+**Última atualização:** 2026-05-20 (fim da sessão)
 
 ---
 
@@ -184,9 +184,35 @@ curl -sS -i -X PUT "<URL_PRESIGNED>" -H "Content-Type: application/pdf" --data-b
 
 ---
 
-## 7. Pendências conhecidas em prod (sem impacto no fluxo principal)
+## 7. Features adicionadas pós-deploy
 
-### 7.1. WebSocket realtime (`wss://api.regenteambiental.com.br/api/v1/ws`)
+Log de funcionalidades pequenas adicionadas em prod após o deploy inicial — para a sócia poder operar sem precisar de acesso ao banco.
+
+### 2026-05-20 — Botão de excluir documento (`feat/0e24562`)
+
+**Onde:** Quadro de Ações → aba "Documentos" → cada linha agora tem dois botões: `Baixar` (existia) e ícone de lixeira vermelho (novo).
+
+**Por quê:** sócia tinha documentos duplicados/incorretos no Quadro e não tinha como removê-los pela UI — só via SQL direto, o que não escala.
+
+**Como funciona:**
+- Backend: novo endpoint `DELETE /api/v1/documents/{id}` em [app/api/v1/documents.py](../../app/api/v1/documents.py)
+- Auth: `get_current_internal_user` (só consultor; portal cliente **não** pode deletar)
+- **Soft delete**: marca `Document.deleted_at` com timestamp UTC; arquivo original fica preservado no R2
+- Audit log com `action="deleted"` via `DocumentRepository.add_audit` (hash-chain preservado, princípio Regente nº 2)
+- Frontend: confirmação `window.confirm` antes do delete; invalida queries `['documents', processId]` e `['checklist', processId]`; toast verde/vermelho
+
+**Como reverter um delete acidental:** no Supabase SQL Editor:
+```sql
+UPDATE documents SET deleted_at = NULL WHERE id = <ID>;
+```
+
+**Como apagar de verdade (hard delete + LGPD):** ainda não implementado. Quando aparecer necessidade formal (pedido do titular de dados, decisão jurídica), virar feature separada que: (a) remove objeto do R2 via `delete_object`, (b) preserva o audit log com `action="hard_deleted"`, (c) zera campos PII do `Document` row mas mantém metadata para auditoria.
+
+---
+
+## 8. Pendências conhecidas em prod (sem impacto no fluxo principal)
+
+### 8.1. WebSocket realtime (`wss://api.regenteambiental.com.br/api/v1/ws`)
 
 **Status:** falhando em prod (browser console). Não impede upload nem fluxo de cadastro.
 
@@ -197,7 +223,7 @@ curl -sS -i -X PUT "<URL_PRESIGNED>" -H "Content-Type: application/pdf" --data-b
 
 **Prioridade:** baixa — recurso é notification/realtime, não bloqueia operação.
 
-### 7.2. Rotação de credenciais expostas em 19/05
+### 8.2. Rotação de credenciais expostas em 19/05
 
 Durante o deploy, secrets reais foram colados via chat e em arquivo local:
 - Anthropic API key (`sk-ant-api03-...`)
@@ -219,11 +245,13 @@ Procedimento de rotação detalhado: criar memory dedicado quando for executar.
 
 ---
 
-## 8. Próximos passos pós-fluxo de upload validado
+## 9. Próximos passos pós-fluxo de upload validado
 
-A sócia agora consegue:
+A sócia agora consegue (validado em prod, 2026-05-20):
 - ✅ Criar cliente no Intake
 - ✅ Subir documentos no Quadro de Ações
+- ✅ Baixar documento por linha
+- ✅ Excluir documento duplicado/incorreto (soft delete)
 
 Falta validar (não testado em prod ainda):
 - [ ] Pipeline OCR + extração (`ocr_then_extract` worker) com PDF real
@@ -231,12 +259,13 @@ Falta validar (não testado em prod ainda):
 - [ ] Chat com agente regulatório
 - [ ] Geração de peças formais (com `requires_review=True`)
 - [ ] Envio de e-mail via Resend
+- [ ] WebSocket realtime / notifications (ver §8.1)
 
-Quando bater bug nessas, **adicionar seção nova aqui** seguindo o template do incidente 2026-05-20.
+Quando bater bug nessas, **adicionar seção nova no §6** seguindo o template do §10.
 
 ---
 
-## 9. Template pra próximos incidentes
+## 10. Template pra próximos incidentes
 
 ```markdown
 ### Incidente AAAA-MM-DD — <título curto>
