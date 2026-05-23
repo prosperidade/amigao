@@ -139,6 +139,26 @@ Bloqueio mais antigo do projeto (23 dias desde 23/04). Destrava-se nesta semana.
 | Skills por tenant | ❌ Capacidade desenhada, não implementada |
 | Marketplace de skills | ❌ Janela 3 do roadmap |
 
+## Convenção de nomenclatura de skills (adendo 2026-05-23)
+
+Com a primeira skill real escrita (`diagnostico/situacao_ambiental_imovel_rural`) e cinco
+do Redator a caminho, fixa-se a convenção para evitar divergência conforme o volume cresce.
+
+**Caminho:** `app/skills/<agente>/<dominio>/SKILL.md`
+- `<agente>` = nome do agente em `BaseAgent.name` (diagnostico, redator, extrator, legislacao…)
+- `<dominio>` = competência da skill, em snake_case, descrevendo O QUE ela faz — nunca
+  repetindo o nome do agente
+- arquivo sempre `SKILL.md` (maiúsculas)
+
+**Regras do nome de domínio:**
+- snake_case (underscore), nunca hífen — casa com identificador Python e com o `name:` do frontmatter
+- descreve a competência (substantivo do domínio), não o agente: `situacao_ambiental_imovel_rural`, não `skill_diagnostico`
+- o `name:` no frontmatter YAML é idêntico ao nome da pasta `<dominio>`
+
+**Por quê:** a pasta-pai já identifica o agente; repetir o nome do agente na skill é
+redundante e quebra quando o mesmo agente ganha a segunda skill. snake_case uniforme evita
+o conflito hífen-vs-underscore observado entre pastas de skill e o `name:` do frontmatter.
+
 ## Relação com outros ADRs
 
 - [`./002-multi-llm-gateway.md`](./002-multi-llm-gateway.md) — gateway carrega skills antes da chamada LLM
