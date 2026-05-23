@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, computed_field, field_validator, model_validator
 
 # Templates suportados pelo RedatorAgent — ver app/agents/redator.py:VALID_TEMPLATES
 PecaTemplate = Literal[
@@ -48,7 +48,65 @@ CitationKind = Literal[
 CitationJurisdicao = Literal["federal", "estadual", "municipal", "outro"]
 
 SourceKind = Literal["legislation", "document", "manual"]
-RiscoSeveridade = Literal["baixo", "medio", "alto"]
+
+# Enum legado mantido para dual-emit. "critico" é aditivo (Sprint A4):
+# o Risco antigo só tinha 3 níveis; a taxonomia oficial pede 4. Manter os
+# 3 antigos garante compat retroativa; somar "critico" garante mapeamento
+# limpo com o novo `grau="critico_impeditivo_potencial"`.
+RiscoSeveridade = Literal["baixo", "medio", "alto", "critico"]
+
+# Taxonomia oficial do Mapa de Riscos (skill diagnostico/situacao_ambiental_imovel_rural).
+# Sprint A4 — 7 categorias + 4 graus + 5 status + 4 prioridades de triagem.
+RiscoCategoria = Literal[
+    "fundiario",
+    "geoespacial",
+    "ambiental",
+    "territorial",
+    "cadastral_sistemico",
+    "atividade_produtiva",
+    "credito_mercado",
+]
+RiscoGrau = Literal[
+    "informativo",
+    "atencao",
+    "alto",
+    "critico_impeditivo_potencial",
+]
+RiscoStatusSaneamento = Literal[
+    "pendente",
+    "em_validacao",
+    "saneado",
+    "descartado",
+    "nao_aplicavel",
+]
+# Dimensão ortogonal à gravidade (grau): expressa urgência/prazo.
+# Um déficit de RL pode ser grau=alto mas prioridade_triagem=media;
+# embargo travando crédito é grau=critico_impeditivo_potencial e
+# prioridade_triagem=urgentissima.
+RiscoPrioridadeTriagem = Literal[
+    "urgentissima",
+    "alta",
+    "media",
+    "estrategica",
+]
+
+NivelRiscoGeral = Literal["baixo", "medio", "alto", "critico"]
+NivelConfiancaDiagnostico = Literal["baixa", "media", "alta"]
+
+
+# Mapeamentos dual-emit Risco antigo (3 campos) ↔ novo (8 campos).
+_SEVERIDADE_TO_GRAU: dict[str, str] = {
+    "baixo": "informativo",
+    "medio": "atencao",
+    "alto": "alto",
+    "critico": "critico_impeditivo_potencial",
+}
+_GRAU_TO_SEVERIDADE: dict[str, str] = {
+    "informativo": "baixo",
+    "atencao": "medio",
+    "alto": "alto",
+    "critico_impeditivo_potencial": "critico",
+}
 
 
 class _StrictModel(BaseModel):
@@ -98,11 +156,62 @@ class CitationRef(_StrictModel):
 
 
 class Risco(_StrictModel):
-    """Risco identificado pelo agente de diagnóstico."""
+    """Risco identificado pelo agente de diagnóstico (Sprint A4).
 
-    descricao: str = Field(..., min_length=1)
-    severidade: RiscoSeveridade
+    Dual-emit: aceita payload antigo (``descricao/severidade/mitigacao_sugerida``)
+    e payload novo (8 campos da taxonomia oficial + ``prioridade_triagem``).
+    O ``model_validator(mode="after")`` reconcilia ida e volta, garantindo que:
+
+    1. Payload antigo continua validando (regressão).
+    2. Round-trip via ``model_dump`` → ``model_validate`` funciona.
+    3. Consumidores legados (``EnquadramentoRegulatorioContent.riscos``) continuam
+       lendo ``descricao/severidade/mitigacao_sugerida`` sem alteração.
+
+    Pelo menos um dos pares precisa estar presente:
+    ``risco_identificado`` (novo) **ou** ``descricao`` (antigo); ``grau`` (novo)
+    **ou** ``severidade`` (antigo).
+    """
+
+    # ── Campos novos (taxonomia oficial — Mapa de Riscos da skill) ──
+    categoria: RiscoCategoria | None = None
+    risco_identificado: str | None = Field(default=None, min_length=1)
+    grau: RiscoGrau | None = None
+    impacto_possivel: str | None = None
+    evidencia: str | None = None
+    proximo_passo: str | None = None
+    status_saneamento: RiscoStatusSaneamento = "pendente"
+    observacao_consultor: str | None = None
+    prioridade_triagem: RiscoPrioridadeTriagem | None = None
+
+    # ── Aliases dual-emit (compat com Risco pré-A4) ──
+    descricao: str | None = Field(default=None, min_length=1)
+    severidade: RiscoSeveridade | None = None
     mitigacao_sugerida: str | None = None
+
+    @model_validator(mode="after")
+    def _reconcile_dual_emit(self) -> Risco:
+        # Ida (payload antigo → campos novos)
+        if self.risco_identificado is None and self.descricao is not None:
+            self.risco_identificado = self.descricao
+        if self.grau is None and self.severidade is not None:
+            self.grau = _SEVERIDADE_TO_GRAU[self.severidade]  # type: ignore[assignment]
+        if self.proximo_passo is None and self.mitigacao_sugerida is not None:
+            self.proximo_passo = self.mitigacao_sugerida
+
+        # Volta (campos novos → aliases antigos, para serialização compat)
+        if self.descricao is None and self.risco_identificado is not None:
+            self.descricao = self.risco_identificado
+        if self.severidade is None and self.grau is not None:
+            self.severidade = _GRAU_TO_SEVERIDADE[self.grau]  # type: ignore[assignment]
+        if self.mitigacao_sugerida is None and self.proximo_passo is not None:
+            self.mitigacao_sugerida = self.proximo_passo
+
+        # Requisitos mínimos
+        if self.risco_identificado is None:
+            raise ValueError("Risco precisa de risco_identificado (ou descricao legado)")
+        if self.grau is None:
+            raise ValueError("Risco precisa de grau (ou severidade legado)")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -139,17 +248,57 @@ class StageOutputContent(_StrictModel):
         return value
 
 
+class Divergencia(_StrictModel):
+    """Linha da matriz de cruzamento documental (Sprint A4).
+
+    Cruzamentos típicos: Matrícula × CAR, Matrícula × CCIR/ITR/SIGEF,
+    CAR × Sistema Ipê, CAR declarado × cobertura real. A skill
+    ``situacao_ambiental_imovel_rural`` (movimento 1) gera essas linhas
+    como ponto de partida do diagnóstico.
+    """
+
+    tema: str = Field(..., min_length=1, description="Ex.: 'área', 'titularidade', 'GEO INCRA'")
+    divergencia: str = Field(..., min_length=1, description="Descrição da divergência observada")
+    impacto: str = Field(..., min_length=1, description="Consequência prática")
+
+
+class NotificacaoItem(_StrictModel):
+    """Linha da matriz de resposta à notificação (estágio saneamento).
+
+    Quando o cliente chega com um caso JÁ ABERTO (notificação/exigências do
+    órgão), o diagnóstico no estágio ``saneamento`` produz uma matriz de
+    resposta item a item para alimentar o RedatorAgent.
+    """
+
+    exigencia: str = Field(..., min_length=1, description="Texto da exigência do órgão")
+    fundamento: str = Field(..., min_length=1, description="Fundamento legal usado para responder")
+    acao: str = Field(..., min_length=1, description="Ação a ser tomada")
+    responsavel: str | None = None
+    status: str = Field(..., min_length=1, description="Ex.: 'pendente', 'em_andamento', 'concluido'")
+
+
 class DiagnosticoPreliminarContent(StageOutputContent):
     """Conteúdo do diagnóstico preliminar (etapa 2).
 
     Campos extras vêm do briefing da sócia: hipóteses, lacunas, riscos e
-    checklist documental sugerido.
+    checklist documental sugerido. Sprint A4 adiciona, todos opcionais:
+    matriz de divergências (cruzamento documental), nível de risco geral,
+    nível de confiança, recomendações externas (encaminhamentos), etapa do
+    funil sugerida e matriz de resposta à notificação (estágio saneamento).
     """
 
     hipoteses: list[str] = Field(default_factory=list)
     lacunas: list[str] = Field(default_factory=list)
     riscos: list[Risco] = Field(default_factory=list)
     checklist_documental: list[str] = Field(default_factory=list)
+
+    # ── Campos opcionais Sprint A4 ──
+    divergencias: list[Divergencia] = Field(default_factory=list)
+    nivel_risco_geral: NivelRiscoGeral | None = None
+    nivel_confianca_diagnostico: NivelConfiancaDiagnostico | None = None
+    recomendacoes_externas: list[str] = Field(default_factory=list)
+    etapa_funil_sugerida: str | None = None
+    matriz_notificacao: list[NotificacaoItem] | None = None
 
 
 class PecaJuridicaContent(StageOutputContent):
@@ -232,3 +381,48 @@ class EnquadramentoRegulatorioContent(StageOutputContent):
     riscos: list[Risco] = Field(default_factory=list)
     documentos_necessarios: list[str] = Field(default_factory=list)
     recomendacoes: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Utilitário Pydantic ↔ JSONB (Sprint A4)
+# ---------------------------------------------------------------------------
+
+def validate_diagnostic_content(content: dict[str, Any]) -> DiagnosticoPreliminarContent:
+    """Valida um dict contra ``DiagnosticoPreliminarContent``.
+
+    Use ANTES de gravar em ``RegulatoryDiagnosis.content`` (JSONB livre): garante
+    que o dict respeita o shape do schema. Levanta ``pydantic.ValidationError``
+    quando inválido — o caller decide se faz log/alerta/abort.
+
+    A função é o ponto de amarração Pydantic ↔ JSONB (gap A4 do mapa de gaps
+    2026-05-23): hoje o JSONB aceita qualquer forma; passa a aceitar apenas o
+    que ``DiagnosticoPreliminarContent.model_validate`` aprovar.
+    """
+    return DiagnosticoPreliminarContent.model_validate(content)
+
+
+__all__ = [
+    "CitationJurisdicao",
+    "CitationKind",
+    "CitationRef",
+    "DiagnosticoPreliminarContent",
+    "Divergencia",
+    "EnquadramentoRegulatorioContent",
+    "Etapa",
+    "NivelConfiancaDiagnostico",
+    "NivelRiscoGeral",
+    "NotificacaoItem",
+    "PecaJuridicaContent",
+    "PecaTemplate",
+    "RespostaNotificacaoContent",
+    "Risco",
+    "RiscoCategoria",
+    "RiscoGrau",
+    "RiscoPrioridadeTriagem",
+    "RiscoSeveridade",
+    "RiscoStatusSaneamento",
+    "Source",
+    "SourceKind",
+    "StageOutputContent",
+    "validate_diagnostic_content",
+]
