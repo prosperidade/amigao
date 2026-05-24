@@ -193,7 +193,10 @@ def ocr_then_extract(
             provider=result.provider or None,
             tokens_in=result.tokens_in or None,
             tokens_out=result.tokens_out or None,
-            cost_usd=result.cost_usd or None,
+            # cost_usd=0.0 (pypdf, sem LLM) é factualmente "custo conhecido e zero".
+            # `or None` colapsava isso em "desconhecido" e quebrava agregação de custo
+            # (média/soma com NULLs). Princípio 2: auditabilidade — preserva o 0.0.
+            cost_usd=result.cost_usd,
             duration_ms=result.duration_ms or None,
             input_payload={
                 "doc_id": doc.id,
