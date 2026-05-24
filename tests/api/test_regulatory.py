@@ -303,3 +303,288 @@ class TestListPropertyIssues:
         body = r.json()
         assert body[0]["type"] == "area_divergente"
         assert body[1]["type"] == "outro"
+
+
+# ---------------------------------------------------------------------------
+# Onda B Fase 2 — POST /processes/{id}/diagnoses
+# ---------------------------------------------------------------------------
+
+def _valid_content() -> dict:
+    """Conteúdo mínimo válido para `DiagnosticoPreliminarContent`.
+    `content` não vazio + `sources` não vazio (validators do schema)."""
+    return {
+        "content": "Diagnóstico preliminar do processo.",
+        "sources": [{"type": "legislation", "ref": "chunk_1"}],
+        "hipoteses": ["CAR pendente"],
+        "lacunas": [],
+        "riscos": [],
+        "checklist_documental": ["Matrícula"],
+    }
+
+
+class TestCreateDiagnosis:
+    def test_unauthorized_returns_401(self, client: TestClient):
+        r = client.post("/api/v1/processes/1/diagnoses", json={"content": _valid_content()})
+        assert r.status_code == 401
+
+    def test_404_quando_processo_nao_existe(self, client: TestClient, db_session):
+        _seed_internal_user(db_session)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.post(
+            "/api/v1/processes/9999/diagnoses",
+            headers=headers,
+            json={"content": _valid_content()},
+        )
+        assert r.status_code == 404
+
+    def test_cria_primeira_versao_201(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers,
+            json={"content": _valid_content()},
+        )
+        assert r.status_code == 201
+        body = r.json()
+        assert body["version"] == 1
+        assert body["process_id"] == process.id
+        assert body["content"]["content"] == "Diagnóstico preliminar do processo."
+        # Princípio 1 do manifesto: humano valida depois — created sem validação.
+        assert body["validated_by_user_id"] is None
+        assert body["validated_at"] is None
+
+    def test_versao_eh_incrementada_em_posts_sucessivos(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r1 = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": _valid_content()},
+        )
+        assert r1.status_code == 201
+        assert r1.json()["version"] == 1
+
+        r2 = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": _valid_content()},
+        )
+        assert r2.status_code == 201
+        assert r2.json()["version"] == 2
+
+        r3 = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": _valid_content()},
+        )
+        assert r3.status_code == 201
+        assert r3.json()["version"] == 3
+
+    def test_versao_continua_apos_versoes_pre_existentes(self, client: TestClient, db_session):
+        """Se já há versões 1 e 2 no banco (criadas por outra via), o POST cria a 3."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        for v in (1, 2):
+            db_session.add(RegulatoryDiagnosis(
+                tenant_id=tenant.id,
+                process_id=process.id,
+                content={"v": v, "content": "seed"},
+                version=v,
+            ))
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": _valid_content()},
+        )
+        assert r.status_code == 201
+        assert r.json()["version"] == 3
+
+    # ---- Gate A4 — validate_diagnostic_content ANTES de persistir ---------
+
+    def test_422_quando_content_viola_schema__content_vazio(self, client: TestClient, db_session):
+        """`content` vazio viola `min_length=1` de StageOutputContent."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        bad = {"content": "", "sources": [{"type": "legislation", "ref": "chunk_1"}]}
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": bad},
+        )
+        assert r.status_code == 422
+        detail = r.json()["detail"]
+        assert "DiagnosticoPreliminarContent" in detail["message"]
+        assert isinstance(detail["errors"], list)
+
+    def test_422_quando_content_viola_schema__sources_vazio(self, client: TestClient, db_session):
+        """`sources` vazio viola `_sources_non_empty` validator."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        bad = {"content": "ok", "sources": []}
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": bad},
+        )
+        assert r.status_code == 422
+        # mensagem do validator chega no detail
+        assert "sources" in str(r.json()["detail"]["errors"])
+
+    def test_422_quando_content_tem_campo_desconhecido(self, client: TestClient, db_session):
+        """`DiagnosticoPreliminarContent` herda de _StrictModel (extra=forbid)."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        bad = {
+            "content": "x",
+            "sources": [{"type": "legislation", "ref": "c1"}],
+            "campo_inventado": 42,
+        }
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": bad},
+        )
+        assert r.status_code == 422
+
+    def test_422_quando_content_rejeita_nao_persiste(self, client: TestClient, db_session):
+        """Confirma que o gate previne escrita: depois de 422, banco continua vazio."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        bad = {"content": "x", "sources": []}
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": bad},
+        )
+        assert r.status_code == 422
+        # banco continua vazio
+        count = (
+            db_session.query(RegulatoryDiagnosis)
+            .filter(RegulatoryDiagnosis.process_id == process.id)
+            .count()
+        )
+        assert count == 0
+
+    def test_aceita_content_com_riscos_no_formato_antigo(self, client: TestClient, db_session):
+        """Dual-emit do A4: payload antigo {descricao, severidade, mitigacao_sugerida}
+        é aceito sem 422 e persistido tal qual."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        content = _valid_content()
+        content["riscos"] = [
+            {"descricao": "Multa por área embargada", "severidade": "alto",
+             "mitigacao_sugerida": "Defesa administrativa"},
+        ]
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": content},
+        )
+        assert r.status_code == 201
+        body = r.json()
+        # JSONB preserva o que entrou (forma bruta)
+        assert body["content"]["riscos"][0]["descricao"] == "Multa por área embargada"
+
+    def test_aceita_content_com_riscos_no_formato_novo(self, client: TestClient, db_session):
+        """Dual-emit do A4: payload novo (8 campos) também aceito."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        content = _valid_content()
+        content["riscos"] = [
+            {
+                "categoria": "ambiental",
+                "risco_identificado": "Supressão sem ASV",
+                "grau": "critico_impeditivo_potencial",
+                "impacto_possivel": "Embargo + multa",
+                "prioridade_triagem": "urgentissima",
+            },
+        ]
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={"content": content},
+        )
+        assert r.status_code == 201
+        assert r.json()["content"]["riscos"][0]["risco_identificado"] == "Supressão sem ASV"
+
+    def test_tenant_isolation_post_de_outro_tenant_dá_404(self, client: TestClient, db_session):
+        """Process de tenant B não pode ser alvo de POST do tenant A."""
+        # tenant A (consultor)
+        tenant_a, _ = _seed_internal_user(db_session, email="a@example.com")
+        # tenant B (com processo)
+        tenant_b = Tenant(name="Tenant B")
+        db_session.add(tenant_b)
+        db_session.flush()
+        client_b = Client(
+            tenant_id=tenant_b.id, full_name="Cliente B",
+            client_type=ClientType.pj, status=ClientStatus.active,
+        )
+        db_session.add(client_b)
+        db_session.flush()
+        process_b = Process(
+            tenant_id=tenant_b.id, client_id=client_b.id,
+            title="Processo B", process_type="car",
+            status=ProcessStatus.diagnostico, demand_type=DemandType.car,
+        )
+        db_session.add(process_b)
+        db_session.commit()
+
+        headers = _login(client, "a@example.com", "senha123")
+        r = client.post(
+            f"/api/v1/processes/{process_b.id}/diagnoses",
+            headers=headers, json={"content": _valid_content()},
+        )
+        # tenant A não vê processo do B → 404, e nada é gravado
+        assert r.status_code == 404
+        count = (
+            db_session.query(RegulatoryDiagnosis)
+            .filter(RegulatoryDiagnosis.process_id == process_b.id)
+            .count()
+        )
+        assert count == 0
+
+    def test_payload_sem_chave_content_da_422(self, client: TestClient, db_session):
+        """RegulatoryDiagnosisCreate exige `content` no body."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers, json={},
+        )
+        assert r.status_code == 422
+
+    def test_payload_com_campo_extra_no_body_da_422(self, client: TestClient, db_session):
+        """RegulatoryDiagnosisCreate tem extra='forbid'."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.post(
+            f"/api/v1/processes/{process.id}/diagnoses",
+            headers=headers,
+            json={"content": _valid_content(), "extra_field": "x"},
+        )
+        assert r.status_code == 422

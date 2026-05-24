@@ -1,6 +1,8 @@
-"""Schemas Pydantic para os endpoints regulatórios — Sprint A1 Tarefa D2.
+"""Schemas Pydantic para os endpoints regulatórios.
 
-Read-only nesta sprint: nenhum POST/PUT exposto. Escrita fica para A2/Y.
+Onda B Fase 2 — endpoint POST adicionado, escreve `RegulatoryDiagnosis`
+versionado. O input passa por `validate_diagnostic_content` antes de
+persistir (ativa o gate A4 Pydantic↔JSONB).
 """
 
 from __future__ import annotations
@@ -8,11 +10,33 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.regulatory import RegulatoryIssueSeverity, RegulatoryIssueType
 
 IssueStatusFilter = Literal["open", "resolved", "all"]
+
+
+class RegulatoryDiagnosisCreate(BaseModel):
+    """Input do POST /processes/{process_id}/diagnoses (Onda B Fase 2).
+
+    O `content` é validado contra `DiagnosticoPreliminarContent` antes da
+    persistência via `validate_diagnostic_content` — payloads que não
+    respeitam o shape do schema retornam HTTP 422 com detalhes do Pydantic.
+    A versão é calculada pelo servidor (`max(version) + 1`).
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    content: dict[str, Any] = Field(
+        ...,
+        description=(
+            "Conteúdo do diagnóstico. Deve respeitar `DiagnosticoPreliminarContent` "
+            "(stage_output.py): pelo menos `content` (str) e `sources` (não vazio). "
+            "Campos opcionais: hipoteses, lacunas, riscos, checklist_documental, "
+            "divergencias, nivel_risco_geral, etc."
+        ),
+    )
 
 
 class RegulatoryDiagnosisOut(BaseModel):
