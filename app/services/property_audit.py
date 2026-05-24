@@ -22,9 +22,68 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-# Tolerância default — 1% de diferença entre áreas declaradas em documentos
-# diferentes é normalmente aceitável (arredondamento cartorial × CAR × CCIR).
+# Tolerância default — 1% é o limite do grau "informativo" (a régua da Onda C).
+# Tolerância configurável: o caller pode passar outro valor para apertar/relaxar
+# qual diferença ainda é "informativa". Acima dela, a régua categoriza em
+# atencao/alto/critico — divergência NUNCA é suprimida, só muda o grau.
 DEFAULT_AREA_TOLERANCE_PCT: Decimal = Decimal("0.01")
+
+# Régua de graus para divergência de área entre documentos (Onda C, validada
+# pela sócia). Alinhada com `RiscoGrau` da taxonomia oficial (Mapa de Riscos
+# da skill diagnostico) — 4 níveis, NÃO os 3 do RegulatoryIssueSeverity.
+# A persistência mapeia 4→3 via _GRADE_TO_SEVERITY abaixo.
+#
+# Princípio: SEMPRE emitir o finding. A régua só decide o grau — divergência
+# pequena (≤ tolerância) vira "informativo", não silêncio. Auditor é radar,
+# não cancela: sinaliza todas as inconsistências, deixa o consultor decidir.
+GRADE_INFORMATIVO = "informativo"
+GRADE_ATENCAO = "atencao"
+GRADE_ALTO = "alto"
+GRADE_CRITICO = "critico"
+
+_GRADE_TO_SEVERITY: dict[str, str] = {
+    GRADE_INFORMATIVO: "info",
+    GRADE_ATENCAO: "warning",
+    GRADE_ALTO: "critical",
+    GRADE_CRITICO: "critical",
+}
+
+
+def grade_area_divergence(
+    diff_pct: Decimal | None,
+    tolerance_pct: Decimal = DEFAULT_AREA_TOLERANCE_PCT,
+) -> str:
+    """Classifica diferença percentual em grau (régua de 4 faixas).
+
+    - `diff_pct is None` (dado ausente) → `atencao` (não dá pra cruzar; sinaliza
+      mas não é crítico — o consultor precisa obter o dado faltante).
+    - `≤ tolerance_pct` (default 1%) → `informativo` (arredondamento cartorial
+      normal entre matrícula × CAR × CCIR).
+    - `tolerance_pct < diff ≤ 5%` → `atencao`.
+    - `5% < diff ≤ 10%` → `alto`.
+    - `> 10%` → `critico` (impacto direto em compensação/recuperação por hectare).
+    """
+    if diff_pct is None:
+        return GRADE_ATENCAO
+    if diff_pct <= tolerance_pct:
+        return GRADE_INFORMATIVO
+    if diff_pct <= Decimal("0.05"):
+        return GRADE_ATENCAO
+    if diff_pct <= Decimal("0.10"):
+        return GRADE_ALTO
+    return GRADE_CRITICO
+
+
+def grade_overlap_severity() -> str:
+    """Sobreposição (terceiro / UC / assentamento / terra pública / matrícula
+    vizinha) é SEMPRE `critico`, independente do percentual ou da área. É
+    finding próprio — não dilui na conta de hectares de divergência documental.
+
+    Helper preparado para quando a detecção espacial real estiver disponível
+    (depende de D1, parser shapefile + `Property.geom`). Hoje não há chamador
+    em audit_property — fica para sprint posterior.
+    """
+    return GRADE_CRITICO
 
 # Padrões reconhecidos como menção a GEO INCRA na matrícula.
 # Fonte: H1 da skill — "número de GEO certificado pelo INCRA" pode aparecer
@@ -51,7 +110,17 @@ class AreaComparison:
 
 @dataclass(frozen=True)
 class AuditFinding:
-    """Achado bruto do auditor — fonte de RegulatoryIssue + Divergencia."""
+    """Achado bruto do auditor — fonte de RegulatoryIssue + Divergencia.
+
+    Dois eixos de severidade convivem:
+    - `severity` (3 níveis: info/warning/critical) — alinha com `RegulatoryIssueSeverity`
+      do model; usado na persistência.
+    - `grade` (4 níveis: informativo/atencao/alto/critico) — alinha com `RiscoGrau`
+      da skill (taxonomia oficial); usado para sinalização no payload e UI.
+
+    Mapeamento 4→3 fica em `_GRADE_TO_SEVERITY`; `grade=""` (vazio) significa
+    "não classificado" (callers legados) e o caller derivava manualmente.
+    """
 
     type: str            # area_divergente, sobreposicao_app, geo_incra_ausente, ...
     severity: str        # info, warning, critical
@@ -59,6 +128,7 @@ class AuditFinding:
     descricao: str
     impacto: str
     evidencia: dict[str, Any]  # campos crus para auditoria/debug
+    grade: str = ""      # informativo, atencao, alto, critico (Onda C)
 
 
 # ---------------------------------------------------------------------------
@@ -169,28 +239,41 @@ def audit_property(
         ("CAR × CCIR", area_car, area_ccir),
     ]
     for tema, a, b in cmp_pairs:
-        if a is None and b is None:
-            continue  # nada a cruzar
+        # Pares incompletos (um ou ambos None) NÃO viram finding de
+        # `area_divergente`. Não há cruzamento real — é dado faltante, domínio
+        # próprio (a detecção de "documento esperado ausente" fica como dívida
+        # para uma função separada quando a sócia validar o conjunto canônico
+        # de documentos esperados por demand_type).
+        if a is None or b is None:
+            continue
         cmp = compare_areas(a, b, tolerance_pct=tolerance_pct)
-        if cmp.divergent and cmp.diff_pct is not None:
-            findings.append(AuditFinding(
-                type="area_divergente",
-                severity="warning" if cmp.diff_pct < Decimal("0.10") else "critical",
-                tema=f"área ({tema})",
-                descricao=(
-                    f"Áreas divergem: {cmp.area_a_ha} ha vs {cmp.area_b_ha} ha "
-                    f"(Δ={cmp.diff_ha} ha, {(cmp.diff_pct * 100):.2f}%)"
-                ),
-                impacto=(
-                    "Passivo, compensação e recuperação são calculados em hectares — "
-                    "padronizar antes do protocolo."
-                ),
-                evidencia={
-                    "area_a_ha": str(cmp.area_a_ha),
-                    "area_b_ha": str(cmp.area_b_ha),
-                    "diff_pct": str(cmp.diff_pct),
-                },
-            ))
+        # Onda C: SEMPRE emite finding quando há cruzamento real (ambos lados
+        # presentes). A régua decide o grau (informativo/atencao/alto/critico);
+        # divergência nunca é suprimida. Áreas iguais (≤ 1%) viram "informativo"
+        # — auditoria sabe que o cruzamento foi feito.
+        grade = grade_area_divergence(cmp.diff_pct, tolerance_pct=tolerance_pct)
+        severity = _GRADE_TO_SEVERITY[grade]
+        descricao = (
+            f"Áreas {tema}: {cmp.area_a_ha} ha vs {cmp.area_b_ha} ha "
+            f"(Δ={cmp.diff_ha} ha, {(cmp.diff_pct * 100):.2f}%)"
+        )
+        findings.append(AuditFinding(
+            type="area_divergente",
+            severity=severity,
+            grade=grade,
+            tema=f"área ({tema})",
+            descricao=descricao,
+            impacto=(
+                "Passivo, compensação e recuperação são calculados em hectares — "
+                "padronizar antes do protocolo."
+            ),
+            evidencia={
+                "area_a_ha": str(cmp.area_a_ha),
+                "area_b_ha": str(cmp.area_b_ha),
+                "diff_pct": str(cmp.diff_pct),
+                "tolerance_pct_used": str(tolerance_pct),
+            },
+        ))
 
     # --- 2. GEO INCRA na matrícula (H1) ------------------------------------
     matricula_text = property_data.get("matricula_text") or extracted.get("matricula_text")
