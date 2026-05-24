@@ -1,5 +1,5 @@
 """
-Sistema de Agentes IA — Amigao do Meio Ambiente.
+Sistema de Agentes IA — Regente Ambiental.
 
 Re-exports das classes publicas e registro de todos os agentes.
 """
