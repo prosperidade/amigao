@@ -23,7 +23,14 @@ logger = logging.getLogger(__name__)
 
 CHAINS: dict[str, list[str]] = {
     "intake": ["atendimento"],
-    "diagnostico_completo": ["extrator", "legislacao", "diagnostico"],
+    # Onda B Fase 2: auditor_imovel entra entre extrator e legislacao.
+    # Sequência decidida no PROMPT_3 (validada pelo FLUXOS_E2E.md):
+    #   extrator → auditor_imovel → legislacao → diagnostico.
+    # O auditor cruza documentos extraídos (matrícula × CAR × CCIR/etc.) e produz
+    # findings/divergências em `chain_data["auditor_imovel"]`. legislacao e
+    # diagnostico continuam executando — o `requires_review=True` do auditor
+    # é não-bloqueante (ver NON_BLOCKING_REVIEW_AGENTS abaixo).
+    "diagnostico_completo": ["extrator", "auditor_imovel", "legislacao", "diagnostico"],
     "gerar_proposta": ["diagnostico", "orcamento"],
     "gerar_documento": ["redator"],
     "analise_regulatoria": ["legislacao"],
@@ -32,6 +39,20 @@ CHAINS: dict[str, list[str]] = {
     "monitoramento": ["acompanhamento", "vigia"],
     "marketing_content": ["marketing"],
 }
+
+# Agentes cujo `requires_review=True` NÃO interrompe a chain.
+#
+# Princípio 1 do manifesto ("a IA propõe, o humano decide e assina") continua
+# valendo: estes agentes ainda marcam `requires_review=True` e a UI exibe o
+# badge. O que muda é só o efeito sobre o pipeline em batch: agentes produtores
+# de findings/contexto (não peças formais) seguem alimentando os próximos da
+# chain. Sem isso, qualquer chain que inclua `auditor_imovel` quebraria antes
+# do `diagnostico` rodar, derrotando o propósito de tê-lo na chain.
+#
+# Critério para entrar nesta lista: agente cujo output é INSUMO para downstream
+# (chain_data), não produto final entregue ao consultor.
+NON_BLOCKING_REVIEW_AGENTS: frozenset[str] = frozenset({"auditor_imovel"})
+
 
 # Mapeamento intent -> chain (usado pela API)
 INTENT_TO_CHAIN: dict[str, str] = {
@@ -121,12 +142,21 @@ class OrchestratorAgent:
                 break
 
             if stop_on_review and result.requires_review:
-                stopped_for_review = True
-                logger.info(
-                    "orchestrator: chain '%s' pausada para revisao humana no agente '%s'",
-                    chain_name, agent_name,
-                )
-                break
+                if agent_name in NON_BLOCKING_REVIEW_AGENTS:
+                    # Sinaliza review (UI exibe badge) mas continua a chain.
+                    # Output ja foi acumulado em chain_data acima — proximos agentes
+                    # podem consumir os findings/divergencias via chain_data[agent_name].
+                    logger.info(
+                        "orchestrator: chain '%s' continua apos review do agente '%s' (NON_BLOCKING)",
+                        chain_name, agent_name,
+                    )
+                else:
+                    stopped_for_review = True
+                    logger.info(
+                        "orchestrator: chain '%s' pausada para revisao humana no agente '%s'",
+                        chain_name, agent_name,
+                    )
+                    break
 
         # Emitir evento de chain completa
         chain_result = AgentResult(
