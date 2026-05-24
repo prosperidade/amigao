@@ -13,6 +13,7 @@ from app.agents.validators import OutputValidationPipeline
 from app.agents import (  # noqa: F401
     acompanhamento,
     atendimento,
+    auditor_imovel,
     diagnostico,
     extrator,
     financeiro,
