@@ -115,7 +115,12 @@ def test_confirm_upload_persists_document(client: TestClient, db_session, monkey
         },
         headers=headers,
     )
-    assert confirm_resp.status_code == 200
+    # O endpoint /documents/confirm-upload retorna 202 Accepted (documents.py:141
+    # status_code=HTTP_202_ACCEPTED) — persiste o documento + enfileira o pipeline
+    # de OCR em background. Verificado: frontend (DocumentUpload.tsx,
+    # DocumentUploadZone.tsx) usa await api.post sem checar status, então
+    # 200→202 não regrediu UX. Único ajuste necessário é a assertion do teste.
+    assert confirm_resp.status_code == 202
     doc_data = confirm_resp.json()
     assert doc_data["filename"] == "laudo_ambiental.pdf"
     assert doc_data["storage_key"] == storage_key
