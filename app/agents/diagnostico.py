@@ -102,6 +102,19 @@ class DiagnosticoAgent(BaseAgent):
             legal_data=legal_data,
             origin="ai",
         )
+
+        # Sprint A3 (Onda 2) — citation_evaluator no Diagnostico
+        # Espelha o padrão do RedatorAgent (`app/agents/redator.py:_evaluate_citations`).
+        # Concatena todos os campos de texto livre que o LLM pode ter citado normas.
+        # Citações fora do contexto legislativo viram "suspeitas" (não derrubam execução).
+        citation_text = "\n".join([
+            situacao_geral,
+            *passivos,
+            *acoes,
+            observacoes,
+        ])
+        citation_eval = self._evaluate_citations(citation_text, legal_data)
+
         return self._build_payload(
             situacao_geral=situacao_geral,
             passivos=passivos,
@@ -110,6 +123,7 @@ class DiagnosticoAgent(BaseAgent):
             risco_estimado=risco_estimado,
             observacoes=observacoes,
             sources=sources,
+            citation_eval=citation_eval,
         )
 
     def _load_process_data(self) -> dict[str, Any]:
@@ -207,6 +221,8 @@ class DiagnosticoAgent(BaseAgent):
                     excerpt="diagnóstico produzido por regras determinísticas (LLM indisponível)",
                 )
             ],
+            # Sem LLM, não há texto livre que justifique extrair citações.
+            citation_eval=None,
         )
 
     # ------------------------------------------------------------------
@@ -274,6 +290,7 @@ class DiagnosticoAgent(BaseAgent):
         risco_estimado: str,
         observacoes: str,
         sources: list[Source],
+        citation_eval: Any | None = None,
     ) -> dict[str, Any]:
         """Monta DiagnosticoPreliminarContent + dual-emit das chaves antigas.
 
@@ -334,7 +351,7 @@ class DiagnosticoAgent(BaseAgent):
         # Dual-emit (γ): chaves antigas preservadas no payload final pra
         # backward-compat com frontend DiagnósticoResult e logs existentes.
         # Plano de deprecação: ver docs/sprints/sprint_a2_diagnostico.md.
-        return diag.model_dump(mode="json") | {
+        payload: dict[str, Any] = diag.model_dump(mode="json") | {
             "requires_review": True,  # Diagnóstico SEMPRE precisa de validação humana
             "situacao_geral": situacao_geral,
             "passivos_identificados": passivos,
@@ -343,6 +360,53 @@ class DiagnosticoAgent(BaseAgent):
             "risco_estimado": normalized_severidade,
             "observacoes": observacoes,
         }
+
+        # Sprint A3 — campos do citation_evaluator (mesma estrutura do RedatorAgent).
+        # Quando não há contexto legal disponível (ex.: chain sem LegislacaoAgent ou
+        # path de regras), citation_eval=None e nenhum campo é emitido.
+        if citation_eval is not None:
+            payload["citation_issues"] = [c.model_dump() for c in citation_eval.invalid]
+            payload["citation_total"] = citation_eval.total
+            payload["citation_coverage_ratio"] = citation_eval.coverage_ratio
+            payload["citation_valid"] = citation_eval.valid
+
+        return payload
+
+    def _evaluate_citations(self, text: str, legal_data: dict[str, Any]) -> Any | None:
+        """Roda o evaluator de citação contra o legislation_context já carregado.
+
+        Sprint A3 (Onda 2 da Fase 2) — espelha `app/agents/redator.py:_evaluate_citations`.
+        Aplica ao Diagnóstico (preliminar/consolidado/saneamento) o mesmo gate que
+        o Redator usa em peças formais: citações sem match no contexto legislativo
+        ficam marcadas como suspeitas (`payload["citation_issues"]`), sem derrubar
+        a execução. Diagnóstico já vai com `requires_review=True` por princípio,
+        então o consultor decide o que fazer com cada citação suspeita.
+
+        Retorna ``None`` quando não há contexto legislativo nessa execução
+        (ex.: diagnóstico chamado fora da chain `extrator → legislacao → diagnostico`,
+        ou texto sem citação detectável).
+        """
+        from app.services.citation_evaluator import (  # noqa: PLC0415
+            extract_citations,
+            validate_citations,
+        )
+
+        context: list[Any] = []
+        for key in ("legislacao_aplicavel", "normas_estaduais"):
+            value = legal_data.get(key) if isinstance(legal_data, dict) else None
+            if isinstance(value, list):
+                context.extend(str(item) for item in value if item)
+        chunks = legal_data.get("rag_chunks_meta") if isinstance(legal_data, dict) else None
+        if isinstance(chunks, list):
+            context.extend(chunks)
+
+        if not context:
+            return None
+
+        citations = extract_citations(text)
+        if not citations:
+            return None
+        return validate_citations(citations, context)
 
     def _fallback_prompts(self) -> dict[str, str]:
         return {
