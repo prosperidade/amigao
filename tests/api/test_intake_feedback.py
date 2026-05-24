@@ -297,7 +297,9 @@ class TestStatsEndpoint:
 
         assert body["total_classifications"] == 3
         assert body["total_corrections"] == 2  # p1 e p3 (último log de p3 ainda diverge)
-        assert body["accuracy_overall"] == 1 / 3
+        # O endpoint arredonda accuracy_overall a 4 casas decimais (intake_feedback.py:267).
+        # Comparar contra 1/3 puro é precisão excessiva (0.3333333… ≠ 0.3333).
+        assert body["accuracy_overall"] == round(1 / 3, 4)
         # accuracy_by_demand_type: car 1/1=1.0; retificacao_car 0/2=0.0
         assert body["accuracy_by_demand_type"]["car"] == 1.0
         assert body["accuracy_by_demand_type"]["retificacao_car"] == 0.0
