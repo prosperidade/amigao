@@ -37,11 +37,61 @@ from app.agents.validators import OutputValidationPipeline
 from app.models.ai_job import AIJobType
 from app.schemas.stage_output import (
     DiagnosticoPreliminarContent,
+    Divergencia,
     Risco,
     Source,
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Consumo de chain_data["auditor_imovel"] — PROMPT_4 Onda A
+# ---------------------------------------------------------------------------
+#
+# O AuditorImovelAgent (chain `diagnostico_completo`: extrator → auditor_imovel
+# → legislacao → diagnostico) é a fonte do cruzamento documental: matrícula ×
+# CAR × CCIR/ITR, GEO INCRA, RL averbada × declarada. O DiagnosticoAgent CONSOME
+# esses findings como "primeiro movimento" (matriz de cruzamento) e NÃO refaz
+# a conta — o auditor é o radar, o diagnóstico é a interpretação.
+#
+# Mapeamento `grade` (4 níveis da régua de divergência, Onda C) → `grau` (4
+# níveis da taxonomia oficial). Preservar `critico` como
+# `critico_impeditivo_potencial` é essencial: a sócia distinguiu alto-vs-crítico
+# de propósito — apenas `critico` dispara o mecanismo de decisão obrigatória do
+# consultor (camada 2 do Princípio 1, sprint posterior). NÃO colapsar com o
+# `severity` de 3 níveis do RegulatoryIssue.
+_GRADE_TO_GRAU: dict[str, str] = {
+    "informativo": "informativo",
+    "atencao": "atencao",
+    "alto": "alto",
+    "critico": "critico_impeditivo_potencial",
+}
+
+# Inferência mínima de RiscoCategoria a partir do finding.type. A remodelagem
+# do RegulatoryIssue (família + codigo_alerta) na próxima sprint afina isso
+# (REGISTRO_DIVIDAS.md P1).
+_FINDING_TYPE_TO_CATEGORIA: dict[str, str] = {
+    "area_divergente": "cadastral_sistemico",
+    "rl_divergente": "ambiental",
+    "geo_incra_ausente": "fundiario",
+    "verificacao_espacial_pendente": "geoespacial",
+}
+
+# Ordenação ascendente do grau para escolher o "pior" entre os findings do
+# auditor e alimentar `nivel_risco_geral` (4 níveis: baixo/medio/alto/critico).
+_GRAU_RANK: dict[str, int] = {
+    "informativo": 0,
+    "atencao": 1,
+    "alto": 2,
+    "critico_impeditivo_potencial": 3,
+}
+_GRAU_TO_NIVEL_RISCO: dict[str, str] = {
+    "informativo": "baixo",
+    "atencao": "medio",
+    "alto": "alto",
+    "critico_impeditivo_potencial": "critico",
+}
 
 
 class DiagnosticoOutputValidationError(ValueError):
@@ -115,6 +165,10 @@ class DiagnosticoAgent(BaseAgent):
         ])
         citation_eval = self._evaluate_citations(citation_text, legal_data)
 
+        # PROMPT_4 Onda A — consumir findings do auditor (primeiro movimento)
+        auditor_payload = self.ctx.chain_data.get("auditor_imovel", {}) if isinstance(self.ctx.chain_data, dict) else {}
+        divergencias_auditor, riscos_auditor = self._consume_auditor_findings(auditor_payload)
+
         return self._build_payload(
             situacao_geral=situacao_geral,
             passivos=passivos,
@@ -124,6 +178,8 @@ class DiagnosticoAgent(BaseAgent):
             observacoes=observacoes,
             sources=sources,
             citation_eval=citation_eval,
+            divergencias_auditor=divergencias_auditor,
+            riscos_auditor=riscos_auditor,
         )
 
     def _load_process_data(self) -> dict[str, Any]:
@@ -207,6 +263,12 @@ class DiagnosticoAgent(BaseAgent):
             passivos.append("CAR com pendencias")
             acoes.append("Resolver pendencias no SICAR")
 
+        # PROMPT_4 Onda A — mesmo no path sem LLM, se o auditor já rodou na chain
+        # consumimos os findings. O Diagnóstico é a interpretação; a matriz de
+        # cruzamento vem do auditor independentemente do path.
+        auditor_payload = self.ctx.chain_data.get("auditor_imovel", {}) if isinstance(self.ctx.chain_data, dict) else {}
+        divergencias_auditor, riscos_auditor = self._consume_auditor_findings(auditor_payload)
+
         return self._build_payload(
             situacao_geral="Diagnostico baseado em regras (IA indisponivel)",
             passivos=passivos,
@@ -223,6 +285,8 @@ class DiagnosticoAgent(BaseAgent):
             ],
             # Sem LLM, não há texto livre que justifique extrair citações.
             citation_eval=None,
+            divergencias_auditor=divergencias_auditor,
+            riscos_auditor=riscos_auditor,
         )
 
     # ------------------------------------------------------------------
@@ -291,6 +355,8 @@ class DiagnosticoAgent(BaseAgent):
         observacoes: str,
         sources: list[Source],
         citation_eval: Any | None = None,
+        divergencias_auditor: list[Divergencia] | None = None,
+        riscos_auditor: list[Risco] | None = None,
     ) -> dict[str, Any]:
         """Monta DiagnosticoPreliminarContent + dual-emit das chaves antigas.
 
@@ -303,11 +369,21 @@ class DiagnosticoAgent(BaseAgent):
         * ``prioridade_acoes`` → ``metadata["prioridade_acoes"]`` (e dual-emit)
         * ``observacoes`` → ``metadata["observacoes"]`` (e dual-emit)
         * ``lacunas`` → ``[]`` (V1 — log INFO; ver Q2 da Fase 0)
+
+        PROMPT_4 Onda A:
+        * ``divergencias_auditor`` → ``divergencias`` (matriz de cruzamento do auditor).
+        * ``riscos_auditor`` → entram ANTES do risco do LLM (primeiro movimento).
+        * ``nivel_risco_geral`` derivado do "pior" grau entre os riscos do auditor
+          quando houver — preserva alto vs. crítico (não usa o severity de 3).
         """
+        divergencias_auditor = divergencias_auditor or []
+        riscos_auditor = riscos_auditor or []
+
         # Garantia mínima de não-vazio em ``content`` (validator do schema)
         content_text = situacao_geral or "Diagnóstico sem síntese textual."
 
-        # severidade do Risco precisa estar no enum {baixo, medio, alto}
+        # severidade do Risco do LLM continua no enum legado {baixo, medio, alto}.
+        # O Risco do auditor carrega `grau` próprio (4 níveis), sem colapsar aqui.
         normalized_severidade = (risco_estimado or "medio").strip().lower()
         if normalized_severidade not in {"baixo", "medio", "alto"}:
             logger.warning(
@@ -315,13 +391,18 @@ class DiagnosticoAgent(BaseAgent):
             )
             normalized_severidade = "medio"
 
-        # Mapping risco_estimado (string única) → riscos (list[Risco])
-        riscos = [
-            Risco(
-                descricao=(situacao_geral or "Risco preliminar identificado")[:200],
-                severidade=normalized_severidade,  # type: ignore[arg-type]
-            )
-        ]
+        # Risco do LLM (síntese textual). Os do auditor vêm antes — são o
+        # "primeiro movimento" (matriz de cruzamento) que pauta a interpretação.
+        risco_llm = Risco(
+            descricao=(situacao_geral or "Risco preliminar identificado")[:200],
+            severidade=normalized_severidade,  # type: ignore[arg-type]
+        )
+        riscos: list[Risco] = list(riscos_auditor) + [risco_llm]
+
+        # nivel_risco_geral derivado do pior grau encontrado entre os findings
+        # do auditor (preserva os 4 níveis). Sem auditor na chain, fica None —
+        # o LLM atualmente não popula esse campo direto.
+        nivel_risco_geral = self._derive_nivel_risco_geral(riscos_auditor)
 
         # Sprint A2-diagnostico Q2 (i): lacunas é schema-only em V1.
         lacunas: list[str] = []
@@ -342,6 +423,8 @@ class DiagnosticoAgent(BaseAgent):
                 lacunas=lacunas,
                 riscos=riscos,
                 checklist_documental=acoes,
+                divergencias=divergencias_auditor,
+                nivel_risco_geral=nivel_risco_geral,  # type: ignore[arg-type]
             )
         except ValidationError as exc:
             raise DiagnosticoOutputValidationError(
@@ -371,6 +454,128 @@ class DiagnosticoAgent(BaseAgent):
             payload["citation_valid"] = citation_eval.valid
 
         return payload
+
+    # ------------------------------------------------------------------
+    # PROMPT_4 Onda A — consumo de chain_data["auditor_imovel"]
+    # ------------------------------------------------------------------
+
+    def _consume_auditor_findings(
+        self,
+        auditor_payload: dict[str, Any],
+    ) -> tuple[list[Divergencia], list[Risco]]:
+        """Lê os findings do AuditorImovelAgent e os transforma em
+        ``Divergencia`` (matriz de cruzamento) + ``Risco`` (com ``grau`` em
+        4 níveis preservado).
+
+        O auditor é a fonte do cruzamento documental — o Diagnóstico não refaz
+        a conta. Esta função é o "primeiro movimento" da skill diagnostico:
+        recebe os findings prontos e os incorpora no payload do diagnóstico
+        para alimentar hipóteses, riscos e enquadramento downstream.
+
+        Retorna ``([], [])`` quando:
+        - não há ``chain_data["auditor_imovel"]`` (chain sem auditor),
+        - ``findings_raw`` está vazio,
+        - o payload do auditor não tem o shape esperado.
+        """
+        if not isinstance(auditor_payload, dict):
+            return [], []
+
+        findings_raw = auditor_payload.get("findings_raw")
+        if not isinstance(findings_raw, list):
+            return [], []
+
+        divergencias: list[Divergencia] = []
+        riscos: list[Risco] = []
+
+        for raw in findings_raw:
+            if not isinstance(raw, dict):
+                continue
+
+            tema = str(raw.get("tema") or "").strip()
+            descricao = str(raw.get("descricao") or "").strip()
+            impacto = str(raw.get("impacto") or "").strip()
+            finding_type = str(raw.get("type") or "").strip()
+            grade = str(raw.get("grade") or "").strip()
+            evidencia_raw = raw.get("evidencia")
+
+            # Divergencia exige os 3 campos não-vazios. Se faltar algum,
+            # pulamos esse finding como divergência (ainda assim pode virar
+            # risco se grade/descricao existirem).
+            if tema and descricao and impacto:
+                try:
+                    divergencias.append(Divergencia(
+                        tema=tema,
+                        divergencia=descricao,
+                        impacto=impacto,
+                    ))
+                except ValidationError:
+                    logger.warning(
+                        "diagnostico.auditor_finding.divergencia_invalida type=%s",
+                        finding_type,
+                    )
+
+            # Risco com `grau` preservado (4 níveis). Falta de grade conhecido
+            # → não viraliza em risco (auditor antigo ou finding novo sem
+            # mapeamento ainda; o consultor ainda enxerga via `divergencias`).
+            grau = _GRADE_TO_GRAU.get(grade)
+            if not grau or not descricao:
+                continue
+
+            categoria = _FINDING_TYPE_TO_CATEGORIA.get(finding_type, "cadastral_sistemico")
+            evidencia_str = self._evidencia_to_str(evidencia_raw)
+
+            try:
+                riscos.append(Risco(
+                    categoria=categoria,  # type: ignore[arg-type]
+                    risco_identificado=descricao[:500],
+                    grau=grau,  # type: ignore[arg-type]
+                    impacto_possivel=impacto[:500] if impacto else None,
+                    evidencia=evidencia_str,
+                ))
+            except ValidationError:
+                logger.warning(
+                    "diagnostico.auditor_finding.risco_invalido type=%s grade=%s",
+                    finding_type, grade,
+                )
+
+        return divergencias, riscos
+
+    @staticmethod
+    def _evidencia_to_str(value: Any) -> str | None:
+        """Serializa a evidência do finding (dict cru do auditor) em string
+        legível para o campo ``Risco.evidencia``. Mantém auditabilidade
+        (Princípio 2) sem perder o detalhe do cruzamento."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip() or None
+        if isinstance(value, dict):
+            try:
+                return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+            except (TypeError, ValueError):
+                return str(value)
+        return str(value)
+
+    @staticmethod
+    def _derive_nivel_risco_geral(riscos_auditor: list[Risco]) -> str | None:
+        """Calcula ``nivel_risco_geral`` (4 níveis) pelo "pior" grau encontrado
+        nos riscos vindos do auditor. Retorna ``None`` quando não há riscos do
+        auditor — o LLM atualmente não popula esse campo direto."""
+        if not riscos_auditor:
+            return None
+        worst_rank = -1
+        worst_grau: str | None = None
+        for risco in riscos_auditor:
+            grau = risco.grau
+            if grau is None:
+                continue
+            rank = _GRAU_RANK.get(grau, -1)
+            if rank > worst_rank:
+                worst_rank = rank
+                worst_grau = grau
+        if worst_grau is None:
+            return None
+        return _GRAU_TO_NIVEL_RISCO.get(worst_grau)
 
     def _evaluate_citations(self, text: str, legal_data: dict[str, Any]) -> Any | None:
         """Roda o evaluator de citação contra o legislation_context já carregado.

@@ -281,6 +281,7 @@ def audit_property(
         findings.append(AuditFinding(
             type="geo_incra_ausente",
             severity="critical",
+            grade=GRADE_CRITICO,
             tema="GEO INCRA",
             descricao="Matrícula não menciona georreferenciamento certificado pelo INCRA.",
             impacto=(
@@ -297,9 +298,15 @@ def audit_property(
     if rl_decl is not None and rl_averb is not None:
         cmp = compare_areas(rl_decl, rl_averb, tolerance_pct=tolerance_pct)
         if cmp.divergent and cmp.diff_pct is not None:
+            # Mesma régua de 4 faixas usada nos pares de área. severity continua
+            # warning por convenção legada (conciliação de RL é alerta, não bloqueio
+            # puro como geo_incra_ausente); grade preserva os 4 níveis para o
+            # consumidor (Diagnóstico) decidir o tratamento.
+            rl_grade = grade_area_divergence(cmp.diff_pct, tolerance_pct=tolerance_pct)
             findings.append(AuditFinding(
                 type="rl_divergente",
                 severity="warning",
+                grade=rl_grade,
                 tema="Reserva Legal",
                 descricao=(
                     f"RL declarada {rl_decl} ha ≠ averbada {rl_averb} ha "
@@ -312,6 +319,7 @@ def audit_property(
                 evidencia={
                     "rl_declarada_ha": str(rl_decl),
                     "rl_averbada_ha": str(rl_averb),
+                    "diff_pct": str(cmp.diff_pct),
                 },
             ))
 
@@ -323,6 +331,7 @@ def audit_property(
         findings.append(AuditFinding(
             type="verificacao_espacial_pendente",
             severity="info",
+            grade=GRADE_INFORMATIVO,
             tema="geometria",
             descricao=(
                 "Property.geom não populado — verificação espacial (APP, RL, UC, "
