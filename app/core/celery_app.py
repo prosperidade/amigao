@@ -24,9 +24,26 @@ celery_app.conf.update(
     timezone="America/Sao_Paulo",
     enable_utc=False,
     task_track_started=True,
-    # Upstash/Redis cloud: visibility_timeout cobre tasks longas (OCR ~3min) e
-    # retry_on_startup tolera o primeiro connect lento de provider gerenciado.
-    broker_transport_options={"visibility_timeout": 3600},
+    # Upstash/Redis cloud: reduzir polling para caber no plano pago básico
+    # (~$0.20 por 100k cmds). Numeros observados 24-25/05: 533k cmds em 3 dias
+    # com Andre+socia testando = ~177k/dia, 96% reads (polling idle do worker).
+    # Mudancas abaixo cortam o polling em ~80-90% sem prejudicar UX:
+    #
+    # - visibility_timeout: 3600 (mantido) — cobre tasks longas (OCR ~3min)
+    # - polling_interval: 5.0 — BRPOP de queue a cada 5s (default ~1s).
+    #   Tasks novas demoram ate ~5s pra serem pegas. Imperceptivel pra
+    #   trigger humano; o consultor nao percebe diferenca entre 1s e 5s
+    #   no inicio de uma extracao OCR que dura minutos.
+    # - broker_heartbeat: 240 — PING ao broker a cada 4min (default 30s).
+    #   Reduz mensagens de keepalive em 8x.
+    # - worker_prefetch_multiplier: 1 — worker pega uma task de cada vez
+    #   antes de pedir mais (default 4). Combina com pool=solo do Render.
+    broker_transport_options={
+        "visibility_timeout": 3600,
+        "polling_interval": 5.0,
+    },
+    broker_heartbeat=240,
+    worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
     beat_schedule={
         "monitor-legislation-dou-daily": {
@@ -43,11 +60,17 @@ celery_app.conf.update(
         },
         "vigia-scheduled-check": {
             "task": "workers.vigia_all_tenants",
-            "schedule": crontab(hour="*/6", minute=15),  # a cada 6h, minuto 15
+            # Reduzido de 6h (4/dia) para 12h (2/dia). Vigia roda sem LLM
+            # checando prazos em ProcessTask; 2 execuções/dia (manhã/noite)
+            # cobrem o ciclo de trabalho da sócia hoje.
+            "schedule": crontab(hour="6,18", minute=15),
         },
         "acompanhamento-check-processes": {
             "task": "workers.acompanhamento_check_all",
-            "schedule": crontab(minute="*/30"),  # a cada 30 minutos
+            # Reduzido de 30min (48/dia) para 2h (12/dia). Sem inbox connector
+            # ativo, o acompanhamento atual é leve. Quando o connector real
+            # de e-mail entrar (dívida P2), reavaliar.
+            "schedule": crontab(minute=0, hour="*/2"),
         },
         # Sprint F Bloco 3 — expira rascunhos de cadastro após 15 dias.
         "cleanup-expired-intake-drafts": {
