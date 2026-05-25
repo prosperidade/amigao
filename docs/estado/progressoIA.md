@@ -516,3 +516,82 @@ Registrado como divida de simplificacao em `docs/sprints/sprint_a2_diagnostico.m
 ### Proximo agente recomendado a migrar
 
 **`LegislacaoAgent` → criar `LegislationContextContent`** (Sprint A2-legislacao). Custo extra de schema novo (vs A2-diagnostico que reaproveitou existente). Alto valor — legislacao alimenta tanto redator quanto diagnostico.
+
+---
+
+## Fase 0 — Auditoria do estado real (23/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — commit `7877652`. Doc completo: `docs/_archive/progressos/progresso7.md`.
+
+Auditoria documental confrontada com codigo. Skill `diagnostico/situacao_ambiental_imovel_rural` (v1.0, depois v1.1 validada pela socia em 22/05) posicionada em `app/skills/`. ADR-010 (loop de aprendizado com consultores) proposto. Mapa de gaps em `docs/auditoria/MAPA_GAPS_CONFIRMADO_2026-05-23.md`.
+
+**Surpresas de escopo (gaps que ja estavam fechados):** `RegulatoryDiagnosis`/`RegulatoryIssue` (A1 D1), MemPalace stub deletado (Sprint Z), `PROJECT_NAME` ja rebrandeado, `feat/ocr-automatico` era branch fantasma.
+
+---
+
+## Fase 2 — Implementacao das 4 dependencias da skill diagnostico (23/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — 4 commits mergeados em `feat/skill-diagnostico-impl`. Mergeado em `main` em 24/05.
+
+| Onda | Commit | Conteudo | Testes |
+|---|---|---|---|
+| A4 (schema) | `43ac9d5` | `Risco` estendido 8+1 campos (taxonomia oficial + `prioridade_triagem`), `Divergencia`, `NotificacaoItem`, dual-emit via `model_validator(mode="after")`, `validate_diagnostic_content` (gate Pydantic↔JSONB), `RiscoSeveridade` ganhou `critico` | 76 schemas + 15 regressao Legislacao |
+| K3 (RAG) | `92f6376` | 9 normas-chave indexadas via OpenAI 768d em `knowledge_catalog`: IN SEMAD 3/2025, 7/2024, Leis GO 18.102/13, 18.104/13, 21.231/22, Decreto GO 9.710/20, IN INCRA 131/23, CONAMA 428/10, 429/11. **+466 chunks novos**. | — |
+| A3 (citation) | `5c4dd33` | `_evaluate_citations` no `DiagnosticoAgent` espelhando padrao do Redator. Citacoes sem match viram `citation_issues`. | 7 |
+| A2 (auditor) | `1830e70` | `AuditorImovelAgent` novo + `app/services/property_audit.py` (matricula × CAR × CCIR/ITR + GEO INCRA + RL averbada × declarada). LLM **NAO** faz a conta. | 9 + 26 |
+
+Decisoes: dual-emit do `Risco` via `model_validator` (nao alias — reconcile bidirecional); `RiscoSeveridade` aditivo (manteve compat); `validate_diagnostic_content` como funcao utilitaria pura (chamada antes de gravar em JSONB).
+
+---
+
+## Pos-Fase 2 — Ondas A/B/C (24/05/2026)
+
+**Status:** ✅ **MERGEADA EM MAIN** — commits `357993c` (Onda A) + `5e64db4` (B+C). Doc completo: `docs/_archive/progressos/progresso7.md` (mesmo arquivo cobre Fase 0 + Fase 2 + Pos-Fase 2).
+
+| Onda | Commits | Conteudo |
+|---|---|---|
+| A (fixes pre-existentes) | `e9c1a00`, `d9c021d`, `9ea9069`, `742a398`, `d062f71` | 4 testes pre-existentes corrigidos: `pytest.approx` (#1 float), aceita 202 (#2 endpoint async), `cost_usd=0.0` (#4 sem `or None`), `_load_tenant_logo` degrada graciosamente (#3 radar-nao-cancela aplicado ao codigo) |
+| B (pipeline ativo) | `6b25602`, `7d6377e`, `b601ac7` | **B1:** `auditor_imovel` ativo na chain `diagnostico_completo` (`extrator → auditor_imovel → legislacao → diagnostico`) via `NON_BLOCKING_REVIEW_AGENTS` (agente sinaliza review mas chain segue). **B2:** `POST /api/v1/processes/{id}/diagnoses` versionado, chama `validate_diagnostic_content` antes de persistir (gate A4 vivo). |
+| C (regua de divergencia) | `2348096` | Regua de **4 faixas** validada pela socia: ≤1% informativo, 1-5% atencao, 5-10% alto, >10% critico. **Sempre emite o finding** (areas iguais viram informativo — auditoria sabe que cruzamento ocorreu). |
+
+Decisoes: `NON_BLOCKING_REVIEW_AGENTS` (criterio: agente produtor de insumo segue na chain mesmo com requires_review=True); `AuditFinding.grade` (4 niveis) ortogonal a `severity` (3 niveis) com mapeamento explicito; versionamento monotonico (`MAX(version)+1`); race no version capturada via `UniqueConstraint`.
+
+Push final em `origin/main` em 24/05 23:30: `5e3780a..5e64db4`, 23 commits.
+
+---
+
+## Upstash polling redução (25/05/2026)
+
+**Status:** ✅ **MERGEADA EM MAIN** — commit `a746eb0` (PR #2, merge `bc98c93`).
+
+`polling_interval=5.0`, `broker_heartbeat=240`, `worker_prefetch_multiplier=1` no Celery; beat schedule do `vigia` 6h→12h e `acompanhamento` 30min→2h. **177k cmds/dia → ~25k/dia (-85%).** Cabe no PAYG Upstash ~$1.50/mês.
+
+---
+
+## PROMPT_4 — Fechar pipeline ponta a ponta (25/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — 2 commits em `feat/prompt4-fechar-pipeline` (PR aberto, pendente de merge). Doc completo: `docs/_archive/progressos/progresso8.md`.
+
+| Onda | Commit | Conteudo | Testes |
+|---|---|---|---|
+| A (consumo do auditor) | `f93b4b4` | `DiagnosticoAgent` consome `chain_data["auditor_imovel"]["findings_raw"]` → `Divergencia` + `Risco` com `grau` 4 niveis preservado. Mapeamentos `_GRADE_TO_GRAU` (4→4, **`critico` vira `critico_impeditivo_potencial`**, NAO colapsa) e `_FINDING_TYPE_TO_CATEGORIA`. `nivel_risco_geral` derivado do pior grau. Path rules-based tambem consome. Auditor agora emite `grade` em `findings_raw` (antes omitia) e preenche grade em todos os AuditFinding (geo→crítico, rl→régua, espacial→informativo). | 15 |
+| B (assinatura humana) | `c74ff2e` | `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` fecha **camada 1 do Princípio 1**. Grava `validated_by_user_id` + `validated_at`; AuditLog com hash chain SHA-256. **409 ao revalidar** (idempotencia explícita, evita sobrescrita silenciosa do assinante original). | 8 |
+
+Decisoes: 409 nao-200 ao revalidar; `Risco.evidencia` recebe JSON serializado deterministico (`sort_keys=True`); `PropertyMock` no nivel da classe para mockar `@property` em pydantic Settings. Item rapido `PROJECT_NAME` ja estava resolvido (Fase 0).
+
+**Suite total:** 585 passed, 0 failed (vs 562 em main — +23 testes).
+
+### Dividas fechadas
+
+- **#1** (Diagnóstico consome auditor) — Onda A.
+- **#2** (assinatura humana, camada 1) — Onda B.
+- **#4 (parcial)** alto vs. crítico preservados no **payload**. A persistência em
+  `RegulatoryIssue` ainda colapsa — sai no PROMPT_5.
+- **#12** (`PROJECT_NAME`) já fechada na Fase 0; confirmada.
+
+### Proxima rodada
+
+**PROMPT_5** — Remodelar `RegulatoryIssue`: `familia` (enum estável ~11) + `codigo_alerta`
+(catálogo evolutivo, NÃO enum) + campos novos + `severity` 4 níveis. Auditor passa a gravar
+`familia` + `codigo_alerta` reais (não mais `type="outro"`). Onda C: **propõe** reconciliação
+de status (3 conjuntos circulantes), não implementa.

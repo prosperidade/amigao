@@ -235,7 +235,10 @@ Toda chamada IA gera:
 3. **Override de prompts via UI cortado** — formalizar como ADR ([`../adr/`](../adr/)).
 4. ~~MemPalace stub vivo em `app/agents/memory.py`~~ — **Já removido em commit `757b7de`** (Sprint Z). Gap A5 da auditoria fechado.
 5. **`AI_HOURLY_COST_LIMIT_USD` ainda hardcoded** — migrar para config quando justificar.
-6. **Novo (Fase 2 Onda 2):** `AuditorImovelAgent` está registrado e funcional, mas **não foi adicionado a nenhuma chain do `orchestrator.py`** — quem decide quando rodá-lo (antes do Diagnóstico? em paralelo?) fica para sprint posterior. A chamada manual já funciona: `AgentRegistry.create("auditor_imovel", ctx).run()`.
+6. ~~`AuditorImovelAgent` registrado mas sem chain~~ — **Resolvido em 2026-05-24** (PROMPT_3 Onda B). Agente entrou na chain `diagnostico_completo` (`extrator → auditor_imovel → legislacao → diagnostico`) via `NON_BLOCKING_REVIEW_AGENTS` — `requires_review=True` do auditor não interrompe a chain (critério: o output é INSUMO `chain_data`, não produto final).
+7. ~~Diagnóstico não consome findings do auditor~~ — **Resolvido em 2026-05-25** (PROMPT_4 Onda A, commit `f93b4b4`). `DiagnosticoAgent._consume_auditor_findings()` lê `chain_data["auditor_imovel"]["findings_raw"]` e os incorpora como "primeiro movimento": cada finding vira `Divergencia` (matriz de cruzamento) + `Risco` com `grau` 4-níveis preservado (`critico` → `critico_impeditivo_potencial`, **NÃO** colapsa em "alto" no payload). `nivel_risco_geral` derivado do pior grau dos findings. Path rules-based também consome (auditor é fonte independente do LLM).
+8. ~~Princípio 1 sem ato de assinatura~~ — **Camada 1 resolvida em 2026-05-25** (PROMPT_4 Onda B, commit `c74ff2e`). `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` grava `validated_by_user_id` + `validated_at` + AuditLog hash chain SHA-256. 409 ao revalidar (idempotência explícita). **Camada 2** (5 botões P4 — decisão por alerta crítico) ainda **aberta**, depende da remodelagem do `RegulatoryIssue` (PROMPT_5).
+9. **`RegulatoryIssue` ainda colapsa 4→3 níveis** na persistência via `_GRADE_TO_SEVERITY`. O payload do Diagnóstico já preserva os 4, mas a persistência só vai para 4 níveis no PROMPT_5 (remodelagem: `familia` + `codigo_alerta` + `severity` 4 níveis). Dívida #4 do `REGISTRO_DIVIDAS.md`.
 
 ## Próximas leituras
 
