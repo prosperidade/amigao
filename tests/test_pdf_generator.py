@@ -7,11 +7,24 @@ from app.workers import pdf_generator
 
 
 class FakeStorageService:
-    def __init__(self):
+    """Storage fake para testes — sem rede, sem MinIO.
+
+    Cobre os 3 modos:
+    - logo_bytes=b"" (default): logo "não cadastrado" → silêncio, b"".
+    - logo_bytes=<conteúdo>: logo encontrado → bytes reais.
+    - logo_raises=Exception: simula MinIO offline → raise; o caller
+      deve degradar graciosamente (PDF sem logo + warning).
+    """
+
+    def __init__(self, logo_bytes: bytes = b"", logo_raises: Exception | None = None):
         self.upload_calls = []
+        self._logo_bytes = logo_bytes
+        self._logo_raises = logo_raises
 
     def download_bytes(self, storage_key: str) -> bytes:
-        return b""
+        if self._logo_raises is not None:
+            raise self._logo_raises
+        return self._logo_bytes
 
     def upload_bytes(self, content: bytes, filename: str, content_type: str, tenant_id: int, process_id: int) -> dict:
         self.upload_calls.append(
@@ -30,14 +43,15 @@ class FakeStorageService:
         }
 
 
-def test_generate_process_visit_report_persists_document(db_session, monkeypatch):
+def _seed_process(db_session) -> tuple[int, int]:
+    """Seeds tenant + user + client + process + task. Retorna (tenant_id, process_id)."""
     tenant = Tenant(name="Tenant PDF")
     db_session.add(tenant)
     db_session.flush()
 
     user = User(
         tenant_id=tenant.id,
-        email="consultor.pdf@example.com",
+        email=f"consultor.pdf.{tenant.id}@example.com",
         hashed_password="hash",
         full_name="Consultor PDF",
         is_active=True,
@@ -48,7 +62,7 @@ def test_generate_process_visit_report_persists_document(db_session, monkeypatch
     client = Client(
         tenant_id=tenant.id,
         full_name="Cliente PDF",
-        email="cliente.pdf@example.com",
+        email=f"cliente.pdf.{tenant.id}@example.com",
         client_type=ClientType.pf,
         status=ClientStatus.active,
     )
@@ -78,16 +92,54 @@ def test_generate_process_visit_report_persists_document(db_session, monkeypatch
     )
     db_session.add(task)
     db_session.commit()
-    process_id = process.id
-    tenant_id = tenant.id
+    return tenant.id, process.id
 
-    fake_storage = FakeStorageService()
+
+def _patch_storage(monkeypatch, db_session, fake_storage):
+    """Patcha pdf_generator para usar fake_storage e a sessão de teste.
+
+    Importante: o módulo chama `get_storage_service()` (lru_cache), não
+    `StorageService()` direto — patcha o getter para garantir que retorna o
+    fake; e limpa o cache antes para descartar qualquer instância "real"
+    cacheada em testes anteriores.
+    """
     monkeypatch.setattr(pdf_generator, "SessionLocal", lambda: db_session)
-    monkeypatch.setattr(pdf_generator, "StorageService", lambda: fake_storage)
+    pdf_generator.get_storage_service.cache_clear()
+    monkeypatch.setattr(pdf_generator, "get_storage_service", lambda: fake_storage)
+
+
+def test_generate_process_visit_report_persists_document(db_session, monkeypatch):
+    """Path feliz: logo não cadastrado (b""), nenhum warning, PDF gerado e persistido."""
+    tenant_id, process_id = _seed_process(db_session)
+    fake_storage = FakeStorageService()
+    _patch_storage(monkeypatch, db_session, fake_storage)
 
     result = pdf_generator.generate_process_visit_report(tenant_id=tenant_id, process_id=process_id)
 
     assert result["status"] == "success"
     assert result["document_id"] > 0
+    assert "warnings" not in result  # silêncio quando logo só não foi cadastrado
     assert len(fake_storage.upload_calls) == 1
     assert fake_storage.upload_calls[0]["filename"] == f"Relatorio_Visita_{process_id}.pdf"
+
+
+def test_generate_process_visit_report_degrada_quando_logo_inacessivel(db_session, monkeypatch):
+    """Radar-não-cancela: MinIO offline ao buscar logo → PDF é gerado mesmo assim,
+    e o retorno carrega `warnings` para a UI sinalizar ao consultor (white-label)."""
+    tenant_id, process_id = _seed_process(db_session)
+    fake_storage = FakeStorageService(
+        logo_raises=ConnectionError("Could not connect to the endpoint URL"),
+    )
+    _patch_storage(monkeypatch, db_session, fake_storage)
+
+    result = pdf_generator.generate_process_visit_report(tenant_id=tenant_id, process_id=process_id)
+
+    # PDF segue sendo gerado e persistido
+    assert result["status"] == "success"
+    assert result["document_id"] > 0
+    assert len(fake_storage.upload_calls) == 1
+    # Warning sobe ao caller (UI / log de auditoria)
+    assert "warnings" in result
+    assert len(result["warnings"]) == 1
+    assert "logo do tenant indisponível" in result["warnings"][0]
+    assert "ConnectionError" in result["warnings"][0]

@@ -107,16 +107,39 @@ class VisitReportPDF(FPDF):
         self.cell(0, 10, f"Pagina {self.page_no()}/{{nb}}", border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align="C")
 
 
-def _load_tenant_logo(storage: StorageService, tenant_id: int) -> bytes:
+def _load_tenant_logo(storage: StorageService, tenant_id: int) -> tuple[bytes, str | None]:
+    """Carrega logo do tenant do MinIO.
+
+    Returns:
+        (logo_bytes, warning):
+        - (b"<conteúdo>", None) — logo encontrado.
+        - (b"", None) — logo não cadastrado pelo tenant (silêncio).
+        - (b"", "logo do tenant indisponível: <motivo>") — falha de
+          conectividade ou erro inesperado de storage (degradação graciosa:
+          PDF é gerado sem logo + warning sobe ao caller).
+
+    Radar-não-cancela: o logo é cosmético. Bloquear geração de PDF (que pode
+    estar a caminho de um órgão com prazo correndo) por causa de cabeçalho
+    indisponível é cancelar por motivo banal. Estende o fallback `b""` que já
+    existia para "logo não cadastrado" → também cobre "logo inacessível".
+    """
     for extension in ("png", "jpg", "jpeg"):
         logo_key = f"tenant_{tenant_id}/logo.{extension}"
-        logo_bytes = storage.download_bytes(logo_key)
+        try:
+            logo_bytes = storage.download_bytes(logo_key)
+        except Exception as exc:  # noqa: BLE001 — qualquer falha aqui é não-fatal
+            logger.warning(
+                "pdf_generator._load_tenant_logo: falha ao baixar %s — %s: %s",
+                logo_key, type(exc).__name__, exc,
+            )
+            return b"", f"logo do tenant indisponível ({type(exc).__name__})"
         if logo_bytes:
-            return logo_bytes
-    return b""
+            return logo_bytes, None
+    return b"", None
 
 def generate_process_visit_report(tenant_id: int, process_id: int) -> dict[str, Any]:
     db: Session = SessionLocal()
+    warnings: list[str] = []
     try:
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         process = db.query(Process).filter(Process.id == process_id, Process.tenant_id == tenant_id).first()
@@ -127,9 +150,13 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> dict[str, 
 
         tasks = db.query(Task).filter(Task.process_id == process_id, Task.tenant_id == tenant_id).all()
 
-        # Busca Logo no MinIO
+        # Busca Logo no MinIO — falha aqui é não-fatal (degrada graciosamente, segue sem logo).
+        # White-label: o warning sobe pro retorno pra UI sinalizar ao consultor
+        # que o documento saiu sem a marca do tenant.
         storage = get_storage_service()
-        logo_bytes = _load_tenant_logo(storage, tenant_id)
+        logo_bytes, logo_warning = _load_tenant_logo(storage, tenant_id)
+        if logo_warning:
+            warnings.append(logo_warning)
 
         total_tasks = len(tasks)
         done_tasks = sum(1 for task in tasks if task.status == TaskStatus.concluida)
@@ -229,7 +256,10 @@ def generate_process_visit_report(tenant_id: int, process_id: int) -> dict[str, 
 
         logger.info(f"Relatorio PDF gerado com sucesso: {filename}")
         db.close()
-        return {"status": "success", "document_id": doc.id}
+        result: dict[str, Any] = {"status": "success", "document_id": doc.id}
+        if warnings:
+            result["warnings"] = warnings
+        return result
 
     except Exception as e:
         logger.error(f"Erro ao gerar PDF do processo {process_id}: {str(e)}")
