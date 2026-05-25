@@ -149,11 +149,14 @@ def create_diagnosis(
     try:
         validate_diagnostic_content(payload.content)
     except ValidationError as exc:
+        # include_context=False pula o `ctx.error` (ValueError do custom validator
+        # como `_sources_non_empty`), que não é JSON-serializável.
+        # include_url=False evita poluir resposta com URL da doc do pydantic.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "message": "content não respeita o schema DiagnosticoPreliminarContent",
-                "errors": exc.errors(),
+                "errors": exc.errors(include_url=False, include_context=False),
             },
         ) from exc
 
