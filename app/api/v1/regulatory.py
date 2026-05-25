@@ -1,19 +1,20 @@
 """Endpoints REST regulatórios.
 
-Sprint A1 Tarefa D2 (read-only) + Onda B Fase 2 (POST de escrita).
+Sprint A1 Tarefa D2 (read-only) + Onda B Fase 2 (POST) + PROMPT_4 Onda B
+(PATCH ... /validate — assinatura humana).
 
-* ``GET  /processes/{process_id}/diagnoses``                 (lista versões, mais nova primeiro)
-* ``GET  /processes/{process_id}/diagnoses/{version}``       (versão específica)
-* ``POST /processes/{process_id}/diagnoses``                 (cria versão nova; ativa A4 Pydantic↔JSONB)
-* ``GET  /properties/{property_id}/issues?status=...``       (lista issues, filtro por status)
+* ``GET   /processes/{process_id}/diagnoses``                       (lista versões, mais nova primeiro)
+* ``GET   /processes/{process_id}/diagnoses/{version}``             (versão específica)
+* ``POST  /processes/{process_id}/diagnoses``                       (cria versão nova; ativa A4 Pydantic↔JSONB)
+* ``PATCH /processes/{process_id}/diagnoses/{version}/validate``    (assinatura humana — camada 1 do Princípio 1)
+* ``GET   /properties/{property_id}/issues?status=...``             (lista issues, filtro por status)
 
 Auth: perfil ``internal``. Tenant isolation aplicada em todas as queries.
-
-PUT/PATCH/DELETE de diagnóstico ficam para sprint posterior (com workflow de
-validação humana — `validated_by_user_id` / `validated_at`).
 """
 
 from __future__ import annotations
+
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
@@ -21,6 +22,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
+from app.models.audit_log import AuditLog
 from app.models.process import Process
 from app.models.property import Property
 from app.models.regulatory import RegulatoryDiagnosis, RegulatoryIssue
@@ -32,6 +34,7 @@ from app.schemas.regulatory import (
     RegulatoryIssueOut,
 )
 from app.schemas.stage_output import validate_diagnostic_content
+from app.services.audit_hash import stamp_audit_hash
 
 # Routers separados — segue padrão do app/api/v1/workflows.py com 2 prefixes
 process_router = APIRouter()
@@ -180,6 +183,83 @@ def create_diagnosis(
         # validated_by/validated_at None — Princípio 1 (humano valida depois).
     )
     db.add(diag)
+    db.commit()
+    db.refresh(diag)
+    return diag
+
+
+@process_router.patch(
+    "/{process_id}/diagnoses/{version}/validate",
+    response_model=RegulatoryDiagnosisOut,
+)
+def validate_diagnosis(
+    process_id: int,
+    version: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> RegulatoryDiagnosis:
+    """Marca a versão específica do `RegulatoryDiagnosis` como validada pelo
+    consultor — fecha a **camada 1 do Princípio 1** ("a IA propõe; o humano
+    decide e assina"). PROMPT_4 Onda B.
+
+    Comportamento:
+    1. Garante que o processo existe e pertence ao tenant.
+    2. Carrega a versão específica do diagnóstico.
+    3. Se já validado → **409 Conflict** (idempotência explícita; revalidação
+       não silenciosa, evita sobrescrita acidental do assinante original).
+    4. Grava `validated_by_user_id = current_user.id` e
+       `validated_at = now(UTC)`.
+    5. Cria `AuditLog(entity_type="regulatory_diagnosis", action="validated")`
+       com hash chain SHA-256 (Princípio 2 — quem assinou, quando, qual
+       versão).
+
+    Não revalida o `content` aqui — o gate Pydantic já rodou na criação (POST).
+    """
+    _get_process_or_404(db, process_id, current_user.tenant_id)
+    diag = (
+        db.query(RegulatoryDiagnosis)
+        .filter(
+            RegulatoryDiagnosis.process_id == process_id,
+            RegulatoryDiagnosis.version == version,
+            RegulatoryDiagnosis.tenant_id == current_user.tenant_id,
+        )
+        .first()
+    )
+    if diag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Versão {version} de diagnóstico não encontrada para este processo",
+        )
+    if diag.validated_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Versão {version} já validada em {diag.validated_at.isoformat()} "
+                f"pelo usuário {diag.validated_by_user_id}"
+            ),
+        )
+
+    diag.validated_by_user_id = current_user.id
+    diag.validated_at = datetime.now(UTC)
+    db.flush()
+
+    # AuditLog com hash chain (Princípio 2 — auditabilidade)
+    audit = AuditLog(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        entity_type="regulatory_diagnosis",
+        entity_id=diag.id,
+        action="validated",
+        new_value=diag.validated_at.isoformat(),
+        details=(
+            f"Diagnóstico v{version} do processo {process_id} validado "
+            f"pelo consultor {current_user.email}"
+        ),
+    )
+    db.add(audit)
+    db.flush()
+    stamp_audit_hash(db, audit)
+
     db.commit()
     db.refresh(diag)
     return diag

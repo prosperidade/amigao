@@ -10,6 +10,7 @@ from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
+from app.models.audit_log import AuditLog
 from app.models.regulatory import (
     RegulatoryDiagnosis,
     RegulatoryIssue,
@@ -588,3 +589,174 @@ class TestCreateDiagnosis:
             json={"content": _valid_content(), "extra_field": "x"},
         )
         assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# PROMPT_4 Onda B — PATCH /processes/{id}/diagnoses/{version}/validate
+# ---------------------------------------------------------------------------
+
+class TestValidateDiagnosis:
+    """Camada 1 do Princípio 1 do manifesto: o consultor assina o diagnóstico.
+
+    Fluxo testado: POST cria (validated_at=None) → PATCH /validate registra
+    quem validou + quando + AuditLog (Princípio 2).
+    """
+
+    def _seed_diagnosis(
+        self,
+        db_session,
+        *,
+        tenant: Tenant,
+        process: Process,
+        version: int = 1,
+    ) -> RegulatoryDiagnosis:
+        diag = RegulatoryDiagnosis(
+            tenant_id=tenant.id,
+            process_id=process.id,
+            content={"content": "x", "sources": [{"type": "legislation", "ref": "c1"}]},
+            version=version,
+        )
+        db_session.add(diag)
+        db_session.flush()
+        return diag
+
+    def test_unauthorized_returns_401(self, client: TestClient):
+        r = client.patch("/api/v1/processes/1/diagnoses/1/validate")
+        assert r.status_code == 401
+
+    def test_404_quando_processo_nao_existe(self, client: TestClient, db_session):
+        _seed_internal_user(db_session)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch("/api/v1/processes/9999/diagnoses/1/validate", headers=headers)
+        assert r.status_code == 404
+
+    def test_404_quando_versao_nao_existe(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/77/validate",
+            headers=headers,
+        )
+        assert r.status_code == 404
+        assert "Versão 77" in r.json()["detail"]
+
+    def test_validacao_grava_user_e_timestamp(self, client: TestClient, db_session):
+        tenant, user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        diag = self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        db_session.commit()
+        diag_id = diag.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["version"] == 1
+        assert body["validated_by_user_id"] == user.id
+        assert body["validated_at"] is not None
+        # confirma persistência
+        db_session.expire_all()
+        persisted = db_session.query(RegulatoryDiagnosis).get(diag_id)
+        assert persisted.validated_by_user_id == user.id
+        assert persisted.validated_at is not None
+
+    def test_409_quando_ja_validado(self, client: TestClient, db_session):
+        """Idempotência explícita: revalidar é conflito (evita sobrescrita
+        silenciosa do assinante original)."""
+        tenant, user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        diag = self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        diag.validated_by_user_id = user.id
+        diag.validated_at = datetime.now(UTC)
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 409
+        assert "já validada" in r.json()["detail"]
+
+    def test_audit_log_gravado_com_hash_chain(self, client: TestClient, db_session):
+        """Princípio 2 — quem assinou, quando, qual versão fica em AuditLog
+        com hash chain SHA-256."""
+        tenant, user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        diag = self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        db_session.commit()
+        diag_id = diag.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+        db_session.expire_all()
+        logs = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.entity_type == "regulatory_diagnosis",
+                AuditLog.entity_id == diag_id,
+                AuditLog.action == "validated",
+            )
+            .all()
+        )
+        assert len(logs) == 1
+        log = logs[0]
+        assert log.tenant_id == tenant.id
+        assert log.user_id == user.id
+        assert log.hash_sha256 is not None
+        assert len(log.hash_sha256) == 64  # SHA-256 hex
+        assert log.new_value is not None  # timestamp ISO da validação
+
+    def test_tenant_isolation_outro_tenant_recebe_404(self, client: TestClient, db_session):
+        """Tenant B não enxerga diagnóstico do tenant A — 404, nada validado."""
+        # tenant A com diag
+        tenant_a, user_a = _seed_internal_user(db_session, email="a@example.com")
+        _, _, process_a = _seed_client_property_process(db_session, tenant=tenant_a)
+        diag_a = self._seed_diagnosis(db_session, tenant=tenant_a, process=process_a)
+        # tenant B (login)
+        _seed_internal_user(db_session, email="b@example.com")
+        db_session.commit()
+        diag_a_id = diag_a.id
+
+        headers = _login(client, "b@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process_a.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 404
+        # confirma que não validou
+        db_session.expire_all()
+        persisted = db_session.query(RegulatoryDiagnosis).get(diag_a_id)
+        assert persisted.validated_at is None
+        assert persisted.validated_by_user_id is None
+
+    def test_versoes_anteriores_continuam_sem_validacao(self, client: TestClient, db_session):
+        """Valida v2 não afeta v1 (versionamento independente)."""
+        tenant, user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        v1 = self._seed_diagnosis(db_session, tenant=tenant, process=process, version=1)
+        self._seed_diagnosis(db_session, tenant=tenant, process=process, version=2)
+        db_session.commit()
+        v1_id = v1.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/2/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+        # v1 continua sem validação
+        db_session.expire_all()
+        v1_persisted = db_session.query(RegulatoryDiagnosis).get(v1_id)
+        assert v1_persisted.validated_at is None
