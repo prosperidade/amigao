@@ -85,6 +85,10 @@ class AuditorImovelAgent(BaseAgent):
                 {
                     "type": f.type,
                     "severity": f.severity,
+                    # grade preserva os 4 níveis (informativo/atencao/alto/critico)
+                    # da régua de divergência (Onda C) — distinto de severity (3).
+                    # Consumido pelo DiagnosticoAgent para preservar alto ≠ crítico.
+                    "grade": f.grade,
                     "tema": f.tema,
                     "descricao": f.descricao,
                     "impacto": f.impacto,

@@ -1,7 +1,7 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-23 (atualização pós-Fase 2)
-**Próxima atualização:** ao fechamento da próxima sprint
+**Data do instantâneo:** 2026-05-25 (atualização pós-PROMPT_4 fechar-pipeline)
+**Próxima atualização:** ao fechamento do PROMPT_5 (remodelagem do `RegulatoryIssue`)
 **Responsável de atualização:** quem fechar a próxima sprint
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
@@ -13,14 +13,31 @@
 **O que está funcionando hoje em produção/dev:**
 
 - Backend FastAPI com 27 routers REST + WebSocket
-- 11 agentes de IA via LiteLLM (multi-provider, fallback, cost cap enforced) — `auditor_imovel` adicionado em 2026-05-23
+- 11 agentes de IA via LiteLLM (multi-provider, fallback, cost cap enforced) — `auditor_imovel` ativo na chain `diagnostico_completo` desde 2026-05-24
 - Painel do consultor (React + Vite) com 36 telas em 10 áreas
 - Multi-tenant com isolamento por `tenant_id` validado no JWT
 - AuditLog com hash chain SHA-256 encadeado
-- RAG semântico via pgvector (~23.000 chunks em 4 UFs; +466 chunks ingeridos em 2026-05-23 cobrindo 9 normas-chave de GO/federal)
-- Sprint Waitlist B1 mergeada (commit 148c25b)
+- RAG semântico via pgvector (~23.000 chunks em 4 UFs; +466 chunks de 9 normas-chave GO/federal)
+- Sprint Waitlist B1 mergeada (commit `148c25b`)
 - Sprint A2 fechada (redator + diagnóstico + legislacao migrados para schema validado)
-- **Fase 2 (skill diagnóstico) fechada em 2026-05-23:** Risco estendido (8+1 campos taxonomia oficial), citation_evaluator no Diagnóstico, auditor_imovel + property_audit determinístico, 9 normas-chave indexadas com identifier próprio. Ver `docs/auditoria/MAPA_GAPS_CONFIRMADO_2026-05-23.md`.
+- **Fase 2 (skill diagnóstico) fechada em 2026-05-23:** Risco 8+1 (taxonomia oficial),
+  citation_evaluator no Diagnóstico, `auditor_imovel` + `property_audit` determinístico,
+  9 normas-chave indexadas. Ver `docs/auditoria/MAPA_GAPS_CONFIRMADO_2026-05-23.md`.
+- **Pós-Fase 2 (Ondas A/B/C) fechada em 2026-05-24:** `auditor_imovel` ativo na chain
+  `diagnostico_completo` via `NON_BLOCKING_REVIEW_AGENTS`; `POST /processes/{id}/diagnoses`
+  versionado com gate A4 Pydantic↔JSONB; régua de 4 faixas para divergência (≤1%
+  informativo / 1-5% atenção / 5-10% alto / >10% crítico) — **sempre emite** o finding.
+- **PROMPT_4 (fechar-pipeline) finalizado em 2026-05-25** (PR aberto, pendente de merge):
+  - **Onda A** — `DiagnosticoAgent` consome `chain_data["auditor_imovel"]`. Cada finding
+    vira `Divergencia` (matriz de cruzamento) + `Risco` com `grau` de 4 níveis preservado
+    (`crítico` vira `critico_impeditivo_potencial`, NÃO colapsa em "alto"). `nivel_risco_geral`
+    derivado do pior grau dos findings do auditor.
+  - **Onda B** — `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` fecha a
+    **camada 1 do Princípio 1** (consultor assina o diagnóstico). AuditLog hash chain SHA-256.
+    409 ao revalidar (idempotência explícita).
+- **Pipeline ponta a ponta no nível de código:** `extrator → auditor_imovel → legislacao →
+  diagnostico → POST /diagnoses (versionado + gate Pydantic) → PATCH /validate (assina +
+  AuditLog)`. UI do `PATCH /validate` ainda pendente no frontend.
 
 **O que está congelado:**
 
@@ -29,8 +46,12 @@
 
 **O que está em transição:**
 
-- Renomeação Amigão → Regente (camadas visíveis) — em execução
-- Skills procedurais do agente Redator — aguardando reunião de 16/05 com a sócia
+- Renomeação Amigão → Regente: rebrand interno feito (`PROJECT_NAME`, docstrings); 8 contratos
+  externos (`X-Amigao-*` headers em `alerts.py` + crawlers User-Agent) pendentes — coordenação
+  com consumidores antes (dívida #13).
+- **Remodelagem do `RegulatoryIssue`** (família + codigo_alerta + 4 níveis) — próxima rodada
+  (PROMPT_5), aguardando validação da skill `auditor_imovel/analise_divergencias_documentais`
+  pela sócia.
 
 ## Backend
 
@@ -62,6 +83,13 @@ Tabelas principais: `tenants`, `users`, `clients`, `properties`, `processes`, `t
 
 Ver `app/main.py:135-161`. Áreas: auth, clientes, processos, documentos, propriedades, tarefas, threads, intake, intake-feedback, checklists, workflows, dossier, decisions, regulatory, proposals, contracts, ai, agents, dashboard, legislation, legislation_alerts, knowledge, waitlist.
 
+**Endpoints regulatórios (2026-05-25):**
+- `GET   /api/v1/processes/{id}/diagnoses` — lista versões (mais nova primeiro)
+- `GET   /api/v1/processes/{id}/diagnoses/{version}` — versão específica
+- `POST  /api/v1/processes/{id}/diagnoses` — cria versão nova (gate A4 Pydantic↔JSONB)
+- `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` — **(PROMPT_4 Onda B)** consultor assina; AuditLog hash chain; 409 se já validado
+- `GET   /api/v1/properties/{id}/issues?status=open|resolved|all` — issues do imóvel
+
 ### Migrations Alembic
 
 39 migrations aplicadas em produção. Convenção: `<8-hex>_sprint_<X>_<descricao>.py`.
@@ -87,10 +115,13 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 
 ## Testes
 
-- 42 arquivos de teste em `tests/` (~500 funções coletadas após Fase 2)
+- 42+ arquivos de teste em `tests/`
 - Testcontainers PostgreSQL+PostGIS (function-scoped session em transação rollback)
 - pytest + pytest-cov, `fail_under=70` em coverage
-- Estado verde após Fase 2: **451+ testes passando**. 4 falhas pré-existentes em main (intake_feedback stats, e2e document_flow, pdf_generator, ocr_tasks pypdf) — não regressão da Fase 2.
+- **Estado verde após PROMPT_4:** **585 passed, 0 failed** (vs 562 antes da rodada — +23 testes:
+  15 do `test_diagnostico_consume_auditor.py` + 8 do `TestValidateDiagnosis` em `test_regulatory.py`).
+- 4 falhas pré-existentes em main resolvidas na Onda A do PROMPT_3 (24/05) — não há mais falhas
+  pré-existentes mascarando o estado.
 
 ## Infraestrutura
 
@@ -116,31 +147,40 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Fase 2 Onda 1 — K3 (RAG) | 9 normas-chave ingeridas + reindex (466 chunks novos) | ✅ commit `92f6376` |
 | Fase 2 Onda 2 — A3 (citation) | citation_evaluator no DiagnosticoAgent (espelha RedatorAgent) | ✅ commit `5c4dd33` |
 | Fase 2 Onda 2 — A2 (auditor) | AuditorImovelAgent + property_audit determinístico | ✅ commit `1830e70` |
+| Pós-Fase 2 (Ondas A/B/C — PROMPT_3) | 4 fixes pré-existentes + `auditor_imovel` na chain + `POST /diagnoses` + régua 4 faixas | ✅ commits `357993c` + `5e64db4` (mergeado em main) |
+| PROMPT_4 — fechar pipeline | Diagnóstico consome auditor + `PATCH /validate` (camada 1 do Princípio 1) | ✅ commits `f93b4b4` + `c74ff2e` (PR aberto, pendente de merge) |
+| Upstash polling redução | `polling_interval=5.0`, `vigia 6h→12h`, `acompanhamento 30min→2h` (-85% de comandos Redis) | ✅ commit `a746eb0` (PR #2 mergeado, `bc98c93`) |
 
 ## Sprints em curso
 
 | Sprint | Conteúdo | Estado |
 |---|---|---|
 | Waitlist | Endpoint público + Resend + drip educativo | PR 2 mergeado, PR 3 pendente |
+| Governança documental | Mover/arquivar docs conforme `GOVERNANCA_DOCUMENTAL.md`; capturar duráveis | Em curso (esta rodada) |
 
 ## Pendências críticas
 
 | Item | Bloqueio | Janela |
 |---|---|---|
-| Skills procedurais (redator + extrator) | Aguardando PDFs-gabarito da sócia (reunião 16/05) | Curto |
-| Renomeação visível Amigão→Regente | Patch sendo preparado | Curto |
-| Property.geom populado | Falta parser shapefile + ingestão de KML/SHP | Médio |
-| ~~Agente auditor_imovel~~ | ✅ Implementado em 2026-05-23 (Fase 2 Onda 2). Cruzamento documental roda sem `geom`; overlay espacial fica marcado como pendente até D1 chegar. | — |
+| Remodelagem `RegulatoryIssue` (dívida #3) | PROMPT_5 — aguarda sócia validar skill `auditor_imovel/analise_divergencias_documentais` | Próxima rodada |
+| Camada 2 do Princípio 1 (5 botões P4) | Depende da remodelagem do `RegulatoryIssue` + reconciliação de status (dívida #5) | Pós-PROMPT_5 |
+| UI consultor-assina (frontend do `PATCH /validate`) | Endpoint pronto desde PROMPT_4; frontend precisa consumir e renderizar | Curto |
+| Property.geom populado | Falta parser shapefile + ingestão de KML/SHP — destrava alertas geoespaciais (dívidas #14/#15) | Médio |
 | Crawlers DOU/DOE ativados em prod | Apenas esqueleto pronto | Médio |
 | Connector e-mail inbound (acompanhamento) | Sem integração de inbound hoje | Médio |
+| R1 polish dos 8 contratos externos (dívida #13) | Headers `X-Amigao-*` em `alerts.py` + crawlers User-Agent — quebra webhook + allowlists SEMAs; coordenar antes | Médio |
 | Hardening de produção (secrets, CORS, Swagger desabilitado) | Checklist em `ops/production-secrets-checklist.md` | Curto |
-| State-leakage entre testes (29 fails na suite, passam isolados) | Pytest e2e foi desbloqueado em 2026-05-17 (commit `0e17ebd`): venv host saudável + Testcontainers usando imagem `amigao_do_meio_ambiente-db` (postgis+pgvector). **339 testes passam**. Sobram 29 que falham só em suite — slowapi rate-limit state vaza entre testes, alguns testes committam transações. Sprint dedicada de saneamento: fixture `autouse=True` que reseta `slowapi.Limiter._storage` + auditar testes que committam manualmente. Não bloqueia deploy (suite roda localmente; mostra testes verdes isolados). | Curto |
+| State-leakage entre testes em suite (29 fails que passam isolados) | Pytest e2e desbloqueado em 17/05 (`0e17ebd`). Sprint dedicada: fixture `autouse=True` resetando `slowapi.Limiter._storage` + auditar testes que committam manualmente. Não bloqueia deploy. | Curto |
 
 ## Próximos marcos
 
-- **16/05 (sábado):** reunião sócia + tecnologia para escrever 4-6 skills procedurais
-- **Semana 19-23/05:** ingestão SP+MG+TO + cirurgia MemPalace + renomeação visível + Sprint A2-legislacao
-- **Reunião institucional SEMAD-GO:** sem data confirmada, mas pacote de preparação em curso
+- **PROMPT_5 — remodelar `RegulatoryIssue`**: `familia` (enum estável) + `codigo_alerta`
+  (catálogo evolutivo) + 4 níveis em severity. Pré-requisito: skill da sócia validada.
+- **Camada 2 do Princípio 1** (5 botões P4) — após reconciliação de status (PROMPT_5 Onda C
+  só **propõe**).
+- **UI do consultor-assina** — frontend consome `PATCH /validate`.
+- **Property.geom + parser shapefile** (D1) — destrava overlay PostGIS para
+  `auditor_imovel` (sobreposição com APP/UC/terceiros).
 
 ## Métricas operacionais
 

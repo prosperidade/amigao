@@ -121,6 +121,23 @@ Listagens usam query params `?skip=0&limit=100` (FastAPI default). Soma máxima 
 
 Convenção: query string aceita filtros simples (`?status=execucao&demand_type=car`). Filtros complexos (full-text, semântico) usam endpoint dedicado (`GET /knowledge/search`).
 
+### Endpoints regulatórios (`/processes/{id}/diagnoses`, `/properties/{id}/issues`)
+
+`app/api/v1/regulatory.py` — versionamento de `RegulatoryDiagnosis` por processo +
+assinatura humana.
+
+| Endpoint | Função |
+|---|---|
+| `GET   /api/v1/processes/{id}/diagnoses` | Lista versões do `RegulatoryDiagnosis`, mais nova primeiro |
+| `GET   /api/v1/processes/{id}/diagnoses/{version}` | Versão específica |
+| `POST  /api/v1/processes/{id}/diagnoses` | Cria versão nova (gate Pydantic↔JSONB via `validate_diagnostic_content`) — 422 se `content` não respeita `DiagnosticoPreliminarContent`. Versão é `MAX(version)+1` server-side. |
+| `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` | **Assinatura humana** (PROMPT_4 Onda B). Grava `validated_by_user_id` + `validated_at` + AuditLog com hash chain SHA-256. Retorna **409 Conflict** se a versão já está validada (idempotência explícita — evita sobrescrita silenciosa do assinante original). |
+| `GET   /api/v1/properties/{id}/issues?status=open\|resolved\|all` | Lista `RegulatoryIssue` do imóvel |
+
+O `PATCH /validate` materializa a **camada 1 do Princípio 1** ("a IA propõe; o humano
+decide e assina"). A camada 2 — decisão por alerta crítico (5 ações da P4) — depende da
+remodelagem do `RegulatoryIssue` (PROMPT_5).
+
 ### Webhooks / async
 
 Endpoints assíncronos que dependem de Celery retornam 202 com `job_id`:
