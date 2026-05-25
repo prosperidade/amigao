@@ -71,4 +71,5 @@ ops/legislation_metadata.json
 # Relatórios temporários de agentes (espelho local de /tmp/ no Windows)
 tmp_*.md
 normas_k3/
+!data/normas_k3/
 ops/normas_k3_preview/

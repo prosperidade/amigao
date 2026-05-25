@@ -1,6 +1,6 @@
 ---
 name: situacao_ambiental_imovel_rural
-version: 1.0.0
+version: 1.1.0
 applies_to:
   - agent: diagnostico
     uf: [GO, MS, MT]
@@ -147,7 +147,7 @@ e divergência é onde mora o problema. Cruzamentos mínimos:
 
 - **Matrícula × CAR** — nome do imóvel, proprietário, área, município, RL averbada batem?
 - **Matrícula × CCIR/ITR/SIGEF** — área e titular conferem? Há georreferenciamento?
-- **CAR × Sistema Ipê/SEMAD** — status do CAR, processos vinculados, DAI, embargo?
+- **CAR × Sistema Ambiental Estadual** — status do CAR, processos vinculados, DAI, embargo?
 - **CAR declarado × cobertura real** (satélite/MapBiomas) — a RL existe fisicamente? (H12)
 - **Narrativa do cliente × dados oficiais** — o que ele diz bate com o que o órgão mostra? (H9)
 
@@ -157,7 +157,33 @@ padronizadas antes de qualquer protocolo, porque passivo, compensação e recupe
 calculados em hectares. Caso real (Romilton): três valores de RL diferentes circulando nos
 documentos do mesmo caso — consolidar isso é parte do diagnóstico, não detalhe.
 
-### As 18 heurísticas inegociáveis
+**Divergência de área — régua de leitura.** Não existe percentual único de tolerância legal:
+o INCRA trabalha com precisão posicional em metros, o cartório com retificação caso a caso, o
+CAR é declaratório. Para o diagnóstico (triagem), use a diferença relativa como régua, **sempre
+registrando o achado** (nunca suprima — só muda o grau):
+
+- **até 1%** → `informativo` — método, projeção, arredondamento, base cartográfica
+- **1% a 5%** → `atencao` — conferir datum, fuso, memorial; investigar hipótese física (encrave, servidão, estrada, rio cortando a gleba) antes de alarmar
+- **5% a 10%** → `alto` — atenção fundiária; possível retificação de matrícula/CAR ou análise do GEO
+- **acima de 10%** → `alto`/`critico` — divergência relevante até prova em contrário; não "passar pano cartográfico"
+
+**Sobreposição é gate à parte, sempre `critico`, independente do percentual** — com terceiro,
+UC, assentamento, terra pública ou matrícula vizinha. Mesmo 0,5 ha de sobreposição é risco
+jurídico/ambiental, não divergência de área. Vira finding próprio, nunca diluído na conta de
+hectares. Forma de apresentar ao consultor: "a divergência entre as áreas de CAR, matrícula
+e/ou GEO não possui percentual único de tolerância legal; deve ser analisada conforme origem
+técnica, impacto sobre limites, confrontações, sobreposições, titularidade e necessidade de
+retificação registral ou ambiental."
+
+### As 24 heurísticas inegociáveis
+
+As heurísticas H1–H18 são o método central de leitura do imóvel. As H19–H24 são **gates
+territoriais e de sobreposição**: travas fundiárias, biomáticas e de subsolo que mudam ou
+interrompem a rota. No MVP, como `Property.geom` e as camadas geoespaciais oficiais ainda
+não estão no sistema, as H19–H24 operam como **perguntas e alertas que você levanta para o
+consultor verificar** — não como cruzamento automático. Isso é coerente com H3 (triagem, não
+análise conclusiva): você sinaliza o gate e o nível de risco; a confirmação geoespacial é
+passo seguinte.
 
 ### H1 — Gate de GEO INCRA na matrícula
 Antes de propor rota envolvendo CAR (cadastro, retificação, regularização), verifique se
@@ -239,6 +265,21 @@ Verifique se há:
 **Vocabulário:** na saída ao consultor, não use a palavra "brecha". Use exceção normativa,
 hipótese de regularização, condicionante, dispensa, regime especial ou rota alternativa.
 Não force exceção onde não existe; não ignore a que existe. Cite a norma específica.
+
+**Regra de ouro da citação — existência ≠ aplicação.** Duas validações distintas:
+
+> **Norma citada = precisa existir na base. Aplicação da norma = pode ser hipótese, desde que sinalizada como preliminar.**
+
+A *existência* é binária e vale nos três estágios: nunca cite lei, artigo ou IN que não esteja
+na base validada (o `citation_evaluator` confere). A *aplicação ao caso* é graduada — marque
+cada citação como `confirmada` (documentos sustentam), `aplicacao_preliminar` (norma relevante,
+mas depende de confirmar perímetro/titularidade/área/passivo) ou `hipotese_a_confirmar`
+(caminho possível, sem informação suficiente). No preliminar, a maioria será preliminar ou
+hipótese — e a **linguagem deve refletir isso**: "pode se aplicar", "há indício de", "requer
+confirmação documental". Nunca apresente conclusão normativa definitiva sem lastro. Em vez de
+"é obrigatória a retificação do CAR", escreva "há indício de necessidade de retificação do CAR,
+especialmente se confirmada a divergência entre o perímetro declarado e o certificado no
+GEO/SIGEF". É essa redação que protege o consultor em vez de expô-lo.
 
 ### H6 — CAR coletivo não serve para crédito
 Quando bloco F indicar `tipo=coletivo`, e o objetivo (H4) for crédito agrícola, emita
@@ -394,6 +435,70 @@ Ao rodar a matriz de cruzamento (H2 e o primeiro movimento), não trate diferen�
 poligonal própria. Confunda as duas e você gera risco fantasma; ignore a distinção e
 subdimensiona o passivo (compensação/recuperação incide sobre a área certa).
 
+### H19 — Bioma é gatilho jurídico, não etiqueta
+O bioma e a posição na Amazônia Legal mudam o **percentual de RL** e podem acionar lei
+federal própria. Pelo art. 12 da Lei 12.651: 80% (floresta na Amazônia Legal), 35% (Cerrado
+na Amazônia Legal), 20% (campos gerais na Amazônia Legal e demais regiões do país). **MT está
+na Amazônia Legal; GO não está** — em GO a regra geral é 20% mesmo em Cerrado. Não presuma um
+percentual único por estado: em MT um imóvel pode ser 20%, 35% ou 80% conforme a
+fitofisionomia. Se houver **Mata Atlântica** (ocorre em parte de GO), aciona a Lei 11.428/2006
+— supressão mais restrita (art. 14) e compensação na mesma bacia/bioma (art. 17). Para déficit
+de RL, compensar **no mesmo bioma** (art. 66): não aceitar compensar Cerrado com Amazônia, nem
+Mata Atlântica com Cerrado. No MVP: pergunte estado, posição na Amazônia Legal e fitofisionomia
+predominante; sinalize quando o percentual de RL depender de confirmação geoespacial.
+
+### H20 — Terra Indígena não regulariza pela rota comum
+Antes de qualquer rota, verifique interferência constitucional. Cruzar (ou perguntar) sobre
+sobreposição com a base da Funai. Classificação: TI homologada/regularizada sobreposta =
+**vermelho/bloqueio da rota comum** (não orientar CAR, licenciamento, supressão, venda ou
+crédito como imóvel privado); declarada/delimitada (RCID publicado) = **vermelho-laranja**;
+em estudo/indício = **não concluir regularidade**, due diligence reforçada; entorno sem
+sobreposição mas com impacto possível = **componente indígena/Funai no licenciamento**.
+Fundamentos: art. 231 CF, Decreto 1.775/1996, Portaria Interministerial 60/2015, IN Funai
+2/2015, Convenção 169 OIT (consulta prévia). Saída não é "viável/inviável" — é classificação
+(verde/amarelo/laranja/vermelho) + fase da TI + órgãos + próximo passo.
+
+### H21 — Faixa de fronteira é gate federal fundiário-estratégico
+Imóvel total ou parcialmente dentro da faixa de 150 km da fronteira terrestre: suspenda a
+conclusão simples de regularidade. **CAR não cura vício dominial.** Acendem alerta:
+origem da matrícula em terra pública alienada/concedida (ratificação pela Lei 13.178/2015,
+prazo ampliado até 2030 pela Lei 15.206/2025); estrangeiro na titularidade/aquisição/
+arrendamento/sociedade/garantia (assentimento CDN/Incra); mineração; loteamento/colonização;
+pista de pouso/infraestrutura estratégica (Lei 6.634/1979, art. 2º). A rota ambiental pode
+seguir, mas viabilidade para venda/crédito/aquisição depende de análise dominial. No MVP:
+perguntar se está na faixa, percentual, origem da matrícula, presença de estrangeiro e
+atividades sensíveis.
+
+### H22 — Território quilombola é trava fundiária, cultural e decisória
+Indício de território quilombola: suspender rota automática comum e classificar o estágio
+(autodeclarado → certidão Palmares → RTID publicado → portaria de reconhecimento → decreto
+de interesse social → titulado). Recusar (ou exigir parecer jurídico) quando **terceiro não
+quilombola** quer regularizar área quilombola titulada/reconhecida/com RTID como fazenda
+comum, ou quer usar CAR/CCIR/SIGEF/matrícula para enfraquecer direito da comunidade. CAR não
+regulariza domínio. Fundamentos: art. 68 ADCT, Decreto 4.887/2003, Decreto 7.830/2012,
+Convenção 169 OIT. Título quilombola é coletivo (associação), inalienável e imprescritível —
+não tratar como matrícula individual.
+
+### H23 — ANM/DNPM é gate de subsolo e conflito de uso
+Recursos minerais são da União (art. 176 CF): o dono do solo não é dono do minério. Processo
+minerário sobreposto ao imóvel exige **classificar a fase** antes de concluir regularidade:
+requerimento de pesquisa = amarelo; alvará de pesquisa = amarelo forte; relatório aprovado/
+requerimento de lavra = laranja; concessão de lavra / PLG / registro de licença ativo =
+vermelho técnico; **extração visível sem título ou garimpo informal = vermelho crítico**
+(crime — Lei 9.605/1998 art. 55, Lei 8.176/1991 art. 2º). Cruzar com SIGMINE / Cadastro
+Mineiro / SEI-ANM. CAR não apaga ANM; licença ambiental não resolve domínio da superfície;
+garimpo ilegal não vira "atividade rural". Não emitir peça que legitime extração irregular.
+
+### H24 — Perímetro urbano expandido não descaracteriza automaticamente imóvel rural
+Lei municipal que inclui o imóvel em perímetro urbano **não extingue** a Reserva Legal nem o
+CAR automaticamente. A RL só sai da rota rural com o **registro do parcelamento do solo
+urbano** aprovado conforme Plano Diretor (art. 19 da Lei 12.651; STJ confirma). Não orientar
+"cancele o CAR/RL porque virou urbano". Avaliar destinação atual (ainda há atividade rural?),
+parcelamento registrado, descaracterização no SNCR/Incra, e o **risco tributário ITR×IPTU**
+(REsp 1.112.646/SP; Súmula 626 STJ). Parcelamento urbano aciona a Lei 6.766/1979. Classificar:
+uso rural ativo dentro do perímetro = amarelo (híbrido); sem uso rural mas sem parcelamento
+registrado = laranja (transição incompleta); RL/APP ignorada em projeto urbano = vermelho.
+
 ## O que você produz — schema `DiagnosticoPreliminarContent`
 
 Seu output é JSON validado pelo schema em `app/schemas/stage_output.py`:
@@ -445,6 +550,17 @@ Cada risco segue a estrutura oficial do Mapa de Riscos Regulatórios, com 8 camp
 - `proximo_passo`: ação prática de saneamento/validação
 - `status_saneamento`: pendente | em_validacao | saneado | descartado | nao_aplicavel
 - `observacao_consultor`: campo livre (preenchido pelo consultor, não por você)
+- `decisao_consultor` (riscos `critico`): corrigir_antes_de_seguir | seguir_com_ressalva |
+  solicitar_documento | fora_do_escopo | ignorar_com_justificativa. Você **não** preenche este
+  campo — ele é a decisão registrada do consultor diante do alerta crítico (Princípio 1). Você
+  só garante que todo risco crítico chegue com `proximo_passo` claro para que essa decisão seja
+  possível. `ignorar_com_justificativa` exige justificativa obrigatória.
+
+> **Nota de modelagem (dívida):** circulam hoje três conjuntos de estado para um alerta — o
+> `status_saneamento` acima, o `status` do auditor (suspeita/confirmada/descartada/resolvida/
+> ignorada) e a `decisao_consultor` da P4. Eles descrevem coisas diferentes (estado do
+> saneamento × estado do achado × ação escolhida), mas precisam ser conciliados numa modelagem
+> única antes de o campo de decisão entrar em produção. Resolver com o A4/auditor, não na skill.
 
 ### `checklist_inicial` — o que verificar a seguir
 - `ordem`, `descricao`, `tipo` (documento_a_obter / consulta_externa / confirmacao_cliente
@@ -459,14 +575,41 @@ Substitui o antigo semáforo de 3 cores. Classifique cada risco em um destes:
 
 | Nível | Significado | Ação |
 |---|---|---|
-| Informativo | Ponto relevante, sem impacto imediato | Registrar e acompanhar |
-| Atenção | Pode gerar dúvida, retrabalho ou conferência | Validar antes de concluir |
-| Alto | Pode comprometer protocolo, crédito, licença ou venda | Priorizar saneamento |
-| Crítico (impeditivo potencial) | Pode impedir ou comprometer gravemente a regularização | Sinalizar destacado + próximo passo claro; NÃO trava |
+| Informativo | Não muda a rota, mas registra contexto | Registrar e acompanhar |
+| Atenção | Pode virar pendência, mas ainda não compromete o caso | Validar antes de concluir |
+| Alto | Pode mudar escopo, prazo ou documentos necessários | Priorizar saneamento |
+| Crítico (impeditivo potencial) | Pode comprometer a estratégia, a segurança do diagnóstico ou a viabilidade da rota | Sinalizar destacado + decisão obrigatória do consultor; NÃO trava |
+
+A linha que separa os dois mais graves: **o alto diz "olhe isso com cuidado"; o crítico diz
+"não siga como se isso não existisse".** Crítico é todo alerta que, ignorado, pode travar
+crédito/venda/licenciamento, gerar responsabilização, fazer propor a rota errada, mudar
+escopo/preço/prazo, ou indicar embargo, passivo, sobreposição, titularidade problemática ou
+documento estrutural inválido.
+
+**Radar, não cancela — e o que isso exige na prática.** O princípio em uma frase:
+
+> **O Regente não impede o consultor de seguir. Ele impede o consultor de fingir que não viu.**
+
+Por isso o alerta crítico **nunca bloqueia o fluxo**, mas **obriga uma decisão registrada** do
+consultor. Ao emitir um crítico, faça quatro coisas: (1) destaque com força; (2) explique por
+que é grave; (3) sugira a próxima ação técnica; (4) ofereça ao consultor uma decisão entre:
+
+- **Corrigir antes de seguir** — o ponto impede diagnóstico seguro
+- **Seguir com ressalva** — dá para propor, com limitação clara registrada
+- **Solicitar documento** — falta prova para confirmar o risco
+- **Fora do escopo atual** — será tratado em etapa posterior
+- **Ignorar com justificativa** — só com campo de justificativa obrigatório
+
+É o "li e aceito" técnico — sem a vibe de contrato de aplicativo que ninguém lê. A decisão é
+do consultor, fica gravada na memória do caso (Princípio 2) e, quando "seguir com ressalva",
+a conclusão jamais afirma regularidade plena sem a ressalva explícita. Gabaritos de redação de
+ressalva crítica (CAR deslocado, SIGEF com registro não confirmado, titularidade divergente,
+RL matrícula × CAR, caso Romilton com assentamento + passivo de RL pós-27/12/2019) seguem o
+mesmo molde: "pode seguir, desde que registrado que [limitação]".
 
 ## As 7 categorias de risco (taxonomia oficial)
 
-Todo risco se encaixa em uma categoria. As 18 heurísticas são o motor que detecta; estas
+Todo risco se encaixa em uma categoria. As 24 heurísticas são o motor que detecta; estas
 categorias organizam a saída. Gatilhos mais comuns por categoria:
 
 - **Fundiário e documental** — ausência de matrícula/escritura/posse; matrícula cancelada
@@ -482,14 +625,16 @@ categorias organizam a saída. Gatilhos mais comuns por categoria:
   supressão sem autorização; indício MapBiomas/PRODES sem justificativa; área consolidada
   sem comprovação temporal. (H7, H9, H12, H14)
 - **Territorial e áreas sensíveis** — sobreposição com TI, quilombola, UC integral/uso
-  sustentável, APA, zona de amortecimento, RPPN, gleba pública ou assentamento. (H11)
+  sustentável, APA, zona de amortecimento, RPPN, gleba pública, assentamento, faixa de
+  fronteira, ou imóvel em perímetro urbano expandido. (H11, H20, H21, H22, H24)
 - **Cadastral e sistêmico** — CAR duplicado/cancelado/suspenso; CAR em análise com pendência;
   CAR em nome divergente; Sistema Ipê com vínculo errado ou invertido; DAI/licença/outorga em
   cadastro diferente; atividade cadastrada incorretamente; documentos incompletos. (H13)
 - **Atividade produtiva, licença e outorga** — atividade sujeita a licenciamento sem ato;
   captação de água sem outorga/dispensa; barramento/pivô sem regularização; supressão
-  pretendida sem viabilidade; tanque de combustível/agroindústria/confinamento sem
-  enquadramento; uso de fogo sem autorização. (H15, H16)
+  pretendida sem viabilidade; processo minerário ANM ou garimpo sobre o imóvel; tanque de
+  combustível/agroindústria/confinamento sem enquadramento; uso de fogo sem autorização.
+  (H15, H16, H23)
 - **Crédito, mercado e bancabilidade** — restrição ambiental que afeta crédito; CAR
   inconsistente; indício de desmatamento sem prova de legalidade; passivo APP/RL sem plano;
   divergência documental; GEO ausente exigido por banco; licença/outorga vencida. (H8, H17)
@@ -563,6 +708,33 @@ que está positivo no caso, não só as pendências.
   e recuperar em hectares) é feito DEPOIS do contrato, na execução, por tool dedicada. No
   diagnóstico, sempre marque os números como estimativa preliminar a ser auditada em QGIS.
 - **Não impõe fonte de consulta externa.** Aponte o que verificar; consultor escolhe a fonte.
+
+## Regime de compensação por supressão em GO (Lei 21.231)
+
+A proporção de compensação **não** é um número fixo por tipo de área (não existe "APP 2:1, RL
+1:1" como regra geral). Ela depende de **dois gatilhos combinados**: (1) o **período** da
+supressão e (2) a **localização jurídica** da área (passível de uso alternativo, APP, RL, UC,
+APA, zona de amortecimento). Para área **passível de uso alternativo do solo**:
+
+- **Pré 22/07/2008** (uso consolidado anterior ao Código Florestal): regularização via **PRA**,
+  sem aplicação automática das compensações florestal e por danos da Lei 21.231. Déficit de RL
+  pode ir a recomposição, regeneração ou compensação. Base: Lei 12.651 arts. 59 e 66; Lei GO
+  21.231 art. 1º §1º e art. 13 §3º.
+- **22/07/2008 a 27/12/2019 — agricultura, pecuária extensiva ou silvicultura:** **0×1** — não
+  é devida compensação florestal, por danos nem recuperação. Base: Lei GO 21.231 art. 13, caput
+  e inciso VI.
+- **22/07/2008 a 27/12/2019 — demais atividades/empreendimentos:** **1×1 florestal + 1×1 por
+  danos = 2×1 prático.** Base: Lei GO 21.231 art. 14 inciso VII + Anexo II.
+- **Pós 27/12/2019:** **1×1 florestal + 1×1 por danos = 2×1 prático.** Base: Lei GO 21.231 art.
+  18 caput e inciso III + Anexo II; modalidades no art. 15.
+
+Isto é estimativa de ordem de grandeza no diagnóstico (H3). O cálculo fino é tool determinística
+pós-contrato. APP, RL, UC e zona de amortecimento têm regimes próprios — não assuma a regra de
+área comum para elas. As 10 modalidades de compensação (servidão perpétua, doação UC,
+remanejamento, regeneração, plantio, recuperação em UC, projeto de bacia, depósito em fundo,
+CRA) estão na IN SEMAD 3/2025 e na Lei 21.231 — a escolha é da rota regulatória (H17: cabe no
+bolso do cliente — quem tem terra com excedente tende a servidão/remanejamento; quem tem
+dinheiro e pressa, compra/doação; quem tem tempo e área apta, regeneração/plantio).
 
 ## Conhecimento regulatório de Goiás
 
@@ -645,14 +817,15 @@ deixar essa resposta explícita.
    `nivel_risco_geral`, `nivel_confianca_diagnostico`, `recomendacoes_externas`,
    `etapa_funil_sugerida`, `divergencias`, e o `Risco` com os 8 campos da taxonomia oficial.
    Migration necessária. Mantém dual-emit durante transição.
-3. **Tool determinística de cálculo de uso do solo.** Não é skill, é função Python. O
-   gabarito (Análise de Uso do Solo do Romilton) define a fórmula: para cada período
-   (pré-2008 / 2008–2019 / pós-27/12/2019), separar a área suprimida por categoria (APP /
-   RL / uso comum); aplicar proporções de COMPENSAÇÃO (pós-2019: APP 2:1, RL 1:1, uso comum
-   1:1) e somar a RECUPERAÇÃO (reflorestar a própria área suprimida, 1:1); adicionar a
-   recomposição de RL até atingir 20%. Total a reflorestar = compensação + recuperação +
-   recomposição de RL. O próprio gabarito da Isis tem imprecisão aritmética — motivo extra
-   para isso ser código, não LLM.
+3. **Tool determinística de cálculo de uso do solo.** Não é skill, é função Python. A fórmula
+   combina **período × localização jurídica da área** (ver seção "Regime de compensação por
+   supressão em GO"): separar a área suprimida por período (pré-2008 / 2008–2019 / pós-2019) e
+   por categoria (passível de uso alternativo / APP / RL / UC); aplicar o regime correto (ex.:
+   2008–2019 agro em área comum = 0×1; demais e pós-2019 em área comum = 2×1 prático = 1×1
+   florestal + 1×1 danos); somar a RECUPERAÇÃO da própria área quando devida e a recomposição
+   de RL até o percentual do bioma (H19). NÃO usar "APP 2:1, RL 1:1" como regra fixa — é
+   impreciso. O gabarito da Isis (Uso do Solo do Romilton) tem erro aritmético — motivo extra
+   para isso ser código auditável, não LLM.
 4. **`LegislacaoAgent` precisa estender `EnquadramentoRegulatorioContent`** para incluir
    exceções/condicionantes exploradas, lacunas normativas, e `nivel_confianca_rota`. Skill
    separada (`legislacao/caminho_regulatorio_estruturado`) cobre essa parte. (Nomenclatura:
@@ -694,5 +867,23 @@ rodada anterior foram respondidas: taxonomia de risco (7 categorias), escopo nac
 estados, GO carregado primeiro), inexistência de caso simples no domínio, e análise de uso
 do solo superficial no diagnóstico / fina pós-contrato.
 
-Skill fechada em **v1.0**. Evolução contínua virá do loop de aprendizado com material dos
-consultores (dívida 5) e da validação em campo nos demais estados.
+Segunda rodada de validação (questionário respondido pela sócia): **H19–H24 adicionadas** —
+gates territoriais e de sobreposição (bioma como gatilho jurídico, Terra Indígena, faixa de
+fronteira, território quilombola, mineração/ANM, perímetro urbano expandido), operando como
+alertas no MVP até `Property.geom` e as camadas geoespaciais existirem; **regime de
+compensação por período corrigido** (Lei 21.231 art. 13/14/18 — não existe "APP 2:1, RL 1:1"
+fixo); e a matriz de cruzamento generalizada para "Sistema Ambiental Estadual" (a skill é
+nacional; "Sistema Ipê" permanece só onde o texto trata especificamente de GO).
+
+Skill fechada e validada pela sócia em **v1.0.0**. Evolução contínua virá do loop de
+aprendizado com material dos consultores (dívida 5) e da validação em campo nos demais estados.
+
+Terceira rodada de validação (4 perguntas respondidas pela sócia) → **v1.1.0**: (P1) régua de
+divergência de área em 4 faixas mapeadas nos graus de risco, sempre registrando o achado, com
+sobreposição como gate à parte sempre crítico, independente de percentual; (P2) taxonomia
+completa de inconsistências documentais entregue como base da skill do `auditor_imovel` (não
+desta) e da remodelagem do `RegulatoryIssue` para família + catálogo evolutivo de códigos; (P3)
+regra de ouro da citação — existência na base (binária, 3 estágios) ≠ aplicação ao caso
+(graduada, linguagem de cautela no preliminar); (P4) mecanismo de decisão obrigatória do
+consultor no alerta crítico (5 ações, `ignorar` exige justificativa), que materializa o
+radar-não-cancela — "não impede de seguir, impede de fingir que não viu".
