@@ -1,5 +1,5 @@
 """
-Sistema de Agentes IA — Amigao do Meio Ambiente.
+Sistema de Agentes IA — Regente Ambiental.
 
 Re-exports das classes publicas e registro de todos os agentes.
 """
@@ -13,6 +13,7 @@ from app.agents.validators import OutputValidationPipeline
 from app.agents import (  # noqa: F401
     acompanhamento,
     atendimento,
+    auditor_imovel,
     diagnostico,
     extrator,
     financeiro,

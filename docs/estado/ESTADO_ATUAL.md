@@ -1,6 +1,6 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-18
+**Data do instantâneo:** 2026-05-23 (atualização pós-Fase 2)
 **Próxima atualização:** ao fechamento da próxima sprint
 **Responsável de atualização:** quem fechar a próxima sprint
 
@@ -12,14 +12,15 @@
 
 **O que está funcionando hoje em produção/dev:**
 
-- Backend FastAPI com 28 routers REST + WebSocket
-- 10 agentes de IA via LiteLLM (multi-provider, fallback, cost cap enforced)
+- Backend FastAPI com 27 routers REST + WebSocket
+- 11 agentes de IA via LiteLLM (multi-provider, fallback, cost cap enforced) — `auditor_imovel` adicionado em 2026-05-23
 - Painel do consultor (React + Vite) com 36 telas em 10 áreas
 - Multi-tenant com isolamento por `tenant_id` validado no JWT
 - AuditLog com hash chain SHA-256 encadeado
-- RAG semântico via pgvector (22.573 chunks em 4 UFs)
-- Sprint Waitlist em curso (PR 2 mergeado, PR 3 pendente)
-- Sprint A2 fechada (redator + diagnóstico migrados para schema validado)
+- RAG semântico via pgvector (~23.000 chunks em 4 UFs; +466 chunks ingeridos em 2026-05-23 cobrindo 9 normas-chave de GO/federal)
+- Sprint Waitlist B1 mergeada (commit 148c25b)
+- Sprint A2 fechada (redator + diagnóstico + legislacao migrados para schema validado)
+- **Fase 2 (skill diagnóstico) fechada em 2026-05-23:** Risco estendido (8+1 campos taxonomia oficial), citation_evaluator no Diagnóstico, auditor_imovel + property_audit determinístico, 9 normas-chave indexadas com identifier próprio. Ver `docs/auditoria/MAPA_GAPS_CONFIRMADO_2026-05-23.md`.
 
 **O que está congelado:**
 
@@ -33,15 +34,16 @@
 
 ## Backend
 
-### Agentes ativos (10)
+### Agentes ativos (11)
 
 | Agente | Arquivo | Status A2 | Custo médio observado |
 |---|---|---|---|
 | atendimento | `app/agents/atendimento.py` | dict legado | baixo (4 execuções) |
 | extrator | `app/agents/extrator.py` | dict legado | 51 execuções históricas — mais usado |
-| diagnostico | `app/agents/diagnostico.py` | ✅ A2 (DiagnosticoPreliminarContent) | $0.0002 smoke |
+| diagnostico | `app/agents/diagnostico.py` | ✅ A2+A3 (DiagnosticoPreliminarContent + citation_evaluator) | $0.0002 smoke |
 | legislacao | `app/agents/legislacao.py` | ✅ A2 (EnquadramentoRegulatorioContent) | $0.0047 acumulado (Gemini 2.0 Flash) |
 | redator | `app/agents/redator.py` | ✅ A2 (PecaJuridicaContent) | $0.0030 smoke 7 templates |
+| auditor_imovel | `app/agents/auditor_imovel.py` | ✅ A2-Fase2 (deterministic tools, sem LLM) | $0 — cruzamento via `app/services/property_audit.py` |
 | orcamento | `app/agents/orcamento.py` | dict legado | baixo |
 | financeiro | `app/agents/financeiro.py` | dict legado | baixo |
 | acompanhamento | `app/agents/acompanhamento.py` | dict legado | 1 execução |
@@ -56,13 +58,13 @@ Definidas em `app/agents/orchestrator.py:CHAINS`: `intake`, `diagnostico_complet
 
 Tabelas principais: `tenants`, `users`, `clients`, `properties`, `processes`, `tasks`, `documents`, `communications`, `proposals`, `contracts`, `ai_jobs`, `audit_logs`, `prompt_templates`, `intake_drafts`, `regulatory_diagnosis`, `regulatory_issues`, `knowledge_catalog`, `legislation_documents`, `pre_cadastros`, `intake_classification_feedback`, etc.
 
-### Routers REST (28 + 1 WebSocket)
+### Routers REST (27 + 1 WebSocket)
 
 Ver `app/main.py:135-161`. Áreas: auth, clientes, processos, documentos, propriedades, tarefas, threads, intake, intake-feedback, checklists, workflows, dossier, decisions, regulatory, proposals, contracts, ai, agents, dashboard, legislation, legislation_alerts, knowledge, waitlist.
 
 ### Migrations Alembic
 
-40 migrations aplicadas em produção. Convenção: `<8-hex>_sprint_<X>_<descricao>.py`.
+39 migrations aplicadas em produção. Convenção: `<8-hex>_sprint_<X>_<descricao>.py`.
 
 ## Corpus regulatório (RAG)
 
@@ -85,10 +87,10 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 
 ## Testes
 
-- 102 arquivos de teste em `tests/`
-- Testcontainers PostgreSQL+PostGIS 15-3.3 (function-scoped session em transação rollback)
+- 42 arquivos de teste em `tests/` (~500 funções coletadas após Fase 2)
+- Testcontainers PostgreSQL+PostGIS (function-scoped session em transação rollback)
 - pytest + pytest-cov, `fail_under=70` em coverage
-- Estado verde após A2: 156/156 testes passando
+- Estado verde após Fase 2: **451+ testes passando**. 4 falhas pré-existentes em main (intake_feedback stats, e2e document_flow, pdf_generator, ocr_tasks pypdf) — não regressão da Fase 2.
 
 ## Infraestrutura
 
@@ -109,6 +111,11 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Sprint A2-redator | RedatorAgent emite `PecaJuridicaContent` (7 templates) | ✅ |
 | Sprint A2-diagnostico | DiagnosticoAgent emite `DiagnosticoPreliminarContent` | ✅ |
 | Sprint A2-legislacao | LegislacaoAgent emite `EnquadramentoRegulatorioContent` (18 testes A2) | ✅ |
+| Fase 0 (auditoria skill) | Skill `situacao_ambiental_imovel_rural` posicionada + ADR-010 + mapa de gaps | ✅ commit `7877652` |
+| Fase 2 Onda 1 — A4 (schema) | Risco estendido (8+1), Divergencia, NotificacaoItem, dual-emit, validate_diagnostic_content | ✅ commit `43ac9d5` |
+| Fase 2 Onda 1 — K3 (RAG) | 9 normas-chave ingeridas + reindex (466 chunks novos) | ✅ commit `92f6376` |
+| Fase 2 Onda 2 — A3 (citation) | citation_evaluator no DiagnosticoAgent (espelha RedatorAgent) | ✅ commit `5c4dd33` |
+| Fase 2 Onda 2 — A2 (auditor) | AuditorImovelAgent + property_audit determinístico | ✅ commit `1830e70` |
 
 ## Sprints em curso
 
@@ -123,7 +130,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Skills procedurais (redator + extrator) | Aguardando PDFs-gabarito da sócia (reunião 16/05) | Curto |
 | Renomeação visível Amigão→Regente | Patch sendo preparado | Curto |
 | Property.geom populado | Falta parser shapefile + ingestão de KML/SHP | Médio |
-| Agente auditor_imovel | Depende de geom populado | Médio |
+| ~~Agente auditor_imovel~~ | ✅ Implementado em 2026-05-23 (Fase 2 Onda 2). Cruzamento documental roda sem `geom`; overlay espacial fica marcado como pendente até D1 chegar. | — |
 | Crawlers DOU/DOE ativados em prod | Apenas esqueleto pronto | Médio |
 | Connector e-mail inbound (acompanhamento) | Sem integração de inbound hoje | Médio |
 | Hardening de produção (secrets, CORS, Swagger desabilitado) | Checklist em `ops/production-secrets-checklist.md` | Curto |

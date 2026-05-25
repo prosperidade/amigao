@@ -176,7 +176,7 @@ Apenas placeholders `_template/SKILL.md`. Skills reais entram quando a sócia fo
 
 **Local:** `app/services/citation_evaluator.py`
 
-Hook chamado **após** o LLM retornar resposta em agentes que citam normas (Redator, Legislacao). Funciona em duas fases:
+Hook chamado **após** o LLM retornar resposta em agentes que citam normas (Redator, Legislacao, **Diagnóstico desde 2026-05-23**). Funciona em duas fases:
 
 ### Fase 1 — Extração
 
@@ -230,11 +230,12 @@ Toda chamada IA gera:
 
 ## Pendências e dívidas
 
-1. **Skills reais não existem ainda** — bloqueio aguardando PDFs-gabarito da sócia (reunião 16/05).
-2. **Citation evaluator só roda no Redator hoje** — expandir para Diagnóstico em A2 follow-up.
+1. ~~Skills reais não existem ainda~~ — **Primeira skill real escrita em 2026-05-23**: `app/skills/diagnostico/situacao_ambiental_imovel_rural/SKILL.md` (3 estágios: preliminar/consolidado/saneamento; 18 heurísticas; mapa de riscos com 7 categorias × 4 graus × 4 prioridades). 5 skills do Redator continuam aguardando reunião com a sócia.
+2. ~~Citation evaluator só roda no Redator hoje~~ — **Expandido para o DiagnosticoAgent em 2026-05-23** (Fase 2 Onda 2, commit `5c4dd33`). Espelha o padrão do RedatorAgent: extrai citações de `situacao_geral + passivos + acoes + observacoes`, valida contra `legislation_context` da chain (`legislacao_aplicavel`, `normas_estaduais`, `rag_chunks_meta`), e popula `citation_total/issues/coverage_ratio/valid` no payload. Citações sem match ficam como suspeitas, não derrubam a execução.
 3. **Override de prompts via UI cortado** — formalizar como ADR ([`../adr/`](../adr/)).
-4. **MemPalace stub vivo em `app/agents/memory.py`** — remover em cirurgia dedicada (16 arquivos afetados).
+4. ~~MemPalace stub vivo em `app/agents/memory.py`~~ — **Já removido em commit `757b7de`** (Sprint Z). Gap A5 da auditoria fechado.
 5. **`AI_HOURLY_COST_LIMIT_USD` ainda hardcoded** — migrar para config quando justificar.
+6. **Novo (Fase 2 Onda 2):** `AuditorImovelAgent` está registrado e funcional, mas **não foi adicionado a nenhuma chain do `orchestrator.py`** — quem decide quando rodá-lo (antes do Diagnóstico? em paralelo?) fica para sprint posterior. A chamada manual já funciona: `AgentRegistry.create("auditor_imovel", ctx).run()`.
 
 ## Próximas leituras
 

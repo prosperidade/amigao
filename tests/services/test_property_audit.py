@@ -1,0 +1,322 @@
+"""Testes unitários do property_audit — funções puras determinísticas.
+
+Sprint A2 (Onda 2 da Fase 2). Sem DB, sem LLM, sem mocks pesados.
+"""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+import pytest
+
+from app.services.property_audit import (
+    GRADE_ALTO,
+    GRADE_ATENCAO,
+    GRADE_CRITICO,
+    GRADE_INFORMATIVO,
+    AuditFinding,
+    audit_property,
+    compare_areas,
+    finding_to_issue_type,
+    grade_area_divergence,
+    grade_overlap_severity,
+    has_geo_incra,
+)
+
+
+class TestCompareAreas:
+    def test_iguais_nao_divergem(self):
+        cmp = compare_areas(100, 100)
+        assert cmp.divergent is False
+        assert cmp.diff_ha == Decimal("0")
+        assert cmp.diff_pct == Decimal("0")
+
+    def test_diferenca_pequena_dentro_da_tolerancia(self):
+        # 100 vs 100.5 = 0.5% < 1% default
+        cmp = compare_areas(100, Decimal("100.5"))
+        assert cmp.divergent is False
+
+    def test_diferenca_grande_acima_da_tolerancia(self):
+        # 120 vs 95 = >20%
+        cmp = compare_areas(120, 95)
+        assert cmp.divergent is True
+        assert cmp.diff_ha == Decimal("25")
+        assert cmp.diff_pct > Decimal("0.10")
+
+    @pytest.mark.parametrize("a,b", [(None, 100), (100, None), (None, None), (0, 100), (100, 0)])
+    def test_lado_ausente_ou_zero_marcado_como_divergente(self, a, b):
+        cmp = compare_areas(a, b)
+        assert cmp.divergent is True
+
+    def test_tolerancia_custom(self):
+        # 100 vs 102 = 2%. Com tolerância 5%, não diverge.
+        cmp = compare_areas(100, 102, tolerance_pct=Decimal("0.05"))
+        assert cmp.divergent is False
+        # Com tolerância 1% (default), diverge.
+        cmp2 = compare_areas(100, 102)
+        assert cmp2.divergent is True
+
+    def test_aceita_str_e_float(self):
+        cmp = compare_areas("100.0", 100.0)
+        assert cmp.divergent is False
+
+
+class TestHasGeoIncra:
+    @pytest.mark.parametrize("text", [
+        "Imóvel georreferenciado conforme Lei 10.267/2001",
+        "Cadastrado no SIGEF",
+        "GEO certificado pelo INCRA — código SIGEF",
+        "CNIR ativo",
+        "Lei nº 10.267",
+    ])
+    def test_detecta_mencao(self, text):
+        assert has_geo_incra(text) is True
+
+    @pytest.mark.parametrize("text", [
+        "Imóvel rural na zona X.",
+        "",
+        None,
+        "Matrícula sem qualquer menção a certificação espacial oficial.",
+    ])
+    def test_nao_detecta_quando_ausente(self, text):
+        assert has_geo_incra(text) is False
+
+
+class TestAuditPropertyDeterministico:
+    def test_property_vazio_nao_levanta_emite_so_finding_de_geom_pendente(self):
+        findings = audit_property(property_data={})
+        # com property_data sem geom, emite o aviso de geom pendente
+        types = [f.type for f in findings]
+        assert "verificacao_espacial_pendente" in types
+
+    def test_areas_divergentes_matricula_e_car_gera_finding(self):
+        findings = audit_property(property_data={
+            "area_documental_ha": 100,
+            "car_area_ha": 80,  # 20% diff
+            "geom": None,
+        })
+        area_findings = [f for f in findings if f.type == "area_divergente"]
+        assert len(area_findings) >= 1
+        # Severidade critical pra diff >= 10%
+        assert any(f.severity == "critical" for f in area_findings)
+
+    def test_areas_dentro_da_tolerancia_emitem_finding_informativo(self):
+        """Onda C: SEMPRE emite finding. Áreas iguais (Δ=0) viram informativo,
+        não são suprimidas — auditoria sabe que o cruzamento foi feito."""
+        findings = audit_property(property_data={
+            "area_documental_ha": 100,
+            "car_area_ha": 100,
+            "geom": object(),  # geom presente — não emite pendente
+        })
+        area_findings = [f for f in findings if f.type == "area_divergente"]
+        # 1 cruzamento possível: matrícula × CAR (CCIR/ITR são None → skipping).
+        assert len(area_findings) == 1
+        assert area_findings[0].grade == GRADE_INFORMATIVO
+        assert area_findings[0].severity == "info"
+
+    def test_geo_incra_ausente_gera_finding_critical(self):
+        findings = audit_property(property_data={
+            "matricula_text": "Imóvel rural sem outras menções.",
+            "geom": object(),
+        })
+        geo_findings = [f for f in findings if f.type == "geo_incra_ausente"]
+        assert len(geo_findings) == 1
+        assert geo_findings[0].severity == "critical"
+
+    def test_geo_incra_presente_nao_gera_finding(self):
+        findings = audit_property(property_data={
+            "matricula_text": "Imóvel georreferenciado conforme Lei 10.267",
+            "geom": object(),
+        })
+        assert not any(f.type == "geo_incra_ausente" for f in findings)
+
+    def test_rl_divergente_gera_finding_warning(self):
+        findings = audit_property(property_data={
+            "rl_declared_ha": 50,
+            "rl_averbada_ha": 30,
+            "geom": object(),
+        })
+        rl_findings = [f for f in findings if f.type == "rl_divergente"]
+        assert len(rl_findings) == 1
+        assert rl_findings[0].severity == "warning"
+
+    def test_sem_geom_marca_verificacao_espacial_pendente(self):
+        findings = audit_property(property_data={"area_documental_ha": 100, "car_area_ha": 100})
+        pendente = [f for f in findings if f.type == "verificacao_espacial_pendente"]
+        assert len(pendente) == 1
+        assert pendente[0].severity == "info"
+
+    def test_com_geom_nao_marca_verificacao_espacial_pendente(self):
+        findings = audit_property(property_data={"geom": object()})
+        pendente = [f for f in findings if f.type == "verificacao_espacial_pendente"]
+        assert pendente == []
+
+    def test_cruzamento_completo_caso_real(self):
+        """Caso composto: matrícula 100ha, CAR 80ha, CCIR 100ha, sem GEO, RL divergente."""
+        findings = audit_property(
+            property_data={
+                "area_documental_ha": 100,
+                "car_area_ha": 80,
+                "ccir_area_ha": 100,
+                "matricula_text": "Matrícula sem certificação espacial.",
+                "rl_declared_ha": 20,
+                "rl_averbada_ha": 18,  # 10% diff > 1% tolerance
+                "geom": None,
+            },
+        )
+        types = sorted(f.type for f in findings)
+        # esperado: area_divergente (mat×CAR), area_divergente (CAR×CCIR), geo_incra_ausente,
+        # rl_divergente, verificacao_espacial_pendente.
+        assert "area_divergente" in types
+        assert "geo_incra_ausente" in types
+        assert "rl_divergente" in types
+        assert "verificacao_espacial_pendente" in types
+
+
+class TestFindingToIssueType:
+    @pytest.mark.parametrize("finding_type,expected", [
+        ("area_divergente", "area_divergente"),
+        ("rl_divergente", "outro"),
+        ("geo_incra_ausente", "outro"),
+        ("verificacao_espacial_pendente", "outro"),
+        ("tipo_inexistente", "outro"),
+    ])
+    def test_mapeamento(self, finding_type, expected):
+        f = AuditFinding(
+            type=finding_type, severity="warning", tema="x",
+            descricao="x", impacto="x", evidencia={},
+        )
+        assert finding_to_issue_type(f) == expected
+
+
+# ---------------------------------------------------------------------------
+# Onda C — Régua de 4 faixas para divergência de área
+# ---------------------------------------------------------------------------
+
+class TestGradeAreaDivergence:
+    """Régua de 4 faixas (validada pela sócia)."""
+
+    @pytest.mark.parametrize("diff_pct,expected", [
+        (Decimal("0"), GRADE_INFORMATIVO),
+        (Decimal("0.005"), GRADE_INFORMATIVO),    # 0.5%
+        (Decimal("0.01"), GRADE_INFORMATIVO),     # exato 1%, ainda dentro
+        (Decimal("0.011"), GRADE_ATENCAO),        # 1.1% → atencao
+        (Decimal("0.03"), GRADE_ATENCAO),         # 3%
+        (Decimal("0.05"), GRADE_ATENCAO),         # exato 5%, ainda atencao
+        (Decimal("0.051"), GRADE_ALTO),           # 5.1% → alto
+        (Decimal("0.08"), GRADE_ALTO),            # 8%
+        (Decimal("0.10"), GRADE_ALTO),            # exato 10%, ainda alto
+        (Decimal("0.101"), GRADE_CRITICO),        # 10.1% → critico
+        (Decimal("0.50"), GRADE_CRITICO),         # 50%
+        (Decimal("2.0"), GRADE_CRITICO),          # 200%
+    ])
+    def test_faixas(self, diff_pct, expected):
+        assert grade_area_divergence(diff_pct) == expected
+
+    def test_dado_ausente_vira_atencao(self):
+        """diff_pct=None → atencao (não consigo cruzar; precisa do dado faltante)."""
+        assert grade_area_divergence(None) == GRADE_ATENCAO
+
+    def test_tolerancia_configuravel_aperta(self):
+        """Tolerância 0.5% → 1% vira atencao (em vez de informativo)."""
+        assert grade_area_divergence(Decimal("0.005"), tolerance_pct=Decimal("0.005")) == GRADE_INFORMATIVO
+        # 1% com tolerância 0.5% deveria virar atencao (passa do limite info)
+        assert grade_area_divergence(Decimal("0.01"), tolerance_pct=Decimal("0.005")) == GRADE_ATENCAO
+
+    def test_tolerancia_configuravel_relaxa(self):
+        """Tolerância 5% → diferença 3% vira informativo (em vez de atencao)."""
+        assert grade_area_divergence(Decimal("0.03"), tolerance_pct=Decimal("0.05")) == GRADE_INFORMATIVO
+
+
+class TestGradeOverlapSeverity:
+    def test_sobreposicao_eh_sempre_critico(self):
+        """Independente do percentual ou da área — sobreposição com terceiro/UC/
+        assentamento/terra pública/matrícula vizinha é sempre `critico`."""
+        assert grade_overlap_severity() == GRADE_CRITICO
+
+
+class TestAuditPropertySempreEmiteFinding:
+    """Onda C: a régua substituiu o filtro `if divergent`. Toda comparação
+    de área com pelo menos um lado disponível produz finding."""
+
+    def test_areas_iguais_emitem_informativo(self):
+        findings = audit_property(property_data={
+            "area_documental_ha": 100,
+            "car_area_ha": 100,
+            "geom": object(),
+        })
+        area = [f for f in findings if f.type == "area_divergente"]
+        assert len(area) == 1
+        assert area[0].grade == GRADE_INFORMATIVO
+        assert area[0].severity == "info"
+
+    def test_diferenca_3pct_vira_atencao(self):
+        findings = audit_property(property_data={
+            "area_documental_ha": 100,
+            "car_area_ha": 97,  # 3% diff
+            "geom": object(),
+        })
+        area = [f for f in findings if f.type == "area_divergente"]
+        assert area[0].grade == GRADE_ATENCAO
+        assert area[0].severity == "warning"
+
+    def test_diferenca_8pct_vira_alto(self):
+        findings = audit_property(property_data={
+            "area_documental_ha": 100,
+            "car_area_ha": 92,  # 8% diff
+            "geom": object(),
+        })
+        area = [f for f in findings if f.type == "area_divergente"]
+        assert area[0].grade == GRADE_ALTO
+        assert area[0].severity == "critical"
+
+    def test_diferenca_20pct_vira_critico(self):
+        findings = audit_property(property_data={
+            "area_documental_ha": 100,
+            "car_area_ha": 80,  # 20% diff
+            "geom": object(),
+        })
+        area = [f for f in findings if f.type == "area_divergente"]
+        assert area[0].grade == GRADE_CRITICO
+        assert area[0].severity == "critical"
+
+    def test_um_lado_ausente_nao_gera_finding_de_divergencia(self):
+        """Dado ausente em um lado NÃO vira finding de `area_divergente` — não
+        há cruzamento real. A detecção de documento faltante fica em domínio
+        próprio (TODO sprint posterior, quando a sócia validar o conjunto
+        canônico de documentos esperados por demand_type)."""
+        findings = audit_property(property_data={
+            "area_documental_ha": 100,
+            "car_area_ha": None,
+            "geom": object(),
+        })
+        area = [f for f in findings if f.type == "area_divergente"]
+        # Nenhum par tem AMBOS os lados → zero findings de area_divergente.
+        assert area == []
+
+    def test_tolerancia_custom_relaxa_a_classificacao(self):
+        """Mesma diferença, tolerância diferente → grau diferente."""
+        # 2% diff: default 1% → atencao
+        findings_default = audit_property(property_data={
+            "area_documental_ha": 100, "car_area_ha": 98, "geom": object(),
+        })
+        area_default = [f for f in findings_default if f.type == "area_divergente"][0]
+        assert area_default.grade == GRADE_ATENCAO
+
+        # Mesmo 2% com tolerância 5% → informativo
+        findings_relaxed = audit_property(
+            property_data={"area_documental_ha": 100, "car_area_ha": 98, "geom": object()},
+            tolerance_pct=Decimal("0.05"),
+        )
+        area_relaxed = [f for f in findings_relaxed if f.type == "area_divergente"][0]
+        assert area_relaxed.grade == GRADE_INFORMATIVO
+        # Evidencia carrega a tolerância usada (auditável)
+        assert area_relaxed.evidencia["tolerance_pct_used"] == "0.05"
+
+    def test_evidencia_inclui_tolerance_pct_usado(self):
+        findings = audit_property(property_data={
+            "area_documental_ha": 100, "car_area_ha": 92, "geom": object(),
+        })
+        area = [f for f in findings if f.type == "area_divergente"][0]
+        assert "tolerance_pct_used" in area.evidencia
+        assert area.evidencia["tolerance_pct_used"] == "0.01"  # default
