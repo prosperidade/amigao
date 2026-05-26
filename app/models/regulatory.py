@@ -119,6 +119,63 @@ class RegulatoryIssueType(str, enum.Enum):
 
 
 # ---------------------------------------------------------------------------
+# Enums dos 3 status reconciliados (PROMPT_6 — camada 2 do Princípio 1)
+# ---------------------------------------------------------------------------
+#
+# A reconciliação dos 3 conjuntos de status que circulavam (dívida #5) foi
+# resolvida pela **Opção A** do `docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md`:
+# três campos ortogonais que medem **dimensões diferentes** do mesmo alerta:
+#
+# 1. ``StatusAchado`` — natureza do indício (preenchido pelo auditor, editável
+#    pelo consultor). Responde "esse alerta é real?".
+# 2. ``DecisaoConsultor`` — qual ação foi escolhida (P4 — 5 botões da camada 2
+#    do Princípio 1). Responde "o que vou fazer com este alerta?". **Só
+#    obrigatório para `severity=critico`** — outros níveis podem ficar `NULL`.
+# 3. ``StatusSaneamento`` — progresso prático da resolução. Responde "este
+#    alerta foi resolvido no mundo?".
+
+
+class StatusAchado(str, enum.Enum):
+    """Estado de confirmação do achado (dimensão 1 — natureza do indício).
+
+    Auditor emite ``suspeita`` por default; consultor edita conforme valida."""
+
+    suspeita = "suspeita"          # auditor emitiu; consultor ainda não olhou
+    confirmada = "confirmada"      # consultor confirmou que o alerta é real
+    descartada = "descartada"      # consultor descartou (auditor errou)
+    resolvida = "resolvida"        # divergência foi sanada no mundo
+    ignorada = "ignorada"          # consultor optou por não tratar (ex.: fora_escopo)
+
+
+class DecisaoConsultor(str, enum.Enum):
+    """**Camada 2 do Princípio 1** (dimensão 2 — ação escolhida sobre alerta
+    crítico). Os 5 botões da P4 da skill diagnóstico.
+
+    **Obrigatório quando ``severity=critico``** — o ``PATCH /validate`` (PROMPT_4)
+    rejeita o diagnóstico se houver crítico sem decisão. Para outros níveis
+    (`informativo`/`atencao`/`alto`), preenchimento é opcional."""
+
+    corrigir_antes = "corrigir_antes"              # corrige antes de protocolar
+    seguir_com_ressalva = "seguir_com_ressalva"    # segue mesmo com problema, registra
+    solicitar_doc = "solicitar_doc"                # exige doc adicional antes de decidir
+    fora_escopo = "fora_escopo"                    # alerta existe mas fora do contratado
+    ignorar_justificado = "ignorar_justificado"    # ignora intencionalmente, com justificativa
+
+
+class StatusSaneamento(str, enum.Enum):
+    """Progresso prático da resolução (dimensão 3 — saneamento do alerta).
+
+    Default ``pendente``. Pode ser derivado das outras duas dimensões em UI,
+    mas mantemos como campo próprio (Opção A) para auditoria explícita."""
+
+    pendente = "pendente"
+    em_validacao = "em_validacao"
+    saneado = "saneado"
+    descartado = "descartado"
+    nao_aplicavel = "nao_aplicavel"
+
+
+# ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
 
@@ -310,6 +367,33 @@ class RegulatoryIssue(Base):
 
     payload = Column(PortableJSON, nullable=True)
     detected_by = Column(String, nullable=True)  # nome do agente ou "manual"
+
+    # ── Reconciliação dos 3 status (PROMPT_6 — Opção A) ──
+    # Três dimensões ortogonais; ver `docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md`.
+    status_achado = Column(
+        Enum(StatusAchado, name="regulatory_status_achado"),
+        nullable=False,
+        default=StatusAchado.suspeita,
+    )
+    decisao_consultor = Column(
+        Enum(DecisaoConsultor, name="regulatory_decisao_consultor"),
+        nullable=True,  # obrigatório só para severity=critico (gate no PATCH /validate)
+    )
+    decisao_consultor_justificativa = Column(
+        # Texto livre justificando a decisão (especialmente útil para
+        # `ignorar_justificado` e `fora_escopo`).
+        String,
+        nullable=True,
+    )
+    decisao_consultor_at = Column(
+        DateTime(timezone=True),
+        nullable=True,  # preenchido quando decisao_consultor é setado
+    )
+    status_saneamento = Column(
+        Enum(StatusSaneamento, name="regulatory_status_saneamento"),
+        nullable=False,
+        default=StatusSaneamento.pendente,
+    )
 
     detected_at = Column(
         DateTime(timezone=True),
