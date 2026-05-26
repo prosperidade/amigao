@@ -74,6 +74,33 @@ def db_engine(_pg_container):
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
     Base.metadata.create_all(bind=engine)
+
+    # PROMPT_5 Onda A: tabela `regulatory_issue_catalog` é criada pelo
+    # `create_all()`, mas o seed inicial vem da migration (não é executada em
+    # testes). Populamos aqui — fora da transação de teste pra ficar disponível
+    # como referência estável para todos os testes.
+    from app.models.regulatory_catalog_seed import seed_rows_as_dicts
+    with engine.begin() as conn:
+        rows = seed_rows_as_dicts()
+        if rows:
+            conn.execute(text(
+                """
+                INSERT INTO regulatory_issue_catalog
+                  (codigo_alerta, familia, descricao_curta, factibilidade,
+                   severity_base, muda_rota_regulatoria, muda_escopo_preco_prazo,
+                   documentos_cruzados_default)
+                VALUES
+                  (:codigo_alerta, :familia, :descricao_curta, :factibilidade,
+                   :severity_base, :muda_rota_regulatoria, :muda_escopo_preco_prazo,
+                   CAST(:documentos_cruzados_default AS jsonb))
+                ON CONFLICT (codigo_alerta) DO NOTHING
+                """
+            ), [
+                {**r, "documentos_cruzados_default":
+                    __import__("json").dumps(r["documentos_cruzados_default"])}
+                for r in rows
+            ])
+
     yield engine
     Base.metadata.drop_all(bind=engine)
     engine.dispose()

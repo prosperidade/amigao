@@ -64,6 +64,10 @@ class TestAgenteRegistro:
 
 
 class TestExecuteSemLLM:
+    """PROMPT_5: findings_raw passou de `type`/`severity` para
+    `codigo_alerta`/`familia`/`grade` (taxonomia rica). `grade` é o único
+    eixo de severidade (4 níveis)."""
+
     def test_areas_divergentes_emitem_divergencia_no_payload(self):
         agent = AuditorImovelAgent(_ctx())
         with ExitStack() as stack:
@@ -80,9 +84,11 @@ class TestExecuteSemLLM:
         # tem pelo menos 1 divergência de área
         areas = [d for d in data["divergencias"] if "área" in d["tema"]]
         assert len(areas) >= 1
-        # e tem raw findings com type='area_divergente'
-        raw_types = [f["type"] for f in data["findings_raw"]]
-        assert "area_divergente" in raw_types
+        # findings_raw carregam codigo_alerta + familia (PROMPT_5)
+        raw_codigos = [f["codigo_alerta"] for f in data["findings_raw"]]
+        assert "AREA_MATRICULA_X_CAR" in raw_codigos
+        raw_familias = [f["familia"] for f in data["findings_raw"]]
+        assert "area" in raw_familias
 
     def test_payload_marca_metodo_deterministic_tools(self):
         agent = AuditorImovelAgent(_ctx())
@@ -105,8 +111,8 @@ class TestExecuteSemLLM:
         assert result.success is True
         data = result.data
         assert data["geom_present"] is False
-        raw_types = [f["type"] for f in data["findings_raw"]]
-        assert "verificacao_espacial_pendente" in raw_types
+        raw_codigos = [f["codigo_alerta"] for f in data["findings_raw"]]
+        assert "VERIFICACAO_ESPACIAL_PENDENTE" in raw_codigos
 
     def test_geo_incra_ausente_aparece_no_payload(self):
         agent = AuditorImovelAgent(_ctx())
@@ -116,11 +122,12 @@ class TestExecuteSemLLM:
                 "geom": object(),
             })
             data = agent.run().data
-        raw_types = [f["type"] for f in data["findings_raw"]]
-        assert "geo_incra_ausente" in raw_types
-        # severidade critical no raw findings
-        geo_finding = next(f for f in data["findings_raw"] if f["type"] == "geo_incra_ausente")
-        assert geo_finding["severity"] == "critical"
+        raw_codigos = [f["codigo_alerta"] for f in data["findings_raw"]]
+        assert "GEO_AUSENTE" in raw_codigos
+        # grade=critico (4 níveis — sem severity 3-níveis)
+        geo_finding = next(f for f in data["findings_raw"] if f["codigo_alerta"] == "GEO_AUSENTE")
+        assert geo_finding["grade"] == "critico"
+        assert geo_finding["familia"] == "geo_incra"
 
     def test_payload_inclui_contagem_e_descricao(self):
         agent = AuditorImovelAgent(_ctx())

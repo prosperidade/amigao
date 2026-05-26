@@ -208,13 +208,13 @@ class TestListPropertyIssues:
             tenant_id=tenant.id,
             property_id=prop.id,
             type=RegulatoryIssueType.area_divergente,
-            severity=RegulatoryIssueSeverity.warning,
+            severity=RegulatoryIssueSeverity.atencao,
         ))
         db_session.add(RegulatoryIssue(
             tenant_id=tenant.id,
             property_id=prop.id,
             type=RegulatoryIssueType.outro,
-            severity=RegulatoryIssueSeverity.info,
+            severity=RegulatoryIssueSeverity.informativo,
             resolved_at=datetime.now(UTC),
         ))
         db_session.commit()
@@ -231,12 +231,12 @@ class TestListPropertyIssues:
         _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
         db_session.add(RegulatoryIssue(
             tenant_id=tenant.id, property_id=prop.id,
-            type=RegulatoryIssueType.outro, severity=RegulatoryIssueSeverity.info,
+            type=RegulatoryIssueType.outro, severity=RegulatoryIssueSeverity.informativo,
         ))
         db_session.add(RegulatoryIssue(
             tenant_id=tenant.id, property_id=prop.id,
             type=RegulatoryIssueType.sobreposicao_app,
-            severity=RegulatoryIssueSeverity.critical,
+            severity=RegulatoryIssueSeverity.critico,
             resolved_at=datetime.now(UTC),
         ))
         db_session.commit()
@@ -254,12 +254,12 @@ class TestListPropertyIssues:
         _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
         db_session.add(RegulatoryIssue(
             tenant_id=tenant.id, property_id=prop.id,
-            type=RegulatoryIssueType.outro, severity=RegulatoryIssueSeverity.info,
+            type=RegulatoryIssueType.outro, severity=RegulatoryIssueSeverity.informativo,
         ))
         db_session.add(RegulatoryIssue(
             tenant_id=tenant.id, property_id=prop.id,
             type=RegulatoryIssueType.poligono_fora_matricula,
-            severity=RegulatoryIssueSeverity.critical,
+            severity=RegulatoryIssueSeverity.critico,
             resolved_at=datetime.now(UTC),
         ))
         db_session.commit()
@@ -287,12 +287,12 @@ class TestListPropertyIssues:
         # detected_at é server_default=now() — manipulamos manualmente para ter ordem determinística
         i_old = RegulatoryIssue(
             tenant_id=tenant.id, property_id=prop.id,
-            type=RegulatoryIssueType.outro, severity=RegulatoryIssueSeverity.info,
+            type=RegulatoryIssueType.outro, severity=RegulatoryIssueSeverity.informativo,
             detected_at=now - timedelta(days=2),
         )
         i_new = RegulatoryIssue(
             tenant_id=tenant.id, property_id=prop.id,
-            type=RegulatoryIssueType.area_divergente, severity=RegulatoryIssueSeverity.warning,
+            type=RegulatoryIssueType.area_divergente, severity=RegulatoryIssueSeverity.atencao,
             detected_at=now,
         )
         db_session.add_all([i_old, i_new])
