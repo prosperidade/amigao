@@ -19,6 +19,7 @@ from app.models.prompt_template import PromptTemplate
 from app.models.property import Property
 from app.models.proposal import Proposal
 from app.models.regulatory import (
+    DecisaoConsultor,
     RegulatoryAlertFactibilidade,
     RegulatoryDiagnosis,
     RegulatoryFamilia,
@@ -26,6 +27,8 @@ from app.models.regulatory import (
     RegulatoryIssueCatalog,
     RegulatoryIssueSeverity,
     RegulatoryIssueType,
+    StatusAchado,
+    StatusSaneamento,
 )
 from app.models.stage_output import StageOutput
 from app.models.task import Task

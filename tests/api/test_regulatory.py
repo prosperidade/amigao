@@ -12,10 +12,14 @@ from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
 from app.models.audit_log import AuditLog
 from app.models.regulatory import (
+    DecisaoConsultor,
     RegulatoryDiagnosis,
+    RegulatoryFamilia,
     RegulatoryIssue,
     RegulatoryIssueSeverity,
     RegulatoryIssueType,
+    StatusAchado,
+    StatusSaneamento,
 )
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -760,3 +764,472 @@ class TestValidateDiagnosis:
         db_session.expire_all()
         v1_persisted = db_session.query(RegulatoryDiagnosis).get(v1_id)
         assert v1_persisted.validated_at is None
+
+
+# ---------------------------------------------------------------------------
+# PROMPT_6 — PATCH /properties/{prop_id}/issues/{issue_id}
+# Reconciliação dos 3 status (Opção A) + os 5 botões P4
+# ---------------------------------------------------------------------------
+
+def _seed_issue(
+    db_session,
+    *,
+    tenant,
+    prop,
+    severity: RegulatoryIssueSeverity = RegulatoryIssueSeverity.atencao,
+    codigo_alerta: str = "AREA_MATRICULA_X_CAR",
+    familia: RegulatoryFamilia = RegulatoryFamilia.area,
+    decisao_consultor: DecisaoConsultor | None = None,
+    resolved: bool = False,
+) -> RegulatoryIssue:
+    issue = RegulatoryIssue(
+        tenant_id=tenant.id,
+        property_id=prop.id,
+        codigo_alerta=codigo_alerta,
+        familia=familia,
+        severity=severity,
+        decisao_consultor=decisao_consultor,
+        resolved_at=datetime.now(UTC) if resolved else None,
+    )
+    db_session.add(issue)
+    db_session.flush()
+    return issue
+
+
+class TestUpdatePropertyIssue:
+    """PROMPT_6: PATCH /properties/{prop}/issues/{id} edita os 3 status +
+    decisao + justificativa. AuditLog separado por campo alterado."""
+
+    def test_unauthorized_returns_401(self, client: TestClient):
+        r = client.patch("/api/v1/properties/1/issues/1", json={})
+        assert r.status_code == 401
+
+    def test_404_quando_issue_nao_existe(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(f"/api/v1/properties/{prop.id}/issues/9999", headers=headers, json={})
+        assert r.status_code == 404
+
+    def test_404_quando_issue_pertence_a_outra_property(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        client_record, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        # Cria outra property no mesmo tenant + issue lá (reusa o client)
+        other_prop = Property(
+            tenant_id=tenant.id, client_id=client_record.id, name="Outra", state="GO",
+        )
+        db_session.add(other_prop)
+        db_session.flush()
+        issue = _seed_issue(db_session, tenant=tenant, prop=other_prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        # Tentar acessar issue de outra property pelo path de prop1 → 404
+        r = client.patch(f"/api/v1/properties/{prop.id}/issues/{issue.id}", headers=headers, json={})
+        assert r.status_code == 404
+
+    def test_body_vazio_eh_noop(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        issue_id = issue.id
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(f"/api/v1/properties/{prop.id}/issues/{issue_id}", headers=headers, json={})
+        assert r.status_code == 200
+        # Nenhum AuditLog gerado (no-op)
+        logs = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.entity_type == "regulatory_issue", AuditLog.entity_id == issue_id)
+            .all()
+        )
+        assert logs == []
+
+    def test_mudar_status_achado_gera_audit_log(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        issue_id = issue.id
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue_id}",
+            headers=headers,
+            json={"status_achado": "confirmada"},
+        )
+        assert r.status_code == 200
+        assert r.json()["status_achado"] == "confirmada"
+        db_session.expire_all()
+        log = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.entity_type == "regulatory_issue",
+                AuditLog.entity_id == issue_id,
+                AuditLog.action == "status_achado_changed",
+            )
+            .one()
+        )
+        assert log.old_value == "suspeita"
+        assert log.new_value == "confirmada"
+        assert log.hash_sha256 is not None
+        assert len(log.hash_sha256) == 64
+
+    def test_setar_decisao_consultor_pela_primeira_vez_grava_timestamp(
+        self, client: TestClient, db_session,
+    ):
+        """Transição NULL → valor grava decisao_consultor_at."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+        issue_id = issue.id
+        assert issue.decisao_consultor is None
+        assert issue.decisao_consultor_at is None
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue_id}",
+            headers=headers,
+            json={
+                "decisao_consultor": "corrigir_antes",
+                "decisao_consultor_justificativa": "Cliente vai retificar primeiro",
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["decisao_consultor"] == "corrigir_antes"
+        assert body["decisao_consultor_at"] is not None
+        assert body["decisao_consultor_justificativa"] == "Cliente vai retificar primeiro"
+        # 2 AuditLogs (decisao + justificativa) — granular por campo
+        db_session.expire_all()
+        logs = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.entity_type == "regulatory_issue",
+                AuditLog.entity_id == issue_id,
+            )
+            .all()
+        )
+        actions = {log.action for log in logs}
+        assert actions == {"decisao_consultor_changed", "decisao_consultor_justificativa_changed"}
+
+    def test_mudar_decisao_atualiza_timestamp(self, client: TestClient, db_session):
+        """Valor → outro valor também atualiza decisao_consultor_at."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            decisao_consultor=DecisaoConsultor.solicitar_doc,
+        )
+        # Simula timestamp antigo
+        issue.decisao_consultor_at = datetime(2026, 5, 1, tzinfo=UTC)
+        db_session.commit()
+        issue_id = issue.id
+        old_ts = issue.decisao_consultor_at
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue_id}",
+            headers=headers,
+            json={"decisao_consultor": "corrigir_antes"},
+        )
+        assert r.status_code == 200
+        db_session.expire_all()
+        updated = db_session.query(RegulatoryIssue).get(issue_id)
+        assert updated.decisao_consultor == DecisaoConsultor.corrigir_antes
+        assert updated.decisao_consultor_at > old_ts
+
+    def test_multiplos_campos_no_mesmo_patch_geram_auditlogs_distintos(
+        self, client: TestClient, db_session,
+    ):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+        issue_id = issue.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue_id}",
+            headers=headers,
+            json={
+                "status_achado": "confirmada",
+                "decisao_consultor": "seguir_com_ressalva",
+                "decisao_consultor_justificativa": "Cliente aceita risco residual",
+                "status_saneamento": "em_validacao",
+            },
+        )
+        assert r.status_code == 200
+        db_session.expire_all()
+        logs = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.entity_type == "regulatory_issue",
+                AuditLog.entity_id == issue_id,
+            )
+            .all()
+        )
+        actions = {log.action for log in logs}
+        assert actions == {
+            "status_achado_changed",
+            "decisao_consultor_changed",
+            "decisao_consultor_justificativa_changed",
+            "status_saneamento_changed",
+        }
+        # Cada AuditLog tem hash chain
+        for log in logs:
+            assert log.hash_sha256 is not None
+            assert len(log.hash_sha256) == 64
+
+    def test_mesmo_valor_nao_gera_auditlog(self, client: TestClient, db_session):
+        """No-op por campo (mesmo valor) não é evento auditável."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            decisao_consultor=DecisaoConsultor.fora_escopo,
+        )
+        db_session.commit()
+        issue_id = issue.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        # PATCH com o mesmo valor que já está
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue_id}",
+            headers=headers,
+            json={
+                "decisao_consultor": "fora_escopo",  # mesmo valor
+                "status_achado": "suspeita",         # mesmo default
+            },
+        )
+        assert r.status_code == 200
+        db_session.expire_all()
+        logs = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.entity_type == "regulatory_issue",
+                AuditLog.entity_id == issue_id,
+            )
+            .all()
+        )
+        assert logs == []
+
+    def test_valor_invalido_retorna_422(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"decisao_consultor": "valor_inexistente"},
+        )
+        assert r.status_code == 422
+
+    def test_extra_field_no_body_retorna_422(self, client: TestClient, db_session):
+        """RegulatoryIssueUpdate tem extra='forbid'."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"campo_inventado": "x"},
+        )
+        assert r.status_code == 422
+
+    def test_tenant_isolation(self, client: TestClient, db_session):
+        """Issue de outro tenant retorna 404 (não enxerga)."""
+        tenant_a, _ = _seed_internal_user(db_session, email="a@example.com")
+        _, prop_a, _ = _seed_client_property_process(db_session, tenant=tenant_a)
+        issue_a = _seed_issue(db_session, tenant=tenant_a, prop=prop_a)
+        _seed_internal_user(db_session, email="b@example.com")
+        db_session.commit()
+
+        headers = _login(client, "b@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop_a.id}/issues/{issue_a.id}",
+            headers=headers,
+            json={"status_achado": "confirmada"},
+        )
+        # Tenant B não enxerga property A → 404 antes de chegar à issue
+        assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PROMPT_6 — Gate camada 2 do Princípio 1 no PATCH /validate
+# ---------------------------------------------------------------------------
+
+class TestValidateDiagnosisGateCamada2:
+    """Camada 2 do Princípio 1: PATCH /validate rejeita assinatura se houver
+    alerta crítico sem `decisao_consultor` preenchido."""
+
+    def _seed_diag(self, db_session, *, tenant, process, version=1):
+        diag = RegulatoryDiagnosis(
+            tenant_id=tenant.id, process_id=process.id,
+            content={"content": "x", "sources": [{"type": "legislation", "ref": "c1"}]},
+            version=version,
+        )
+        db_session.add(diag)
+        db_session.flush()
+        return diag
+
+    def test_422_com_critica_sem_decisao(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            decisao_consultor=None,
+            codigo_alerta="GEO_AUSENTE",
+            familia=RegulatoryFamilia.geo_incra,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 422
+        detail = r.json()["detail"]
+        assert "crítico" in detail["message"].lower() or "critico" in detail["message"].lower()
+        assert len(detail["alertas_pendentes"]) == 1
+        assert detail["alertas_pendentes"][0]["codigo_alerta"] == "GEO_AUSENTE"
+        assert detail["alertas_pendentes"][0]["severity"] == "critico"
+
+    def test_422_lista_todas_as_criticas_pendentes(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        for codigo in ("GEO_AUSENTE", "EMBARGO_NAO_INFORMADO", "RL_CAR_X_REALIDADE"):
+            _seed_issue(
+                db_session, tenant=tenant, prop=prop,
+                severity=RegulatoryIssueSeverity.critico,
+                codigo_alerta=codigo,
+                familia=RegulatoryFamilia.geo_incra,
+            )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 422
+        codigos = {a["codigo_alerta"] for a in r.json()["detail"]["alertas_pendentes"]}
+        assert codigos == {"GEO_AUSENTE", "EMBARGO_NAO_INFORMADO", "RL_CAR_X_REALIDADE"}
+
+    def test_200_com_todas_as_criticas_decididas(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            decisao_consultor=DecisaoConsultor.corrigir_antes,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+    def test_200_quando_critica_resolvida(self, client: TestClient, db_session):
+        """Issue crítica RESOLVIDA (resolved_at != None) não bloqueia — já
+        sanada no mundo, não exige decisão pendente."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            decisao_consultor=None,  # sem decisão...
+            resolved=True,           # ...mas resolvida no mundo
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+    def test_200_sem_issues_criticas(self, client: TestClient, db_session):
+        """Alertas alto/atencao/informativo sem decisão NÃO bloqueiam — gate
+        é só para crítico (camada 2 é decisão obrigatória ALÉM da assinatura
+        do diagnóstico)."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.alto,  # não-critico
+            decisao_consultor=None,
+        )
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.atencao,
+            decisao_consultor=None,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+    def test_422_nao_grava_validated(self, client: TestClient, db_session):
+        """Quando o gate rejeita (422), o diagnóstico NÃO é validado nem
+        ganha AuditLog. Idempotência defensiva."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        diag = self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            decisao_consultor=None,
+        )
+        db_session.commit()
+        diag_id = diag.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 422
+
+        # Confirma que validated_at continua None
+        db_session.expire_all()
+        persisted = db_session.query(RegulatoryDiagnosis).get(diag_id)
+        assert persisted.validated_at is None
+        # E nenhum AuditLog "validated"
+        logs = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.entity_type == "regulatory_diagnosis",
+                AuditLog.entity_id == diag_id,
+                AuditLog.action == "validated",
+            )
+            .all()
+        )
+        assert logs == []

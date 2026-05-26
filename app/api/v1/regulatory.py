@@ -1,13 +1,15 @@
 """Endpoints REST regulatórios.
 
 Sprint A1 Tarefa D2 (read-only) + Onda B Fase 2 (POST) + PROMPT_4 Onda B
-(PATCH ... /validate — assinatura humana).
+(PATCH ... /validate — camada 1 do Princípio 1) + PROMPT_6 (camada 2 do
+Princípio 1 — 5 botões P4 + reconciliação dos 3 status).
 
 * ``GET   /processes/{process_id}/diagnoses``                       (lista versões, mais nova primeiro)
 * ``GET   /processes/{process_id}/diagnoses/{version}``             (versão específica)
 * ``POST  /processes/{process_id}/diagnoses``                       (cria versão nova; ativa A4 Pydantic↔JSONB)
-* ``PATCH /processes/{process_id}/diagnoses/{version}/validate``    (assinatura humana — camada 1 do Princípio 1)
+* ``PATCH /processes/{process_id}/diagnoses/{version}/validate``    (assinatura humana — camada 1; **gate** rejeita se faltar decisao_consultor em alerta crítico — camada 2)
 * ``GET   /properties/{property_id}/issues?status=...``             (lista issues, filtro por status)
+* ``PATCH /properties/{property_id}/issues/{issue_id}``             (consultor edita os 3 status + decisao — PROMPT_6)
 
 Auth: perfil ``internal``. Tenant isolation aplicada em todas as queries.
 """
@@ -25,13 +27,18 @@ from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
 from app.models.process import Process
 from app.models.property import Property
-from app.models.regulatory import RegulatoryDiagnosis, RegulatoryIssue
+from app.models.regulatory import (
+    RegulatoryDiagnosis,
+    RegulatoryIssue,
+    RegulatoryIssueSeverity,
+)
 from app.models.user import User
 from app.schemas.regulatory import (
     IssueStatusFilter,
     RegulatoryDiagnosisCreate,
     RegulatoryDiagnosisOut,
     RegulatoryIssueOut,
+    RegulatoryIssueUpdate,
 )
 from app.schemas.stage_output import validate_diagnostic_content
 from app.services.audit_hash import stamp_audit_hash
@@ -215,7 +222,7 @@ def validate_diagnosis(
 
     Não revalida o `content` aqui — o gate Pydantic já rodou na criação (POST).
     """
-    _get_process_or_404(db, process_id, current_user.tenant_id)
+    process = _get_process_or_404(db, process_id, current_user.tenant_id)
     diag = (
         db.query(RegulatoryDiagnosis)
         .filter(
@@ -238,6 +245,44 @@ def validate_diagnosis(
                 f"pelo usuário {diag.validated_by_user_id}"
             ),
         )
+
+    # PROMPT_6 — **Camada 2 do Princípio 1**: a IA propõe, o humano decide,
+    # alerta por alerta. Todo `RegulatoryIssue` crítico do imóvel deste
+    # processo precisa ter `decisao_consultor` preenchido antes da assinatura
+    # do diagnóstico. Sem isso, retornamos 422 com a lista de issues
+    # pendentes — o frontend mostra cada uma para o consultor decidir.
+    if process.property_id is not None:
+        pendentes = (
+            db.query(RegulatoryIssue)
+            .filter(
+                RegulatoryIssue.tenant_id == current_user.tenant_id,
+                RegulatoryIssue.property_id == process.property_id,
+                RegulatoryIssue.severity == RegulatoryIssueSeverity.critico,
+                RegulatoryIssue.decisao_consultor.is_(None),
+                RegulatoryIssue.resolved_at.is_(None),
+            )
+            .all()
+        )
+        if pendentes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": (
+                        f"{len(pendentes)} alerta(s) crítico(s) sem decisão do consultor — "
+                        "camada 2 do Princípio 1 exige decisão alerta por alerta antes da "
+                        "assinatura do diagnóstico"
+                    ),
+                    "alertas_pendentes": [
+                        {
+                            "id": issue.id,
+                            "codigo_alerta": issue.codigo_alerta,
+                            "familia": issue.familia.value if issue.familia else None,
+                            "severity": issue.severity.value,
+                        }
+                        for issue in pendentes
+                    ],
+                },
+            )
 
     diag.validated_by_user_id = current_user.id
     diag.validated_at = datetime.now(UTC)
@@ -295,3 +340,117 @@ def list_property_issues(
         query = query.filter(RegulatoryIssue.resolved_at.is_not(None))
     # "all" → sem filtro adicional
     return query.order_by(RegulatoryIssue.detected_at.desc()).all()
+
+
+@property_router.patch(
+    "/{property_id}/issues/{issue_id}",
+    response_model=RegulatoryIssueOut,
+)
+def update_property_issue(
+    property_id: int,
+    issue_id: int,
+    payload: RegulatoryIssueUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> RegulatoryIssue:
+    """**PROMPT_6** — consultor edita os 3 status + decisão sobre alerta.
+
+    Implementa a **Opção A** da reconciliação (3 dimensões ortogonais
+    + decisão da camada 2 do Princípio 1).
+
+    Comportamento:
+    1. Valida que property existe e pertence ao tenant + issue pertence à
+       property.
+    2. Para cada campo presente no body (parcial é OK), grava
+       `AuditLog(entity_type="regulatory_issue", action="<campo>_changed")`
+       com hash chain SHA-256. `old_value` e `new_value` populados em string.
+       Mudança "sem mudança" (mesmo valor) **não** gera AuditLog.
+    3. Quando `decisao_consultor` é setado pela primeira vez (transição
+       NULL → valor), `decisao_consultor_at` é gravado automaticamente.
+       Mudança valor → outro valor também atualiza o timestamp.
+    4. Retorna a issue atualizada (com taxonomia rica + 3 status).
+
+    O body é parcial — campos ausentes não são tocados. Body vazio é OK
+    (no-op + retorna o estado atual).
+    """
+    _get_property_or_404(db, property_id, current_user.tenant_id)
+    issue = (
+        db.query(RegulatoryIssue)
+        .filter(
+            RegulatoryIssue.id == issue_id,
+            RegulatoryIssue.property_id == property_id,
+            RegulatoryIssue.tenant_id == current_user.tenant_id,
+        )
+        .first()
+    )
+    if issue is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Issue {issue_id} não encontrada para este imóvel",
+        )
+
+    # Coleta de mudanças efetivas (campo, valor antigo, valor novo). Só
+    # gera AuditLog para campos que de fato mudaram — repetir o mesmo valor
+    # não é evento auditável.
+    changes: list[tuple[str, str | None, str | None]] = []
+
+    body = payload.model_dump(exclude_unset=True)
+
+    if "status_achado" in body and body["status_achado"] != issue.status_achado:
+        old = issue.status_achado.value if issue.status_achado else None
+        new = body["status_achado"].value
+        issue.status_achado = body["status_achado"]
+        changes.append(("status_achado", old, new))
+
+    if "decisao_consultor" in body and body["decisao_consultor"] != issue.decisao_consultor:
+        old = issue.decisao_consultor.value if issue.decisao_consultor else None
+        new = body["decisao_consultor"].value if body["decisao_consultor"] else None
+        issue.decisao_consultor = body["decisao_consultor"]
+        # Timestamp da decisão: marca em qualquer mudança não-trivial.
+        # Limpar (NULL) também é decisão — registra timestamp de "tirei a decisão".
+        issue.decisao_consultor_at = datetime.now(UTC)
+        changes.append(("decisao_consultor", old, new))
+
+    if "decisao_consultor_justificativa" in body and (
+        body["decisao_consultor_justificativa"] != issue.decisao_consultor_justificativa
+    ):
+        old = issue.decisao_consultor_justificativa
+        new = body["decisao_consultor_justificativa"]
+        issue.decisao_consultor_justificativa = new
+        changes.append(("decisao_consultor_justificativa", old, new))
+
+    if "status_saneamento" in body and body["status_saneamento"] != issue.status_saneamento:
+        old = issue.status_saneamento.value if issue.status_saneamento else None
+        new = body["status_saneamento"].value
+        issue.status_saneamento = body["status_saneamento"]
+        changes.append(("status_saneamento", old, new))
+
+    if not changes:
+        # No-op: nenhum campo mudou de valor. Retorna estado atual sem
+        # gerar AuditLog (não é evento auditável).
+        return issue
+
+    db.flush()
+
+    # Um AuditLog por campo alterado (Princípio 2 — auditoria granular).
+    for field, old_value, new_value in changes:
+        audit = AuditLog(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            entity_type="regulatory_issue",
+            entity_id=issue.id,
+            action=f"{field}_changed",
+            old_value=old_value,
+            new_value=new_value,
+            details=(
+                f"Issue {issue.id} (cod={issue.codigo_alerta}) — consultor "
+                f"{current_user.email} mudou {field}: {old_value!r} → {new_value!r}"
+            ),
+        )
+        db.add(audit)
+        db.flush()
+        stamp_audit_hash(db, audit)
+
+    db.commit()
+    db.refresh(issue)
+    return issue
