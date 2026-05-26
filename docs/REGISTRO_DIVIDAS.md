@@ -68,7 +68,11 @@ licença/outorga — aguardam integração.
 
 **16. Loop de aprendizado com material dos consultores** — ADR-010.
 
-## Reveladas na revisão do PROMPT_6 (26/05) — novas dívidas
+## Reveladas na revisão do PROMPT_6 (26/05)
+
+*Régua de prioridade aplicada após classificação do Andre.*
+
+### P2 — dívida com risco modesto
 
 **17. Coerência entre os 3 status reconciliados.** A Opção A do
 `RECONCILIACAO_STATUS_ALERTAS.md` foi implementada como **3 enums soltos**
@@ -76,31 +80,26 @@ licença/outorga — aguardam integração.
 "tabela-verdade do uso real" descrita no documento da proposta NÃO está
 aplicada como constraint. Combinações contraditórias gravam sem erro
 (ex.: `decisao=ignorar_justificado` + `status_achado=confirmada`;
-`decisao=corrigir_antes` + `status_saneamento=saneado`). Não bloqueia
-produção, mas a UI fica responsável por evitar essas combinações — frágil.
-**Resolver:** seja regras de validação no schema Pydantic
-(`@model_validator(mode='after')`), seja CHECK constraints no banco, seja
-máquina de estados explícita. **Origem:** revisão do PROMPT_6 (26/05).
+`decisao=corrigir_antes` + `status_saneamento=saneado`). Consultor não
+gera combinações absurdas de propósito — mas o sistema não deveria
+permitir gravá-las. **Resolver no MVP:** `@model_validator` no
+`RegulatoryIssueUpdate` barrando as combinações claramente contraditórias.
+Máquina de estados completa é futuro. **Origem:** revisão do PROMPT_6 (26/05).
+
+### P3 — com marco condicional
 
 **18. Hash chain de `AuditLog` sem rotina de verificação.**
 `app/services/audit_hash.py` tem **só escritores** (`compute_audit_hash`,
 `get_last_hash_for_tenant`, `stamp_audit_hash`) — não existe função que
 percorra a cadeia de um tenant e detecte se algum elo foi quebrado.
-Hash chain sem verificador é cerimônia. **Resolver:** adicionar
+Hash chain sem verificador é cerimônia. **Marco:** implementar **antes do
+primeiro uso jurídico da trilha** (auditoria de órgão, disputa com banco,
+contestação de decisão do consultor). Até lá, **não vender** "auditabilidade
+garantida" como se o verificador existisse. **Resolver:** adicionar
 `verify_audit_chain(db, tenant_id) -> list[BrokenLink]` que recomputa cada
 hash em ordem e compara com o `hash_sha256` persistido; expor via endpoint
 admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
-**Nota:** dívida pré-existente (vem do A1); foi exposta porque a camada 2
-do Princípio 1 reforça a ênfase na auditoria.
-
-**19. Justificativa obrigatória para `ignorar_justificado` e `fora_escopo`.**
-O nome do valor `ignorar_justificado` implica "com justificativa
-preenchida", mas o `RegulatoryIssueUpdate` aceita `decisao_consultor=
-ignorar_justificado` com `decisao_consultor_justificativa` vazio. Sem essa
-exigência, o nome mente — vira cancela disfarçada. **Resolver:** validator
-no `RegulatoryIssueUpdate` exigindo `justificativa not in (None, "")`
-quando `decisao_consultor in {ignorar_justificado, fora_escopo}`.
-**Origem:** revisão do PROMPT_6 (26/05).
+**Nota:** dívida pré-existente (vem do A1).
 
 ---
 
@@ -114,6 +113,7 @@ quando `decisao_consultor in {ignorar_justificado, fora_escopo}`.
 | **4** | Mapeamento `grade` 4→`severity` 3 que colapsava alto+crítico | 2026-05-25 (PROMPT_5 Onda A) | `_GRADE_TO_SEVERITY` removido de `property_audit.py`. `AuditFinding.grade` e `RegulatoryIssue.severity` agora compartilham 4 níveis (`informativo`/`atencao`/`alto`/`critico`). Auditor emite codigos reais (📄) e grade direto; 🛰️/🔌 ficam no catálogo mas não emitidos até infra. Diagnóstico mapeia `familia` (11) → `RiscoCategoria` (7) via `_FAMILIA_TO_CATEGORIA` (substitui `_FINDING_TYPE_TO_CATEGORIA` do PROMPT_4). |
 | **5** | Reconciliar `status_saneamento` × `status` do auditor × `decisao_consultor` (3 status circulantes) | 2026-05-26 (PROMPT_6 — Opção A do RECONCILIACAO_STATUS_ALERTAS) | 3 enums novos: `StatusAchado` (5 valores), `DecisaoConsultor` (os 5 botões P4), `StatusSaneamento` (5 valores). 5 colunas em `RegulatoryIssue`: `status_achado` (NOT NULL default `suspeita`), `decisao_consultor` (nullable), `decisao_consultor_justificativa`, `decisao_consultor_at`, `status_saneamento` (NOT NULL default `pendente`). PATCH `/properties/{prop}/issues/{id}` edita com AuditLog granular por campo. Gate no PATCH `/validate` rejeita 422 se houver crítica sem decisão (camada 2 do Princípio 1 fechada). Migration `d2c3e4f5a6b8`. |
 | **Camada 2 P1** | 5 botões da P4 — decisão obrigatória por alerta crítico antes da assinatura | 2026-05-26 (PROMPT_6) | `decisao_consultor` enum com os 5 valores + gate no `PATCH /validate` retornando 422 com lista de pendentes. Frontend dos botões fica para rodada futura (UI consome `RegulatoryIssueOut` + PATCH). |
+| **19** | Justificativa obrigatória para `ignorar_justificado` e `fora_escopo` (camada 2 completa) | 2026-05-26 (revisão pós-PROMPT_6) | `@model_validator` no `RegulatoryIssueUpdate` rejeita 422 quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no body sem `justificativa` preenchida (str_strip cuida de strings só-espaços). Aplica APENAS quando `decisao_consultor` está no body — PATCH parcial que só toca outros campos não força re-confirmação. 5 testes em `TestUpdatePropertyIssueJustificativaObrigatoria`. Fecha o buraco no Princípio 2 no caso mais arriscado (descartar uma crítica). |
 | **12** | `PROJECT_NAME='Amigão'` em `config.py:52` | 2026-05-23 (Fase 0) | Já estava `"Regente Ambiental"` quando a Fase 0 auditou. Commit `7877652` documentou. |
 
 ---
