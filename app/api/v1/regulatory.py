@@ -2,14 +2,17 @@
 
 Sprint A1 Tarefa D2 (read-only) + Onda B Fase 2 (POST) + PROMPT_4 Onda B
 (PATCH ... /validate — camada 1 do Princípio 1) + PROMPT_6 (camada 2 do
-Princípio 1 — 5 botões P4 + reconciliação dos 3 status).
+Princípio 1 — 5 botões P4 + reconciliação dos 3 status) + PROMPT_7 (ADR-012:
+`decisao_consultor` vira contextual ao processo, em `ProcessIssueDecision`).
 
-* ``GET   /processes/{process_id}/diagnoses``                       (lista versões, mais nova primeiro)
-* ``GET   /processes/{process_id}/diagnoses/{version}``             (versão específica)
-* ``POST  /processes/{process_id}/diagnoses``                       (cria versão nova; ativa A4 Pydantic↔JSONB)
-* ``PATCH /processes/{process_id}/diagnoses/{version}/validate``    (assinatura humana — camada 1; **gate** rejeita se faltar decisao_consultor em alerta crítico — camada 2)
-* ``GET   /properties/{property_id}/issues?status=...``             (lista issues, filtro por status)
-* ``PATCH /properties/{property_id}/issues/{issue_id}``             (consultor edita os 3 status + decisao — PROMPT_6)
+* ``GET   /processes/{process_id}/diagnoses``                                    (lista versões)
+* ``GET   /processes/{process_id}/diagnoses/{version}``                          (versão específica)
+* ``POST  /processes/{process_id}/diagnoses``                                    (cria versão nova; gate A4)
+* ``PATCH /processes/{process_id}/diagnoses/{version}/validate``                 (assinatura humana — camada 1; gate camada 2 rejeita se faltar ProcessIssueDecision em alerta crítico)
+* ``GET   /properties/{property_id}/issues?status=...``                          (lista issues)
+* ``PATCH /properties/{property_id}/issues/{issue_id}``                          (consultor edita os 2 status perenes — PROMPT_7 perdeu campos de decisão)
+* ``GET   /processes/{process_id}/issues/{issue_id}/decision``                   (lê a decisão deste processo — PROMPT_7)
+* ``PUT   /processes/{process_id}/issues/{issue_id}/decision``                   (cria/atualiza a decisão — PROMPT_7)
 
 Auth: perfil ``internal``. Tenant isolation aplicada em todas as queries.
 """
@@ -28,6 +31,7 @@ from app.models.audit_log import AuditLog
 from app.models.process import Process
 from app.models.property import Property
 from app.models.regulatory import (
+    ProcessIssueDecision,
     RegulatoryDiagnosis,
     RegulatoryIssue,
     RegulatoryIssueSeverity,
@@ -35,6 +39,8 @@ from app.models.regulatory import (
 from app.models.user import User
 from app.schemas.regulatory import (
     IssueStatusFilter,
+    ProcessIssueDecisionCreate,
+    ProcessIssueDecisionOut,
     RegulatoryDiagnosisCreate,
     RegulatoryDiagnosisOut,
     RegulatoryIssueOut,
@@ -246,43 +252,55 @@ def validate_diagnosis(
             ),
         )
 
-    # PROMPT_6 — **Camada 2 do Princípio 1**: a IA propõe, o humano decide,
-    # alerta por alerta. Todo `RegulatoryIssue` crítico do imóvel deste
-    # processo precisa ter `decisao_consultor` preenchido antes da assinatura
-    # do diagnóstico. Sem isso, retornamos 422 com a lista de issues
-    # pendentes — o frontend mostra cada uma para o consultor decidir.
+    # PROMPT_6 + ADR-012 (PROMPT_7) — **Camada 2 do Princípio 1**:
+    # cada processo decide alerta por alerta. A decisão é **contextual ao
+    # processo** (ADR-012) — não herda decisão de outro trabalho. Aqui o
+    # gate olha `ProcessIssueDecision` para este `process.id`, não mais um
+    # campo no próprio `RegulatoryIssue`.
     if process.property_id is not None:
-        pendentes = (
+        issues_criticas = (
             db.query(RegulatoryIssue)
             .filter(
                 RegulatoryIssue.tenant_id == current_user.tenant_id,
                 RegulatoryIssue.property_id == process.property_id,
                 RegulatoryIssue.severity == RegulatoryIssueSeverity.critico,
-                RegulatoryIssue.decisao_consultor.is_(None),
                 RegulatoryIssue.resolved_at.is_(None),
             )
             .all()
         )
-        if pendentes:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "message": (
-                        f"{len(pendentes)} alerta(s) crítico(s) sem decisão do consultor — "
-                        "camada 2 do Princípio 1 exige decisão alerta por alerta antes da "
-                        "assinatura do diagnóstico"
-                    ),
-                    "alertas_pendentes": [
-                        {
-                            "id": issue.id,
-                            "codigo_alerta": issue.codigo_alerta,
-                            "familia": issue.familia.value if issue.familia else None,
-                            "severity": issue.severity.value,
-                        }
-                        for issue in pendentes
-                    ],
-                },
-            )
+        if issues_criticas:
+            decided_issue_ids = {
+                d.issue_id for d in (
+                    db.query(ProcessIssueDecision.issue_id)
+                    .filter(
+                        ProcessIssueDecision.tenant_id == current_user.tenant_id,
+                        ProcessIssueDecision.process_id == process.id,
+                        ProcessIssueDecision.issue_id.in_([i.id for i in issues_criticas]),
+                    )
+                    .all()
+                )
+            }
+            pendentes = [i for i in issues_criticas if i.id not in decided_issue_ids]
+            if pendentes:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={
+                        "message": (
+                            f"{len(pendentes)} alerta(s) crítico(s) sem decisão do consultor "
+                            "neste processo — camada 2 do Princípio 1 exige decisão alerta "
+                            "por alerta antes da assinatura do diagnóstico"
+                        ),
+                        "alertas_pendentes": [
+                            {
+                                "id": issue.id,
+                                "codigo_alerta": issue.codigo_alerta,
+                                "familia": issue.familia.value if issue.familia else None,
+                                "severity": issue.severity.value,
+                            }
+                            for issue in pendentes
+                        ],
+                    },
+                )
 
     diag.validated_by_user_id = current_user.id
     diag.validated_at = datetime.now(UTC)
@@ -353,25 +371,16 @@ def update_property_issue(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> RegulatoryIssue:
-    """**PROMPT_6** — consultor edita os 3 status + decisão sobre alerta.
+    """Consultor edita os 2 status **perenes** do fato do imóvel.
 
-    Implementa a **Opção A** da reconciliação (3 dimensões ortogonais
-    + decisão da camada 2 do Princípio 1).
+    PROMPT_7 (ADR-012): perdeu os 3 campos de decisão (`decisao_consultor`,
+    `justificativa`, `at`). A decisão é contextual ao processo agora; vive
+    em `ProcessIssueDecision` e é editada via `PUT /processes/{pid}/issues/
+    {iid}/decision`. Aqui ficam só `status_achado` (natureza do indício) e
+    `status_saneamento` (saneamento REAL no mundo) — perenes.
 
-    Comportamento:
-    1. Valida que property existe e pertence ao tenant + issue pertence à
-       property.
-    2. Para cada campo presente no body (parcial é OK), grava
-       `AuditLog(entity_type="regulatory_issue", action="<campo>_changed")`
-       com hash chain SHA-256. `old_value` e `new_value` populados em string.
-       Mudança "sem mudança" (mesmo valor) **não** gera AuditLog.
-    3. Quando `decisao_consultor` é setado pela primeira vez (transição
-       NULL → valor), `decisao_consultor_at` é gravado automaticamente.
-       Mudança valor → outro valor também atualiza o timestamp.
-    4. Retorna a issue atualizada (com taxonomia rica + 3 status).
-
-    O body é parcial — campos ausentes não são tocados. Body vazio é OK
-    (no-op + retorna o estado atual).
+    Body parcial. Cada campo alterado gera AuditLog próprio com hash chain
+    SHA-256 (Princípio 2). No-op por campo (mesmo valor) NÃO gera AuditLog.
     """
     _get_property_or_404(db, property_id, current_user.tenant_id)
     issue = (
@@ -389,11 +398,8 @@ def update_property_issue(
             detail=f"Issue {issue_id} não encontrada para este imóvel",
         )
 
-    # Coleta de mudanças efetivas (campo, valor antigo, valor novo). Só
-    # gera AuditLog para campos que de fato mudaram — repetir o mesmo valor
-    # não é evento auditável.
+    # Coleta de mudanças efetivas (campo, valor antigo, valor novo).
     changes: list[tuple[str, str | None, str | None]] = []
-
     body = payload.model_dump(exclude_unset=True)
 
     if "status_achado" in body and body["status_achado"] != issue.status_achado:
@@ -402,23 +408,6 @@ def update_property_issue(
         issue.status_achado = body["status_achado"]
         changes.append(("status_achado", old, new))
 
-    if "decisao_consultor" in body and body["decisao_consultor"] != issue.decisao_consultor:
-        old = issue.decisao_consultor.value if issue.decisao_consultor else None
-        new = body["decisao_consultor"].value if body["decisao_consultor"] else None
-        issue.decisao_consultor = body["decisao_consultor"]
-        # Timestamp da decisão: marca em qualquer mudança não-trivial.
-        # Limpar (NULL) também é decisão — registra timestamp de "tirei a decisão".
-        issue.decisao_consultor_at = datetime.now(UTC)
-        changes.append(("decisao_consultor", old, new))
-
-    if "decisao_consultor_justificativa" in body and (
-        body["decisao_consultor_justificativa"] != issue.decisao_consultor_justificativa
-    ):
-        old = issue.decisao_consultor_justificativa
-        new = body["decisao_consultor_justificativa"]
-        issue.decisao_consultor_justificativa = new
-        changes.append(("decisao_consultor_justificativa", old, new))
-
     if "status_saneamento" in body and body["status_saneamento"] != issue.status_saneamento:
         old = issue.status_saneamento.value if issue.status_saneamento else None
         new = body["status_saneamento"].value
@@ -426,13 +415,10 @@ def update_property_issue(
         changes.append(("status_saneamento", old, new))
 
     if not changes:
-        # No-op: nenhum campo mudou de valor. Retorna estado atual sem
-        # gerar AuditLog (não é evento auditável).
         return issue
 
     db.flush()
 
-    # Um AuditLog por campo alterado (Princípio 2 — auditoria granular).
     for field, old_value, new_value in changes:
         audit = AuditLog(
             tenant_id=current_user.tenant_id,
@@ -454,3 +440,196 @@ def update_property_issue(
     db.commit()
     db.refresh(issue)
     return issue
+
+
+# ---------------------------------------------------------------------------
+# PROMPT_7 (ADR-012) — Decisão do consultor por processo (ProcessIssueDecision)
+# ---------------------------------------------------------------------------
+
+@process_router.get(
+    "/{process_id}/issues/{issue_id}/decision",
+    response_model=ProcessIssueDecisionOut,
+)
+def get_process_issue_decision(
+    process_id: int,
+    issue_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> ProcessIssueDecision:
+    """Retorna a decisão do consultor sobre `issue_id` no contexto do
+    `process_id`. 404 se ainda não há decisão (cada processo começa do
+    zero — ADR-012)."""
+    process = _get_process_or_404(db, process_id, current_user.tenant_id)
+    decision = (
+        db.query(ProcessIssueDecision)
+        .filter(
+            ProcessIssueDecision.tenant_id == current_user.tenant_id,
+            ProcessIssueDecision.process_id == process.id,
+            ProcessIssueDecision.issue_id == issue_id,
+        )
+        .first()
+    )
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Issue {issue_id} sem decisão registrada no processo {process_id} — "
+                "cada processo decide do zero (ADR-012)"
+            ),
+        )
+    return decision
+
+
+@process_router.put(
+    "/{process_id}/issues/{issue_id}/decision",
+    response_model=ProcessIssueDecisionOut,
+)
+def upsert_process_issue_decision(
+    process_id: int,
+    issue_id: int,
+    payload: ProcessIssueDecisionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> ProcessIssueDecision:
+    """**ADR-012** — cria ou atualiza (upsert) a decisão do consultor sobre
+    `issue_id` no contexto do `process_id`.
+
+    Comportamento:
+    1. Valida que processo existe e pertence ao tenant.
+    2. Valida que issue existe e pertence à property do processo. Se a
+       property do processo é NULL, rejeita (não dá pra decidir sobre uma
+       issue de outro imóvel).
+    3. Se já existe decisão para `(process_id, issue_id)`, **atualiza** os
+       campos alterados; gera AuditLog granular por campo
+       (`entity_type="process_issue_decision"`, `action="<campo>_changed"`).
+    4. Se não existe, **cria** uma nova com `decided_by_user_id=current_user.id`
+       e `decided_at=now()`; gera AuditLog `action="created"`.
+    5. `decided_at` é gerenciado pelo servidor em toda mudança (não aceita
+       override do body).
+
+    Validator de Pydantic já rejeita 422 quando `decisao in
+    {ignorar_justificado, fora_escopo}` sem `justificativa` (Princípio 2).
+    """
+    process = _get_process_or_404(db, process_id, current_user.tenant_id)
+
+    # Validar que a issue pertence à property do processo (tenant isolation
+    # + integridade contextual: não dá pra decidir sobre issue de outro
+    # imóvel via path do processo errado).
+    if process.property_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Processo {process_id} não tem property vinculada",
+        )
+    issue = (
+        db.query(RegulatoryIssue)
+        .filter(
+            RegulatoryIssue.id == issue_id,
+            RegulatoryIssue.property_id == process.property_id,
+            RegulatoryIssue.tenant_id == current_user.tenant_id,
+        )
+        .first()
+    )
+    if issue is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Issue {issue_id} não encontrada para o imóvel do processo "
+                f"{process_id}"
+            ),
+        )
+
+    existing = (
+        db.query(ProcessIssueDecision)
+        .filter(
+            ProcessIssueDecision.tenant_id == current_user.tenant_id,
+            ProcessIssueDecision.process_id == process.id,
+            ProcessIssueDecision.issue_id == issue_id,
+        )
+        .first()
+    )
+
+    audit_entries: list[AuditLog] = []
+
+    if existing is None:
+        # Criação inicial — 1 AuditLog action="created".
+        decision = ProcessIssueDecision(
+            tenant_id=current_user.tenant_id,
+            process_id=process.id,
+            issue_id=issue_id,
+            decisao=payload.decisao,
+            justificativa=payload.justificativa,
+            decided_by_user_id=current_user.id,
+            decided_at=datetime.now(UTC),
+        )
+        db.add(decision)
+        db.flush()
+
+        audit_entries.append(AuditLog(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            entity_type="process_issue_decision",
+            entity_id=decision.id,
+            action="created",
+            new_value=payload.decisao.value,
+            details=(
+                f"Decisão criada: processo {process_id}, issue {issue_id} "
+                f"(cod={issue.codigo_alerta}) — decisao={payload.decisao.value} "
+                f"por {current_user.email}"
+            ),
+        ))
+    else:
+        # Atualização — AuditLog granular por campo alterado.
+        decision = existing
+        if payload.decisao != decision.decisao:
+            old = decision.decisao.value
+            new = payload.decisao.value
+            decision.decisao = payload.decisao
+            decision.decided_by_user_id = current_user.id
+            decision.decided_at = datetime.now(UTC)
+            audit_entries.append(AuditLog(
+                tenant_id=current_user.tenant_id,
+                user_id=current_user.id,
+                entity_type="process_issue_decision",
+                entity_id=decision.id,
+                action="decisao_changed",
+                old_value=old,
+                new_value=new,
+                details=(
+                    f"Decisão alterada: processo {process_id}, issue {issue_id} "
+                    f"(cod={issue.codigo_alerta}) — decisao: {old!r} → {new!r}"
+                ),
+            ))
+
+        if payload.justificativa != decision.justificativa:
+            old = decision.justificativa
+            new = payload.justificativa
+            decision.justificativa = payload.justificativa
+            audit_entries.append(AuditLog(
+                tenant_id=current_user.tenant_id,
+                user_id=current_user.id,
+                entity_type="process_issue_decision",
+                entity_id=decision.id,
+                action="justificativa_changed",
+                old_value=old,
+                new_value=new,
+                details=(
+                    f"Justificativa alterada: processo {process_id}, issue "
+                    f"{issue_id} (cod={issue.codigo_alerta})"
+                ),
+            ))
+
+        if not audit_entries:
+            # No-op: nenhum campo mudou. Retorna estado atual.
+            return decision
+
+        db.flush()
+
+    # Persiste AuditLogs com hash chain SHA-256.
+    for audit in audit_entries:
+        db.add(audit)
+        db.flush()
+        stamp_audit_hash(db, audit)
+
+    db.commit()
+    db.refresh(decision)
+    return decision

@@ -83,14 +83,15 @@ Esquema completo do banco do Regente Ambiental. Toda mudança aqui passa por mig
 | Entidade | Tabela | Função |
 |---|---|---|
 | `RegulatoryDiagnosis` | `regulatory_diagnoses` | Diagnóstico técnico-regulatório do caso. Versionado por processo (`(process_id, version)` único — sprint A1-D1). Tem `validated_by_user_id` + `validated_at` para a **camada 1 do Princípio 1** (consultor assina; PROMPT_4 Onda B). |
-| `RegulatoryIssue` | `regulatory_issues` | Inconsistência detectada no imóvel. Taxonomia rica (PROMPT_5) + decisão do consultor (PROMPT_6). Detalhes na subseção abaixo. |
+| `RegulatoryIssue` | `regulatory_issues` | Inconsistência detectada no imóvel. Taxonomia rica (PROMPT_5) + 2 status perenes (PROMPT_6 + ADR-012). Detalhes na subseção abaixo. |
 | `RegulatoryIssueCatalog` | `regulatory_issue_catalog` | **Catálogo evolutivo** de `codigo_alerta` (PROMPT_5). PK = `codigo_alerta` string (45 entradas seed). Adicionar código novo é `INSERT`, **não migration de schema**. Vocabulário canônico da skill `auditor_imovel/analise_divergencias_documentais` v1.1.0. |
+| `ProcessIssueDecision` | `process_issue_decisions` | **Decisão contextual** do consultor sobre uma `RegulatoryIssue` no contexto de um `Process` (PROMPT_7 — ADR-012). FK composta `(process_id, issue_id)` única. Detalhes na subseção abaixo. |
 | `ProcessDecision` | `process_decisions` | Decisões tomadas no caso (escolha de caminho regulatório, mudança de estratégia). |
 | `StageOutput` | `stage_outputs` | Output estruturado de cada macroetapa. `content_data` (JSONB) validado por `StageOutputContent` (Pydantic, opt-in nos agentes). |
 
-#### `RegulatoryIssue` — taxonomia rica + 3 status reconciliados
+#### `RegulatoryIssue` — taxonomia rica + 2 status perenes
 
-Anatomia atual da tabela (após PROMPT_5 + PROMPT_6):
+Anatomia atual da tabela (após PROMPT_5 + PROMPT_6 + PROMPT_7):
 
 **Identificação (PROMPT_5 Onda A):**
 - `codigo_alerta` (`String(80)`, FK → `regulatory_issue_catalog.codigo_alerta`, nullable só por retrocompat com registros antigos). Identifica o "tipo exato" do alerta (`AREA_MATRICULA_X_CAR`, `GEO_AUSENTE`, etc.).
@@ -99,12 +100,13 @@ Anatomia atual da tabela (após PROMPT_5 + PROMPT_6):
 **Severidade (PROMPT_5 — sai o colapso 3→3):**
 - `severity` (Enum `regulatory_severity_v2`, 4 valores: `informativo` / `atencao` / `alto` / `critico`). Substituiu o enum antigo de 3 (`info`/`warning`/`critical`). A migração mapeou `info→informativo`, `warning→atencao`, `critical→alto`. **Só `critico` dispara o gate da camada 2** (PROMPT_6).
 
-**Reconciliação dos 3 status (PROMPT_6 — Opção A do `RECONCILIACAO_STATUS_ALERTAS.md`):**
-- `status_achado` (Enum `regulatory_status_achado`, 5 valores: `suspeita` default / `confirmada` / `descartada` / `resolvida` / `ignorada`) — **natureza do indício**.
-- `decisao_consultor` (Enum `regulatory_decisao_consultor`, nullable, 5 valores = **os 5 botões P4**: `corrigir_antes` / `seguir_com_ressalva` / `solicitar_doc` / `fora_escopo` / `ignorar_justificado`) — **ação escolhida sobre alerta crítico**. NULL = ainda não decidido. Obrigatório para `severity=critico` (gate no `PATCH /validate`).
-- `decisao_consultor_justificativa` (`String`, nullable) — texto livre. Recomendado para `ignorar_justificado` / `fora_escopo` (hoje **não-obrigatório** — ver dívida #19).
-- `decisao_consultor_at` (`DateTime`, nullable) — gravado pelo servidor em toda mudança de `decisao_consultor`.
-- `status_saneamento` (Enum `regulatory_status_saneamento`, 5 valores: `pendente` default / `em_validacao` / `saneado` / `descartado` / `nao_aplicavel`) — **progresso prático da resolução**.
+**2 status PERENES (PROMPT_6 + ADR-012 / PROMPT_7):**
+- `status_achado` (Enum `regulatory_status_achado`, 5 valores: `suspeita` default / `confirmada` / `descartada` / `resolvida` / `ignorada`) — **natureza do indício** ("auditor errou ou é real?"). É fato do imóvel, não muda com o processo.
+- `status_saneamento` (Enum `regulatory_status_saneamento`, 5 valores: `pendente` default / `em_validacao` / `saneado` / `descartado` / `nao_aplicavel`) — **saneamento REAL no mundo**. Se a matrícula foi de fato corrigida no cartório, vale para todos os processos.
+
+> **A decisão do consultor (`decisao`/`justificativa`/`at`) MIGROU** para
+> `ProcessIssueDecision` no PROMPT_7 (ADR-012) — é contextual ao processo,
+> não perene no imóvel.
 
 **Overrides do catálogo (PROMPT_5 Onda A):**
 - `muda_rota_regulatoria` (`Boolean`, nullable) — override do default do catálogo.
@@ -117,7 +119,33 @@ Anatomia atual da tabela (após PROMPT_5 + PROMPT_6):
 **Migrations relevantes:**
 - `a8e1d4c7f3b6` (A1) — cria `regulatory_issues` + enums originais.
 - `c1b2d3e4f5a7` (PROMPT_5) — `regulatory_issue_catalog` + colunas ricas + migra `severity` 3→4.
-- `d2c3e4f5a6b8` (PROMPT_6) — 3 enums novos + 5 colunas dos 3 status reconciliados.
+- `d2c3e4f5a6b8` (PROMPT_6) — 3 enums dos status reconciliados + 5 colunas.
+- `e3d4f5g6a7b8` (PROMPT_7) — cria `process_issue_decisions`; dropa as 3 colunas de decisão do `RegulatoryIssue` (ADR-012).
+
+#### `ProcessIssueDecision` — decisão contextual ao processo (ADR-012)
+
+Nova entidade introduzida pelo PROMPT_7. Anatomia:
+
+**Identificação:**
+- `id` (PK).
+- `tenant_id` (FK `tenants.id` ondelete=RESTRICT, indexed) — tenant isolation.
+- `process_id` (FK `processes.id` ondelete=CASCADE, indexed).
+- `issue_id` (FK `regulatory_issues.id` ondelete=CASCADE, indexed).
+- **UNIQUE** `(process_id, issue_id)` — uma decisão por par.
+
+**Conteúdo:**
+- `decisao` (Enum `regulatory_decisao_consultor`, **NOT NULL**, 5 valores = **os 5 botões P4**: `corrigir_antes` / `seguir_com_ressalva` / `solicitar_doc` / `fora_escopo` / `ignorar_justificado`).
+- `justificativa` (`String`, nullable). **Obrigatória** quando `decisao in {ignorar_justificado, fora_escopo}` (validator no schema `ProcessIssueDecisionCreate`).
+- `decided_by_user_id` (FK `users.id` ondelete=SET NULL, nullable) — autor da decisão (Princípio 2 — explicito além do AuditLog).
+- `decided_at` (`DateTime`, NOT NULL) — server-side em toda criação/atualização.
+
+**Por que separada de `RegulatoryIssue`** (ADR-012): a sócia (Isis) validou em 26/05 que cada trabalho recomeça do zero. Titularidade torta pesa diferente para vender e para dar como garantia ao banco; não dá pra herdar decisão. O fato da divergência é perene (Property), mas a avaliação é contextual.
+
+**Endpoints:**
+- `GET /api/v1/processes/{pid}/issues/{iid}/decision` — lê (404 se não existe; cada processo recomeça).
+- `PUT /api/v1/processes/{pid}/issues/{iid}/decision` — upsert. AuditLog granular por campo com hash chain SHA-256.
+
+**Gate camada 2 do Princípio 1** (PROMPT_6 + ADR-012): o `PATCH /processes/{id}/diagnoses/{version}/validate` cruza issues críticas × `ProcessIssueDecision` **deste processo**. Decisão tomada em outro processo da mesma property **não** libera o gate.
 
 ### Comercial
 

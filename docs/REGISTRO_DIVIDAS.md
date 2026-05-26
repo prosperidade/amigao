@@ -1,4 +1,4 @@
-# Registro de dívidas — Regente (consolidado pós-ADR-012 · 2026-05-26)
+# Registro de dívidas — Regente (consolidado pós-PROMPT_7 · 2026-05-26)
 
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
@@ -14,46 +14,12 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 Pipeline ponta-a-ponta no nível de código: auditor cruza → diagnóstico consome → grava
 versionado → consultor assina.*
 
-## P1 — re-modelagem disparada pelo ADR-012 (próxima rodada)
+## P1 — (esvaziada após PROMPT_7)
 
-**20. Re-modelar a decisão do consultor de campo de `RegulatoryIssue` para
-entidade própria por `(processo × issue)` — conforme ADR-012.**
+*A re-modelagem do ADR-012 (dívida #20) foi implementada nesta rodada. Ver
+tabela "Fechadas (histórico)" abaixo.*
 
-A sócia (Isis) validou em 26/05 a opção **(b) cada trabalho recomeça**: o
-**fato** da divergência é perene (Property), mas a **decisão** do consultor
-sobre como tratá-la é **contextual ao processo**. Titularidade torta pesa
-diferente para vender e para dar como garantia ao banco — não dá pra
-herdar a decisão.
-
-O PROMPT_6 colocou `decisao_consultor`/`justificativa`/`decisao_consultor_at`
-no `RegulatoryIssue` (Property). Esses campos saem de lá e viram uma nova
-entidade `ProcessIssueDecision` (FK process_id + FK issue_id + os 5 botões
-+ justificativa + timestamp). Cada processo começa **sem decisão herdada**;
-o gate da camada 2 passa a olhar essa entidade nova.
-
-**Escopo da próxima rodada (PROMPT_7 — re-modelagem):**
-- Nova tabela `process_issue_decisions` (FK composta `(process_id, issue_id)`).
-- Migration que **MOVE** os 3 campos de decisão do `RegulatoryIssue` para
-  essa nova tabela (com dados existentes preservados — mapear cada
-  decisão antiga para o processo "dono" original).
-- `PATCH /properties/.../issues/{id}` deixa de aceitar campos de decisão
-  (vira só `status_achado` e `status_saneamento`).
-- Novo endpoint `PATCH /processes/{pid}/issues/{iid}/decision` (ou similar
-  — definir).
-- Gate do `PATCH /validate` passa a olhar `ProcessIssueDecision` daquele
-  processo, não `RegulatoryIssue.decisao_consultor`.
-- Validator de justificativa obrigatória (#19) e o gate dos 5 botões
-  acompanham o novo endpoint.
-- Examinar `status_saneamento`: separar saneamento **real** (fato corrigido
-  no mundo → fica em Property) de **avaliação contextual** (parte de
-  `ProcessIssueDecision`). Isis disse "detalhar ao implementar".
-
-**Quando entra:** próxima rodada — bloqueia a UI dos 5 botões (frontend
-depende dessa modelagem estável).
-
-**Origem:** ADR-012 (26/05), validado pela Isis.
-
-## P2 — coerência (depende de #20 estar resolvida)
+## P2 — coerência entre os status (próxima rodada possível)
 
 ## P2 — produto/domínio (precisam da sócia)
 
@@ -107,21 +73,25 @@ licença/outorga — aguardam integração.
 
 *Régua de prioridade aplicada após classificação do Andre.*
 
-### P2 — dívida com risco modesto (espera #20 — ADR-012)
+### P2 — dívida com risco modesto (desbloqueada pelo PROMPT_7)
 
-**17. Coerência entre os 3 status reconciliados.** A Opção A do
-`RECONCILIACAO_STATUS_ALERTAS.md` foi implementada como **3 enums soltos**
-— o `PATCH /properties/{prop}/issues/{id}` aceita qualquer combinação.
-Consultor não gera combinações absurdas de propósito — mas o sistema
-não deveria permitir gravá-las. **Resolver no MVP:** `@model_validator`
-barrando contradições óbvias.
+**17. Coerência entre os status reconciliados.** Após o PROMPT_7 (ADR-012),
+os 3 status vivem em **lugares diferentes**: `status_achado` e
+`status_saneamento` em `RegulatoryIssue`; `decisao` em `ProcessIssueDecision`.
+As 3 regras propostas no PROMPT_6 ficaram menores:
 
-> ⚠ **Depende da #20 (re-modelagem ADR-012)**: começamos a implementar
-> em 26/05 (`chore/prompt6-coerencia-status`) e descartamos quando o
-> ADR-012 da Isis chegou — `decisao_consultor` vai sair do
-> `RegulatoryIssue` e ir para `ProcessIssueDecision`. As regras de
-> coerência ficam diferentes (uma cruza entidades). Implementar **depois**
-> da re-modelagem da próxima rodada. **Origem:** revisão do PROMPT_6 (26/05).
+- Regras 1 e 2 (achado descartado/ignorada incompatível com saneamento
+  saneado/em_validacao; resolvida exige saneamento saneado/em_validacao)
+  viram `@model_validator` simples no `RegulatoryIssueUpdate` + check no
+  estado pós-PATCH (precisa do estado atual da issue para checar
+  contradição quando o PATCH é parcial).
+- Regra 3 (suspeita + decisao_consultor != NULL) **cruza entidades**:
+  no endpoint PUT `/processes/.../decision`, validar que a issue não
+  está em `status_achado=suspeita` antes de aceitar criar/atualizar
+  `ProcessIssueDecision`. Força o consultor a confirmar/descartar primeiro.
+
+**Resolver no MVP:** validators + check cruzado no PUT. Máquina de
+estados completa é futuro. **Origem:** revisão do PROMPT_6 (26/05).
 
 ### P3 — com marco condicional
 
@@ -150,7 +120,8 @@ admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
 | **4** | Mapeamento `grade` 4→`severity` 3 que colapsava alto+crítico | 2026-05-25 (PROMPT_5 Onda A) | `_GRADE_TO_SEVERITY` removido de `property_audit.py`. `AuditFinding.grade` e `RegulatoryIssue.severity` agora compartilham 4 níveis (`informativo`/`atencao`/`alto`/`critico`). Auditor emite codigos reais (📄) e grade direto; 🛰️/🔌 ficam no catálogo mas não emitidos até infra. Diagnóstico mapeia `familia` (11) → `RiscoCategoria` (7) via `_FAMILIA_TO_CATEGORIA` (substitui `_FINDING_TYPE_TO_CATEGORIA` do PROMPT_4). |
 | **5** | Reconciliar `status_saneamento` × `status` do auditor × `decisao_consultor` (3 status circulantes) | 2026-05-26 (PROMPT_6 — Opção A do RECONCILIACAO_STATUS_ALERTAS) | 3 enums novos: `StatusAchado` (5 valores), `DecisaoConsultor` (os 5 botões P4), `StatusSaneamento` (5 valores). 5 colunas em `RegulatoryIssue`: `status_achado` (NOT NULL default `suspeita`), `decisao_consultor` (nullable), `decisao_consultor_justificativa`, `decisao_consultor_at`, `status_saneamento` (NOT NULL default `pendente`). PATCH `/properties/{prop}/issues/{id}` edita com AuditLog granular por campo. Gate no PATCH `/validate` rejeita 422 se houver crítica sem decisão (camada 2 do Princípio 1 fechada). Migration `d2c3e4f5a6b8`. |
 | **Camada 2 P1** | 5 botões da P4 — decisão obrigatória por alerta crítico antes da assinatura | 2026-05-26 (PROMPT_6) | `decisao_consultor` enum com os 5 valores + gate no `PATCH /validate` retornando 422 com lista de pendentes. Frontend dos botões fica para rodada futura (UI consome `RegulatoryIssueOut` + PATCH). |
-| **19** | Justificativa obrigatória para `ignorar_justificado` e `fora_escopo` (camada 2 completa) | 2026-05-26 (revisão pós-PROMPT_6) | `@model_validator` no `RegulatoryIssueUpdate` rejeita 422 quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no body sem `justificativa` preenchida (str_strip cuida de strings só-espaços). Aplica APENAS quando `decisao_consultor` está no body — PATCH parcial que só toca outros campos não força re-confirmação. 5 testes em `TestUpdatePropertyIssueJustificativaObrigatoria`. Fecha o buraco no Princípio 2 no caso mais arriscado (descartar uma crítica). |
+| **19** | Justificativa obrigatória para `ignorar_justificado` e `fora_escopo` (camada 2 completa) | 2026-05-26 (revisão pós-PROMPT_6) | `@model_validator` no `RegulatoryIssueUpdate` rejeita 422 quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no body sem `justificativa` preenchida (str_strip cuida de strings só-espaços). Aplica APENAS quando `decisao_consultor` está no body — PATCH parcial que só toca outros campos não força re-confirmação. 5 testes em `TestUpdatePropertyIssueJustificativaObrigatoria`. PROMPT_7 migrou o validator para `ProcessIssueDecisionCreate` (mesma regra, schema novo). |
+| **20** | Re-modelar `decisao_consultor` como entidade contextual ao processo (ADR-012) | 2026-05-26 (PROMPT_7) | Nova entidade `ProcessIssueDecision` (FK composta `(process_id, issue_id)` unique). Campos `decisao`/`justificativa`/`decided_at`/`decided_by_user_id` (renomeados em relação ao PROMPT_6; `decided_by_user_id` é novo). Migration `e3d4f5g6a7b8` cria tabela e dropa as 3 colunas do `RegulatoryIssue` (drop sem backfill — sem dados em prod). Endpoints novos: `GET` e `PUT /api/v1/processes/{pid}/issues/{iid}/decision` com upsert + AuditLog granular por campo (hash chain SHA-256). Gate `PATCH /validate` cruza issues críticas × `ProcessIssueDecision` deste processo. Validator de justificativa obrigatória migrou para o schema novo. Cada processo recomeça do zero (titularidade torta pesa diferente para venda e para crédito). `TestProcessIssueDecision` (11 testes novos) + `test_decisao_de_outro_processo_nao_libera_gate` confirma comportamento contextual. |
 | **12** | `PROJECT_NAME='Amigão'` em `config.py:52` | 2026-05-23 (Fase 0) | Já estava `"Regente Ambiental"` quando a Fase 0 auditou. Commit `7877652` documentou. |
 
 ---

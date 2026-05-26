@@ -1,7 +1,7 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-26 (pós-ADR-012 — re-modelagem `decisao_consultor` contextual ao processo virou próxima rodada)
-**Próxima atualização:** PROMPT_7 — re-modelagem da decisão como entidade por `(processo × issue)` (dívida #20)
+**Data do instantâneo:** 2026-05-26 (pós-PROMPT_7 — ADR-012 implementado; decisão contextual ao processo)
+**Próxima atualização:** UI dos 5 botões (frontend) ou #17 (coerência entre status) — backend ADR-012 estável
 **Responsável de atualização:** quem fechar a próxima sprint
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
@@ -58,19 +58,32 @@
     `ignorar_justificado` e `fora_escopo` (#19 fechada); MODELO_DE_DADOS e API_v1
     atualizados (gatilhos de estrutura).
 - **ADR-012 aceito em 2026-05-26** — Isis validou: a decisão do consultor é
-  **contextual ao processo**, não perene no imóvel. Consequência: os 3 campos
-  de decisão (`decisao_consultor`/`justificativa`/`at`) **vão sair** do
-  `RegulatoryIssue` na próxima rodada e virar entidade
-  `ProcessIssueDecision` por `(processo × issue)`. Cada processo recomeça
-  do zero — não herda decisão antiga. **PROMPT_6 ficou parcial** nesse aspecto;
-  re-modelagem é a próxima rodada (dívida #20).
+  **contextual ao processo**, não perene no imóvel.
+- **PROMPT_7 mergeado em 2026-05-26** — implementa o ADR-012:
+  - Nova entidade `ProcessIssueDecision` (FK composta `(process_id, issue_id)`
+    única) com `decisao`/`justificativa`/`decided_by_user_id`/`decided_at`.
+    Migration `e3d4f5g6a7b8`.
+  - 3 campos de decisão **saem** do `RegulatoryIssue` (drop sem backfill —
+    sem dados em prod ainda). Restam só os 2 status perenes (`status_achado`
+    e `status_saneamento`).
+  - Endpoints novos: `GET` e `PUT /api/v1/processes/{pid}/issues/{iid}/decision`
+    (upsert; AuditLog granular por campo com hash chain SHA-256).
+  - Gate `PATCH /validate` ajustado: cruza issues críticas × `ProcessIssueDecision`
+    deste processo (não mais campo no `RegulatoryIssue`). Decisão tomada
+    no processo A não libera o processo B (titularidade torta pesa diferente
+    para venda e para crédito).
+  - Validator de justificativa obrigatória (#19) migrou para o schema novo.
+  - `decided_by_user_id` é melhoria proporcional ao Princípio 2 — autor
+    explícito além do timestamp.
 - **Skill `auditor_imovel/analise_divergencias_documentais` validada
   integralmente pela sócia** em 2026-05-26 — separação 📄/🛰️/🔌 confirmada.
 - **Pipeline ponta a ponta no nível de código:** `extrator → auditor_imovel → legislacao →
-  diagnostico → POST /diagnoses (versionado + gate Pydantic) → PATCH /properties/.../issues/{id}
-  (consultor decide alerta por alerta) → PATCH /validate (assina + gate camada 2 + AuditLog)`.
-  **Frontend ainda pendente** (UI dos 5 botões + 3 status editáveis — espera a
-  re-modelagem ADR-012 estabilizar para começar).
+  diagnostico → POST /diagnoses (versionado + gate Pydantic) →
+  PATCH /properties/.../issues/{id} (consultor edita os 2 status perenes) →
+  PUT /processes/{pid}/issues/{iid}/decision (decide alerta por alerta neste processo) →
+  PATCH /validate (assina + gate camada 2 cross-entidades + AuditLog)`.
+  **Frontend dos 5 botões + 3 status pendente** — backend ADR-012 estável,
+  pode começar.
 
 **O que está congelado:**
 
