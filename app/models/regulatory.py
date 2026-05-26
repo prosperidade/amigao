@@ -368,26 +368,21 @@ class RegulatoryIssue(Base):
     payload = Column(PortableJSON, nullable=True)
     detected_by = Column(String, nullable=True)  # nome do agente ou "manual"
 
-    # ── Reconciliação dos 3 status (PROMPT_6 — Opção A) ──
-    # Três dimensões ortogonais; ver `docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md`.
+    # ── Status do achado e saneamento real (perenes — fato do imóvel) ──
+    # PROMPT_6 (Opção A) introduziu 3 status reconciliados como campos da
+    # issue. ADR-012 (validado pela Isis em 26/05) reclassificou:
+    #
+    # - `status_achado` (natureza do indício — "auditor errou ou é real?") e
+    #   `status_saneamento` (saneamento REAL no mundo — fato corrigido)
+    #   ficam aqui em RegulatoryIssue: são **perenes** no imóvel.
+    # - `decisao_consultor` (ação escolhida) era campo aqui no PROMPT_6 —
+    #   moveu para `ProcessIssueDecision` no PROMPT_7 porque a decisão é
+    #   **contextual ao processo** (titularidade torta pesa diferente para
+    #   vender e para dar como garantia ao banco; cada trabalho recomeça).
     status_achado = Column(
         Enum(StatusAchado, name="regulatory_status_achado"),
         nullable=False,
         default=StatusAchado.suspeita,
-    )
-    decisao_consultor = Column(
-        Enum(DecisaoConsultor, name="regulatory_decisao_consultor"),
-        nullable=True,  # obrigatório só para severity=critico (gate no PATCH /validate)
-    )
-    decisao_consultor_justificativa = Column(
-        # Texto livre justificando a decisão (especialmente útil para
-        # `ignorar_justificado` e `fora_escopo`).
-        String,
-        nullable=True,
-    )
-    decisao_consultor_at = Column(
-        DateTime(timezone=True),
-        nullable=True,  # preenchido quando decisao_consultor é setado
     )
     status_saneamento = Column(
         Enum(StatusSaneamento, name="regulatory_status_saneamento"),
@@ -409,3 +404,89 @@ class RegulatoryIssue(Base):
         "RegulatoryIssueCatalog",
         foreign_keys=[codigo_alerta],
     )
+
+
+class ProcessIssueDecision(Base):
+    """Decisão do consultor sobre uma `RegulatoryIssue` no contexto de um
+    `Process` específico (PROMPT_7 — implementa ADR-012).
+
+    **Por que separada de `RegulatoryIssue`:** a sócia validou em 26/05 que a
+    decisão do consultor é **contextual ao processo**, não perene no imóvel
+    (ADR-012). Titularidade torta pesa diferente para venda e para crédito
+    — não dá pra herdar a decisão de um trabalho pra outro. Cada processo
+    recomeça do zero; o fato da divergência fica em ``RegulatoryIssue``
+    (perene), a avaliação fica aqui (contextual).
+
+    **Unique `(process_id, issue_id)`:** uma decisão por par. O `PUT`
+    endpoint faz upsert; mudança gera AuditLog granular por campo
+    (Princípio 2). DELETE não está no MVP (consultor pode mudar o valor;
+    "tirar decisão" é o suficiente).
+
+    **Diferenças relevantes vs PROMPT_6 (que tinha tudo em RegulatoryIssue):**
+    - `decisao` NOT NULL — uma linha aqui sempre tem decisão (vs nullable
+      no PROMPT_6, que representava "ainda não decidido").
+    - `decided_by_user_id` é **novo** — captura quem decidiu (PROMPT_6 só
+      tinha o timestamp; agora temos o autor explicito, melhoria
+      proporcional ao Princípio 2).
+    - Renomeado: `decisao_consultor` → `decisao`, `decisao_consultor_at` →
+      `decided_at`, `decisao_consultor_justificativa` → `justificativa`.
+      Contexto da tabela já indica; nomes redundantes saem.
+    """
+
+    __tablename__ = "process_issue_decisions"
+    __table_args__ = (
+        UniqueConstraint("process_id", "issue_id", name="uq_process_issue_decisions_pid_iid"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    process_id = Column(
+        Integer,
+        ForeignKey("processes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    issue_id = Column(
+        Integer,
+        ForeignKey("regulatory_issues.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    decisao = Column(
+        Enum(DecisaoConsultor, name="regulatory_decisao_consultor"),
+        nullable=False,
+    )
+    # Texto livre. Obrigatória quando `decisao in {ignorar_justificado,
+    # fora_escopo}` — gate enforced no `ProcessIssueDecisionCreate` schema.
+    justificativa = Column(String, nullable=True)
+    decided_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    decided_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        onupdate=func.now(),
+    )
+
+    process = relationship("Process", foreign_keys=[process_id])
+    issue = relationship("RegulatoryIssue", foreign_keys=[issue_id])
+    decided_by = relationship("User", foreign_keys=[decided_by_user_id])
