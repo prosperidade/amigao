@@ -30,7 +30,7 @@ import pytest
 from app.agents.base import AgentContext
 from app.agents.diagnostico import (
     DiagnosticoAgent,
-    _FINDING_TYPE_TO_CATEGORIA,
+    _FAMILIA_TO_CATEGORIA,
     _GRADE_TO_GRAU,
 )
 
@@ -70,19 +70,45 @@ def _default_llm_payload() -> dict:
     }
 
 
+# PROMPT_5 atalhos: tipos antigos do PROMPT_4 mapeados para a taxonomia rica
+# (codigo_alerta + familia). O parâmetro `type_` virou alias semântico —
+# resolvido para (codigo_alerta, familia) via este mapa.
+_FINDING_TYPE_TO_RICH = {
+    "area_divergente": ("AREA_MATRICULA_X_CAR", "area"),
+    "rl_divergente": ("RL_MATRICULA_DIVERGENTE_RL_CAR", "ambiental"),
+    "geo_incra_ausente": ("GEO_AUSENTE", "geo_incra"),
+    "verificacao_espacial_pendente": ("VERIFICACAO_ESPACIAL_PENDENTE", "geoespacial"),
+}
+
+
 def _finding(
     *,
     type_: str = "area_divergente",
-    severity: str = "warning",
     grade: str = "atencao",
+    codigo_alerta: str | None = None,
+    familia: str | None = None,
     tema: str = "área (matrícula × CAR)",
     descricao: str = "Áreas divergentes: 100 ha vs 80 ha (Δ 20 ha, 20.00%)",
     impacto: str = "Passivo, compensação e recuperação são calculados em hectares.",
     evidencia: dict | None = None,
 ) -> dict:
+    """Builder do raw finding como o auditor emite no payload (PROMPT_5).
+
+    `type_` é alias retrocompatível dos testes — resolve para
+    (codigo_alerta, familia) via `_FINDING_TYPE_TO_RICH`. Passar `codigo_alerta`/
+    `familia` diretos sobrescreve essa resolução (para testar códigos
+    desconhecidos / família desconhecida)."""
+    if codigo_alerta is None or familia is None:
+        codigo_resolvido, familia_resolvida = _FINDING_TYPE_TO_RICH.get(
+            type_, (type_.upper(), "validade_documental"),
+        )
+        if codigo_alerta is None:
+            codigo_alerta = codigo_resolvido
+        if familia is None:
+            familia = familia_resolvida
     return {
-        "type": type_,
-        "severity": severity,
+        "codigo_alerta": codigo_alerta,
+        "familia": familia,
         "grade": grade,
         "tema": tema,
         "descricao": descricao,
@@ -283,7 +309,9 @@ class TestComAuditor:
         # LLM por último — vem do `situacao_geral`
         assert "SICAR" in riscos[2]["risco_identificado"]
 
-    def test_categoria_inferida_por_type(self):
+    def test_categoria_inferida_por_familia(self):
+        """PROMPT_5: agora a categoria é mapeada por `familia` (11 valores
+        estáveis) ao invés de `type` (4 valores genéricos)."""
         auditor_payload = {
             "findings_raw": [
                 _finding(grade="alto", type_="area_divergente"),
@@ -301,10 +329,10 @@ class TestComAuditor:
 
         categorias = [r["categoria"] for r in data["riscos"][:4]]
         assert categorias == [
-            "cadastral_sistemico",  # area_divergente
-            "ambiental",            # rl_divergente
-            "fundiario",            # geo_incra_ausente
-            "geoespacial",          # verificacao_espacial_pendente
+            "cadastral_sistemico",  # familia=area
+            "ambiental",            # familia=ambiental
+            "fundiario",            # familia=geo_incra
+            "geoespacial",          # familia=geoespacial
         ]
 
     def test_grade_desconhecido_nao_vira_risco_mas_pode_virar_divergencia(self):
@@ -312,10 +340,14 @@ class TestComAuditor:
         não vira Risco. Mas se tema/descricao/impacto estão presentes, ainda
         vira Divergencia (auditor é radar — não suprimimos o cruzamento)."""
         auditor_payload = {
-            "findings_raw": [_finding(grade="nao_mapeado_ainda",
-                                      tema="campo desconhecido",
-                                      descricao="finding novo do futuro",
-                                      impacto="ainda em validação")],
+            "findings_raw": [_finding(
+                grade="nao_mapeado_ainda",
+                codigo_alerta="CODIGO_FUTURO",
+                familia="validade_documental",
+                tema="campo desconhecido",
+                descricao="finding novo do futuro",
+                impacto="ainda em validação",
+            )],
         }
         agent = DiagnosticoAgent(_ctx(chain_data={"auditor_imovel": auditor_payload}))
         with ExitStack() as stack:
@@ -436,10 +468,19 @@ class TestMapeamentos:
             "critico": "critico_impeditivo_potencial",
         }
 
-    def test_finding_type_to_categoria_cobre_4_tipos_do_auditor(self):
-        assert _FINDING_TYPE_TO_CATEGORIA == {
-            "area_divergente": "cadastral_sistemico",
-            "rl_divergente": "ambiental",
-            "geo_incra_ausente": "fundiario",
-            "verificacao_espacial_pendente": "geoespacial",
+    def test_familia_to_categoria_cobre_11_familias(self):
+        """PROMPT_5: agora `familia` (11) → `categoria` (7) — antes era
+        `type` (4 do PROMPT_4) → `categoria` (4)."""
+        assert _FAMILIA_TO_CATEGORIA == {
+            "identificacao": "cadastral_sistemico",
+            "titularidade": "fundiario",
+            "area": "cadastral_sistemico",
+            "geoespacial": "geoespacial",
+            "geo_incra": "fundiario",
+            "car": "cadastral_sistemico",
+            "ambiental": "ambiental",
+            "fiscal": "credito_mercado",
+            "restricao_risco": "territorial",
+            "licenciamento": "atividade_produtiva",
+            "validade_documental": "cadastral_sistemico",
         }

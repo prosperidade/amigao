@@ -1,4 +1,4 @@
-# Registro de dívidas — Regente (consolidado pós-PROMPT_4 · 2026-05-25)
+# Registro de dívidas — Regente (consolidado pós-PROMPT_5 · 2026-05-25)
 
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
@@ -14,41 +14,23 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 Pipeline ponta-a-ponta no nível de código: auditor cruza → diagnóstico consome → grava
 versionado → consultor assina.*
 
-## P1 — remodelagem que três dívidas compartilham
+## P1 — reconciliação de status (aguarda decisão)
 
-**3. Remodelar o `RegulatoryIssue`.** (**PROMPT_5 — próxima rodada**)
-Hoje: `type` (enum curto que cai em "outro" para a maioria dos findings) + `severity` de 3
-níveis. A taxonomia da sócia (40 alertas) e a régua de risco pedem outra forma:
-- `familia` — enum estável (~11: identificação, titularidade, área, geoespacial, geo_incra,
-  car, ambiental, fiscal, restrição_risco, licenciamento, validade_documental)
-- `codigo_alerta` — **catálogo evolutivo, não enum** (cresce sem migration)
-- campos novos: `muda_rota_regulatoria`, `muda_escopo_preco_prazo`, `documentos_cruzados`
-- `severity`/`grade` com **4 níveis** (informativo/atenção/alto/crítico), não 3
+**5. Reconciliar os três conjuntos de status de um alerta.** (**PROPOSTA em
+docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md — aguarda decisão do Andre**)
 
-**Origem:** ponto #5 dos sensíveis + taxonomia da sócia (P2). **Estado:** spec pronta na skill
-do auditor; **PROMPT_5 implementa.**
-
-**4. Mapeamento 4→3 níveis (`grade` → `severity`) colapsa alto e crítico.** (**parcial**)
-O `AuditFinding.grade` preserva os 4 níveis, mas `_GRADE_TO_SEVERITY` projeta para os 3 do
-`RegulatoryIssueSeverity`. A sócia afiou alto-vs-crítico de propósito: **só crítico dispara
-o mecanismo de decisão obrigatória do consultor (5 ações, P4).**
-
-- **Endereçada parcialmente pelo PROMPT_4 (Onda A):** o **payload** do Diagnóstico preserva
-  os 4 níveis em `Risco.grau` (`critico` vira `critico_impeditivo_potencial`, NÃO colapsa).
-  Camada 2 do Princípio 1 ainda não foi implementada, mas o sinal certo já circula.
-- **Pendência:** a **persistência** em `RegulatoryIssue.severity` continua de 3 níveis.
-  `_GRADE_TO_SEVERITY` sai junto com a Onda A do **PROMPT_5** (severity vira 4 níveis).
-
-**5. Reconciliar os três conjuntos de status de um alerta.** (**PROMPT_5 — propõe, não
-implementa**)
 Circulam: `status_saneamento` (skill diagnóstico: pendente/em_validacao/saneado/descartado/
 nao_aplicavel) × `status` do auditor (suspeita/confirmada/descartada/resolvida/ignorada) ×
 `decisao_consultor` (P4: corrigir_antes/seguir_com_ressalva/solicitar_doc/fora_escopo/
 ignorar_justificado). Descrevem coisas diferentes (estado do saneamento × estado do achado ×
-ação escolhida) mas precisam de modelagem única antes do campo de decisão entrar em produção.
+ação escolhida) e a P4 (camada 2 do Princípio 1) depende dessa modelagem antes do campo
+de decisão entrar em produção.
 
-**Origem:** P4 + skill diagnóstico. **Estado:** PROMPT_5 Onda C **propõe** a reconciliação;
-implementação fica para a rodada seguinte (junto com a camada 2 do Princípio 1).
+**Origem:** P4 + skill diagnóstico. **Estado:** PROMPT_5 Onda C entregou proposta com 3
+opções analisadas (A: três campos ortogonais; B: campo único com state machine; C: dois
+campos + saneamento derivado). **Recomendação técnica = Opção A** (preserva vocabulário da
+sócia, compatível com desenho atual, auditoria simples, migração trivial). Implementação
+fica para a rodada seguinte junto com a camada 2 do Princípio 1.
 
 ## P2 — produto/domínio (precisam da sócia)
 
@@ -106,6 +88,8 @@ licença/outorga — aguardam integração.
 |---|---|---|---|
 | **1** | Diagnóstico não consome `chain_data["auditor_imovel"]` | 2026-05-25 (PROMPT_4 Onda A) | `_consume_auditor_findings()` em `app/agents/diagnostico.py` — findings viram `Divergencia` + `Risco` com `grau` 4-níveis preservado. Commit `f93b4b4`. |
 | **2** | "Humano assina" — ciclo do Princípio 1 (camada 1) | 2026-05-25 (PROMPT_4 Onda B) | `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` grava `validated_by_user_id` + `validated_at` + AuditLog hash chain SHA-256. 409 ao revalidar. Commit `c74ff2e`. *(A camada 2 — 5 botões P4 — continua aberta, pós-PROMPT_5.)* |
+| **3** | Remodelar `RegulatoryIssue` (família + codigo_alerta + 4 níveis) | 2026-05-25 (PROMPT_5 Onda A) | Enum `RegulatoryFamilia` (11 estável) + model `RegulatoryIssueCatalog` (PK = codigo_alerta string; catálogo evolutivo via INSERT, NÃO migration) + colunas `codigo_alerta`/`familia`/`muda_rota_regulatoria`/`muda_escopo_preco_prazo`/`documentos_cruzados` em `RegulatoryIssue`. `severity` passa para 4 níveis. Migration `c1b2d3e4f5a7` cria, popula 45 entradas seed (via `app/models/regulatory_catalog_seed.py`, fonte única) e migra dados antigos. `type` legado fica nullable (deprecated). |
+| **4** | Mapeamento `grade` 4→`severity` 3 que colapsava alto+crítico | 2026-05-25 (PROMPT_5 Onda A) | `_GRADE_TO_SEVERITY` removido de `property_audit.py`. `AuditFinding.grade` e `RegulatoryIssue.severity` agora compartilham 4 níveis (`informativo`/`atencao`/`alto`/`critico`). Auditor emite codigos reais (📄) e grade direto; 🛰️/🔌 ficam no catálogo mas não emitidos até infra. Diagnóstico mapeia `familia` (11) → `RiscoCategoria` (7) via `_FAMILIA_TO_CATEGORIA` (substitui `_FINDING_TYPE_TO_CATEGORIA` do PROMPT_4). |
 | **12** | `PROJECT_NAME='Amigão'` em `config.py:52` | 2026-05-23 (Fase 0) | Já estava `"Regente Ambiental"` quando a Fase 0 auditou. Commit `7877652` documentou. |
 
 ---

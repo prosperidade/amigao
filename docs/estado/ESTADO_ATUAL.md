@@ -1,7 +1,7 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-25 (atualização pós-PROMPT_4 fechar-pipeline)
-**Próxima atualização:** ao fechamento do PROMPT_5 (remodelagem do `RegulatoryIssue`)
+**Data do instantâneo:** 2026-05-25 (atualização pós-PROMPT_5 remodelar-regulatory-issue)
+**Próxima atualização:** ao fechamento da camada 2 do Princípio 1 (5 botões P4) — depende da decisão sobre reconciliação de status
 **Responsável de atualização:** quem fechar a próxima sprint
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
@@ -27,17 +27,26 @@
   `diagnostico_completo` via `NON_BLOCKING_REVIEW_AGENTS`; `POST /processes/{id}/diagnoses`
   versionado com gate A4 Pydantic↔JSONB; régua de 4 faixas para divergência (≤1%
   informativo / 1-5% atenção / 5-10% alto / >10% crítico) — **sempre emite** o finding.
-- **PROMPT_4 (fechar-pipeline) finalizado em 2026-05-25** (PR aberto, pendente de merge):
+- **PROMPT_4 (fechar-pipeline) mergeado em 2026-05-25** (commits `f93b4b4` + `c74ff2e`):
   - **Onda A** — `DiagnosticoAgent` consome `chain_data["auditor_imovel"]`. Cada finding
-    vira `Divergencia` (matriz de cruzamento) + `Risco` com `grau` de 4 níveis preservado
-    (`crítico` vira `critico_impeditivo_potencial`, NÃO colapsa em "alto"). `nivel_risco_geral`
-    derivado do pior grau dos findings do auditor.
+    vira `Divergencia` + `Risco` com `grau` 4 níveis preservado.
   - **Onda B** — `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` fecha a
-    **camada 1 do Princípio 1** (consultor assina o diagnóstico). AuditLog hash chain SHA-256.
-    409 ao revalidar (idempotência explícita).
+    **camada 1 do Princípio 1** (consultor assina). AuditLog hash chain SHA-256.
+- **PROMPT_5 (remodelar `RegulatoryIssue`) finalizado em 2026-05-25** (PR a abrir):
+  - **Onda A** — `RegulatoryIssue` ganha taxonomia rica: `familia` (enum estável 11) +
+    `codigo_alerta` (FK em `regulatory_issue_catalog`, catálogo evolutivo via INSERT) +
+    campos `muda_rota_regulatoria`/`muda_escopo_preco_prazo`/`documentos_cruzados`.
+    `severity` passa de 3 para 4 níveis (`informativo`/`atencao`/`alto`/`critico`) — sai
+    o `_GRADE_TO_SEVERITY` que colapsava (dívida #4 fechada). `type` legado fica nullable.
+    Migration `c1b2d3e4f5a7` cria, popula 45 entradas seed e migra dados antigos.
+  - **Onda B** — auditor emite codigos reais (📄: AREA_MATRICULA_X_CAR, GEO_AUSENTE,
+    RL_MATRICULA_DIVERGENTE_RL_CAR, etc.); 🛰️ e 🔌 ficam no catálogo mas não emitidos.
+  - **Onda C** — proposta de reconciliação dos 3 status em
+    `docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md` (Opção A recomendada).
 - **Pipeline ponta a ponta no nível de código:** `extrator → auditor_imovel → legislacao →
   diagnostico → POST /diagnoses (versionado + gate Pydantic) → PATCH /validate (assina +
-  AuditLog)`. UI do `PATCH /validate` ainda pendente no frontend.
+  AuditLog)`. UI do `PATCH /validate` ainda pendente no frontend. Taxonomia rica do
+  RegulatoryIssue ativa em produção pós-merge.
 
 **O que está congelado:**
 

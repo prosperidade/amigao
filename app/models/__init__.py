@@ -19,8 +19,11 @@ from app.models.prompt_template import PromptTemplate
 from app.models.property import Property
 from app.models.proposal import Proposal
 from app.models.regulatory import (
+    RegulatoryAlertFactibilidade,
     RegulatoryDiagnosis,
+    RegulatoryFamilia,
     RegulatoryIssue,
+    RegulatoryIssueCatalog,
     RegulatoryIssueSeverity,
     RegulatoryIssueType,
 )

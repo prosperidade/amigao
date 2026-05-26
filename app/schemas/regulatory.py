@@ -1,8 +1,12 @@
 """Schemas Pydantic para os endpoints regulatórios.
 
-Onda B Fase 2 — endpoint POST adicionado, escreve `RegulatoryDiagnosis`
-versionado. O input passa por `validate_diagnostic_content` antes de
-persistir (ativa o gate A4 Pydantic↔JSONB).
+Histórico:
+- **Onda B Fase 2** — POST de `RegulatoryDiagnosis` versionado com gate A4.
+- **PROMPT_4 Onda B** — `PATCH /validate` (camada 1 do Princípio 1).
+- **PROMPT_5 Onda A** — `RegulatoryIssueOut` ganha `codigo_alerta` + `familia`
+  + campos `muda_*` + `documentos_cruzados`; `severity` passa a ter 4 níveis.
+  `type` continua como nullable (deprecated) para retrocompat com registros
+  antigos.
 """
 
 from __future__ import annotations
@@ -12,7 +16,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.regulatory import RegulatoryIssueSeverity, RegulatoryIssueType
+from app.models.regulatory import (
+    RegulatoryFamilia,
+    RegulatoryIssueSeverity,
+    RegulatoryIssueType,
+)
 
 IssueStatusFilter = Literal["open", "resolved", "all"]
 
@@ -55,15 +63,28 @@ class RegulatoryDiagnosisOut(BaseModel):
 
 
 class RegulatoryIssueOut(BaseModel):
-    """Saída de leitura de RegulatoryIssue."""
+    """Saída de leitura de RegulatoryIssue.
+
+    PROMPT_5 Onda A: ganha a taxonomia rica. ``type`` continua exposto mas
+    é nullable (deprecated; registros novos preenchem `codigo_alerta` +
+    `familia`).
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     property_id: int
     document_id: int | None
-    type: RegulatoryIssueType
+    # Taxonomia rica (PROMPT_5)
+    codigo_alerta: str | None
+    familia: RegulatoryFamilia | None
+    muda_rota_regulatoria: bool | None
+    muda_escopo_preco_prazo: bool | None
+    documentos_cruzados: list[str] | None
+    # severity 4 níveis
     severity: RegulatoryIssueSeverity
+    # type legado (nullable, deprecated)
+    type: RegulatoryIssueType | None
     payload: dict[str, Any] | None
     detected_by: str | None
     detected_at: datetime

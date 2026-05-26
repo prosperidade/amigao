@@ -68,14 +68,24 @@ _GRADE_TO_GRAU: dict[str, str] = {
     "critico": "critico_impeditivo_potencial",
 }
 
-# Inferência mínima de RiscoCategoria a partir do finding.type. A remodelagem
-# do RegulatoryIssue (família + codigo_alerta) na próxima sprint afina isso
-# (REGISTRO_DIVIDAS.md P1).
-_FINDING_TYPE_TO_CATEGORIA: dict[str, str] = {
-    "area_divergente": "cadastral_sistemico",
-    "rl_divergente": "ambiental",
-    "geo_incra_ausente": "fundiario",
-    "verificacao_espacial_pendente": "geoespacial",
+# Mapeamento `familia` (taxonomia rica do PROMPT_5 — 11 valores estáveis) →
+# `RiscoCategoria` (7 categorias do Mapa de Riscos da skill diagnostico). É
+# 11→7 (algumas famílias caem na mesma categoria, ex.: identificacao/car/
+# validade_documental → cadastral_sistemico). Substituiu o mapeamento por
+# `finding.type` do PROMPT_4 (que tinha 4 valores e caía maioritariamente em
+# "outro").
+_FAMILIA_TO_CATEGORIA: dict[str, str] = {
+    "identificacao": "cadastral_sistemico",
+    "titularidade": "fundiario",
+    "area": "cadastral_sistemico",
+    "geoespacial": "geoespacial",
+    "geo_incra": "fundiario",
+    "car": "cadastral_sistemico",
+    "ambiental": "ambiental",
+    "fiscal": "credito_mercado",
+    "restricao_risco": "territorial",
+    "licenciamento": "atividade_produtiva",
+    "validade_documental": "cadastral_sistemico",
 }
 
 # Ordenação ascendente do grau para escolher o "pior" entre os findings do
@@ -494,7 +504,12 @@ class DiagnosticoAgent(BaseAgent):
             tema = str(raw.get("tema") or "").strip()
             descricao = str(raw.get("descricao") or "").strip()
             impacto = str(raw.get("impacto") or "").strip()
-            finding_type = str(raw.get("type") or "").strip()
+            # PROMPT_5: payload do auditor passou de `type` (4 valores
+            # genéricos) para `codigo_alerta` + `familia` (taxonomia rica).
+            # Compat retroativa: se `codigo_alerta`/`familia` ausentes (payload
+            # antigo), tentamos o `type` legado como fallback para descrição.
+            codigo_alerta = str(raw.get("codigo_alerta") or "").strip()
+            familia = str(raw.get("familia") or "").strip()
             grade = str(raw.get("grade") or "").strip()
             evidencia_raw = raw.get("evidencia")
 
@@ -510,18 +525,21 @@ class DiagnosticoAgent(BaseAgent):
                     ))
                 except ValidationError:
                     logger.warning(
-                        "diagnostico.auditor_finding.divergencia_invalida type=%s",
-                        finding_type,
+                        "diagnostico.auditor_finding.divergencia_invalida codigo=%s",
+                        codigo_alerta,
                     )
 
             # Risco com `grau` preservado (4 níveis). Falta de grade conhecido
-            # → não viraliza em risco (auditor antigo ou finding novo sem
-            # mapeamento ainda; o consultor ainda enxerga via `divergencias`).
+            # → não viraliza em risco (finding novo sem mapeamento ainda; o
+            # consultor ainda enxerga via `divergencias`).
             grau = _GRADE_TO_GRAU.get(grade)
             if not grau or not descricao:
                 continue
 
-            categoria = _FINDING_TYPE_TO_CATEGORIA.get(finding_type, "cadastral_sistemico")
+            # Categoria a partir de `familia` (PROMPT_5). Default
+            # `cadastral_sistemico` cobre familias desconhecidas (catálogo
+            # evolutivo permite famílias futuras).
+            categoria = _FAMILIA_TO_CATEGORIA.get(familia, "cadastral_sistemico")
             evidencia_str = self._evidencia_to_str(evidencia_raw)
 
             try:
@@ -534,8 +552,8 @@ class DiagnosticoAgent(BaseAgent):
                 ))
             except ValidationError:
                 logger.warning(
-                    "diagnostico.auditor_finding.risco_invalido type=%s grade=%s",
-                    finding_type, grade,
+                    "diagnostico.auditor_finding.risco_invalido codigo=%s grade=%s",
+                    codigo_alerta, grade,
                 )
 
         return divergencias, riscos
