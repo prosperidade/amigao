@@ -643,3 +643,52 @@ alto+crítico — dívidas #3 e #4 do `REGISTRO_DIVIDAS.md`.
 
 - **Decisão do Andre + sócia** sobre a Opção A da reconciliação de status.
 - **Camada 2 do Princípio 1** (5 botões P4 — decisão por alerta crítico) depende do acima.
+
+---
+
+## PROMPT_6 — Camada 2 do Princípio 1: reconciliação dos 3 status (26/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — PR `feat/prompt6-camada2-principio1` a abrir.
+Doc completo: `docs/_archive/progressos/progresso10.md`.
+
+### Motivacao
+
+A proposta da Onda C do PROMPT_5 (`docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md`)
+foi aprovada — **Opção A: três campos ortogonais** (`status_achado` /
+`decisao_consultor` / `status_saneamento`). Implementação destrava a **camada
+2 do Princípio 1**: os 5 botões da P4 viram decisão obrigatória sobre cada
+alerta crítico antes da assinatura do diagnóstico. Fecha dívida #5.
+
+### O que foi entregue
+
+| Onda | Conteúdo |
+|---|---|
+| A1 (modelo + migration) | 3 enums novos (`StatusAchado` 5v, `DecisaoConsultor` 5v=os 5 botões P4, `StatusSaneamento` 5v) + 5 colunas em `RegulatoryIssue`: `status_achado` (NOT NULL default `suspeita`), `decisao_consultor` (nullable), `decisao_consultor_justificativa` (texto livre), `decisao_consultor_at` (timestamp, gerenciado pelo servidor), `status_saneamento` (NOT NULL default `pendente`). Migration `d2c3e4f5a6b8` aditiva pura. |
+| A2 (auditor) | Confirmação que `auditor_imovel._persist_issues` não precisa de mudança — defaults do model (`suspeita`/`pendente`) aplicam automaticamente. |
+| B (endpoint PATCH) | `PATCH /api/v1/properties/{prop}/issues/{id}` aceita body parcial (`RegulatoryIssueUpdate`). AuditLog **granular por campo** com hash chain SHA-256. No-op por campo (mesmo valor) não gera AuditLog. `decisao_consultor_at` gerenciado server-side. |
+| D (camada 2 do P1) | `PATCH /validate` ganha gate: **422** com lista de alertas pendentes quando há `RegulatoryIssue` com `severity=critico` sem `decisao_consultor`. Críticas RESOLVIDAS (`resolved_at != NULL`) não bloqueiam. Não-críticas não bloqueiam (a sócia afiou alto-vs-crítico de propósito). |
+
+### Decisões arquiteturais
+
+- **Opção A — 3 campos ortogonais**: cada um mede dimensão diferente (natureza do indício / ação escolhida / progresso prático). Sem derivação automática; cada um editável.
+- **`decisao_consultor_at` server-side**: body PATCH não aceita override do timestamp. Server grava em qualquer mudança de `decisao_consultor` (inclui transições para NULL).
+- **Gate só para `critico`**: alto/atencao/informativo não bloqueiam.
+- **Crítica RESOLVIDA não bloqueia**: `resolved_at != NULL` = sanada no mundo, sem precisar de decisão pendente.
+- **AuditLog granular por campo (não payload único)**: cada campo alterado vira AuditLog próprio com `old_value`/`new_value`.
+
+### Testes
+
+18 testes novos (em `tests/api/test_regulatory.py`):
+- `TestUpdatePropertyIssue` (11)
+- `TestValidateDiagnosisGateCamada2` (6) — *nota: numeração das classes; 6 cobre 6 cenários do gate*
+
+Subset rodado verde (18/18). Suite completa rodando em background no fechamento.
+
+### Dividas fechadas
+
+- **#5** — Reconciliação dos 3 status. Opção A implementada inteira.
+- **Camada 2 do Princípio 1** — os 5 botões P4 como `DecisaoConsultor` enum + gate no `PATCH /validate`.
+
+### Proximas rodadas (frontend depende)
+
+- **UI dos 5 botões + 3 status editáveis** — frontend consome `RegulatoryIssueOut` (com 3 campos novos) + PATCH `/properties/{prop}/issues/{id}`. Cada card de alerta crítico = 5 radios + textarea + botão "Decidir". Botão "Assinar diagnóstico" só habilita quando todas as críticas têm decisão.

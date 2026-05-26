@@ -1,4 +1,4 @@
-# Registro de dívidas — Regente (consolidado pós-PROMPT_5 · 2026-05-25)
+# Registro de dívidas — Regente (consolidado pós-PROMPT_6 · 2026-05-26)
 
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
@@ -14,23 +14,11 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 Pipeline ponta-a-ponta no nível de código: auditor cruza → diagnóstico consome → grava
 versionado → consultor assina.*
 
-## P1 — reconciliação de status (aguarda decisão)
+## P1 — (esvaziada — todos os itens P1 já foram fechados)
 
-**5. Reconciliar os três conjuntos de status de um alerta.** (**PROPOSTA em
-docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md — aguarda decisão do Andre**)
-
-Circulam: `status_saneamento` (skill diagnóstico: pendente/em_validacao/saneado/descartado/
-nao_aplicavel) × `status` do auditor (suspeita/confirmada/descartada/resolvida/ignorada) ×
-`decisao_consultor` (P4: corrigir_antes/seguir_com_ressalva/solicitar_doc/fora_escopo/
-ignorar_justificado). Descrevem coisas diferentes (estado do saneamento × estado do achado ×
-ação escolhida) e a P4 (camada 2 do Princípio 1) depende dessa modelagem antes do campo
-de decisão entrar em produção.
-
-**Origem:** P4 + skill diagnóstico. **Estado:** PROMPT_5 Onda C entregou proposta com 3
-opções analisadas (A: três campos ortogonais; B: campo único com state machine; C: dois
-campos + saneamento derivado). **Recomendação técnica = Opção A** (preserva vocabulário da
-sócia, compatível com desenho atual, auditoria simples, migração trivial). Implementação
-fica para a rodada seguinte junto com a camada 2 do Princípio 1.
+*Os 3 itens que estavam aqui (#3 remodelagem do RegulatoryIssue, #4 mapeamento
+4→3 do severity, #5 reconciliação dos 3 status) foram fechados nos PROMPTs 5
+e 6. Ver tabela "Fechadas (histórico)" abaixo.*
 
 ## P2 — produto/domínio (precisam da sócia)
 
@@ -90,6 +78,8 @@ licença/outorga — aguardam integração.
 | **2** | "Humano assina" — ciclo do Princípio 1 (camada 1) | 2026-05-25 (PROMPT_4 Onda B) | `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` grava `validated_by_user_id` + `validated_at` + AuditLog hash chain SHA-256. 409 ao revalidar. Commit `c74ff2e`. *(A camada 2 — 5 botões P4 — continua aberta, pós-PROMPT_5.)* |
 | **3** | Remodelar `RegulatoryIssue` (família + codigo_alerta + 4 níveis) | 2026-05-25 (PROMPT_5 Onda A) | Enum `RegulatoryFamilia` (11 estável) + model `RegulatoryIssueCatalog` (PK = codigo_alerta string; catálogo evolutivo via INSERT, NÃO migration) + colunas `codigo_alerta`/`familia`/`muda_rota_regulatoria`/`muda_escopo_preco_prazo`/`documentos_cruzados` em `RegulatoryIssue`. `severity` passa para 4 níveis. Migration `c1b2d3e4f5a7` cria, popula 45 entradas seed (via `app/models/regulatory_catalog_seed.py`, fonte única) e migra dados antigos. `type` legado fica nullable (deprecated). |
 | **4** | Mapeamento `grade` 4→`severity` 3 que colapsava alto+crítico | 2026-05-25 (PROMPT_5 Onda A) | `_GRADE_TO_SEVERITY` removido de `property_audit.py`. `AuditFinding.grade` e `RegulatoryIssue.severity` agora compartilham 4 níveis (`informativo`/`atencao`/`alto`/`critico`). Auditor emite codigos reais (📄) e grade direto; 🛰️/🔌 ficam no catálogo mas não emitidos até infra. Diagnóstico mapeia `familia` (11) → `RiscoCategoria` (7) via `_FAMILIA_TO_CATEGORIA` (substitui `_FINDING_TYPE_TO_CATEGORIA` do PROMPT_4). |
+| **5** | Reconciliar `status_saneamento` × `status` do auditor × `decisao_consultor` (3 status circulantes) | 2026-05-26 (PROMPT_6 — Opção A do RECONCILIACAO_STATUS_ALERTAS) | 3 enums novos: `StatusAchado` (5 valores), `DecisaoConsultor` (os 5 botões P4), `StatusSaneamento` (5 valores). 5 colunas em `RegulatoryIssue`: `status_achado` (NOT NULL default `suspeita`), `decisao_consultor` (nullable), `decisao_consultor_justificativa`, `decisao_consultor_at`, `status_saneamento` (NOT NULL default `pendente`). PATCH `/properties/{prop}/issues/{id}` edita com AuditLog granular por campo. Gate no PATCH `/validate` rejeita 422 se houver crítica sem decisão (camada 2 do Princípio 1 fechada). Migration `d2c3e4f5a6b8`. |
+| **Camada 2 P1** | 5 botões da P4 — decisão obrigatória por alerta crítico antes da assinatura | 2026-05-26 (PROMPT_6) | `decisao_consultor` enum com os 5 valores + gate no `PATCH /validate` retornando 422 com lista de pendentes. Frontend dos botões fica para rodada futura (UI consome `RegulatoryIssueOut` + PATCH). |
 | **12** | `PROJECT_NAME='Amigão'` em `config.py:52` | 2026-05-23 (Fase 0) | Já estava `"Regente Ambiental"` quando a Fase 0 auditou. Commit `7877652` documentou. |
 
 ---

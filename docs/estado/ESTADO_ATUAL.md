@@ -1,7 +1,7 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-25 (atualização pós-PROMPT_5 remodelar-regulatory-issue)
-**Próxima atualização:** ao fechamento da camada 2 do Princípio 1 (5 botões P4) — depende da decisão sobre reconciliação de status
+**Data do instantâneo:** 2026-05-26 (atualização pós-PROMPT_6 camada 2 do Princípio 1)
+**Próxima atualização:** UI dos 5 botões P4 (frontend) ou próxima dívida do REGISTRO_DIVIDAS
 **Responsável de atualização:** quem fechar a próxima sprint
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
@@ -32,7 +32,7 @@
     vira `Divergencia` + `Risco` com `grau` 4 níveis preservado.
   - **Onda B** — `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` fecha a
     **camada 1 do Princípio 1** (consultor assina). AuditLog hash chain SHA-256.
-- **PROMPT_5 (remodelar `RegulatoryIssue`) finalizado em 2026-05-25** (PR a abrir):
+- **PROMPT_5 (remodelar `RegulatoryIssue`) mergeado em 2026-05-25** (3c8ac8f):
   - **Onda A** — `RegulatoryIssue` ganha taxonomia rica: `familia` (enum estável 11) +
     `codigo_alerta` (FK em `regulatory_issue_catalog`, catálogo evolutivo via INSERT) +
     campos `muda_rota_regulatoria`/`muda_escopo_preco_prazo`/`documentos_cruzados`.
@@ -43,10 +43,23 @@
     RL_MATRICULA_DIVERGENTE_RL_CAR, etc.); 🛰️ e 🔌 ficam no catálogo mas não emitidos.
   - **Onda C** — proposta de reconciliação dos 3 status em
     `docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md` (Opção A recomendada).
+- **PROMPT_6 (camada 2 do Princípio 1) finalizado em 2026-05-26** (PR a abrir):
+  - **Onda A1** — `RegulatoryIssue` ganha 3 status reconciliados (Opção A):
+    `status_achado` (default `suspeita`), `decisao_consultor` (nullable),
+    `decisao_consultor_justificativa`, `decisao_consultor_at`, `status_saneamento`
+    (default `pendente`). Migration `d2c3e4f5a6b8` (aditiva).
+  - **Onda B** — `PATCH /api/v1/properties/{prop}/issues/{id}` edita os 3 status +
+    decisão. AuditLog **granular por campo** com hash chain SHA-256.
+  - **Onda D (camada 2 do Princípio 1)** — `PATCH /validate` ganha gate: **422**
+    se houver `RegulatoryIssue` com `severity=critico` sem `decisao_consultor`.
+    Os 5 botões da P4 (corrigir_antes / seguir_com_ressalva / solicitar_doc /
+    fora_escopo / ignorar_justificado) são obrigatórios para alertas críticos.
+  - Dívida #5 fechada. **Princípio 1 fechado em 2 camadas** (1 do PROMPT_4 +
+    2 do PROMPT_6).
 - **Pipeline ponta a ponta no nível de código:** `extrator → auditor_imovel → legislacao →
-  diagnostico → POST /diagnoses (versionado + gate Pydantic) → PATCH /validate (assina +
-  AuditLog)`. UI do `PATCH /validate` ainda pendente no frontend. Taxonomia rica do
-  RegulatoryIssue ativa em produção pós-merge.
+  diagnostico → POST /diagnoses (versionado + gate Pydantic) → PATCH /properties/.../issues/{id}
+  (consultor decide alerta por alerta) → PATCH /validate (assina + gate camada 2 + AuditLog)`.
+  **Frontend ainda pendente** (UI dos 5 botões + 3 status editáveis).
 
 **O que está congelado:**
 
