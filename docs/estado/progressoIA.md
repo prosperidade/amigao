@@ -719,3 +719,45 @@ campos de decisão; novo endpoint por processo (`PATCH /processes/{pid}/issues/{
 Gate `/validate` aprendido a olhar a tabela nova. Re-examinar
 `status_saneamento` para separar saneamento real (perene) de avaliação
 contextual. Bloqueia a UI dos 5 botões.
+
+---
+
+## PROMPT_7 — Decisão contextual ao processo (ADR-012) (26/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — PR `feat/prompt7-decisao-contextual` a abrir.
+Doc completo: `docs/_archive/progressos/progresso11.md`. Suite 625/625 verdes
+(+16 vs 609 baseline).
+
+### Motivacao
+
+ADR-012 (Isis, 26/05): a decisão do consultor é **contextual ao processo**,
+não perene no imóvel. O PROMPT_6 deixou `decisao_consultor` como campo do
+`RegulatoryIssue` (Property — perene). Esta rodada implementa a re-modelagem.
+
+### O que foi entregue
+
+| Onda | Conteúdo |
+|---|---|
+| A (model + migration) | Nova entidade `ProcessIssueDecision` com FK composta única `(process_id, issue_id)` e campos `decisao` (NOT NULL) / `justificativa` / `decided_by_user_id` (FK users, **novo**) / `decided_at`. RegulatoryIssue **perdeu** 3 colunas (`decisao_consultor`/`justificativa`/`at`). Migration `e3d4f5g6a7b8` cria tabela + drop sem backfill nas 3 colunas (sem dados em prod). |
+| B (schemas) | `RegulatoryIssueOut`/`Update` perderam 3 campos (sobraram `status_achado` e `status_saneamento`). Novos `ProcessIssueDecisionCreate`/`Out`. Validator de justificativa obrigatória **migrou** para o schema novo. |
+| C (endpoints) | `PATCH /properties/.../issues/{id}` enxugou (só status perenes). Novos: `GET` e `PUT /processes/{pid}/issues/{iid}/decision` (upsert; AuditLog granular por campo com hash chain SHA-256). Gate `/validate` cruza issues críticas × `ProcessIssueDecision` **deste processo** (cross-processo não libera). |
+| D (testes) | TestUpdatePropertyIssue enxugado; TestUpdatePropertyIssueJustificativaObrigatoria → TestProcessIssueDecisionJustificativaObrigatoria; TestValidateDiagnosisGateCamada2 adaptado + novo cenário `test_decisao_de_outro_processo_nao_libera_gate`; **novo** TestProcessIssueDecision (11 testes CRUD + autoria + AuditLog + tenant isolation). |
+
+### Decisões arquiteturais
+
+- **Nomes encurtados**: `decisao` / `justificativa` / `decided_at` (contexto da tabela já indica).
+- **Drop sem backfill** (sem dados em prod ainda — Andre confirmou).
+- **`decided_by_user_id`** novo (PROMPT_6 só tinha timestamp; agora autor explícito).
+- **`status_achado` e `status_saneamento` permanecem em `RegulatoryIssue`** — fato perene do imóvel. YAGNI sobre "saneamento contextual" — só se aparecer demanda.
+
+### Dívidas fechadas
+
+- **#20** (re-modelagem ADR-012) — implementada inteira.
+
+### Próximas rodadas
+
+- **UI dos 5 botões + 3 status** — desbloqueada agora que o backend ADR-012
+  está estável. Aba "Alertas" no ProcessDetail consome `RegulatoryIssueOut`
+  (read-only nos 2 status) + `PUT /processes/.../decision`.
+- **#17 (coerência entre status)** — desbloqueada também. Regras menores:
+  2 sobre os campos perenes, 1 cross-entidade no PUT decision.
