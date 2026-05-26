@@ -220,3 +220,69 @@ Em ordem de pré-requisito:
   PROMPT_5 Onda A).
 - Não implementar os 5 botões da P4 — depende da decisão acima.
 - Não tocar contratos externos (R1).
+
+---
+
+## Status pós-execução (atualizado 2026-05-26)
+
+Opção A **implementada** no PROMPT_6 (merge `08ea537`):
+- 3 colunas + 3 enums + `decisao_consultor_justificativa` + `decisao_consultor_at`
+  no `RegulatoryIssue` (migration `d2c3e4f5a6b8`).
+- `PATCH /properties/{prop}/issues/{id}` para edição parcial com AuditLog
+  granular por campo.
+- Gate da camada 2 no `PATCH /validate` (422 com lista de pendentes).
+- Validator de justificativa obrigatória para `ignorar_justificado` /
+  `fora_escopo` (revisão pós-PROMPT_6 — fecha o Princípio 2 no caso de
+  descarte).
+
+### Questões pendentes de produto (próxima conversa com Isis)
+
+A implementação do gate seguiu o desenho de schema (Opção A), mas o
+**comportamento cross-processo** depende de uma decisão de produto que só
+a sócia (Isis) pode tomar. Levar essas perguntas para a próxima
+conversa com ela — junto da conferência de fidelidade da skill do auditor:
+
+**Pergunta 1 — `decisao_consultor` é perene ou contextual?**
+
+`RegulatoryIssue` mora em `Property` (perene — vive enquanto o imóvel
+existe), mas a **assinatura** é por `Process` (cada demanda é um processo
+distinto: venda, crédito, regularização, etc.). A `decisao_consultor` é
+campo da issue.
+
+Consequência atual do desenho: uma decisão `seguir_com_ressalva` tomada
+no processo A (venda, mês 1) fica gravada na issue. Quando o processo B
+(crédito, mês 7, mesmo imóvel) for assinar, o gate vê a issue como **já
+decidida** e libera a assinatura — sem o consultor re-olhar.
+
+Só que **titularidade divergente** pesa diferente para venda (compra
+direta com pessoa física) e para crédito (banco quer averbação limpa).
+"Aceitar o risco" no contexto de venda pode não fazer sentido no de
+crédito.
+
+Três posturas possíveis:
+
+- **Perene** (comportamento atual): a decisão é do imóvel, vale para
+  sempre. Consultor pode editar via `PATCH /issues/{id}` quando contexto
+  novo justificar — mas o sistema não força re-avaliação.
+- **Contextual com aviso**: o gate vê a decisão antiga e libera, mas
+  sinaliza "esta crítica foi decidida no processo X em tal data — ainda
+  vale?" (UI/badge, sem rejeitar).
+- **Contextual com força**: o gate **só conta como decidido** se a
+  `decisao_consultor_at` for posterior à abertura do processo atual; do
+  contrário, exige nova decisão. Mais seguro, mais fricção.
+
+Resposta da Isis define se isso vira ajuste no gate (e em qual direção),
+ou se permanece perene + responsabilidade da UI/UX em sinalizar.
+
+**Não bloqueia a UI** — a tela funciona com decisão perene. Mas o
+comportamento do gate cross-processo depende dessa resposta.
+
+**Pergunta 2 — fidelidade da skill do auditor.**
+
+A condensação que fizemos da skill `auditor_imovel/
+analise_divergencias_documentais` v1.1.0 (40 códigos / 11 famílias / 10
+heurísticas / régua de área) é fiel ao documento original v1.0 da Isis
+("Instrução operacional para análise de divergências documentais")?
+Verificação rápida — não-bloqueante; o conteúdo de domínio já era
+"validado por construção" (todo dela), faltou só conferência da redução
+feita no `app/skills/auditor_imovel/.../SKILL.md`.

@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.regulatory import (
     DecisaoConsultor,
@@ -108,8 +108,15 @@ class RegulatoryIssueUpdate(BaseModel):
 
     Quando ``decisao_consultor`` é setado pela primeira vez,
     ``decisao_consultor_at`` é gravado automaticamente pelo servidor (não
-    aceita override). ``decisao_consultor_justificativa`` é texto livre —
-    fortemente recomendado para ``ignorar_justificado`` e ``fora_escopo``.
+    aceita override).
+
+    **Princípio 2 — justificativa obrigatória para descarte/exclusão:** quando
+    ``decisao_consultor`` é setado para ``ignorar_justificado`` ou
+    ``fora_escopo`` no mesmo body, ``decisao_consultor_justificativa`` precisa
+    estar preenchida e não-vazia. O nome do valor promete o registro — sem
+    justificativa, o "li e aceito técnico" vira só "li e aceito", e a camada
+    2 do Princípio 1 fica incompleta no caso que mais importa (descartar uma
+    crítica). Validator retorna 422 quando essas condições não são atendidas.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -118,6 +125,37 @@ class RegulatoryIssueUpdate(BaseModel):
     decisao_consultor: DecisaoConsultor | None = None
     decisao_consultor_justificativa: str | None = Field(
         default=None,
-        description="Texto livre. Recomendado para ignorar_justificado / fora_escopo.",
+        description=(
+            "Texto livre. **Obrigatório** quando decisao_consultor in "
+            "{ignorar_justificado, fora_escopo} no mesmo body — sem isso o "
+            "nome do valor mente e o Princípio 2 (auditável) falha no caso "
+            "que mais importa (descartar uma crítica)."
+        ),
     )
     status_saneamento: StatusSaneamento | None = None
+
+    @model_validator(mode="after")
+    def _justificativa_obrigatoria_em_descarte(self) -> "RegulatoryIssueUpdate":
+        """Fecha o buraco #19 do REGISTRO_DIVIDAS: o nome `ignorar_justificado`
+        promete a justificativa. `fora_escopo` idem — quem decide tirar do
+        contrato precisa registrar por quê. Sem registro, vira cancela
+        disfarçada (e Princípio 2 não se sustenta no ponto crítico).
+
+        Aplicado APENAS quando ``decisao_consultor`` está sendo SETADO no body
+        — PATCH parcial que só toca outros campos (sem `decisao_consultor`)
+        não dispara (a justificativa antiga continua valendo). Isso evita
+        forçar re-confirmação a cada mudança de `status_saneamento`.
+        """
+        exige_justificativa = {
+            DecisaoConsultor.ignorar_justificado,
+            DecisaoConsultor.fora_escopo,
+        }
+        if self.decisao_consultor in exige_justificativa:
+            j = self.decisao_consultor_justificativa
+            if j is None or not j.strip():
+                raise ValueError(
+                    f"decisao_consultor='{self.decisao_consultor.value}' exige "
+                    "decisao_consultor_justificativa não-vazia no mesmo body "
+                    "(Princípio 2 — o nome do valor promete o registro)"
+                )
+        return self

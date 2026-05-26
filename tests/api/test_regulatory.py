@@ -989,13 +989,18 @@ class TestUpdatePropertyIssue:
             assert len(log.hash_sha256) == 64
 
     def test_mesmo_valor_nao_gera_auditlog(self, client: TestClient, db_session):
-        """No-op por campo (mesmo valor) não é evento auditável."""
+        """No-op por campo (mesmo valor) não é evento auditável.
+
+        Usa `corrigir_antes` (que não exige justificativa) para isolar o
+        comportamento de "no-op por campo" do validator de justificativa
+        obrigatória (testado em TestUpdatePropertyIssueJustificativaObrigatoria).
+        """
         tenant, _ = _seed_internal_user(db_session)
         _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
         issue = _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
-            decisao_consultor=DecisaoConsultor.fora_escopo,
+            decisao_consultor=DecisaoConsultor.corrigir_antes,
         )
         db_session.commit()
         issue_id = issue.id
@@ -1006,8 +1011,8 @@ class TestUpdatePropertyIssue:
             f"/api/v1/properties/{prop.id}/issues/{issue_id}",
             headers=headers,
             json={
-                "decisao_consultor": "fora_escopo",  # mesmo valor
-                "status_achado": "suspeita",         # mesmo default
+                "decisao_consultor": "corrigir_antes",  # mesmo valor
+                "status_achado": "suspeita",            # mesmo default
             },
         )
         assert r.status_code == 200
@@ -1065,6 +1070,143 @@ class TestUpdatePropertyIssue:
         )
         # Tenant B não enxerga property A → 404 antes de chegar à issue
         assert r.status_code == 404
+
+
+class TestUpdatePropertyIssueJustificativaObrigatoria:
+    """Fechamento da dívida #19 (PROMPT_6 — revisão): `ignorar_justificado` e
+    `fora_escopo` exigem `decisao_consultor_justificativa` não-vazia no mesmo
+    body. Sem isso, o nome do valor mente — o "li e aceito técnico" vira só
+    "li e aceito" e o Princípio 2 (auditável) falha no caso que mais importa
+    (descartar uma crítica)."""
+
+    def test_ignorar_sem_justificativa_eh_422(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"decisao_consultor": "ignorar_justificado"},
+        )
+        assert r.status_code == 422
+        # Mensagem cita o valor e a regra
+        detail = str(r.json()["detail"])
+        assert "ignorar_justificado" in detail
+        assert "justificativa" in detail.lower()
+
+    def test_fora_escopo_sem_justificativa_eh_422(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"decisao_consultor": "fora_escopo"},
+        )
+        assert r.status_code == 422
+
+    def test_ignorar_com_justificativa_so_espacos_eh_422(self, client: TestClient, db_session):
+        """str_strip_whitespace=True em ConfigDict strip o body antes do
+        validator — `"   "` vira `""` → trigger."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={
+                "decisao_consultor": "ignorar_justificado",
+                "decisao_consultor_justificativa": "   ",
+            },
+        )
+        assert r.status_code == 422
+
+    def test_ignorar_com_justificativa_preenchida_eh_200(self, client: TestClient, db_session):
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={
+                "decisao_consultor": "ignorar_justificado",
+                "decisao_consultor_justificativa": "Falso positivo: nome do imóvel é histórico, mesma matrícula.",
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["decisao_consultor"] == "ignorar_justificado"
+        assert "Falso positivo" in body["decisao_consultor_justificativa"]
+
+    def test_corrigir_antes_sem_justificativa_eh_200(self, client: TestClient, db_session):
+        """As outras 3 decisões NÃO exigem justificativa — só ignorar e fora_escopo."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        for decisao in ("corrigir_antes", "seguir_com_ressalva", "solicitar_doc"):
+            # Reset issue
+            issue.decisao_consultor = None
+            issue.decisao_consultor_justificativa = None
+            db_session.flush()
+            r = client.patch(
+                f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+                headers=headers,
+                json={"decisao_consultor": decisao},
+            )
+            assert r.status_code == 200, f"{decisao} deveria passar sem justificativa"
+
+    def test_patch_so_status_saneamento_nao_dispara_validator(self, client: TestClient, db_session):
+        """Issue já tem decisao=ignorar_justificado + justificativa antiga válida
+        no banco. PATCH parcial que só toca status_saneamento NÃO deve forçar
+        re-envio da justificativa — validator só roda quando decisao_consultor
+        está sendo setado no body."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            decisao_consultor=DecisaoConsultor.ignorar_justificado,
+        )
+        issue.decisao_consultor_justificativa = "Justificativa antiga válida"
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"status_saneamento": "saneado"},
+        )
+        assert r.status_code == 200
 
 
 # ---------------------------------------------------------------------------
