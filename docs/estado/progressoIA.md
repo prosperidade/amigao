@@ -761,3 +761,67 @@ não perene no imóvel. O PROMPT_6 deixou `decisao_consultor` como campo do
   (read-only nos 2 status) + `PUT /processes/.../decision`.
 - **#17 (coerência entre status)** — desbloqueada também. Regras menores:
   2 sobre os campos perenes, 1 cross-entidade no PUT decision.
+
+---
+
+## PROMPT_8 — Coerência entre status do alerta (#17) (26/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — branch `feat/prompt8-coerencia-status`. Suite
+635/635 verdes (+10 vs 625 baseline do PROMPT_7).
+
+### Motivação
+
+Após PROMPT_7, os 3 status (`status_achado` e `status_saneamento` perenes
+em `RegulatoryIssue`; `decisao` em `ProcessIssueDecision`) eram enums
+soltos no DB — o sistema aceitava combinações que o negócio considera
+absurdas (saneamento concluído sobre achado em suspeita, decisão sobre
+algo ainda não confirmado). Dívida #17 — esvazia o último P2 regulatório.
+
+### O que foi entregue
+
+| Onda | Conteúdo |
+|---|---|
+| A (helper puro) | `app/services/regulatory_coherence.py` — 2 funções (`assert_status_coerente`, `assert_decisao_permitida`) + exception `StatusCoherenceError(ValueError)`. Conjuntos frozen explícitos (`_SANEAMENTO_EXIGE_ACHADO_VALIDADO`, `_ACHADOS_QUE_HABILITAM_SANEAMENTO`). 100% de coverage. |
+| B (schema) | `RegulatoryIssueUpdate` ganha `@model_validator(mode="after")` que delega ao helper quando os 2 status vêm juntos no body (fast-fail, sem ler o DB). |
+| C (endpoints) | `PATCH /properties/.../issues/{id}` chama o helper sobre o **estado resultante** (corpo aplicado sobre a issue carregada — fonte da verdade, cobre PATCH parcial). `PUT /processes/.../decision` chama `assert_decisao_permitida(issue.status_achado)` antes do upsert — 422 com mensagem acionável. |
+| D (testes) | `TestCoerenciaStatusPerene` (7 cenários: 2 fast-fail no body completo, 2 PATCH parcial, 1 transição simultânea, 1 `resolvida+saneado`, 1 saneamento descartado); `TestDecisaoBloqueadaSeAchadoSuspeita` (3 cenários: 422 com suspeita, 200 com confirmada, 422 não grava nada no DB). Adaptados 7 testes pré-existentes que seedavam issue em `suspeita` (default) e faziam `PUT /decision` esperando 200 — `_seed_issue` ganha parâmetro `status_achado`. |
+
+### Decisões arquiteturais
+
+- **Escopo fechado em 2 regras semânticas** (não construir máquina de
+  estados completa — over-engineering para dívida P2; consultor não é
+  adversário, barrar só o absurdo óbvio).
+- **`resolvida` habilita saneamento ativo/concluído**, junto com
+  `confirmada` (decisão de UX validada com Andre 26/05). Bloquear a
+  transição simultânea `confirmada → resolvida` + `em_validacao →
+  saneado` no mesmo PATCH forçaria salvar em duas etapas — friction sem
+  ganho de invariante. `resolvida` é evolução terminal de `confirmada`.
+- **Sem migration** — isto é validação, não modelagem. Os 3 enums
+  continuam soltos no DB; a coerência é enforçada na borda (schema +
+  endpoint).
+- **Fonte da verdade no endpoint** — o `@model_validator` só dispara
+  quando os 2 campos vêm juntos no body; o endpoint compara o estado
+  resultante (corpo + DB) e é quem garante a invariante. Mesmo helper,
+  sem duplicação de regra.
+- **Mensagens de erro acionáveis** (UI vai consumir): Regra A cita
+  `confirmada`/`resolvida`; Regra B diz "Confirme ou descarte o achado
+  antes de decidir" — dica direta para o consultor.
+
+### Dívidas fechadas
+
+- **#17** (coerência entre os 3 status reconciliados) — implementada
+  inteira. P2 regulatória esvaziada.
+
+### Heads-up para a UI (registrado, não implementado)
+
+Pela Regra B, alertas críticos presos em `suspeita` não aceitam decisão —
+e o gate do `/validate` exige decisão para toda crítica. Logo, a aba
+"Alertas" do ProcessDetail precisa deixar o consultor **mover o
+`status_achado`** (`suspeita → confirmada`/`descartada`) na mesma tela em
+que ele decide o que fazer, senão trava no gate sem caminho. A mensagem
+422 da Regra B é o suficiente para a UI orientar.
+
+### Próximas rodadas
+
+- **UI dos 5 botões + 3 status** (única frente aberta agora — backend
+  regulatório completo com guardas de coerência).

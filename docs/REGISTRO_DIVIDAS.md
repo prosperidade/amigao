@@ -1,4 +1,4 @@
-# Registro de dívidas — Regente (consolidado pós-PROMPT_7 · 2026-05-26)
+# Registro de dívidas — Regente (consolidado pós-PROMPT_8 · 2026-05-26)
 
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
@@ -19,7 +19,13 @@ versionado → consultor assina.*
 *A re-modelagem do ADR-012 (dívida #20) foi implementada nesta rodada. Ver
 tabela "Fechadas (histórico)" abaixo.*
 
-## P2 — coerência entre os status (próxima rodada possível)
+## P2 — (esvaziada após PROMPT_8)
+
+*A coerência entre os status (dívida #17) foi implementada nesta rodada
+via 2 regras: helper `assert_status_coerente` sobre estado resultante no
+PATCH `/issues` + bloqueio do PUT `/decision` quando achado em `suspeita`
+(`assert_decisao_permitida`). Sem máquina de estados completa — barrou só
+o absurdo óbvio. Ver tabela "Fechadas" abaixo.*
 
 ## P2 — produto/domínio (precisam da sócia)
 
@@ -73,27 +79,23 @@ licença/outorga — aguardam integração.
 
 *Régua de prioridade aplicada após classificação do Andre.*
 
-### P2 — dívida com risco modesto (desbloqueada pelo PROMPT_7)
-
-**17. Coerência entre os status reconciliados.** Após o PROMPT_7 (ADR-012),
-os 3 status vivem em **lugares diferentes**: `status_achado` e
-`status_saneamento` em `RegulatoryIssue`; `decisao` em `ProcessIssueDecision`.
-As 3 regras propostas no PROMPT_6 ficaram menores:
-
-- Regras 1 e 2 (achado descartado/ignorada incompatível com saneamento
-  saneado/em_validacao; resolvida exige saneamento saneado/em_validacao)
-  viram `@model_validator` simples no `RegulatoryIssueUpdate` + check no
-  estado pós-PATCH (precisa do estado atual da issue para checar
-  contradição quando o PATCH é parcial).
-- Regra 3 (suspeita + decisao_consultor != NULL) **cruza entidades**:
-  no endpoint PUT `/processes/.../decision`, validar que a issue não
-  está em `status_achado=suspeita` antes de aceitar criar/atualizar
-  `ProcessIssueDecision`. Força o consultor a confirmar/descartar primeiro.
-
-**Resolver no MVP:** validators + check cruzado no PUT. Máquina de
-estados completa é futuro. **Origem:** revisão do PROMPT_6 (26/05).
-
 ### P3 — com marco condicional
+
+**21. Pares de status semanticamente incoerentes fora das 2 regras do PROMPT_8.**
+As 2 regras de `regulatory_coherence.py` foram desenhadas como "barrar o
+absurdo óbvio" — escopo fechado, não máquina de estados completa. Sobram
+pares teoricamente incoerentes que o sistema aceita por desenho:
+`status_achado=resolvida` com `status_saneamento=pendente` (achado já
+sanado mas saneamento ainda pendente); `descartada+pendente`,
+`ignorada+pendente` e variações com `nao_aplicavel`/`descartado` no
+saneamento sobre achados terminais. **Dimensionamento:** consultor não é
+adversário (P2 da rodada, agora P3 do que sobrou) — não cria isso de
+propósito; UI dos 5 botões pode até prevenir naturalmente pelo fluxo de
+clique. **Marco para revisitar:** apenas se aparecer dado real bagunçando
+o estado (ex.: import legado, regressão de UI deixando registros em
+combinações fantasmas). Aí valeria considerar máquina de estados completa
+ou regras adicionais. **Origem:** revisão pós-PROMPT_8 (26/05 — Andre
+notou ao revisar o escopo).
 
 **18. Hash chain de `AuditLog` sem rotina de verificação.**
 `app/services/audit_hash.py` tem **só escritores** (`compute_audit_hash`,
@@ -122,6 +124,7 @@ admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
 | **Camada 2 P1** | 5 botões da P4 — decisão obrigatória por alerta crítico antes da assinatura | 2026-05-26 (PROMPT_6) | `decisao_consultor` enum com os 5 valores + gate no `PATCH /validate` retornando 422 com lista de pendentes. Frontend dos botões fica para rodada futura (UI consome `RegulatoryIssueOut` + PATCH). |
 | **19** | Justificativa obrigatória para `ignorar_justificado` e `fora_escopo` (camada 2 completa) | 2026-05-26 (revisão pós-PROMPT_6) | `@model_validator` no `RegulatoryIssueUpdate` rejeita 422 quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no body sem `justificativa` preenchida (str_strip cuida de strings só-espaços). Aplica APENAS quando `decisao_consultor` está no body — PATCH parcial que só toca outros campos não força re-confirmação. 5 testes em `TestUpdatePropertyIssueJustificativaObrigatoria`. PROMPT_7 migrou o validator para `ProcessIssueDecisionCreate` (mesma regra, schema novo). |
 | **20** | Re-modelar `decisao_consultor` como entidade contextual ao processo (ADR-012) | 2026-05-26 (PROMPT_7) | Nova entidade `ProcessIssueDecision` (FK composta `(process_id, issue_id)` unique). Campos `decisao`/`justificativa`/`decided_at`/`decided_by_user_id` (renomeados em relação ao PROMPT_6; `decided_by_user_id` é novo). Migration `e3d4f5g6a7b8` cria tabela e dropa as 3 colunas do `RegulatoryIssue` (drop sem backfill — sem dados em prod). Endpoints novos: `GET` e `PUT /api/v1/processes/{pid}/issues/{iid}/decision` com upsert + AuditLog granular por campo (hash chain SHA-256). Gate `PATCH /validate` cruza issues críticas × `ProcessIssueDecision` deste processo. Validator de justificativa obrigatória migrou para o schema novo. Cada processo recomeça do zero (titularidade torta pesa diferente para venda e para crédito). `TestProcessIssueDecision` (11 testes novos) + `test_decisao_de_outro_processo_nao_libera_gate` confirma comportamento contextual. |
+| **17** | Coerência entre os status reconciliados | 2026-05-26 (PROMPT_8) | Helper puro `app/services/regulatory_coherence.py` com 2 regras semânticas (escopo fechado, sem máquina de estados completa). **Regra A — perenes:** `assert_status_coerente(status_achado, status_saneamento)` exige `status_achado in {confirmada, resolvida}` quando `status_saneamento in {em_validacao, saneado}`. Aplicada (i) no `@model_validator` do `RegulatoryIssueUpdate` (fast-fail quando os 2 status vêm juntos no body) e (ii) no endpoint `PATCH /properties/.../issues/{id}` sobre o estado **resultante** (fonte da verdade — cobre PATCH parcial). **Regra B — cross-entidade:** `assert_decisao_permitida(status_achado)` rejeita `PUT /processes/.../decision` quando `status_achado == suspeita`. Mensagens de erro acionáveis: a primeira cita `confirmada`/`resolvida`, a segunda diz "Confirme ou descarte o achado antes de decidir". Sem migration (validação, não modelagem). `TestCoerenciaStatusPerene` (7 testes) + `TestDecisaoBloqueadaSeAchadoSuspeita` (3 testes). Suite 635/635 verde. |
 | **12** | `PROJECT_NAME='Amigão'` em `config.py:52` | 2026-05-23 (Fase 0) | Já estava `"Regente Ambiental"` quando a Fase 0 auditou. Commit `7877652` documentou. |
 
 ---

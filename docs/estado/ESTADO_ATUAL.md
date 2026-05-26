@@ -1,7 +1,7 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-26 (pós-PROMPT_7 — ADR-012 implementado; decisão contextual ao processo)
-**Próxima atualização:** UI dos 5 botões (frontend) ou #17 (coerência entre status) — backend ADR-012 estável
+**Data do instantâneo:** 2026-05-26 (pós-PROMPT_8 — coerência entre status fechada; #17 resolvida)
+**Próxima atualização:** UI dos 5 botões + 3 status (frontend) — backend regulatório estável
 **Responsável de atualização:** quem fechar a próxima sprint
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
@@ -77,13 +77,27 @@
     explícito além do timestamp.
 - **Skill `auditor_imovel/analise_divergencias_documentais` validada
   integralmente pela sócia** em 2026-05-26 — separação 📄/🛰️/🔌 confirmada.
+- **PROMPT_8 mergeado em 2026-05-26** — fecha a dívida #17 (coerência entre status):
+  - Helper puro `app/services/regulatory_coherence.py` com 2 regras semânticas
+    (escopo fechado — sem máquina de estados completa).
+  - **Regra A (perenes):** saneamento em `em_validacao`/`saneado` exige
+    `status_achado in {confirmada, resolvida}`. Aplicada no `@model_validator`
+    do `RegulatoryIssueUpdate` (fast-fail) E no endpoint `PATCH
+    /properties/.../issues/{id}` sobre o **estado resultante** (fonte da
+    verdade, cobre PATCH parcial).
+  - **Regra B (cross-entidade):** `PUT /processes/.../decision` rejeita
+    `status_achado == suspeita` com mensagem acionável ("Confirme ou
+    descarte o achado antes de decidir").
+  - Sem migration (validação, não modelagem). Suite 635/635 verde.
 - **Pipeline ponta a ponta no nível de código:** `extrator → auditor_imovel → legislacao →
   diagnostico → POST /diagnoses (versionado + gate Pydantic) →
-  PATCH /properties/.../issues/{id} (consultor edita os 2 status perenes) →
-  PUT /processes/{pid}/issues/{iid}/decision (decide alerta por alerta neste processo) →
+  PATCH /properties/.../issues/{id} (consultor edita os 2 status perenes, com gate de
+  coerência sobre o estado resultante) →
+  PUT /processes/{pid}/issues/{iid}/decision (decide alerta por alerta neste processo;
+  Regra B exige achado ≠ suspeita) →
   PATCH /validate (assina + gate camada 2 cross-entidades + AuditLog)`.
-  **Frontend dos 5 botões + 3 status pendente** — backend ADR-012 estável,
-  pode começar.
+  **Frontend dos 5 botões + 3 status pendente** — backend regulatório agora
+  com guardas de coerência completas, pode começar.
 
 **O que está congelado:**
 
