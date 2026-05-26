@@ -1,4 +1,4 @@
-# Registro de dívidas — Regente (consolidado pós-PROMPT_6 · 2026-05-26)
+# Registro de dívidas — Regente (consolidado pós-ADR-012 · 2026-05-26)
 
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
@@ -14,11 +14,46 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 Pipeline ponta-a-ponta no nível de código: auditor cruza → diagnóstico consome → grava
 versionado → consultor assina.*
 
-## P1 — (esvaziada — todos os itens P1 já foram fechados)
+## P1 — re-modelagem disparada pelo ADR-012 (próxima rodada)
 
-*Os 3 itens que estavam aqui (#3 remodelagem do RegulatoryIssue, #4 mapeamento
-4→3 do severity, #5 reconciliação dos 3 status) foram fechados nos PROMPTs 5
-e 6. Ver tabela "Fechadas (histórico)" abaixo.*
+**20. Re-modelar a decisão do consultor de campo de `RegulatoryIssue` para
+entidade própria por `(processo × issue)` — conforme ADR-012.**
+
+A sócia (Isis) validou em 26/05 a opção **(b) cada trabalho recomeça**: o
+**fato** da divergência é perene (Property), mas a **decisão** do consultor
+sobre como tratá-la é **contextual ao processo**. Titularidade torta pesa
+diferente para vender e para dar como garantia ao banco — não dá pra
+herdar a decisão.
+
+O PROMPT_6 colocou `decisao_consultor`/`justificativa`/`decisao_consultor_at`
+no `RegulatoryIssue` (Property). Esses campos saem de lá e viram uma nova
+entidade `ProcessIssueDecision` (FK process_id + FK issue_id + os 5 botões
++ justificativa + timestamp). Cada processo começa **sem decisão herdada**;
+o gate da camada 2 passa a olhar essa entidade nova.
+
+**Escopo da próxima rodada (PROMPT_7 — re-modelagem):**
+- Nova tabela `process_issue_decisions` (FK composta `(process_id, issue_id)`).
+- Migration que **MOVE** os 3 campos de decisão do `RegulatoryIssue` para
+  essa nova tabela (com dados existentes preservados — mapear cada
+  decisão antiga para o processo "dono" original).
+- `PATCH /properties/.../issues/{id}` deixa de aceitar campos de decisão
+  (vira só `status_achado` e `status_saneamento`).
+- Novo endpoint `PATCH /processes/{pid}/issues/{iid}/decision` (ou similar
+  — definir).
+- Gate do `PATCH /validate` passa a olhar `ProcessIssueDecision` daquele
+  processo, não `RegulatoryIssue.decisao_consultor`.
+- Validator de justificativa obrigatória (#19) e o gate dos 5 botões
+  acompanham o novo endpoint.
+- Examinar `status_saneamento`: separar saneamento **real** (fato corrigido
+  no mundo → fica em Property) de **avaliação contextual** (parte de
+  `ProcessIssueDecision`). Isis disse "detalhar ao implementar".
+
+**Quando entra:** próxima rodada — bloqueia a UI dos 5 botões (frontend
+depende dessa modelagem estável).
+
+**Origem:** ADR-012 (26/05), validado pela Isis.
+
+## P2 — coerência (depende de #20 estar resolvida)
 
 ## P2 — produto/domínio (precisam da sócia)
 
@@ -72,19 +107,21 @@ licença/outorga — aguardam integração.
 
 *Régua de prioridade aplicada após classificação do Andre.*
 
-### P2 — dívida com risco modesto
+### P2 — dívida com risco modesto (espera #20 — ADR-012)
 
 **17. Coerência entre os 3 status reconciliados.** A Opção A do
 `RECONCILIACAO_STATUS_ALERTAS.md` foi implementada como **3 enums soltos**
-— o `PATCH /properties/{prop}/issues/{id}` aceita qualquer combinação. A
-"tabela-verdade do uso real" descrita no documento da proposta NÃO está
-aplicada como constraint. Combinações contraditórias gravam sem erro
-(ex.: `decisao=ignorar_justificado` + `status_achado=confirmada`;
-`decisao=corrigir_antes` + `status_saneamento=saneado`). Consultor não
-gera combinações absurdas de propósito — mas o sistema não deveria
-permitir gravá-las. **Resolver no MVP:** `@model_validator` no
-`RegulatoryIssueUpdate` barrando as combinações claramente contraditórias.
-Máquina de estados completa é futuro. **Origem:** revisão do PROMPT_6 (26/05).
+— o `PATCH /properties/{prop}/issues/{id}` aceita qualquer combinação.
+Consultor não gera combinações absurdas de propósito — mas o sistema
+não deveria permitir gravá-las. **Resolver no MVP:** `@model_validator`
+barrando contradições óbvias.
+
+> ⚠ **Depende da #20 (re-modelagem ADR-012)**: começamos a implementar
+> em 26/05 (`chore/prompt6-coerencia-status`) e descartamos quando o
+> ADR-012 da Isis chegou — `decisao_consultor` vai sair do
+> `RegulatoryIssue` e ir para `ProcessIssueDecision`. As regras de
+> coerência ficam diferentes (uma cruza entidades). Implementar **depois**
+> da re-modelagem da próxima rodada. **Origem:** revisão do PROMPT_6 (26/05).
 
 ### P3 — com marco condicional
 

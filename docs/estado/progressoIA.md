@@ -692,3 +692,30 @@ Subset rodado verde (18/18). Suite completa rodando em background no fechamento.
 ### Proximas rodadas (frontend depende)
 
 - **UI dos 5 botões + 3 status editáveis** — frontend consome `RegulatoryIssueOut` (com 3 campos novos) + PATCH `/properties/{prop}/issues/{id}`. Cada card de alerta crítico = 5 radios + textarea + botão "Decidir". Botão "Assinar diagnóstico" só habilita quando todas as críticas têm decisão.
+
+---
+
+## Pós-PROMPT_6 (26/05/2026) — revisão estrutural + decisão da Isis
+
+Duas atualizações pequenas mas estruturalmente importantes mergeadas em 26/05:
+
+**1. Revisão da governança (PR #6/#7, commits f4e6f6b + 3e66f45):**
+- Aplicou checklist da `GOVERNANCA_DOCUMENTAL` que o PROMPT_6 deixou pendente: `MODELO_DE_DADOS` e `API_v1` atualizados com os gatilhos de estrutura (schema novo + endpoint novo).
+- Fechou dívida #19 (justificativa obrigatória para `ignorar_justificado` e `fora_escopo`): `@model_validator` no `RegulatoryIssueUpdate` + 5 testes novos. Camada 2 do Princípio 1 fica completa no caso que mais importa (descartar uma crítica).
+- 2 dívidas novas reveladas pela revisão: #17 (coerência entre os 3 status, P2) e #18 (verificador do hash chain, P3 com marco "antes do 1º uso jurídico").
+
+**2. ADR-012 aceito pela Isis (a decisão do consultor é contextual ao processo):**
+- A sócia validou em 26/05 a alternativa **(b) cada trabalho recomeça**. O fato da divergência é perene (Property), mas a decisão do consultor é contextual ao processo. Titularidade torta pesa diferente para vender e para dar como garantia ao banco.
+- Implicação: os 3 campos de decisão (`decisao_consultor`/`justificativa`/`at`) **vão sair** do `RegulatoryIssue` na próxima rodada e virar `ProcessIssueDecision` por `(processo × issue)`. Cada processo recomeça do zero.
+- O PROMPT_6 ficou **parcial** nesse aspecto — a estrutura está pronta mas no lugar errado. Não é regressão (o gate funciona, a UI funcionaria), mas o comportamento seria errado para o caso real (processo B herdaria decisão do processo A automaticamente).
+- Skill `auditor_imovel/analise_divergencias_documentais` **validada integralmente** pela sócia — separação 📄/🛰️/🔌 confirmada. Atualização mergeada na mesma rodada (4 linhas no final do arquivo).
+- Dívida #17 (coerência) **espera** essa re-modelagem para ser implementada — uma das regras de coerência cruza entidades agora.
+
+### Próxima rodada (PROMPT_7 — re-modelagem ADR-012)
+
+Nova tabela `process_issue_decisions` (FK composta `process_id × issue_id`).
+Migration que move os 3 campos. `PATCH /properties/.../issues/{id}` perde os
+campos de decisão; novo endpoint por processo (`PATCH /processes/{pid}/issues/{iid}/decision`).
+Gate `/validate` aprendido a olhar a tabela nova. Re-examinar
+`status_saneamento` para separar saneamento real (perene) de avaliação
+contextual. Bloqueia a UI dos 5 botões.

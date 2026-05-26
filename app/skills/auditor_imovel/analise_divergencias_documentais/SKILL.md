@@ -194,10 +194,10 @@ mecanismo de decisão obrigatória do consultor (5 ações — ver skill de Diag
 Condensada do documento de arquitetura operacional **v1.0 da sócia** ("Instrução operacional
 para análise de divergências documentais", 40 alertas / 11 famílias / 10 heurísticas) e
 complementada por ela com a matriz de fontes (v1.1.0). **O conteúdo de domínio é todo da sócia —
-validado por construção**, não há validação de domínio pendente. A marcação de factibilidade
-(📄 / 🛰️ / 🔌), o formato e a ligação com a régua de área e a chain são decisão técnica do
-coordenador (não dependem da sócia). Resta apenas uma conferência rápida de fidelidade da
-condensação — não-bloqueante.
+validado por construção.** A marcação de factibilidade (📄 / 🛰️ / 🔌), o formato e a ligação com
+a régua de área e a chain são decisão técnica do coordenador, e a **separação de factibilidade
+foi conferida e confirmada pela sócia** ("o que está em 'só documentos' resolve com os papéis; o
+que está em satélite/consulta realmente precisa de mais que papel"). Skill validada integralmente.
 
 Dívidas conhecidas que esta skill pauta: remodelagem do `RegulatoryIssue` (família + catálogo de
 `codigo_alerta` + os campos `muda_rota_regulatoria`, `muda_escopo_preco_prazo`,

@@ -1,7 +1,7 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-26 (atualização pós-PROMPT_6 camada 2 do Princípio 1)
-**Próxima atualização:** UI dos 5 botões P4 (frontend) ou próxima dívida do REGISTRO_DIVIDAS
+**Data do instantâneo:** 2026-05-26 (pós-ADR-012 — re-modelagem `decisao_consultor` contextual ao processo virou próxima rodada)
+**Próxima atualização:** PROMPT_7 — re-modelagem da decisão como entidade por `(processo × issue)` (dívida #20)
 **Responsável de atualização:** quem fechar a próxima sprint
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
@@ -43,23 +43,34 @@
     RL_MATRICULA_DIVERGENTE_RL_CAR, etc.); 🛰️ e 🔌 ficam no catálogo mas não emitidos.
   - **Onda C** — proposta de reconciliação dos 3 status em
     `docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md` (Opção A recomendada).
-- **PROMPT_6 (camada 2 do Princípio 1) finalizado em 2026-05-26** (PR a abrir):
-  - **Onda A1** — `RegulatoryIssue` ganha 3 status reconciliados (Opção A):
+- **PROMPT_6 (camada 2 do Princípio 1) mergeado em 2026-05-26** (62740ae):
+  - **Onda A1** — `RegulatoryIssue` ganhou 3 status reconciliados (Opção A):
     `status_achado` (default `suspeita`), `decisao_consultor` (nullable),
     `decisao_consultor_justificativa`, `decisao_consultor_at`, `status_saneamento`
     (default `pendente`). Migration `d2c3e4f5a6b8` (aditiva).
   - **Onda B** — `PATCH /api/v1/properties/{prop}/issues/{id}` edita os 3 status +
     decisão. AuditLog **granular por campo** com hash chain SHA-256.
-  - **Onda D (camada 2 do Princípio 1)** — `PATCH /validate` ganha gate: **422**
-    se houver `RegulatoryIssue` com `severity=critico` sem `decisao_consultor`.
-    Os 5 botões da P4 (corrigir_antes / seguir_com_ressalva / solicitar_doc /
-    fora_escopo / ignorar_justificado) são obrigatórios para alertas críticos.
-  - Dívida #5 fechada. **Princípio 1 fechado em 2 camadas** (1 do PROMPT_4 +
-    2 do PROMPT_6).
+  - **Onda D (camada 2)** — `PATCH /validate` com gate: **422** se houver
+    `RegulatoryIssue` com `severity=critico` sem `decisao_consultor`.
+    5 botões P4 (`corrigir_antes` / `seguir_com_ressalva` / `solicitar_doc` /
+    `fora_escopo` / `ignorar_justificado`) obrigatórios para críticas.
+  - **Revisão pós-rodada (PR #7)** — validator de justificativa obrigatória para
+    `ignorar_justificado` e `fora_escopo` (#19 fechada); MODELO_DE_DADOS e API_v1
+    atualizados (gatilhos de estrutura).
+- **ADR-012 aceito em 2026-05-26** — Isis validou: a decisão do consultor é
+  **contextual ao processo**, não perene no imóvel. Consequência: os 3 campos
+  de decisão (`decisao_consultor`/`justificativa`/`at`) **vão sair** do
+  `RegulatoryIssue` na próxima rodada e virar entidade
+  `ProcessIssueDecision` por `(processo × issue)`. Cada processo recomeça
+  do zero — não herda decisão antiga. **PROMPT_6 ficou parcial** nesse aspecto;
+  re-modelagem é a próxima rodada (dívida #20).
+- **Skill `auditor_imovel/analise_divergencias_documentais` validada
+  integralmente pela sócia** em 2026-05-26 — separação 📄/🛰️/🔌 confirmada.
 - **Pipeline ponta a ponta no nível de código:** `extrator → auditor_imovel → legislacao →
   diagnostico → POST /diagnoses (versionado + gate Pydantic) → PATCH /properties/.../issues/{id}
   (consultor decide alerta por alerta) → PATCH /validate (assina + gate camada 2 + AuditLog)`.
-  **Frontend ainda pendente** (UI dos 5 botões + 3 status editáveis).
+  **Frontend ainda pendente** (UI dos 5 botões + 3 status editáveis — espera a
+  re-modelagem ADR-012 estabilizar para começar).
 
 **O que está congelado:**
 

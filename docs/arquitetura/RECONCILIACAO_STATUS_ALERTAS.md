@@ -235,12 +235,28 @@ Opção A **implementada** no PROMPT_6 (merge `08ea537`):
   `fora_escopo` (revisão pós-PROMPT_6 — fecha o Princípio 2 no caso de
   descarte).
 
-### Questões pendentes de produto (próxima conversa com Isis)
+### Questões respondidas pela Isis em 26/05
+
+**Pergunta 1 — `decisao_consultor` é perene ou contextual?**
+→ **Resposta: contextual ao processo.** Cada trabalho recomeça do zero.
+Ver [ADR-012](../adr/012-decisao-consultor-contextual-ao-processo.md).
+Consequência: `decisao_consultor` sai do `RegulatoryIssue` e vira entidade
+nova `ProcessIssueDecision` por `(processo × issue)`. Próxima rodada
+implementa a re-modelagem (dívida #20 no `REGISTRO_DIVIDAS`).
+
+**Pergunta 2 — fidelidade da skill do auditor v1.1.0.**
+→ **Resposta: skill validada integralmente.** A separação de factibilidade
+(📄 / 🛰️ / 🔌) foi conferida e confirmada pela sócia ("o que está em 'só
+documentos' resolve com os papéis; o que está em satélite/consulta
+realmente precisa de mais que papel"). Atualização do arquivo
+`app/skills/auditor_imovel/analise_divergencias_documentais/SKILL.md`
+refletindo a validação integral foi mergeada na mesma rodada (26/05).
+
+### Questões originais — mantidas aqui para o histórico
 
 A implementação do gate seguiu o desenho de schema (Opção A), mas o
-**comportamento cross-processo** depende de uma decisão de produto que só
-a sócia (Isis) pode tomar. Levar essas perguntas para a próxima
-conversa com ela — junto da conferência de fidelidade da skill do auditor:
+**comportamento cross-processo** dependia de uma decisão de produto que só
+a sócia (Isis) podia tomar. As duas perguntas levadas para ela:
 
 **Pergunta 1 — `decisao_consultor` é perene ou contextual?**
 
