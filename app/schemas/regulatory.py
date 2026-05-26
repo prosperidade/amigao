@@ -12,6 +12,9 @@ Histórico:
   vira `ProcessIssueDecision` (entidade própria por `(processo × issue)`).
   `RegulatoryIssueOut/Update` perdem os 3 campos de decisão; novos schemas
   `ProcessIssueDecisionCreate/Out` modelam a decisão contextual.
+- **PROMPT_8** (#17) — `RegulatoryIssueUpdate` ganha `@model_validator` que
+  delega para `regulatory_coherence.assert_status_coerente` (fast-fail
+  quando os 2 status vêm juntos no body).
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from app.models.regulatory import (
     StatusAchado,
     StatusSaneamento,
 )
+from app.services.regulatory_coherence import assert_status_coerente
 
 IssueStatusFilter = Literal["open", "resolved", "all"]
 
@@ -114,12 +118,29 @@ class RegulatoryIssueUpdate(BaseModel):
 
     Body parcial — campos ausentes não são tocados. Cada campo alterado gera
     AuditLog próprio (Princípio 2).
+
+    PROMPT_8 (#17): `@model_validator` fast-fail para combinações incoerentes
+    quando os 2 status vêm juntos no body. PATCH parcial (só 1 campo) é
+    validado no endpoint contra o estado resultante.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     status_achado: StatusAchado | None = None
     status_saneamento: StatusSaneamento | None = None
+
+    @model_validator(mode="after")
+    def _coerencia_quando_body_completo(self) -> "RegulatoryIssueUpdate":
+        """PROMPT_8 (#17) — fast-fail no body quando os 2 status vêm juntos.
+
+        A fonte da verdade fica no endpoint (que conhece o estado resultante
+        após aplicar o body sobre a issue carregada). Aqui só dispara quando
+        ambos campos estão presentes — PATCH parcial é validado lá.
+        Reaproveita o mesmo helper para não duplicar regra.
+        """
+        if self.status_achado is not None and self.status_saneamento is not None:
+            assert_status_coerente(self.status_achado, self.status_saneamento)
+        return self
 
 
 # ---------------------------------------------------------------------------

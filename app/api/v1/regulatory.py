@@ -48,6 +48,11 @@ from app.schemas.regulatory import (
 )
 from app.schemas.stage_output import validate_diagnostic_content
 from app.services.audit_hash import stamp_audit_hash
+from app.services.regulatory_coherence import (
+    StatusCoherenceError,
+    assert_decisao_permitida,
+    assert_status_coerente,
+)
 
 # Routers separados — segue padrão do app/api/v1/workflows.py com 2 prefixes
 process_router = APIRouter()
@@ -381,6 +386,10 @@ def update_property_issue(
 
     Body parcial. Cada campo alterado gera AuditLog próprio com hash chain
     SHA-256 (Princípio 2). No-op por campo (mesmo valor) NÃO gera AuditLog.
+
+    PROMPT_8 (#17): valida coerência sobre o **estado resultante** (corpo
+    aplicado sobre a issue carregada). Saneamento em `em_validacao`/`saneado`
+    exige achado em `confirmada`/`resolvida`. 422 com mensagem acionável.
     """
     _get_property_or_404(db, property_id, current_user.tenant_id)
     issue = (
@@ -401,6 +410,22 @@ def update_property_issue(
     # Coleta de mudanças efetivas (campo, valor antigo, valor novo).
     changes: list[tuple[str, str | None, str | None]] = []
     body = payload.model_dump(exclude_unset=True)
+
+    # PROMPT_8 (#17) — coerência sobre o **estado resultante**. Cobre o caso
+    # de PATCH parcial (só um dos campos no body): o helper compara o que
+    # vai ficar gravado após o merge. Só roda quando ao menos um dos dois
+    # status vem no body — issue não tocada nesses campos não é
+    # responsabilidade desta requisição.
+    if "status_achado" in body or "status_saneamento" in body:
+        status_achado_final = body.get("status_achado") or issue.status_achado
+        status_saneamento_final = body.get("status_saneamento") or issue.status_saneamento
+        try:
+            assert_status_coerente(status_achado_final, status_saneamento_final)
+        except StatusCoherenceError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
 
     if "status_achado" in body and body["status_achado"] != issue.status_achado:
         old = issue.status_achado.value if issue.status_achado else None
@@ -537,6 +562,18 @@ def upsert_process_issue_decision(
                 f"{process_id}"
             ),
         )
+
+    # PROMPT_8 (#17) — Regra B: não dá pra decidir sobre achado em `suspeita`.
+    # Decide-se o que fazer depois de confirmar que a divergência é real.
+    # A mensagem é acionável para que a UI oriente o consultor a mover o
+    # `status_achado` no PATCH /issues antes de tentar a decisão de novo.
+    try:
+        assert_decisao_permitida(issue.status_achado)
+    except StatusCoherenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
     existing = (
         db.query(ProcessIssueDecision)
