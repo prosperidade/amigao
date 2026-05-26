@@ -131,12 +131,30 @@ assinatura humana.
 | `GET   /api/v1/processes/{id}/diagnoses` | Lista versões do `RegulatoryDiagnosis`, mais nova primeiro |
 | `GET   /api/v1/processes/{id}/diagnoses/{version}` | Versão específica |
 | `POST  /api/v1/processes/{id}/diagnoses` | Cria versão nova (gate Pydantic↔JSONB via `validate_diagnostic_content`) — 422 se `content` não respeita `DiagnosticoPreliminarContent`. Versão é `MAX(version)+1` server-side. |
-| `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` | **Assinatura humana** (PROMPT_4 Onda B). Grava `validated_by_user_id` + `validated_at` + AuditLog com hash chain SHA-256. Retorna **409 Conflict** se a versão já está validada (idempotência explícita — evita sobrescrita silenciosa do assinante original). |
+| `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` | **Camada 1 + 2 do Princípio 1.** Grava `validated_by_user_id` + `validated_at` + AuditLog hash chain. **409** se já validada. **422** (PROMPT_6) com lista de `alertas_pendentes` se houver `RegulatoryIssue` com `severity=critico` + `decisao_consultor IS NULL` + `resolved_at IS NULL` no imóvel do processo. Críticas RESOLVIDAS e não-críticas não bloqueiam. Quando 422 rejeita, NADA é gravado (`validated_*` continua None). |
 | `GET   /api/v1/properties/{id}/issues?status=open\|resolved\|all` | Lista `RegulatoryIssue` do imóvel |
+| `PATCH /api/v1/properties/{prop_id}/issues/{issue_id}` | **PROMPT_6 — consultor edita os 3 status + decisão.** Body parcial via `RegulatoryIssueUpdate` (`extra="forbid"`): `status_achado`, `decisao_consultor`, `decisao_consultor_justificativa`, `status_saneamento`. **AuditLog granular por campo** (`<campo>_changed`) com hash chain SHA-256. Mesmo valor (no-op por campo) NÃO gera AuditLog. `decisao_consultor_at` é gerenciado server-side em qualquer mudança de `decisao_consultor`. 404 se issue não pertence à property/tenant. |
 
-O `PATCH /validate` materializa a **camada 1 do Princípio 1** ("a IA propõe; o humano
-decide e assina"). A camada 2 — decisão por alerta crítico (5 ações da P4) — depende da
-remodelagem do `RegulatoryIssue` (PROMPT_5).
+**Princípio 1 fechado em 2 camadas:**
+- **Camada 1** (PROMPT_4 Onda B): consultor assina o `RegulatoryDiagnosis` como um todo via `PATCH /validate`.
+- **Camada 2** (PROMPT_6): o gate de `PATCH /validate` exige `decisao_consultor` preenchido em **toda** issue crítica do imóvel. Os 5 valores do enum (`corrigir_antes` / `seguir_com_ressalva` / `solicitar_doc` / `fora_escopo` / `ignorar_justificado`) são **todos** decisões válidas que liberam o gate — o princípio é "obrigar a decidir", não "obrigar a corrigir" (radar-não-cancela preservado).
+
+#### Shape do 422 do gate (camada 2)
+
+```json
+{
+  "detail": {
+    "message": "3 alerta(s) crítico(s) sem decisão do consultor — camada 2 do Princípio 1 exige decisão alerta por alerta antes da assinatura do diagnóstico",
+    "alertas_pendentes": [
+      {"id": 42, "codigo_alerta": "GEO_AUSENTE", "familia": "geo_incra", "severity": "critico"},
+      {"id": 43, "codigo_alerta": "EMBARGO_NAO_INFORMADO", "familia": "restricao_risco", "severity": "critico"},
+      {"id": 44, "codigo_alerta": "RL_CAR_X_REALIDADE", "familia": "ambiental", "severity": "critico"}
+    ]
+  }
+}
+```
+
+A UI consome esse shape para mostrar cada alerta pendente e levar o consultor à tela de decisão.
 
 ### Webhooks / async
 

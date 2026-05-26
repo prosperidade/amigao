@@ -82,10 +82,42 @@ Esquema completo do banco do Regente Ambiental. Toda mudança aqui passa por mig
 
 | Entidade | Tabela | Função |
 |---|---|---|
-| `RegulatoryDiagnosis` | `regulatory_diagnosis` | Diagnóstico técnico-regulatório do caso. Versionado por processo (sprint A1-D1). |
-| `RegulatoryIssue` | `regulatory_issues` | Inconsistência detectada (sobreposição com APP, RL faltante, etc.). Vinculado a property + document. |
+| `RegulatoryDiagnosis` | `regulatory_diagnoses` | Diagnóstico técnico-regulatório do caso. Versionado por processo (`(process_id, version)` único — sprint A1-D1). Tem `validated_by_user_id` + `validated_at` para a **camada 1 do Princípio 1** (consultor assina; PROMPT_4 Onda B). |
+| `RegulatoryIssue` | `regulatory_issues` | Inconsistência detectada no imóvel. Taxonomia rica (PROMPT_5) + decisão do consultor (PROMPT_6). Detalhes na subseção abaixo. |
+| `RegulatoryIssueCatalog` | `regulatory_issue_catalog` | **Catálogo evolutivo** de `codigo_alerta` (PROMPT_5). PK = `codigo_alerta` string (45 entradas seed). Adicionar código novo é `INSERT`, **não migration de schema**. Vocabulário canônico da skill `auditor_imovel/analise_divergencias_documentais` v1.1.0. |
 | `ProcessDecision` | `process_decisions` | Decisões tomadas no caso (escolha de caminho regulatório, mudança de estratégia). |
 | `StageOutput` | `stage_outputs` | Output estruturado de cada macroetapa. `content_data` (JSONB) validado por `StageOutputContent` (Pydantic, opt-in nos agentes). |
+
+#### `RegulatoryIssue` — taxonomia rica + 3 status reconciliados
+
+Anatomia atual da tabela (após PROMPT_5 + PROMPT_6):
+
+**Identificação (PROMPT_5 Onda A):**
+- `codigo_alerta` (`String(80)`, FK → `regulatory_issue_catalog.codigo_alerta`, nullable só por retrocompat com registros antigos). Identifica o "tipo exato" do alerta (`AREA_MATRICULA_X_CAR`, `GEO_AUSENTE`, etc.).
+- `familia` (Enum `regulatory_familia`, 11 valores: `identificacao` / `titularidade` / `area` / `geoespacial` / `geo_incra` / `car` / `ambiental` / `fiscal` / `restricao_risco` / `licenciamento` / `validade_documental`). Enum estável; acréscimo de família é decisão arquitetural.
+
+**Severidade (PROMPT_5 — sai o colapso 3→3):**
+- `severity` (Enum `regulatory_severity_v2`, 4 valores: `informativo` / `atencao` / `alto` / `critico`). Substituiu o enum antigo de 3 (`info`/`warning`/`critical`). A migração mapeou `info→informativo`, `warning→atencao`, `critical→alto`. **Só `critico` dispara o gate da camada 2** (PROMPT_6).
+
+**Reconciliação dos 3 status (PROMPT_6 — Opção A do `RECONCILIACAO_STATUS_ALERTAS.md`):**
+- `status_achado` (Enum `regulatory_status_achado`, 5 valores: `suspeita` default / `confirmada` / `descartada` / `resolvida` / `ignorada`) — **natureza do indício**.
+- `decisao_consultor` (Enum `regulatory_decisao_consultor`, nullable, 5 valores = **os 5 botões P4**: `corrigir_antes` / `seguir_com_ressalva` / `solicitar_doc` / `fora_escopo` / `ignorar_justificado`) — **ação escolhida sobre alerta crítico**. NULL = ainda não decidido. Obrigatório para `severity=critico` (gate no `PATCH /validate`).
+- `decisao_consultor_justificativa` (`String`, nullable) — texto livre. Recomendado para `ignorar_justificado` / `fora_escopo` (hoje **não-obrigatório** — ver dívida #19).
+- `decisao_consultor_at` (`DateTime`, nullable) — gravado pelo servidor em toda mudança de `decisao_consultor`.
+- `status_saneamento` (Enum `regulatory_status_saneamento`, 5 valores: `pendente` default / `em_validacao` / `saneado` / `descartado` / `nao_aplicavel`) — **progresso prático da resolução**.
+
+**Overrides do catálogo (PROMPT_5 Onda A):**
+- `muda_rota_regulatoria` (`Boolean`, nullable) — override do default do catálogo.
+- `muda_escopo_preco_prazo` (`Boolean`, nullable) — override.
+- `documentos_cruzados` (`PortableJSON`, lista de strings) — override.
+
+**Legados / deprecated:**
+- `type` (Enum `regulatory_issue_type`, nullable, 5 valores: `area_divergente` / `sobreposicao_app` / `sobreposicao_reserva` / `poligono_fora_matricula` / `outro`) — **DEPRECATED** desde PROMPT_5. Mantido nullable para retrocompat de leitura. Novos registros têm `type=None` + `codigo_alerta` preenchido.
+
+**Migrations relevantes:**
+- `a8e1d4c7f3b6` (A1) — cria `regulatory_issues` + enums originais.
+- `c1b2d3e4f5a7` (PROMPT_5) — `regulatory_issue_catalog` + colunas ricas + migra `severity` 3→4.
+- `d2c3e4f5a6b8` (PROMPT_6) — 3 enums novos + 5 colunas dos 3 status reconciliados.
 
 ### Comercial
 

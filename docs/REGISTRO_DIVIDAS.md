@@ -68,6 +68,40 @@ licença/outorga — aguardam integração.
 
 **16. Loop de aprendizado com material dos consultores** — ADR-010.
 
+## Reveladas na revisão do PROMPT_6 (26/05) — novas dívidas
+
+**17. Coerência entre os 3 status reconciliados.** A Opção A do
+`RECONCILIACAO_STATUS_ALERTAS.md` foi implementada como **3 enums soltos**
+— o `PATCH /properties/{prop}/issues/{id}` aceita qualquer combinação. A
+"tabela-verdade do uso real" descrita no documento da proposta NÃO está
+aplicada como constraint. Combinações contraditórias gravam sem erro
+(ex.: `decisao=ignorar_justificado` + `status_achado=confirmada`;
+`decisao=corrigir_antes` + `status_saneamento=saneado`). Não bloqueia
+produção, mas a UI fica responsável por evitar essas combinações — frágil.
+**Resolver:** seja regras de validação no schema Pydantic
+(`@model_validator(mode='after')`), seja CHECK constraints no banco, seja
+máquina de estados explícita. **Origem:** revisão do PROMPT_6 (26/05).
+
+**18. Hash chain de `AuditLog` sem rotina de verificação.**
+`app/services/audit_hash.py` tem **só escritores** (`compute_audit_hash`,
+`get_last_hash_for_tenant`, `stamp_audit_hash`) — não existe função que
+percorra a cadeia de um tenant e detecte se algum elo foi quebrado.
+Hash chain sem verificador é cerimônia. **Resolver:** adicionar
+`verify_audit_chain(db, tenant_id) -> list[BrokenLink]` que recomputa cada
+hash em ordem e compara com o `hash_sha256` persistido; expor via endpoint
+admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
+**Nota:** dívida pré-existente (vem do A1); foi exposta porque a camada 2
+do Princípio 1 reforça a ênfase na auditoria.
+
+**19. Justificativa obrigatória para `ignorar_justificado` e `fora_escopo`.**
+O nome do valor `ignorar_justificado` implica "com justificativa
+preenchida", mas o `RegulatoryIssueUpdate` aceita `decisao_consultor=
+ignorar_justificado` com `decisao_consultor_justificativa` vazio. Sem essa
+exigência, o nome mente — vira cancela disfarçada. **Resolver:** validator
+no `RegulatoryIssueUpdate` exigindo `justificativa not in (None, "")`
+quando `decisao_consultor in {ignorar_justificado, fora_escopo}`.
+**Origem:** revisão do PROMPT_6 (26/05).
+
 ---
 
 ## Fechadas (histórico — não revoga, só comprova fechamento)
