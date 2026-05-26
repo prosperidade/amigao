@@ -26,7 +26,6 @@ from app.models.ai_job import AIJobType
 from app.services.property_audit import (
     AuditFinding,
     audit_property,
-    finding_to_issue_type,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,29 +69,35 @@ class AuditorImovelAgent(BaseAgent):
             }
             for f in findings
         ]
-        criticos = [f for f in findings if f.severity == "critical"]
-        warnings = [f for f in findings if f.severity == "warning"]
+        # PROMPT_5 Onda A: contagem por grade (4 níveis), não mais severity (3).
+        criticos = [f for f in findings if f.grade == "critico"]
+        altos = [f for f in findings if f.grade == "alto"]
+        atencoes = [f for f in findings if f.grade == "atencao"]
 
         return {
             "content": (
                 f"{len(findings)} divergência(s) detectada(s) "
-                f"({len(criticos)} crítica(s), {len(warnings)} alerta(s))."
+                f"({len(criticos)} crítica(s), {len(altos)} alto(s), "
+                f"{len(atencoes)} atenção)."
             ),
             "requires_review": True,  # princípio 1 do manifesto
             "divergencias": divergencias,
             "issue_ids": issue_ids,
             "findings_raw": [
                 {
-                    "type": f.type,
-                    "severity": f.severity,
-                    # grade preserva os 4 níveis (informativo/atencao/alto/critico)
-                    # da régua de divergência (Onda C) — distinto de severity (3).
-                    # Consumido pelo DiagnosticoAgent para preservar alto ≠ crítico.
+                    # PROMPT_5 Onda A: taxonomia rica no payload.
+                    # `codigo_alerta` + `familia` substituem o `type` legado.
+                    # `grade` continua como eixo único de severidade (4 níveis).
+                    "codigo_alerta": f.codigo_alerta,
+                    "familia": f.familia,
                     "grade": f.grade,
                     "tema": f.tema,
                     "descricao": f.descricao,
                     "impacto": f.impacto,
                     "evidencia": f.evidencia,
+                    "muda_rota_regulatoria": f.muda_rota_regulatoria,
+                    "muda_escopo_preco_prazo": f.muda_escopo_preco_prazo,
+                    "documentos_cruzados": f.documentos_cruzados,
                 }
                 for f in findings
             ],
@@ -156,11 +161,17 @@ class AuditorImovelAgent(BaseAgent):
         property_data: dict[str, Any],
         findings: list[AuditFinding],
     ) -> list[int]:
-        """Cria um RegulatoryIssue por finding. Retorna IDs criados."""
+        """Cria um ``RegulatoryIssue`` por finding com **taxonomia rica**
+        (PROMPT_5 Onda A): ``codigo_alerta`` (FK no catálogo), ``familia``,
+        ``severity`` 4 níveis (= ``finding.grade``), e overrides
+        ``muda_rota_regulatoria`` / ``muda_escopo_preco_prazo`` /
+        ``documentos_cruzados``. O ``type`` legado (3 níveis) fica como
+        ``None`` em registros novos.
+        """
         from app.models.regulatory import (  # noqa: PLC0415
+            RegulatoryFamilia,
             RegulatoryIssue,
             RegulatoryIssueSeverity,
-            RegulatoryIssueType,
         )
 
         property_id = property_data.get("id")
@@ -174,13 +185,21 @@ class AuditorImovelAgent(BaseAgent):
                 tenant_id=self.ctx.tenant_id,
                 property_id=property_id,
                 document_id=None,
-                type=RegulatoryIssueType(finding_to_issue_type(f)),
-                severity=RegulatoryIssueSeverity(f.severity),
+                # Taxonomia rica (PROMPT_5 Onda A) — codigo_alerta é FK no
+                # `regulatory_issue_catalog`; familia é o enum estável de 11.
+                codigo_alerta=f.codigo_alerta,
+                familia=RegulatoryFamilia(f.familia),
+                # severity de 4 níveis (PROMPT_5) — grade é o eixo único.
+                severity=RegulatoryIssueSeverity(f.grade),
+                muda_rota_regulatoria=f.muda_rota_regulatoria,
+                muda_escopo_preco_prazo=f.muda_escopo_preco_prazo,
+                documentos_cruzados=f.documentos_cruzados,
+                # type legado fica nullable em registros novos (deprecated).
+                type=None,
                 payload={
                     "descricao": f.descricao,
                     "impacto": f.impacto,
                     "tema": f.tema,
-                    "finding_type": f.type,
                     "evidencia": f.evidencia,
                 },
                 detected_by=self.name,

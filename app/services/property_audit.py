@@ -1,18 +1,23 @@
-"""Cálculos determinísticos do auditor_imovel — Sprint A2 (Onda 2 da Fase 2).
+"""Cálculos determinísticos do auditor_imovel — Sprint A2 (Onda 2 da Fase 2)
++ PROMPT_5 Onda A.
 
 A matemática do cruzamento documental NÃO passa pelo LLM. O auditor_imovel usa
 estas funções puras como tools; o LLM pode opcionalmente explicar e priorizar
 as divergências detectadas, mas a conta é destas funções.
 
-Cobre os cruzamentos mínimos da skill `diagnostico/situacao_ambiental_imovel_rural`:
-- Matrícula × CAR (área, GEO INCRA)
-- Matrícula × CCIR/ITR/SIGEF (área)
-- Detecção de GEO INCRA ausente na matrícula (H1 da skill)
+Cobre os cruzamentos mínimos da skill `auditor_imovel/
+analise_divergencias_documentais` (v1.1.0, validada pela sócia):
+- Matrícula × CAR / CCIR / ITR / GEO (área)
+- Detecção de GEO INCRA ausente na matrícula (H1)
 - Detecção de RL averbada × declarada (H12)
+- Verificação espacial pendente (sinal quando Property.geom ausente)
 
-Saída: lista de divergências tipadas para alimentar `RegulatoryIssue`
-(`app/models/regulatory.py:RegulatoryIssue`) e `Divergencia`
-(`app/schemas/stage_output.py:Divergencia`).
+Saída: lista de ``AuditFinding`` com **taxonomia rica** (PROMPT_5 Onda A) —
+``codigo_alerta`` (catálogo evolutivo `regulatory_issue_catalog`), ``familia``
+(enum estável 11), ``grade`` (4 níveis), e overrides do default do catálogo
+(``muda_rota_regulatoria`` / ``muda_escopo_preco_prazo`` /
+``documentos_cruzados``). Sai o ``severity`` de 3 níveis — agora ``grade``
+de 4 é o único eixo (persistido como ``RegulatoryIssue.severity``).
 """
 
 from __future__ import annotations
@@ -29,9 +34,9 @@ from typing import Any
 DEFAULT_AREA_TOLERANCE_PCT: Decimal = Decimal("0.01")
 
 # Régua de graus para divergência de área entre documentos (Onda C, validada
-# pela sócia). Alinhada com `RiscoGrau` da taxonomia oficial (Mapa de Riscos
-# da skill diagnostico) — 4 níveis, NÃO os 3 do RegulatoryIssueSeverity.
-# A persistência mapeia 4→3 via _GRADE_TO_SEVERITY abaixo.
+# pela sócia). PROMPT_5 Onda A: agora ``grade`` é o **único** eixo —
+# persistido como ``RegulatoryIssue.severity`` (4 níveis). O antigo
+# ``_GRADE_TO_SEVERITY`` que colapsava 4→3 SAIU.
 #
 # Princípio: SEMPRE emitir o finding. A régua só decide o grau — divergência
 # pequena (≤ tolerância) vira "informativo", não silêncio. Auditor é radar,
@@ -40,13 +45,6 @@ GRADE_INFORMATIVO = "informativo"
 GRADE_ATENCAO = "atencao"
 GRADE_ALTO = "alto"
 GRADE_CRITICO = "critico"
-
-_GRADE_TO_SEVERITY: dict[str, str] = {
-    GRADE_INFORMATIVO: "info",
-    GRADE_ATENCAO: "warning",
-    GRADE_ALTO: "critical",
-    GRADE_CRITICO: "critical",
-}
 
 
 def grade_area_divergence(
@@ -110,25 +108,37 @@ class AreaComparison:
 
 @dataclass(frozen=True)
 class AuditFinding:
-    """Achado bruto do auditor — fonte de RegulatoryIssue + Divergencia.
+    """Achado bruto do auditor — fonte de ``RegulatoryIssue`` + ``Divergencia``.
 
-    Dois eixos de severidade convivem:
-    - `severity` (3 níveis: info/warning/critical) — alinha com `RegulatoryIssueSeverity`
-      do model; usado na persistência.
-    - `grade` (4 níveis: informativo/atencao/alto/critico) — alinha com `RiscoGrau`
-      da skill (taxonomia oficial); usado para sinalização no payload e UI.
+    PROMPT_5 Onda A: taxonomia rica. Cada finding carrega:
 
-    Mapeamento 4→3 fica em `_GRADE_TO_SEVERITY`; `grade=""` (vazio) significa
-    "não classificado" (callers legados) e o caller derivava manualmente.
+    - ``codigo_alerta`` — código curto, estável, MAIÚSCULAS (catálogo evolutivo
+      em `regulatory_issue_catalog`; ex.: ``AREA_MATRICULA_X_CAR``,
+      ``GEO_AUSENTE``).
+    - ``familia`` — uma das 11 do enum estável (``area``, ``geo_incra``,
+      ``ambiental``, ``car``, ``geoespacial``, ``identificacao``,
+      ``titularidade``, ``fiscal``, ``restricao_risco``, ``licenciamento``,
+      ``validade_documental``).
+    - ``grade`` — 4 níveis (``informativo``/``atencao``/``alto``/``critico``).
+      É o **único** eixo de severidade — persistido em
+      ``RegulatoryIssue.severity`` (que também é 4 níveis). Saiu o ``severity``
+      de 3 níveis e o mapeamento ``_GRADE_TO_SEVERITY``.
+    - ``muda_rota_regulatoria`` / ``muda_escopo_preco_prazo`` — overrides do
+      default do catálogo. ``None`` significa "usar default do catálogo".
+    - ``documentos_cruzados`` — lista dos documentos que foram comparados
+      neste finding específico. ``None`` = usa default do catálogo.
     """
 
-    type: str            # area_divergente, sobreposicao_app, geo_incra_ausente, ...
-    severity: str        # info, warning, critical
-    tema: str            # área, titularidade, GEO INCRA, ...
+    codigo_alerta: str           # AREA_MATRICULA_X_CAR, GEO_AUSENTE, ...
+    familia: str                 # area, geo_incra, ambiental, car, ...
+    grade: str                   # informativo / atencao / alto / critico
+    tema: str                    # rótulo legível: "área (matrícula × CAR)", ...
     descricao: str
     impacto: str
-    evidencia: dict[str, Any]  # campos crus para auditoria/debug
-    grade: str = ""      # informativo, atencao, alto, critico (Onda C)
+    evidencia: dict[str, Any]    # campos crus para auditoria/debug
+    muda_rota_regulatoria: bool | None = None   # None = usa default do catálogo
+    muda_escopo_preco_prazo: bool | None = None
+    documentos_cruzados: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -226,24 +236,26 @@ def audit_property(
     findings: list[AuditFinding] = []
     extracted = extracted_data or {}
 
-    # --- 1. Cruzamento de áreas (Matrícula × CAR × CCIR/ITR) ---------------
+    # --- 1. Cruzamento de áreas (Matrícula × CAR × CCIR/ITR / CAR × CCIR) --
+    # Cada par tem código próprio no catálogo (PROMPT_5 Onda A).
     area_doc = property_data.get("area_documental_ha")
     area_car = property_data.get("car_area_ha") or property_data.get("area_grafica_ha") or extracted.get("car_area_ha")
     area_ccir = property_data.get("ccir_area_ha") or extracted.get("ccir_area_ha")
     area_itr = property_data.get("itr_area_ha") or extracted.get("itr_area_ha")
 
+    # (rótulo_tema, codigo_alerta, documentos_cruzados, área_a, área_b)
     cmp_pairs = [
-        ("matrícula × CAR", area_doc, area_car),
-        ("matrícula × CCIR", area_doc, area_ccir),
-        ("matrícula × ITR", area_doc, area_itr),
-        ("CAR × CCIR", area_car, area_ccir),
+        ("matrícula × CAR", "AREA_MATRICULA_X_CAR", ["Matricula", "CAR"], area_doc, area_car),
+        ("matrícula × CCIR", "AREA_MATRICULA_X_CCIR", ["Matricula", "CCIR"], area_doc, area_ccir),
+        ("matrícula × ITR", "AREA_MATRICULA_X_ITR", ["Matricula", "ITR"], area_doc, area_itr),
+        ("CAR × CCIR", "AREA_CAR_X_CCIR", ["CAR", "CCIR"], area_car, area_ccir),
     ]
-    for tema, a, b in cmp_pairs:
-        # Pares incompletos (um ou ambos None) NÃO viram finding de
-        # `area_divergente`. Não há cruzamento real — é dado faltante, domínio
-        # próprio (a detecção de "documento esperado ausente" fica como dívida
-        # para uma função separada quando a sócia validar o conjunto canônico
-        # de documentos esperados por demand_type).
+    for tema, codigo, docs, a, b in cmp_pairs:
+        # Pares incompletos (um ou ambos None) NÃO viram finding de área. Não
+        # há cruzamento real — é dado faltante, domínio próprio (a detecção
+        # de "documento esperado ausente" fica como dívida para uma função
+        # separada quando a sócia validar o conjunto canônico de documentos
+        # esperados por demand_type).
         if a is None or b is None:
             continue
         cmp = compare_areas(a, b, tolerance_pct=tolerance_pct)
@@ -252,14 +264,13 @@ def audit_property(
         # divergência nunca é suprimida. Áreas iguais (≤ 1%) viram "informativo"
         # — auditoria sabe que o cruzamento foi feito.
         grade = grade_area_divergence(cmp.diff_pct, tolerance_pct=tolerance_pct)
-        severity = _GRADE_TO_SEVERITY[grade]
         descricao = (
             f"Áreas {tema}: {cmp.area_a_ha} ha vs {cmp.area_b_ha} ha "
             f"(Δ={cmp.diff_ha} ha, {(cmp.diff_pct * 100):.2f}%)"
         )
         findings.append(AuditFinding(
-            type="area_divergente",
-            severity=severity,
+            codigo_alerta=codigo,
+            familia="area",
             grade=grade,
             tema=f"área ({tema})",
             descricao=descricao,
@@ -273,14 +284,15 @@ def audit_property(
                 "diff_pct": str(cmp.diff_pct),
                 "tolerance_pct_used": str(tolerance_pct),
             },
+            documentos_cruzados=docs,
         ))
 
     # --- 2. GEO INCRA na matrícula (H1) ------------------------------------
     matricula_text = property_data.get("matricula_text") or extracted.get("matricula_text")
     if matricula_text is not None and not has_geo_incra(matricula_text):
         findings.append(AuditFinding(
-            type="geo_incra_ausente",
-            severity="critical",
+            codigo_alerta="GEO_AUSENTE",
+            familia="geo_incra",
             grade=GRADE_CRITICO,
             tema="GEO INCRA",
             descricao="Matrícula não menciona georreferenciamento certificado pelo INCRA.",
@@ -290,6 +302,7 @@ def audit_property(
                 "ou conflito de limites (H1 da skill)."
             ),
             evidencia={"has_geo_incra_match": False},
+            documentos_cruzados=["Matricula"],
         ))
 
     # --- 3. RL averbada × declarada (H12) ----------------------------------
@@ -298,14 +311,12 @@ def audit_property(
     if rl_decl is not None and rl_averb is not None:
         cmp = compare_areas(rl_decl, rl_averb, tolerance_pct=tolerance_pct)
         if cmp.divergent and cmp.diff_pct is not None:
-            # Mesma régua de 4 faixas usada nos pares de área. severity continua
-            # warning por convenção legada (conciliação de RL é alerta, não bloqueio
-            # puro como geo_incra_ausente); grade preserva os 4 níveis para o
-            # consumidor (Diagnóstico) decidir o tratamento.
+            # Mesma régua de 4 faixas usada nos pares de área. grade preserva
+            # os 4 níveis sem colapso (PROMPT_5 — saiu o severity 3-níveis).
             rl_grade = grade_area_divergence(cmp.diff_pct, tolerance_pct=tolerance_pct)
             findings.append(AuditFinding(
-                type="rl_divergente",
-                severity="warning",
+                codigo_alerta="RL_MATRICULA_DIVERGENTE_RL_CAR",
+                familia="ambiental",
                 grade=rl_grade,
                 tema="Reserva Legal",
                 descricao=(
@@ -321,6 +332,7 @@ def audit_property(
                     "rl_averbada_ha": str(rl_averb),
                     "diff_pct": str(cmp.diff_pct),
                 },
+                documentos_cruzados=["Matricula", "CAR"],
             ))
 
     # --- 4. Sobreposição espacial — depende de geom (D1, ausente hoje) -----
@@ -329,8 +341,8 @@ def audit_property(
     # (área CAR × APP, sobreposição com UC, etc.).
     if property_data.get("geom") is None:
         findings.append(AuditFinding(
-            type="verificacao_espacial_pendente",
-            severity="info",
+            codigo_alerta="VERIFICACAO_ESPACIAL_PENDENTE",
+            familia="geoespacial",
             grade=GRADE_INFORMATIVO,
             tema="geometria",
             descricao=(
@@ -349,21 +361,11 @@ def audit_property(
 
 
 # ---------------------------------------------------------------------------
-# Mapeamento Finding → RegulatoryIssueType / Divergencia
+# Mapeamento Finding → RegulatoryIssue
 # ---------------------------------------------------------------------------
-
-_FINDING_TO_ISSUE_TYPE: dict[str, str] = {
-    "area_divergente": "area_divergente",
-    "rl_divergente": "outro",  # RegulatoryIssueType não tem "rl_divergente" hoje; vira "outro"
-    "geo_incra_ausente": "outro",
-    "verificacao_espacial_pendente": "outro",
-}
-
-
-def finding_to_issue_type(finding: AuditFinding) -> str:
-    """Mapeia AuditFinding.type → RegulatoryIssueType.value (string).
-
-    Usado pelo agente para criar RegulatoryIssue tipados a partir dos achados
-    do auditor. Tipos não previstos no enum viram "outro".
-    """
-    return _FINDING_TO_ISSUE_TYPE.get(finding.type, "outro")
+#
+# PROMPT_5 Onda A removeu `_FINDING_TO_ISSUE_TYPE` / `finding_to_issue_type`.
+# Cada `AuditFinding.codigo_alerta` agora vai DIRETO para
+# `RegulatoryIssue.codigo_alerta` (FK no catálogo `regulatory_issue_catalog`).
+# Não há mais mapeamento intermediário "para outro" — a taxonomia é rica e
+# 1:1 com o catálogo evolutivo.
