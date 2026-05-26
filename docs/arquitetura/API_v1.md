@@ -133,9 +133,9 @@ assinatura humana.
 | `POST  /api/v1/processes/{id}/diagnoses` | Cria versão nova (gate Pydantic↔JSONB via `validate_diagnostic_content`) — 422 se `content` não respeita `DiagnosticoPreliminarContent`. Versão é `MAX(version)+1` server-side. |
 | `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` | **Camada 1 + 2 do Princípio 1.** Grava `validated_by_user_id` + `validated_at` + AuditLog hash chain. **409** se já validada. **422** (PROMPT_6 + ADR-012) com lista de `alertas_pendentes` se houver `RegulatoryIssue` com `severity=critico` + `resolved_at IS NULL` no imóvel **sem `ProcessIssueDecision` deste processo**. Críticas RESOLVIDAS e não-críticas não bloqueiam. Decisão tomada em OUTRO processo da mesma property não libera (ADR-012). Quando 422 rejeita, NADA é gravado (`validated_*` continua None). |
 | `GET   /api/v1/properties/{id}/issues?status=open\|resolved\|all` | Lista `RegulatoryIssue` do imóvel |
-| `PATCH /api/v1/properties/{prop_id}/issues/{issue_id}` | **Consultor edita os 2 status perenes** (PROMPT_7 — ADR-012 enxugou). Body parcial via `RegulatoryIssueUpdate` (`extra="forbid"`): `status_achado`, `status_saneamento`. **AuditLog granular por campo** (`<campo>_changed`) com hash chain SHA-256. Mesmo valor (no-op por campo) NÃO gera AuditLog. 404 se issue não pertence à property/tenant. Os 3 campos de decisão saíram daqui — moveram para `PUT /processes/.../decision`. |
+| `PATCH /api/v1/properties/{prop_id}/issues/{issue_id}` | **Consultor edita os 2 status perenes** (PROMPT_7 — ADR-012 enxugou). Body parcial via `RegulatoryIssueUpdate` (`extra="forbid"`): `status_achado`, `status_saneamento`. **AuditLog granular por campo** (`<campo>_changed`) com hash chain SHA-256. Mesmo valor (no-op por campo) NÃO gera AuditLog. 404 se issue não pertence à property/tenant. Os 3 campos de decisão saíram daqui — moveram para `PUT /processes/.../decision`. **PROMPT_8 (#17):** rejeita 422 quando o **estado resultante** (corpo aplicado sobre a issue carregada) tem `status_saneamento in {em_validacao, saneado}` sem `status_achado in {confirmada, resolvida}`. Body completo com a combinação proibida estoura fast-fail no `@model_validator` do schema; PATCH parcial é validado no endpoint. |
 | `GET   /api/v1/processes/{process_id}/issues/{issue_id}/decision` | **PROMPT_7 (ADR-012)** — lê a decisão do consultor para `(process_id, issue_id)`. **404** se ainda não há decisão (cada processo recomeça do zero — comportamento contextual). |
-| `PUT   /api/v1/processes/{process_id}/issues/{issue_id}/decision` | **PROMPT_7 (ADR-012)** — **upsert** da decisão. Body via `ProcessIssueDecisionCreate`: `decisao` (obrigatório), `justificativa` (obrigatória quando `decisao in {ignorar_justificado, fora_escopo}` — Princípio 2). Server-side: `decided_by_user_id = current_user.id`, `decided_at = now()`. Primeira chamada cria com `AuditLog(action="created")`; chamadas seguintes atualizam com AuditLog **granular por campo** (`decisao_changed`, `justificativa_changed`). Mesmo valor = no-op. **404** se issue não pertence à property do processo. |
+| `PUT   /api/v1/processes/{process_id}/issues/{issue_id}/decision` | **PROMPT_7 (ADR-012)** — **upsert** da decisão. Body via `ProcessIssueDecisionCreate`: `decisao` (obrigatório), `justificativa` (obrigatória quando `decisao in {ignorar_justificado, fora_escopo}` — Princípio 2). Server-side: `decided_by_user_id = current_user.id`, `decided_at = now()`. Primeira chamada cria com `AuditLog(action="created")`; chamadas seguintes atualizam com AuditLog **granular por campo** (`decisao_changed`, `justificativa_changed`). Mesmo valor = no-op. **404** se issue não pertence à property do processo. **PROMPT_8 (#17):** rejeita 422 (com mensagem "Confirme ou descarte o achado antes de decidir") quando `issue.status_achado == suspeita` — decide-se o que fazer com a divergência só depois de confirmar que ela é real. |
 
 **Princípio 1 fechado em 2 camadas:**
 - **Camada 1** (PROMPT_4 Onda B): consultor assina o `RegulatoryDiagnosis` como um todo via `PATCH /validate`.
@@ -157,6 +157,37 @@ assinatura humana.
 ```
 
 A UI consome esse shape para mostrar cada alerta pendente e levar o consultor à tela de decisão.
+
+#### Coerência entre status do alerta (PROMPT_8 — #17)
+
+Duas regras semânticas barram combinações que o negócio considera incoerentes, sem
+construir máquina de estados completa. Fonte da verdade:
+`app/services/regulatory_coherence.py`.
+
+- **Regra A (perenes) — `PATCH /properties/{prop}/issues/{id}`**
+  Saneamento em estado **ativo** (`em_validacao`) ou **concluído** (`saneado`) exige
+  `status_achado in {confirmada, resolvida}`. Validada sobre o estado **resultante**
+  (corpo aplicado sobre a issue carregada — cobre PATCH parcial). Quando os 2 status
+  vêm juntos no body, dispara fast-fail no `@model_validator` do
+  `RegulatoryIssueUpdate`. Mensagem: *"Combinação inválida: saneamento '<x>' exige que
+  o achado esteja 'confirmada' ou 'resolvida' (atual: '<y>')."*
+
+- **Regra B (cross-entidade) — `PUT /processes/.../issues/.../decision`**
+  Bloqueia o registro de decisão quando `issue.status_achado == suspeita` —
+  decide-se o que fazer com a divergência só depois de confirmar que ela é real.
+  Mensagem: *"Não é possível registrar decisão: o achado ainda está como 'suspeita'.
+  Confirme ou descarte o achado antes de decidir."*
+
+Shape do 422 (string simples em `detail`, distinto do shape do gate camada 2):
+
+```json
+{ "detail": "Não é possível registrar decisão: o achado ainda está como 'suspeita'. Confirme ou descarte o achado antes de decidir." }
+```
+
+**Heads-up de UX:** pela Regra B, um alerta crítico em `suspeita` não aceita decisão —
+e o gate de `/validate` exige decisão. A UI dos 5 botões precisa expor a transição do
+`status_achado` (PATCH `/issues`) no mesmo fluxo da decisão, senão trava no gate sem
+caminho.
 
 ### Webhooks / async
 
