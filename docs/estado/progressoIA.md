@@ -595,3 +595,51 @@ Decisoes: 409 nao-200 ao revalidar; `Risco.evidencia` recebe JSON serializado de
 (catálogo evolutivo, NÃO enum) + campos novos + `severity` 4 níveis. Auditor passa a gravar
 `familia` + `codigo_alerta` reais (não mais `type="outro"`). Onda C: **propõe** reconciliação
 de status (3 conjuntos circulantes), não implementa.
+
+---
+
+## PROMPT_5 — Remodelar `RegulatoryIssue` (25/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — PR `feat/prompt5-remodelar-regulatory-issue` a abrir.
+Doc completo: `docs/_archive/progressos/progresso9.md`. Suite 591/591 verde.
+
+### Motivacao
+
+A skill `auditor_imovel/analise_divergencias_documentais` v1.1.0 (validada pela sócia em
+governanca-documental) definiu 40 códigos de alerta em 11 famílias, com campos
+`muda_rota_regulatoria` / `muda_escopo_preco_prazo` / `documentos_cruzados` por código e
+régua de 4 níveis. O `RegulatoryIssue` antigo tinha enum `type` curto (5 valores genéricos,
+maioria caía em `outro`) + `severity` 3 níveis (`info`/`warning`/`critical`) que colapsava
+alto+crítico — dívidas #3 e #4 do `REGISTRO_DIVIDAS.md`.
+
+### O que foi entregue
+
+| Onda | Conteúdo |
+|---|---|
+| A (modelo + migration) | 3 enums novos (`RegulatoryFamilia`, `RegulatoryAlertFactibilidade`, `RegulatoryIssueSeverity` em 4 níveis). Model `RegulatoryIssueCatalog` (PK = `codigo_alerta` string, catálogo evolutivo via INSERT). `RegulatoryIssue` ganha `codigo_alerta` (FK) + `familia` + `muda_*` + `documentos_cruzados`; `severity` 4 níveis (substitui 3). Seed em `app/models/regulatory_catalog_seed.py` (fonte única) com 45 entradas. Migration `c1b2d3e4f5a7` cria tudo + migra dados antigos. `type` legado fica nullable (deprecated). |
+| A (auditor + diagnostico) | `property_audit.py`: `AuditFinding` rico com `codigo_alerta`/`familia`/`grade`. `audit_property()` emite codigos reais por par (`AREA_MATRICULA_X_CAR`, etc.). `_GRADE_TO_SEVERITY` removido. `_FINDING_TO_ISSUE_TYPE` / `finding_to_issue_type` removidos (codigo_alerta vai direto). `auditor_imovel.py`: persiste taxonomia rica. `diagnostico.py`: `_FAMILIA_TO_CATEGORIA` (11→7) substitui `_FINDING_TYPE_TO_CATEGORIA` (4→4). |
+| B | Códigos 📄 (documental) emitidos AGORA. 🛰️ (geoespacial) e 🔌 (consulta externa) ficam no catálogo mas NÃO são emitidos até infra (D1 / integrações externas). |
+| C | **Proposta** em `docs/arquitetura/RECONCILIACAO_STATUS_ALERTAS.md`: 3 opções analisadas (A: três campos ortogonais; B: campo único com state machine; C: dois campos + saneamento derivado). **Recomendação técnica = Opção A.** NÃO implementada — aguarda decisão do Andre. |
+
+### Decisões arquiteturais
+
+- **Catálogo evolutivo via INSERT, não enum** (`regulatory_issue_catalog`). Adicionar código novo no tempo do produto sem ciclo de deploy.
+- **11 famílias estáveis** (enum). Acréscimo de família é decisão arquitetural; acréscimo de código não.
+- **Severity 4 níveis** (sai `_GRADE_TO_SEVERITY`). Preserva alto vs. crítico ponta a ponta (gatilho da camada 2 do Princípio 1).
+- **`type` nullable** (não dropado). Retrocompat com registros antigos; novos têm `codigo_alerta` preenchido + `type=None`.
+- **Onda C foi só proposta** — PROMPT_5 proibiu implementar; depende de validação da sócia + decisão do Andre.
+
+### Suite
+
+**591 passed, 0 failed** (vs 585 em main — +6 líquido: +7 `TestRegulatoryIssueCatalog`,
+-1 do `TestFindingToIssueType` removido).
+
+### Dividas fechadas
+
+- **#3** (Remodelar `RegulatoryIssue` rico) — Onda A.
+- **#4** (Colapso 4→3 no `_GRADE_TO_SEVERITY`) — Onda A. Severity é 4 níveis em persistência.
+
+### Proxima rodada
+
+- **Decisão do Andre + sócia** sobre a Opção A da reconciliação de status.
+- **Camada 2 do Princípio 1** (5 botões P4 — decisão por alerta crítico) depende do acima.
