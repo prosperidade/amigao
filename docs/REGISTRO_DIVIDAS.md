@@ -81,6 +81,22 @@ licença/outorga — aguardam integração.
 
 ### P3 — com marco condicional
 
+**21. Pares de status semanticamente incoerentes fora das 2 regras do PROMPT_8.**
+As 2 regras de `regulatory_coherence.py` foram desenhadas como "barrar o
+absurdo óbvio" — escopo fechado, não máquina de estados completa. Sobram
+pares teoricamente incoerentes que o sistema aceita por desenho:
+`status_achado=resolvida` com `status_saneamento=pendente` (achado já
+sanado mas saneamento ainda pendente); `descartada+pendente`,
+`ignorada+pendente` e variações com `nao_aplicavel`/`descartado` no
+saneamento sobre achados terminais. **Dimensionamento:** consultor não é
+adversário (P2 da rodada, agora P3 do que sobrou) — não cria isso de
+propósito; UI dos 5 botões pode até prevenir naturalmente pelo fluxo de
+clique. **Marco para revisitar:** apenas se aparecer dado real bagunçando
+o estado (ex.: import legado, regressão de UI deixando registros em
+combinações fantasmas). Aí valeria considerar máquina de estados completa
+ou regras adicionais. **Origem:** revisão pós-PROMPT_8 (26/05 — Andre
+notou ao revisar o escopo).
+
 **18. Hash chain de `AuditLog` sem rotina de verificação.**
 `app/services/audit_hash.py` tem **só escritores** (`compute_audit_hash`,
 `get_last_hash_for_tenant`, `stamp_audit_hash`) — não existe função que
