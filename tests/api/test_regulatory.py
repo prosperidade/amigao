@@ -781,6 +781,7 @@ def _seed_issue(
     codigo_alerta: str = "AREA_MATRICULA_X_CAR",
     familia: RegulatoryFamilia = RegulatoryFamilia.area,
     resolved: bool = False,
+    status_achado: StatusAchado = StatusAchado.suspeita,
 ) -> RegulatoryIssue:
     issue = RegulatoryIssue(
         tenant_id=tenant.id,
@@ -789,6 +790,7 @@ def _seed_issue(
         familia=familia,
         severity=severity,
         resolved_at=datetime.now(UTC) if resolved else None,
+        status_achado=status_achado,
     )
     db_session.add(issue)
     db_session.flush()
@@ -1084,9 +1086,12 @@ class TestProcessIssueDecisionJustificativaObrigatoria:
     def test_ignorar_com_justificativa_preenchida_eh_200(self, client: TestClient, db_session):
         tenant, _ = _seed_internal_user(db_session)
         _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        # PROMPT_8 (#17): Regra B exige achado != suspeita para registrar
+        # decisão. `confirmada` é o caminho feliz semântico.
         issue = _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.confirmada,
         )
         db_session.commit()
 
@@ -1113,11 +1118,13 @@ class TestProcessIssueDecisionJustificativaObrigatoria:
         headers = _login(client, "consultor@example.com", "senha123")
         for decisao in ("corrigir_antes", "seguir_com_ressalva", "solicitar_doc"):
             # Cria issue nova pra cada decisão (PUT é upsert por par; uma issue
-            # só pode ter uma decisão no processo).
+            # só pode ter uma decisão no processo). PROMPT_8 (#17): Regra B
+            # exige achado != suspeita.
             issue = _seed_issue(
                 db_session, tenant=tenant, prop=prop,
                 severity=RegulatoryIssueSeverity.critico,
                 codigo_alerta=f"AREA_MATRICULA_X_CAR",  # mesmo código pode repetir; chave é (process, issue)
+                status_achado=StatusAchado.confirmada,
             )
             db_session.commit()
             r = client.put(
@@ -1360,9 +1367,11 @@ class TestProcessIssueDecision:
     def test_put_cria_primeira_decisao(self, client: TestClient, db_session):
         tenant, user = _seed_internal_user(db_session)
         _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        # PROMPT_8 (#17): Regra B exige achado != suspeita.
         issue = _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.confirmada,
         )
         db_session.commit()
 
@@ -1390,6 +1399,7 @@ class TestProcessIssueDecision:
         issue = _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.confirmada,
         )
         db_session.commit()
 
@@ -1426,6 +1436,7 @@ class TestProcessIssueDecision:
         issue = _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.confirmada,
         )
         existing = _seed_decision(
             db_session, tenant=tenant, process=process, issue=issue,
@@ -1459,6 +1470,7 @@ class TestProcessIssueDecision:
         issue = _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.confirmada,
         )
         existing = _seed_decision(
             db_session, tenant=tenant, process=process, issue=issue,
@@ -1498,6 +1510,7 @@ class TestProcessIssueDecision:
         issue = _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.confirmada,
         )
         existing = _seed_decision(
             db_session, tenant=tenant, process=process, issue=issue,
@@ -1588,3 +1601,236 @@ class TestProcessIssueDecision:
         assert body["decisao"] == "seguir_com_ressalva"
         assert body["justificativa"] == "aceito o risco"
         assert body["decided_by_user_id"] == user.id
+
+
+# ---------------------------------------------------------------------------
+# PROMPT_8 (#17) — Coerência entre status do alerta
+# ---------------------------------------------------------------------------
+
+class TestCoerenciaStatusPerene:
+    """PROMPT_8 (#17) — Regra A: saneamento em estado ATIVO (em_validacao)
+    ou CONCLUÍDO (saneado) exige status_achado in {confirmada, resolvida}.
+
+    Validado em duas frentes:
+    - Body completo (2 status juntos): fast-fail no @model_validator do
+      `RegulatoryIssueUpdate` (422 do Pydantic).
+    - PATCH parcial: validado no endpoint sobre o estado **resultante**
+      (corpo aplicado sobre a issue carregada) — 422 com mensagem
+      acionável que cita `confirmada`/`resolvida`.
+    """
+
+    def test_body_completo_suspeita_mais_em_validacao_eh_422(
+        self, client: TestClient, db_session,
+    ):
+        """Caminho mais comum do absurdo: consultor tenta marcar saneamento
+        ativo sem antes confirmar o achado. Fast-fail no schema."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"status_achado": "suspeita", "status_saneamento": "em_validacao"},
+        )
+        assert r.status_code == 422
+
+    def test_body_completo_descartada_mais_saneado_eh_422(
+        self, client: TestClient, db_session,
+    ):
+        """Saneamento concluído sobre achado descartado é absurdo simétrico —
+        não se sanea o que não é divergência."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"status_achado": "descartada", "status_saneamento": "saneado"},
+        )
+        assert r.status_code == 422
+
+    def test_patch_parcial_estado_resultante_invalido_eh_422(
+        self, client: TestClient, db_session,
+    ):
+        """Issue está em (suspeita, pendente); body manda só
+        status_saneamento=saneado → estado resultante (suspeita, saneado)
+        é proibido. A fonte da verdade é o endpoint (model_validator não
+        dispara porque só 1 campo vem no body)."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"status_saneamento": "saneado"},
+        )
+        assert r.status_code == 422
+        detail = r.json()["detail"]
+        # Mensagem cita `confirmada`/`resolvida` para a UI orientar a ação.
+        assert "confirmada" in detail
+        assert "resolvida" in detail
+
+    def test_patch_parcial_estado_resultante_valido_eh_200(
+        self, client: TestClient, db_session,
+    ):
+        """Issue está em (confirmada, pendente); body manda só
+        status_saneamento=saneado → resultante (confirmada, saneado) ok."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            status_achado=StatusAchado.confirmada,
+        )
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"status_saneamento": "saneado"},
+        )
+        assert r.status_code == 200
+        assert r.json()["status_saneamento"] == "saneado"
+
+    def test_transicao_simultanea_confirmada_em_validacao_eh_200(
+        self, client: TestClient, db_session,
+    ):
+        """Caminho feliz comum: consultor revisa o alerta e marca os dois
+        status no mesmo PATCH. Nenhum fast-fail."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"status_achado": "confirmada", "status_saneamento": "em_validacao"},
+        )
+        assert r.status_code == 200
+
+    def test_resolvida_mais_saneado_eh_200(self, client: TestClient, db_session):
+        """`resolvida` é evolução terminal de `confirmada` e habilita
+        saneamento concluído — decisão de UX (não bloqueia transição
+        simultânea no PATCH)."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            status_achado=StatusAchado.confirmada,
+        )
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            json={"status_achado": "resolvida", "status_saneamento": "saneado"},
+        )
+        assert r.status_code == 200
+
+    def test_saneamento_descartado_aceita_qualquer_achado(
+        self, client: TestClient, db_session,
+    ):
+        """`descartado`/`pendente`/`nao_aplicavel` não constrangem — só
+        `em_validacao` e `saneado` exigem achado validado."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(db_session, tenant=tenant, prop=prop)
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/properties/{prop.id}/issues/{issue.id}",
+            headers=headers,
+            # Achado em `suspeita` + saneamento `descartado` é OK
+            # (saneamento não foi iniciado nem concluído).
+            json={"status_saneamento": "descartado"},
+        )
+        assert r.status_code == 200
+
+
+class TestDecisaoBloqueadaSeAchadoSuspeita:
+    """PROMPT_8 (#17) — Regra B: PUT /processes/.../decision rejeita
+    quando `issue.status_achado == suspeita`. Decide-se o que fazer com
+    a divergência só depois de confirmar que ela é real.
+
+    Aplicado ao endpoint, não ao schema (precisa do estado da issue).
+    """
+
+    def test_put_decision_com_achado_suspeita_eh_422(
+        self, client: TestClient, db_session,
+    ):
+        """Issue default (suspeita) + PUT decision → 422 com mensagem
+        acionável citando 'Confirme ou descarte'."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            # status_achado=suspeita (default)
+        )
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.put(
+            f"/api/v1/processes/{process.id}/issues/{issue.id}/decision",
+            headers=headers,
+            json={"decisao": "corrigir_antes"},
+        )
+        assert r.status_code == 422
+        detail = r.json()["detail"]
+        assert "suspeita" in detail
+        assert "Confirme ou descarte" in detail
+
+    def test_put_decision_com_achado_confirmada_eh_200(
+        self, client: TestClient, db_session,
+    ):
+        """Caminho feliz: achado já confirmado → PUT decisão aceita."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.confirmada,
+        )
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.put(
+            f"/api/v1/processes/{process.id}/issues/{issue.id}/decision",
+            headers=headers,
+            json={"decisao": "corrigir_antes"},
+        )
+        assert r.status_code == 200
+        assert r.json()["decisao"] == "corrigir_antes"
+
+    def test_put_decision_com_suspeita_nao_grava_decision_nem_auditlog(
+        self, client: TestClient, db_session,
+    ):
+        """422 da Regra B é defensivo: zero efeito colateral no DB."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        issue = _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+        )
+        db_session.commit()
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.put(
+            f"/api/v1/processes/{process.id}/issues/{issue.id}/decision",
+            headers=headers,
+            json={"decisao": "corrigir_antes"},
+        )
+        assert r.status_code == 422
+        db_session.expire_all()
+        # Nenhuma ProcessIssueDecision criada
+        assert db_session.query(ProcessIssueDecision).count() == 0
+        # Nenhum AuditLog associado
+        logs = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.entity_type == "process_issue_decision")
+            .all()
+        )
+        assert logs == []
