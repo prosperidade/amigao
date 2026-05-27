@@ -91,6 +91,10 @@ Status: diagnostico
        │  ├── Mais documentos coletados (checklist por demand_type)
        │  ├── RegulatoryDiagnosis versionado registrado
        │  └── RegulatoryIssue cadastrado para cada inconsistência
+       │ Gate camada 2 do `/validate` (PROMPT_6/7/10): exige decisão por
+       │ crítica EM ESTADO NÃO-TERMINAL do achado (`suspeita` ou
+       │ `confirmada`). Terminais (`descartada`/`resolvida`/`ignorada`)
+       │ não cobram decisão — descartar libera o gate sem dupla negação.
        │ Frontend: ProcessDetail.tsx + DiagnosisTab + DocumentsTab
        │
        │ PROMPT_9 — UI da camada 2 do Princípio 1:
