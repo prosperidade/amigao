@@ -264,15 +264,23 @@ def validate_diagnosis(
     # gate olha `ProcessIssueDecision` para este `process.id`, não mais um
     # campo no próprio `RegulatoryIssue`.
     #
-    # PROMPT_10 — gate só cobra decisão de críticos em estado **não-terminal**
-    # do achado (`suspeita` ou `confirmada`). Em `descartada`/`resolvida`/
-    # `ignorada` o consultor já adjudicou que não há divergência ativa a
-    # tratar — exigir decisão seria dupla negação (cf. enum `StatusAchado`
-    # em `app/models/regulatory.py`). `suspeita` permanece dentro: força o
-    # consultor a confirmar/descartar antes de assinar (não é deadlock, ele
-    # pode mover o estado pelo `PATCH /properties/.../issues/{id}`).
-    # `resolved_at IS NULL` continua porque é critério ortogonal (estado do
-    # campo persistido), mesmo que nenhum fluxo do app o utilize ainda.
+    # PROMPT_10 + PROMPT_11 — gate cobra decisão de críticos cujo achado
+    # ainda exige adjudicação justificada. Excluídos APENAS os terminais
+    # onde não há o que decidir:
+    #   - `descartada` = "não é divergência real" → nada a decidir.
+    #   - `resolvida`  = "corrigida no mundo"     → nada a decidir.
+    # `ignorada` NÃO é excluída (PROMPT_11, corrige furo do #10): significa
+    # "consultor optou por não tratar um achado REAL" (cf. enum em
+    # `app/models/regulatory.py`). Como setar `status_achado=ignorada` via
+    # `PATCH /issues` não exige justificativa, excluí-la do gate abriria um
+    # atalho pra silenciar crítico real sem registro — recriando a porta que
+    # o #19 fechou. Ignorar um real precisa passar por
+    # `decisao=ignorar_justificado` (que exige justificativa, #19); a Regra B
+    # permite essa decisão porque `ignorada` ≠ `suspeita`.
+    # `suspeita`/`confirmada` permanecem: suspeita força adjudicação antes de
+    # assinar (não é deadlock — move-se o estado pelo `PATCH /issues`).
+    # `resolved_at IS NULL` continua como critério ortogonal (estado do campo
+    # persistido), mesmo que nenhum fluxo do app o utilize ainda.
     if process.property_id is not None:
         issues_criticas = (
             db.query(RegulatoryIssue)
@@ -282,7 +290,11 @@ def validate_diagnosis(
                 RegulatoryIssue.severity == RegulatoryIssueSeverity.critico,
                 RegulatoryIssue.resolved_at.is_(None),
                 RegulatoryIssue.status_achado.in_(
-                    [StatusAchado.suspeita, StatusAchado.confirmada]
+                    [
+                        StatusAchado.suspeita,
+                        StatusAchado.confirmada,
+                        StatusAchado.ignorada,
+                    ]
                 ),
             )
             .all()

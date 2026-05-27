@@ -964,3 +964,61 @@ simétrico a `descartada`. Sem ambiguidade com `ignorar_justificado` (que
 
 - **Frente aberta** — follow-on do badge OU próxima frente nova (#18
   hash-chain verifier, geoespacial 🛰️, mobile/client-portal).
+
+---
+
+## PROMPT_11 — Hotfix: `ignorada` volta a exigir decisão (26/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — branch `fix/prompt11-ignorada-volta-ao-gate`.
+Suite 639/639 verde. Corrige furo introduzido no PROMPT_10 (#23).
+
+### Motivação
+
+O PROMPT_10 excluiu `ignorada` do gate junto com `descartada`/`resolvida`,
+assumindo simetria entre os três. **Não são simétricos.** `descartada`
+("não é divergência real") e `resolvida` ("corrigida no mundo") são
+terminais sem o que decidir — exclusão correta. `ignorada`
+(`models/regulatory.py:147`: "consultor optou por não tratar") é um achado
+**REAL** posto de lado.
+
+O furo: setar `status_achado=ignorada` via `PATCH /issues` NÃO exige
+justificativa (o `RegulatoryIssueUpdate` só valida coerência da Regra A).
+Com o gate excluindo `ignorada`, um consultor podia silenciar um crítico
+real sem registrar justificativa nenhuma — recriando exatamente a porta
+que o #19 fechou para `decisao=ignorar_justificado`. Como o PROMPT_10 já
+estava em main (PR #12), virou hotfix.
+
+### A mudança (escopo fechado)
+
+- **Código (1 linha):** filtro do gate em `regulatory.py` passa de
+  `status_achado.in_([suspeita, confirmada])` para
+  `.in_([suspeita, confirmada, ignorada])`. Só `descartada`/`resolvida`
+  ficam excluídas. Comentário do gate reescrito explicando por que
+  `ignorada` é diferente.
+- **Teste (1 virado):** `test_200_critica_ignorada_sem_decisao_libera_gate`
+  (do #10, que documentava o furo) virou
+  `test_422_critica_ignorada_sem_decisao_continua_bloqueando`. Os outros 3
+  do #10 seguem (`descartada`/`resolvida` liberam; `confirmada` exige).
+- **Docs:** #23 corrigido no `REGISTRO_DIVIDAS`; `ESTADO_ATUAL`, `API_v1`,
+  `FLUXOS_E2E` ajustados (todos diziam "ignorada não cobra").
+
+### Sem deadlock
+
+Quem quer ignorar um crítico real registra `decisao=ignorar_justificado`
+no PUT /decision, que exige justificativa (#19). A Regra B permite porque
+`ignorada` ≠ `suspeita`. O caminho **justificado** fica; só fecha o
+caminho **sem-justificativa**.
+
+### Lição registrada
+
+A exclusão de `ignorada` veio de uma recomendação rasa no PROMPT_10
+("simetria com descartada") sem checar o impacto cruzado no #19. Antes de
+recomendar excluir um estado de um gate de auditabilidade, a pergunta
+obrigatória é: "isso abre caminho pra pular uma garantia que outra regra
+já estabeleceu?". Aqui, abria. O André pegou na revisão antes de produção.
+
+### Próximas rodadas
+
+- **Follow-on do badge** (PROMPT_9): espelhar a exclusão `descartada`/
+  `resolvida` no cálculo client-side de `criticasAbertas`. Agora com
+  #9/#10/#11 em main, é a tarefa curta natural. OU próxima frente nova.

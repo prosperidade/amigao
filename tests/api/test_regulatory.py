@@ -1375,17 +1375,24 @@ class TestValidateDiagnosisGateCamada2:
         )
         assert r.status_code == 200
 
-    def test_200_critica_ignorada_sem_decisao_libera_gate(
+    def test_422_critica_ignorada_sem_decisao_continua_bloqueando(
         self, client: TestClient, db_session,
     ):
-        """PROMPT_10: `status_achado=ignorada` também é terminal — consultor
-        optou por não tratar como fato do imóvel. Sem decisão é OK."""
+        """PROMPT_11 (corrige furo do #10): `status_achado=ignorada` significa
+        "achado REAL posto de lado" — NÃO é terminal como descartada/resolvida.
+        Setar `ignorada` via PATCH /issues não exige justificativa, então
+        excluí-la do gate abriria atalho pra silenciar crítico real sem
+        registro (bypassa o #19). Logo `ignorada` continua exigindo decisão:
+        quem quer ignorar registra `decisao=ignorar_justificado` (com
+        justificativa) — a Regra B permite porque `ignorada` ≠ `suspeita`."""
         tenant, _ = _seed_internal_user(db_session)
         _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
         self._seed_diag(db_session, tenant=tenant, process=process)
         _seed_issue(
             db_session, tenant=tenant, prop=prop,
             severity=RegulatoryIssueSeverity.critico,
+            codigo_alerta="GEO_AUSENTE",
+            familia=RegulatoryFamilia.geo_incra,
             status_achado=StatusAchado.ignorada,
         )
         db_session.commit()
@@ -1395,7 +1402,8 @@ class TestValidateDiagnosisGateCamada2:
             f"/api/v1/processes/{process.id}/diagnoses/1/validate",
             headers=headers,
         )
-        assert r.status_code == 200
+        assert r.status_code == 422
+        assert len(r.json()["detail"]["alertas_pendentes"]) == 1
 
     def test_422_critica_confirmada_sem_decisao_continua_bloqueando(
         self, client: TestClient, db_session,
