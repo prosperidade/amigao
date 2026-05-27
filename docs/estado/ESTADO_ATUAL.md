@@ -1,9 +1,9 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-26 (pós-PROMPT_10 — gate camada 2 exclui achados terminais; trap descoberto pós-PROMPT_9 fechado)
-**Próxima atualização:** follow-on PROMPT_9 (badge espelhar exclusão do gate) OU próxima frente (#18 hash-chain verifier? geoespacial 🛰️?)
+**Data do instantâneo:** 2026-05-26 (pós-PROMPT_11 — hotfix: `ignorada` volta a exigir decisão no gate)
+**Próxima atualização:** follow-on do badge (espelhar exclusão `descartada`/`resolvida`) OU próxima frente (#18 hash-chain verifier? geoespacial 🛰️?)
 **Responsável de atualização:** quem fechar a próxima sprint
-**Frente em revisão:** `feat/prompt10-gate-exclui-terminais` (gate exclui terminais — PR a abrir; PROMPT_8 e PROMPT_9 já em main)
+**Frente em revisão:** `fix/prompt11-ignorada-volta-ao-gate` (hotfix do gate — PR a abrir; PROMPT_8/9/10 já em main)
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
@@ -123,26 +123,33 @@
     `frontend/scripts/run-vitest.mjs` injeta `--experimental-require-module`
     via `NODE_OPTIONS` (workaround pro jsdom 27 + Node 22.11 — registrado
     no commit, removível quando upstream corrigir).
-- **PROMPT_10 mergeado em 2026-05-26** — fecha #23 (gate cobrando decisão em
-  achado terminal — trap revelado pós-PROMPT_9):
-  - Filtro do `PATCH /diagnoses/{version}/validate` estreitou: só cobra
-    decisão em críticos com `status_achado in {suspeita, confirmada}`.
-    Terminais (`descartada`/`resolvida`/`ignorada`) não pedem decisão —
-    consultor já adjudicou que não há divergência ativa a tratar.
+- **PROMPT_10 + PROMPT_11 mergeados em 2026-05-26** — fecha #23 (gate cobrando
+  decisão em achado terminal — trap revelado pós-PROMPT_9):
+  - Filtro do `PATCH /diagnoses/{version}/validate` cobra decisão em críticos
+    com `status_achado in {suspeita, confirmada, ignorada}`. Excluídos só
+    `descartada` ("não é divergência real") e `resolvida` ("corrigida no
+    mundo") — neles não há o que decidir.
+  - **PROMPT_11 corrigiu a versão original do #10**, que excluía `ignorada`
+    por erro de simetria. `ignorada` = "achado REAL posto de lado"; setá-la
+    via PATCH /issues não exige justificativa, então excluí-la abriria atalho
+    pra silenciar crítico real sem registro (bypassa o #19). Quem quer ignorar
+    registra `decisao=ignorar_justificado` (com justificativa); a Regra B
+    permite porque `ignorada` ≠ `suspeita`.
   - `suspeita` permanece dentro do filtro pra **forçar adjudicação** antes
     de assinar — não é deadlock, o consultor pode mover o estado via
     PATCH /issues.
   - `resolved_at IS NULL` continua como critério ortogonal.
-  - Sem migration, sem ADR (refina camada 2 já firmada).
-  - 4 testes novos no `TestValidateDiagnosisGateCamada2` (cada terminal
-    libera + um explícito que `confirmada` continua 422).
+  - Sem migration, sem ADR. Testes no `TestValidateDiagnosisGateCamada2`:
+    `descartada`/`resolvida` liberam; `suspeita`/`confirmada`/`ignorada`
+    continuam exigindo (422).
   - **Follow-on aberto:** badge "N pendentes" do `DiagnosisAssinatura`
-    (PROMPT_9) precisa espelhar a mesma exclusão pra não super-contar.
+    (PROMPT_9) precisa espelhar a mesma exclusão (`descartada`/`resolvida`)
+    pra não super-contar.
 - **Pipeline ponta a ponta no nível de código + UI:** `extrator → auditor_imovel
   → legislacao → diagnostico → POST /diagnoses (versionado + gate Pydantic) →
   consultor adjudica status_achado e decide alerta por alerta (aba Alertas) →
   consultor assina (DiagnosisAssinatura — gate camada 2 cross-entidades + AuditLog,
-  agora sem cobrar decisão em achado terminal — PROMPT_10)`.
+  excluindo só achados descartados/resolvidos — PROMPT_10/11)`.
   Princípio 1 fechado em UI também — **a IA propõe, o consultor decide e assina,
   alerta por alerta.**
 

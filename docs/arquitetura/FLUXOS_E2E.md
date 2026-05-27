@@ -91,10 +91,11 @@ Status: diagnostico
        │  ├── Mais documentos coletados (checklist por demand_type)
        │  ├── RegulatoryDiagnosis versionado registrado
        │  └── RegulatoryIssue cadastrado para cada inconsistência
-       │ Gate camada 2 do `/validate` (PROMPT_6/7/10): exige decisão por
-       │ crítica EM ESTADO NÃO-TERMINAL do achado (`suspeita` ou
-       │ `confirmada`). Terminais (`descartada`/`resolvida`/`ignorada`)
-       │ não cobram decisão — descartar libera o gate sem dupla negação.
+       │ Gate camada 2 do `/validate` (PROMPT_6/7/10/11): exige decisão por
+       │ crítica com `status_achado in {suspeita, confirmada, ignorada}`.
+       │ Só `descartada`/`resolvida` ficam de fora (nada a decidir). Descartar
+       │ libera; `ignorada` (achado real posto de lado) ainda cobra decisão —
+       │ ignorar um real passa por `ignorar_justificado` (com justificativa).
        │ Frontend: ProcessDetail.tsx + DiagnosisTab + DocumentsTab
        │
        │ PROMPT_9 — UI da camada 2 do Princípio 1:
