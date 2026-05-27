@@ -1,8 +1,9 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-26 (pós-PROMPT_9 — UI da camada 2 do Princípio 1 entregue)
-**Próxima atualização:** próxima frente (#18 hash-chain verifier? mobile/client-portal? geoespacial 🛰️?)
+**Data do instantâneo:** 2026-05-26 (pós-PROMPT_10 — gate camada 2 exclui achados terminais; trap descoberto pós-PROMPT_9 fechado)
+**Próxima atualização:** follow-on PROMPT_9 (badge espelhar exclusão do gate) OU próxima frente (#18 hash-chain verifier? geoespacial 🛰️?)
 **Responsável de atualização:** quem fechar a próxima sprint
+**Frente em revisão:** `feat/prompt10-gate-exclui-terminais` (gate exclui terminais — PR a abrir; PROMPT_8 e PROMPT_9 já em main)
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
@@ -122,10 +123,26 @@
     `frontend/scripts/run-vitest.mjs` injeta `--experimental-require-module`
     via `NODE_OPTIONS` (workaround pro jsdom 27 + Node 22.11 — registrado
     no commit, removível quando upstream corrigir).
+- **PROMPT_10 mergeado em 2026-05-26** — fecha #23 (gate cobrando decisão em
+  achado terminal — trap revelado pós-PROMPT_9):
+  - Filtro do `PATCH /diagnoses/{version}/validate` estreitou: só cobra
+    decisão em críticos com `status_achado in {suspeita, confirmada}`.
+    Terminais (`descartada`/`resolvida`/`ignorada`) não pedem decisão —
+    consultor já adjudicou que não há divergência ativa a tratar.
+  - `suspeita` permanece dentro do filtro pra **forçar adjudicação** antes
+    de assinar — não é deadlock, o consultor pode mover o estado via
+    PATCH /issues.
+  - `resolved_at IS NULL` continua como critério ortogonal.
+  - Sem migration, sem ADR (refina camada 2 já firmada).
+  - 4 testes novos no `TestValidateDiagnosisGateCamada2` (cada terminal
+    libera + um explícito que `confirmada` continua 422).
+  - **Follow-on aberto:** badge "N pendentes" do `DiagnosisAssinatura`
+    (PROMPT_9) precisa espelhar a mesma exclusão pra não super-contar.
 - **Pipeline ponta a ponta no nível de código + UI:** `extrator → auditor_imovel
   → legislacao → diagnostico → POST /diagnoses (versionado + gate Pydantic) →
   consultor adjudica status_achado e decide alerta por alerta (aba Alertas) →
-  consultor assina (DiagnosisAssinatura — gate camada 2 cross-entidades + AuditLog)`.
+  consultor assina (DiagnosisAssinatura — gate camada 2 cross-entidades + AuditLog,
+  agora sem cobrar decisão em achado terminal — PROMPT_10)`.
   Princípio 1 fechado em UI também — **a IA propõe, o consultor decide e assina,
   alerta por alerta.**
 

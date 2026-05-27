@@ -1326,6 +1326,103 @@ class TestValidateDiagnosisGateCamada2:
         assert r.status_code == 422
         assert len(r.json()["detail"]["alertas_pendentes"]) == 1
 
+    # ── PROMPT_10 — Gate exclui achados terminais ──────────────────────
+    # Estados terminais do achado (descartada/resolvida/ignorada) não cobram
+    # decisão: o consultor já adjudicou que não há divergência ativa a tratar.
+
+    def test_200_critica_descartada_sem_decisao_libera_gate(
+        self, client: TestClient, db_session,
+    ):
+        """PROMPT_10: crítica com `status_achado=descartada` (falso positivo)
+        não exige decisão — o consultor já disse que não é divergência real."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.descartada,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+    def test_200_critica_status_achado_resolvida_sem_decisao_libera_gate(
+        self, client: TestClient, db_session,
+    ):
+        """PROMPT_10: `status_achado=resolvida` é terminal — sanada no mundo.
+        Não confundir com `resolved_at`: são critérios desacoplados, o gate
+        agora cobre os dois."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.resolvida,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+    def test_200_critica_ignorada_sem_decisao_libera_gate(
+        self, client: TestClient, db_session,
+    ):
+        """PROMPT_10: `status_achado=ignorada` também é terminal — consultor
+        optou por não tratar como fato do imóvel. Sem decisão é OK."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            status_achado=StatusAchado.ignorada,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+    def test_422_critica_confirmada_sem_decisao_continua_bloqueando(
+        self, client: TestClient, db_session,
+    ):
+        """PROMPT_10 (regressão explícita): `confirmada` é divergência real;
+        decisão continua obrigatória. Documenta que o estreitamento do filtro
+        NÃO esvaziou o gate para todos os casos."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diag(db_session, tenant=tenant, process=process)
+        _seed_issue(
+            db_session, tenant=tenant, prop=prop,
+            severity=RegulatoryIssueSeverity.critico,
+            codigo_alerta="GEO_AUSENTE",
+            familia=RegulatoryFamilia.geo_incra,
+            status_achado=StatusAchado.confirmada,
+        )
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process.id}/diagnoses/1/validate",
+            headers=headers,
+        )
+        assert r.status_code == 422
+        assert len(r.json()["detail"]["alertas_pendentes"]) == 1
+
 
 # ---------------------------------------------------------------------------
 # PROMPT_7 (ADR-012) — PUT/GET /processes/{pid}/issues/{iid}/decision

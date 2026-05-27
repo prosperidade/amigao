@@ -35,6 +35,7 @@ from app.models.regulatory import (
     RegulatoryDiagnosis,
     RegulatoryIssue,
     RegulatoryIssueSeverity,
+    StatusAchado,
 )
 from app.models.user import User
 from app.schemas.regulatory import (
@@ -262,6 +263,16 @@ def validate_diagnosis(
     # processo** (ADR-012) — não herda decisão de outro trabalho. Aqui o
     # gate olha `ProcessIssueDecision` para este `process.id`, não mais um
     # campo no próprio `RegulatoryIssue`.
+    #
+    # PROMPT_10 — gate só cobra decisão de críticos em estado **não-terminal**
+    # do achado (`suspeita` ou `confirmada`). Em `descartada`/`resolvida`/
+    # `ignorada` o consultor já adjudicou que não há divergência ativa a
+    # tratar — exigir decisão seria dupla negação (cf. enum `StatusAchado`
+    # em `app/models/regulatory.py`). `suspeita` permanece dentro: força o
+    # consultor a confirmar/descartar antes de assinar (não é deadlock, ele
+    # pode mover o estado pelo `PATCH /properties/.../issues/{id}`).
+    # `resolved_at IS NULL` continua porque é critério ortogonal (estado do
+    # campo persistido), mesmo que nenhum fluxo do app o utilize ainda.
     if process.property_id is not None:
         issues_criticas = (
             db.query(RegulatoryIssue)
@@ -270,6 +281,9 @@ def validate_diagnosis(
                 RegulatoryIssue.property_id == process.property_id,
                 RegulatoryIssue.severity == RegulatoryIssueSeverity.critico,
                 RegulatoryIssue.resolved_at.is_(None),
+                RegulatoryIssue.status_achado.in_(
+                    [StatusAchado.suspeita, StatusAchado.confirmada]
+                ),
             )
             .all()
         )

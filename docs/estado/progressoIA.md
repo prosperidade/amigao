@@ -885,3 +885,82 @@ assina, **alerta por alerta**. Sem inventar backend.
 - **Frente aberta** pra decisão do Andre: #18 (verifier de hash chain
   do AuditLog), geoespacial 🛰️ (corpus de áreas + `Property.geom`),
   mobile/client-portal (descongelar), ou continuidade do RAG estadual.
+
+---
+
+## PROMPT_10 — Gate camada 2 exclui achados terminais (#23) (26/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — branch `feat/prompt10-gate-exclui-terminais`.
+Suite 639/639 verde (+4 vs 635 do PROMPT_8).
+
+### Motivação
+
+Trap descoberto na revisão do PROMPT_9 (UI da camada 2): o gate de
+`PATCH /diagnoses/{version}/validate` filtrava apenas
+`severity=critico AND resolved_at IS NULL`, sem olhar `status_achado`.
+Resultado: um achado crítico que o consultor já tinha descartado como
+falso positivo AINDA cobrava decisão — dupla negação ("não é real" via
+`status_achado=descartada` + "ignorar justificado" via `decisao` +
+justificativa redundante). Saída #1 do trio do Andre: estreitar o filtro,
+não complicar a UI.
+
+### Passo 0 — leituras antes de mexer
+
+- Filtro real do gate em `regulatory.py:266-275`.
+- Enum `StatusAchado` em `models/regulatory.py:138-148` — 5 valores.
+- **Descoberta:** grep `resolved_at\s*=` em `app/**/*.py` retorna **zero
+  matches**. Nenhum fluxo do produto seta `resolved_at` — só os testes
+  via `_seed_issue(resolved=True)`. Significa que `status_achado=resolvida`
+  e o critério `resolved_at IS NULL` estão **desacoplados**: precisa do
+  filtro explícito por `status_achado` para o trap fechar (não duplicação).
+
+### O que foi entregue
+
+| Onda | Conteúdo |
+|---|---|
+| A (filtro) | `regulatory.py` ganha `RegulatoryIssue.status_achado.in_([StatusAchado.suspeita, StatusAchado.confirmada])` na query do gate. Comentário inline explica: terminais não cobram decisão; `suspeita` permanece para forçar adjudicação; `resolved_at IS NULL` mantido como critério ortogonal. Import de `StatusAchado` adicionado. |
+| B (testes) | 4 testes novos em `TestValidateDiagnosisGateCamada2`: cada terminal (`descartada`, `resolvida`, `ignorada`) libera o gate sem decisão; `confirmada` sem decisão continua 422 (regressão explícita). `_seed_issue` já tinha `status_achado` desde PROMPT_8 — reutilizado. Pré-existentes do gate passam sem mudança (todos usam `suspeita` default). |
+| C (docs) | `REGISTRO_DIVIDAS`: #23 fechada. `ESTADO_ATUAL`: bullet PROMPT_10 + follow-on do badge anotado. `API_v1`: nota inline do 422 estreitou. `FLUXOS_E2E`: nota curta sobre "descartar → assinar". `GOVERNANCA`: índice 1..14. Snapshot `progresso14.md`. |
+
+### Decisão sobre `ignorada`
+
+Prompt antecipou ambiguidade: pode soar como `decisao=ignorar_justificado`
+ou como adjudicação terminal do achado. AskUserQuestion → Andre confirmou
+**excluir** (recomendado). Semântica fechada: `status_achado=ignorada`
+significa "consultor optou por não tratar como fato do imóvel" — terminal
+simétrico a `descartada`. Sem ambiguidade com `ignorar_justificado` (que
+é ação no contexto do processo, não adjudicação do fato).
+
+### Decisões arquiteturais
+
+- **Estreitar o filtro, não complicar a UI.** A UI já habilita decisão
+  em todos os achados não-suspeita (PROMPT_9) — backend mais permissivo
+  evita dupla negação UX.
+- **`suspeita` permanece dentro do gate** — força adjudicação antes de
+  assinar. Não é deadlock porque o consultor pode mover `status_achado`
+  pelo PATCH /issues.
+- **`resolved_at IS NULL` mantido** como critério ortogonal — mesmo
+  sendo vacuoso hoje, reflete intenção semântica e cobre o caso futuro
+  de fluxo que marque `resolved_at`.
+- **Filtro positivo** (`in [suspeita, confirmada]`) em vez de negativo
+  — mais fácil de raciocinar quando lê o código.
+- **Sem migration, sem ADR, sem schema change** — é refinamento de
+  query no gate camada 2 já firmado.
+
+### Dívidas fechadas
+
+- **#23** — gate cobrando decisão em achado terminal (trap revelado
+  pós-PROMPT_9).
+
+### Follow-on aberto
+
+- **Badge do `DiagnosisAssinatura` (PROMPT_9)** precisa espelhar a mesma
+  exclusão pra não super-contar pendentes. Aplicado depois que PROMPT_9
+  estiver em main (1 linha no filtro client-side de `criticasAbertas`).
+  Modal já consome `alertas_pendentes` do 422 (autoridade), então sempre
+  estará correto independente do badge.
+
+### Próximas rodadas
+
+- **Frente aberta** — follow-on do badge OU próxima frente nova (#18
+  hash-chain verifier, geoespacial 🛰️, mobile/client-portal).
