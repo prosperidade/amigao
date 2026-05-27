@@ -1,4 +1,4 @@
-# Registro de dívidas — Regente (consolidado pós-PROMPT_8 · 2026-05-26)
+# Registro de dívidas — Regente (consolidado pós-PROMPT_9 · 2026-05-26)
 
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
@@ -96,6 +96,18 @@ o estado (ex.: import legado, regressão de UI deixando registros em
 combinações fantasmas). Aí valeria considerar máquina de estados completa
 ou regras adicionais. **Origem:** revisão pós-PROMPT_8 (26/05 — Andre
 notou ao revisar o escopo).
+
+**22. Workaround `--experimental-require-module` no runner do Vitest.**
+Os primeiros testes de componente do frontend (PROMPT_9) usam jsdom 27,
+que puxa `@asamuzakjp/css-color` (CJS) que `require()` `@csstools/css-calc`
+(ESM). Node 22.11 só aceita isso com a flag experimental
+`--experimental-require-module`. Como `poolOptions.execArgv` do Vitest não
+propaga aos workers Tinypool, o workaround é o runner
+`frontend/scripts/run-vitest.mjs` que injeta a flag via `NODE_OPTIONS`.
+**Marco para remover:** quando o jsdom corrigir a dep CJS/ESM upstream
+**ou** quando o projeto subir pra Node 22.12+ (que ativou `require(esm)`
+por default). Sem urgência — o runner é local, isolado e cross-platform.
+**Origem:** PROMPT_9 (26/05).
 
 **18. Hash chain de `AuditLog` sem rotina de verificação.**
 `app/services/audit_hash.py` tem **só escritores** (`compute_audit_hash`,

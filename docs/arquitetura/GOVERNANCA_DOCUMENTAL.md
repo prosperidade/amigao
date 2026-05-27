@@ -97,7 +97,7 @@ listados antes foram arquivados em `docs/_archive/`).*
 **ADR:** `001`–`012` (em `docs/adr/`; `003-mempalace` está `REVOKED` — exemplo da regra: caiu, mas não some. `012` ajusta a modelagem do PROMPT_6: decisão do consultor é contextual ao processo, validado pela Isis em 26/05).
 **Skills:** `diagnostico/situacao_ambiental_imovel_rural` (v1.1.0) · `auditor_imovel/analise_divergencias_documentais` (**validada integralmente pela sócia em 26/05**, + anexo `bases_car_estaduais`) (em `app/skills/<agente>/<dominio>/`)
 **Dados:** `data/normas_k3/MANIFESTO.md` (9 normas indexadas no `knowledge_catalog`; PDFs originais ficam fora do repo)
-**Progressos históricos:** `docs/_archive/progressos/progresso1..progresso12.md` (snapshots ao fim de cada rodada — *imutáveis*)
+**Progressos históricos:** `docs/_archive/progressos/progresso1..progresso13.md` (snapshots ao fim de cada rodada — *imutáveis*)
 
 **Arquivados em 2026-05-25** (cumpriram função; duráveis já capturados em vivos):
 - `docs/_archive/PROGRESSO_WAITLIST.md` — Waitlist B1 mergeada; histórico cobre no `progressoIA`.

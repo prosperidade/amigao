@@ -825,3 +825,63 @@ que ele decide o que fazer, senão trava no gate sem caminho. A mensagem
 
 - **UI dos 5 botões + 3 status** (única frente aberta agora — backend
   regulatório completo com guardas de coerência).
+
+---
+
+## PROMPT_9 — UI da camada 2 do Princípio 1 (26/05/2026)
+
+**Status:** ✅ **CONCLUIDA** — branch `feat/prompt9-ui-alertas-decisao`,
+31/31 testes verdes no frontend (Vitest+RTL, 21 pré-existentes + 10
+novos).
+
+### Motivação
+
+Backend regulatório completo após PROMPT_4/5/6/7/8 — mas o consultor
+ainda não tinha tela pra usar. Esta rodada consome o contrato existente
+e materializa o ciclo do Princípio 1: a IA propõe, o humano decide e
+assina, **alerta por alerta**. Sem inventar backend.
+
+### O que foi entregue
+
+| Onda | Conteúdo |
+|---|---|
+| A (camada de dados) | `frontend/src/lib/regulatory/{types,labels,hooks}.ts` espelha o contrato dos endpoints regulatórios (sem renomear valor nem inventar campo). Labels pt-BR + classes Tailwind por severidade (tom forte só pra `critico` — não afoga em vermelho). React Query hooks com query keys centralizadas; `useDecision` trata 404 como `null` (ADR-012). `useUpsertDecision` invalida `diagnoses` (gate cruza as duas entidades). |
+| B (aba Alertas) | `AlertasTab` + `AlertaCard` em `pages/Processes/`. Lista issues do imóvel, críticos no topo. **Regra B preventiva na UI:** enquanto `status_achado === 'suspeita'`, `<fieldset>` da decisão fica `disabled` com hint claro. **#19 client-side:** botão "Registrar decisão" disabled enquanto textarea vazia em `ignorar_justificado`/`fora_escopo`. 422 da Regra A renderiza inline (não em toast). Empty state pra `property_id === null`. `TabKey` ganha `'alertas'` no `ProcessDetail`. |
+| C (gate + PropertyHub) | `DiagnosisAssinatura` no topo do `DiagnosisTab` — busca última versão do `RegulatoryDiagnosis`, calcula pendentes via `useQueries` (críticas × decisões), botão "Assinar vN" com badge. 422 do gate abre modal com `detail.alertas_pendentes`; click no item troca pra aba "Alertas" e faz `scrollIntoView` do card `#alerta-{id}`. **Backend é a autoridade:** se cálculo client-side divergir do 422 (cache stale), mostra o que veio no 422. Modal segue padrão da casa (overlay fixed + backdrop-blur). **PropertyHub.AnalysesTab aumentado** (era stub): vira lente do ADR-012 — chips de TODOS os processos por issue, "Processo #N (demand) · {decisão\|pendente} · Decidir/Ver" com verbo-por-estado via `useDecision`. Cor emerald = decidida, amber = pendente. Teto visual "+N mais". |
+| D (testes) | `AlertaCard.test.tsx` (7 cenários: Regra B desabilita em suspeita, `it.each` confirma habilita nos 4 outros achados, #19 desabilita submit em textarea vazia + libera ao preencher + bloqueia em só-espaços, `corrigir_antes` não exige justificativa). `DiagnosisAssinatura.test.tsx` (3 cenários: 422 do gate abre modal e click dispara `onGoToAlerta`; card "assinado" quando `validated_at`; render silencioso sem diagnóstico). Runner `frontend/scripts/run-vitest.mjs` injeta `NODE_OPTIONS=--experimental-require-module` (workaround jsdom 27 + Node 22.11). |
+
+### Decisões arquiteturais
+
+- **Regra B preventiva na UI**, não reativa. O 422 do backend é rede de
+  segurança; a primeira linha é o `disabled` do `<fieldset>` que sai
+  sozinho quando o consultor adjudica o achado (`useUpdateIssue`
+  invalida `issues` → re-render → libera). É o que evita travar no gate
+  sem caminho.
+- **Backend é a autoridade do gate camada 2**, não o cálculo
+  client-side. O badge "N pendentes" é heurística pra UI orientar; o
+  422 com `alertas_pendentes` decide.
+- **Verbo-por-estado nos chips do PropertyHub** ("Decidir"/"Ver"
+  conforme `useDecision` retorna `null` ou objeto), com label da
+  decisão visível quando há — é o ADR-012 renderizado em pixel.
+  Listar TODOS os processos (não eleger "ativo"): qualquer eleição
+  reintroduziria a perenidade que a Isis rejeitou.
+- **Cache compartilhado** entre AlertaCard, DiagnosisAssinatura e
+  IssueProcessChip via `regulatoryKeys.decision(pid, iid)` — três telas
+  vêem a mesma decisão sem refetch.
+- **#19 (justificativa obrigatória) tem 3 camadas:** schema Pydantic
+  (rejeição definitiva), endpoint (rede de segurança), UI client-side
+  (preempção do erro). Cada camada tem responsabilidade clara.
+- **Sem backend novo, sem ADR novo, sem migration** — é UI sobre
+  contrato existente, como o prompt explicitou.
+
+### Dívidas reveladas
+
+- **#22** (workaround do runner Vitest pra jsdom 27 + Node 22.11) —
+  registrado como dívida P3 com marco condicional (jsdom corrigir
+  upstream OU subida pra Node 22.12+). O runner é local e isolado.
+
+### Próximas rodadas
+
+- **Frente aberta** pra decisão do Andre: #18 (verifier de hash chain
+  do AuditLog), geoespacial 🛰️ (corpus de áreas + `Property.geom`),
+  mobile/client-portal (descongelar), ou continuidade do RAG estadual.

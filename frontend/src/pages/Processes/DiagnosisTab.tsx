@@ -5,12 +5,15 @@ import { api } from '@/lib/api';
 import { Process } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
 import { CONFIDENCE_STYLES } from '@/types/agent';
+import DiagnosisAssinatura from './DiagnosisAssinatura';
 
 interface DiagnosisTabProps {
   process: Process;
+  /** Callback opcional pra trocar pra aba Alertas + scroll (PROMPT_9). */
+  onGoToAlerta?: (issueId: number) => void;
 }
 
-export default function DiagnosisTab({ process }: DiagnosisTabProps) {
+export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProps) {
   const navigate = useNavigate();
 
   // Buscar ultimo job do agente diagnostico para este processo
@@ -28,6 +31,15 @@ export default function DiagnosisTab({ process }: DiagnosisTabProps) {
 
   return (
     <div className="space-y-4">
+
+      {/* PROMPT_9 — Camada 2 do Princípio 1: bloco de assinatura
+          + badge de pendentes + modal 422 do gate. Renderiza só quando há
+          RegulatoryDiagnosis criado (silencioso caso contrário). */}
+      <DiagnosisAssinatura
+        processId={process.id}
+        propertyId={process.property_id}
+        onGoToAlerta={onGoToAlerta}
+      />
 
       {process.initial_diagnosis ? (
         <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/5 dark:to-teal-500/5 border border-emerald-100 dark:border-emerald-500/20 p-5">
