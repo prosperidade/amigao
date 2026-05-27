@@ -92,6 +92,17 @@ Status: diagnostico
        │  ├── RegulatoryDiagnosis versionado registrado
        │  └── RegulatoryIssue cadastrado para cada inconsistência
        │ Frontend: ProcessDetail.tsx + DiagnosisTab + DocumentsTab
+       │
+       │ PROMPT_9 — UI da camada 2 do Princípio 1:
+       │  ├── Aba "Alertas" lista RegulatoryIssue do imóvel (críticos no topo)
+       │  ├── Consultor adjudica status_achado (suspeita → confirmada/descartada/…)
+       │  ├── Decide alerta por alerta — 5 botões da P4 (decisão contextual ao
+       │  │   processo, ADR-012). Regra B: decisão fica desabilitada enquanto
+       │  │   achado = suspeita ("Confirme ou descarte antes de decidir").
+       │  ├── Justificativa obrigatória em ignorar_justificado / fora_escopo (#19)
+       │  └── Botão "Assinar diagnóstico vN" — gate camada 2 (422 com lista de
+       │      pendentes; modal navega pro card correspondente)
+       │ Frontend: AlertasTab + AlertaCard + DiagnosisAssinatura
        ▼
 Status: planejamento
        │ Workflow template aplicado (por demand_type)

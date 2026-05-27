@@ -1,7 +1,7 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-26 (pós-PROMPT_8 — coerência entre status fechada; #17 resolvida)
-**Próxima atualização:** UI dos 5 botões + 3 status (frontend) — backend regulatório estável
+**Data do instantâneo:** 2026-05-26 (pós-PROMPT_9 — UI da camada 2 do Princípio 1 entregue)
+**Próxima atualização:** próxima frente (#18 hash-chain verifier? mobile/client-portal? geoespacial 🛰️?)
 **Responsável de atualização:** quem fechar a próxima sprint
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
@@ -89,15 +89,45 @@
     `status_achado == suspeita` com mensagem acionável ("Confirme ou
     descarte o achado antes de decidir").
   - Sem migration (validação, não modelagem). Suite 635/635 verde.
-- **Pipeline ponta a ponta no nível de código:** `extrator → auditor_imovel → legislacao →
-  diagnostico → POST /diagnoses (versionado + gate Pydantic) →
-  PATCH /properties/.../issues/{id} (consultor edita os 2 status perenes, com gate de
-  coerência sobre o estado resultante) →
-  PUT /processes/{pid}/issues/{iid}/decision (decide alerta por alerta neste processo;
-  Regra B exige achado ≠ suspeita) →
-  PATCH /validate (assina + gate camada 2 cross-entidades + AuditLog)`.
-  **Frontend dos 5 botões + 3 status pendente** — backend regulatório agora
-  com guardas de coerência completas, pode começar.
+- **PROMPT_9 mergeado em 2026-05-26** — UI da camada 2 do Princípio 1
+  (consome o backend regulatório sem inventar contrato):
+  - Aba **"Alertas"** nova no `ProcessDetail` (block_type "active", entre
+    "Visão geral" e "Ações"). Lista `RegulatoryIssue` do imóvel, críticos
+    no topo. Cada `AlertaCard` tem: dois `<select>` pros status perenes
+    + 5 radios da decisão + textarea de justificativa.
+  - **Regra B preventiva na UI:** enquanto `status_achado === 'suspeita'`,
+    o fieldset da decisão fica `disabled` com hint "Confirme ou descarte
+    o achado para poder decidir". O consultor adjudica primeiro, aí a
+    decisão libera. O 422 do backend é rede de segurança, não a primeira
+    linha. **#19 (justificativa) validada client-side** + 422 inline.
+  - **Bloco "Assinar diagnóstico vN"** no topo do `DiagnosisTab` com
+    badge "N pendentes" (`useQueries` cruza issues críticas × decisões).
+    Click → `PATCH /validate`. 422 do gate abre modal listando
+    `alertas_pendentes`; click no item troca pra aba "Alertas" e faz
+    `scrollIntoView` do card `#alerta-{id}`. **Autoridade do backend:**
+    se cálculo client-side divergir do 422 (cache stale), confiamos no
+    422 e mostramos o que veio.
+  - **PropertyHub.AnalysesTab aumentado** (era stub com 5 casos sem
+    contexto): vira lente do ADR-012 — lista issues do imóvel + chips
+    de TODOS os processos da property, mais recente primeiro. Cada chip
+    "Processo #N (demand) · {decisão|pendente} · Decidir/Ver" com
+    verbo-por-estado via `useDecision`. Cor emerald = decidida, amber =
+    pendente. Teto visual "+N mais" se overflow. Read-only — click leva
+    à aba Alertas do processo.
+  - **Camada de dados:** `frontend/src/lib/regulatory/{types,labels,hooks}.ts`
+    espelha o contrato sem inventar campo nem renomear valor. Cache do
+    `useDecision` é compartilhado entre AlertaCard, DiagnosisAssinatura
+    e IssueProcessChip — três telas vêem a mesma decisão sem refetch.
+  - **Testes:** 10 novos (Vitest+RTL), 31/31 verde. Runner
+    `frontend/scripts/run-vitest.mjs` injeta `--experimental-require-module`
+    via `NODE_OPTIONS` (workaround pro jsdom 27 + Node 22.11 — registrado
+    no commit, removível quando upstream corrigir).
+- **Pipeline ponta a ponta no nível de código + UI:** `extrator → auditor_imovel
+  → legislacao → diagnostico → POST /diagnoses (versionado + gate Pydantic) →
+  consultor adjudica status_achado e decide alerta por alerta (aba Alertas) →
+  consultor assina (DiagnosisAssinatura — gate camada 2 cross-entidades + AuditLog)`.
+  Princípio 1 fechado em UI também — **a IA propõe, o consultor decide e assina,
+  alerta por alerta.**
 
 **O que está congelado:**
 
@@ -168,10 +198,12 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 
 ## Frontend (painel consultor)
 
-- React 18 + Vite + TypeScript + TailwindCSS + React Query + Zustand
-- 36 telas em 10 áreas (Auth, Clients, Processes, Properties, Intake, Contracts, Proposals, Dashboard, AI, Settings)
+- React 19 + Vite + TypeScript + TailwindCSS + React Query + Zustand
+- 37+ telas/abas em 10 áreas (Auth, Clients, Processes, Properties, Intake, Contracts, Proposals, Dashboard, AI, Settings)
+  - **PROMPT_9:** aba **Alertas** nova no ProcessDetail (Regra B preventiva + 5 botões da P4 + textarea de justificativa); **AnalysesTab** do PropertyHub agora é lente do ADR-012 com chips verbo-por-estado.
 - TypeScript strict, zero `any` explícito, mutations uniformizadas via async/await
 - Token em Zustand persist + interceptor de 401/403 em `frontend/src/lib/api.ts`
+- **Vitest+RTL:** 31/31 verde (4 testes pré-existentes + 10 do PROMPT_9 em `AlertaCard.test.tsx` e `DiagnosisAssinatura.test.tsx`). Runner `frontend/scripts/run-vitest.mjs` injeta `NODE_OPTIONS=--experimental-require-module` (workaround pro jsdom 27 + Node 22.11).
 
 ## Testes
 
