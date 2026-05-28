@@ -88,15 +88,39 @@ def update_client(
     return client
 
 
+@router.get("/{client_id}/delete-preview")
+def get_client_delete_preview(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Preview da cascata antes do DELETE — usado pelo modal de confirmação."""
+    from app.services.cascade_delete import preview_client_cascade  # noqa: PLC0415
+
+    _get_client_or_404(db, current_user.tenant_id, client_id)
+    return preview_client_cascade(db, current_user.tenant_id, client_id).to_dict()
+
+
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_client(
     client_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> None:
-    """Remove um cliente."""
-    repo = ClientRepository(db, current_user.tenant_id)
-    repo.delete(client_id, detail="Cliente não encontrado")
+    """Remove cliente em cascata controlada (LGPD: registra AuditLog com hash chain).
+
+    Apaga: contratos, propostas, processos, checklists, documentos e imóveis
+    pertencentes ao cliente — sempre nessa ordem para satisfazer FKs RESTRICT.
+    Nunca toca documentos de outro cliente.
+    """
+    from app.services.cascade_delete import cascade_delete_client  # noqa: PLC0415
+
+    cascade_delete_client(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        client_id=client_id,
+    )
     db.commit()
 
 

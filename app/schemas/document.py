@@ -27,6 +27,7 @@ class DocumentConfirmRequest(BaseModel):
     file_size_bytes: int = Field(gt=0, le=104857600, description="Tamanho em bytes, máximo 100MB")
     document_type: Optional[str] = None
     document_category: Optional[str] = None
+    checklist_item_id: Optional[str] = None
 
 
 class DocumentResponse(BaseModel):

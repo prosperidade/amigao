@@ -1,9 +1,9 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-26 (pós-PROMPT_11 — hotfix: `ignorada` volta a exigir decisão no gate)
+**Data do instantâneo:** 2026-05-28 (pós `fix/upload-checklist-binding` — vínculo doc↔checklist + exclusão em cascata cliente/imóvel)
 **Próxima atualização:** follow-on do badge (espelhar exclusão `descartada`/`resolvida`) OU próxima frente (#18 hash-chain verifier? geoespacial 🛰️?)
 **Responsável de atualização:** quem fechar a próxima sprint
-**Frente em revisão:** `fix/prompt11-ignorada-volta-ao-gate` (hotfix do gate — PR a abrir; PROMPT_8/9/10 já em main)
+**Frente em revisão:** `fix/upload-checklist-binding` (PR aberto) — PROMPT_8/9/10/11 já em main
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
@@ -145,6 +145,40 @@
   - **Follow-on aberto:** badge "N pendentes" do `DiagnosisAssinatura`
     (PROMPT_9) precisa espelhar a mesma exclusão (`descartada`/`resolvida`)
     pra não super-contar.
+- **`fix/upload-checklist-binding` mergeado em 2026-05-28** — destrava o ciclo de teste da Isis:
+  - **Vínculo doc ↔ item de checklist no upload.** `DocumentConfirmRequest` ganha
+    `checklist_item_id?: str` (opcional). O endpoint `POST /documents/confirm-upload`
+    persiste a coluna `Document.checklist_item_id` (já existia no model) e — se o
+    frontend não enviou um `checklist_item_id` explícito mas o `document_type`
+    casa com um item pendente — chama `auto_link_document` para marcar o item
+    como `received`. Sintoma original: documento subido não virava "recebido"
+    no checklist mesmo com tipo correto.
+  - **Campos extraídos visíveis na DocumentsTab.** Lista `Object.entries(AIJob.result)`
+    do extrator (excluindo `document_id`/`doc_type`/`tenant_id`/`process_id`)
+    em `<dl>` abaixo de cada documento processado — antes só aparecia o badge
+    "Campos extraídos" sem mostrar o que foi extraído.
+  - **`document_id` no PATCH "Recebido" do ProcessChecklist.** `handleReceived`
+    passa `item.document_id` (quando existe) no payload — antes só mandava
+    `action`, perdendo o vínculo se o consultor desfizesse + refizesse manualmente.
+  - **Exclusão em cascata controlada de cliente e imóvel** (`app/services/cascade_delete.py`):
+    `cascade_delete_client` apaga, em ordem: documentos do escopo do cliente
+    (Document.client_id OU process_id no escopo OU property_id no escopo —
+    nunca toca doc de outro cliente), checklists, processos, imóveis, contratos,
+    propostas, cliente. Satisfaz FKs RESTRICT (Process/Property/Contract/Proposal
+    em client_id). `cascade_delete_property` apaga documentos, checklists e
+    processos do imóvel + o próprio imóvel. Cada cascata grava `AuditLog`
+    `cascade_deleted` com `details` JSON `{"client_name"/"property_name", "cascade": {counts}}`
+    e hash chain SHA-256 (LGPD).
+  - **Preview da cascata antes de confirmar.** Endpoints novos
+    `GET /clients/{id}/delete-preview` e `GET /properties/{id}/delete-preview`
+    devolvem `{properties, processes, documents, checklists, contracts, proposals}`.
+    Os modais (`Clients/index.tsx`, `Properties/index.tsx`) carregam o preview
+    e listam contagens exatas antes do botão "Confirmar exclusão".
+  - **Comportamento de DELETE de documento NÃO mudou:** `DELETE /documents/{id}`
+    continua soft delete (`deleted_at`). A cascata acima é hard delete porque
+    o caso de uso é resubir os mesmos dados de teste.
+  - Suite ampliada das frentes afetadas: **186 testes passando**, tsc `--noEmit`
+    zero erros. Sem migration (todas as colunas já existem no schema).
 - **Pipeline ponta a ponta no nível de código + UI:** `extrator → auditor_imovel
   → legislacao → diagnostico → POST /diagnoses (versionado + gate Pydantic) →
   consultor adjudica status_achado e decide alerta por alerta (aba Alertas) →
