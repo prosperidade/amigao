@@ -89,6 +89,11 @@ Status: triagem
 Status: diagnostico
        │ Diagnóstico técnico aprofundado:
        │  ├── Mais documentos coletados (checklist por demand_type)
+       │  │   ↳ Upload (`POST /documents/confirm-upload`) vincula automaticamente
+       │  │     ao item pendente do checklist por `document_type` ou via
+       │  │     `checklist_item_id` explícito do frontend; campos extraídos
+       │  │     pelo `extrator` aparecem na DocumentsTab abaixo do badge
+       │  │     (fix/upload-checklist-binding, 2026-05-28).
        │  ├── RegulatoryDiagnosis versionado registrado
        │  └── RegulatoryIssue cadastrado para cada inconsistência
        │ Gate camada 2 do `/validate` (PROMPT_6/7/10/11): exige decisão por

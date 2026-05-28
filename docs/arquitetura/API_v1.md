@@ -111,7 +111,24 @@ Tenant guard implícito: toda dependency que devolve usuário também exige que 
 
 ### Soft delete
 
-Endpoints de DELETE em tabelas críticas (`Process`, `Client`, `Document`) fazem soft delete (`deleted_at`). Restauração via endpoint específico de undo onde aplicável.
+`DELETE /documents/{id}` continua soft delete (`deleted_at`). `DELETE /processes/{id}`
+também é soft delete.
+
+**Exceção — `DELETE /clients/{id}` e `DELETE /properties/{id}` viraram cascata
+hard-delete** (`fix/upload-checklist-binding`, 2026-05-28). Motivação: ciclo de
+teste — a consultora precisa apagar pra resubir os mesmos casos. Cada endpoint
+exige preview antes:
+
+| Endpoint | Função |
+|---|---|
+| `GET    /api/v1/clients/{id}/delete-preview` | Devolve `{properties, processes, documents, checklists, contracts, proposals}` (contagens exatas) sem alterar o banco. Usado pelo modal de confirmação. |
+| `DELETE /api/v1/clients/{id}` | Cascata em ordem segura (documentos do escopo do cliente → checklists → processos → imóveis → contratos → propostas → cliente). Satisfaz FKs RESTRICT (Process/Property/Contract/Proposal em `client_id`). Documentos só caem se pertencem ao escopo do cliente (Document.client_id OU process_id IN procs_owned_by_client OU property_id IN props_owned_by_client) — **nunca toca doc de outro cliente**. AuditLog `cascade_deleted` com hash chain SHA-256, `details` JSON com nome + contagens (LGPD). |
+| `GET    /api/v1/properties/{id}/delete-preview` | Devolve `{properties: 1, processes, documents, checklists, contracts: 0, proposals: 0}`. |
+| `DELETE /api/v1/properties/{id}` | Cascata documentos → checklists → processos do imóvel → imóvel. AuditLog `cascade_deleted` com hash chain SHA-256. |
+
+Lógica isolada em `app/services/cascade_delete.py` (`preview_*` + `cascade_delete_*` +
+`CascadePreview` dataclass). Sem migration — usa FKs existentes. Tudo dentro do
+endpoint roda em uma única transação (commit no router).
 
 ### Paginação
 
@@ -120,6 +137,21 @@ Listagens usam query params `?skip=0&limit=100` (FastAPI default). Soma máxima 
 ### Listagem com filtro
 
 Convenção: query string aceita filtros simples (`?status=execucao&demand_type=car`). Filtros complexos (full-text, semântico) usam endpoint dedicado (`GET /knowledge/search`).
+
+### Confirmação de upload (`POST /documents/confirm-upload`)
+
+`DocumentConfirmRequest` aceita `checklist_item_id?: str` (opcional —
+`fix/upload-checklist-binding`, 2026-05-28). Comportamento de auto-vínculo:
+
+1. Se o body trouxer `checklist_item_id`, o endpoint marca aquele item específico
+   do `ProcessChecklist` como `received` com `document_id = doc.id`.
+2. Senão, se `document_type` estiver setado, `auto_link_document` procura o
+   primeiro item pendente do checklist com `doc_type == document_type` e marca.
+   O `Document.checklist_item_id` é preenchido com o item_id linkado.
+3. Se não houver checklist ou nenhum item casar, o documento é persistido sem
+   vínculo — o consultor ainda pode marcar manualmente via PATCH `/checklist/items`.
+
+Resposta continua `202 Accepted` (extração OCR é enfileirada como antes).
 
 ### Endpoints regulatórios (`/processes/{id}/diagnoses`, `/properties/{id}/issues`)
 

@@ -1022,3 +1022,39 @@ já estabeleceu?". Aqui, abria. O André pegou na revisão antes de produção.
 - **Follow-on do badge** (PROMPT_9): espelhar a exclusão `descartada`/
   `resolvida` no cálculo client-side de `criticasAbertas`. Agora com
   #9/#10/#11 em main, é a tarefa curta natural. OU próxima frente nova.
+
+---
+
+## fix/upload-checklist-binding (2026-05-28) — destrava ciclo de teste
+
+### Motivação
+
+Sintoma reportado: documento subido pela tela não virava "recebido" no
+checklist, campos extraídos pelo `extrator` apareciam só como badge sem
+mostrar o dado, e não dava pra apagar cliente/imóvel pra resubir caso de
+teste (FKs RESTRICT do banco bloqueavam o DELETE direto).
+
+### O que mudou na superfície IA
+
+A camada de agentes em si não mudou — o `extrator` continua emitindo
+`AIJob.result` no mesmo shape (`Record<string, unknown>`). O que mudou foi
+o **consumo** desse resultado:
+
+- **DocumentsTab.tsx** agora renderiza `Object.entries(j.result)` em `<dl>`
+  abaixo de cada documento processado (excluindo `document_id`/`doc_type`/
+  `tenant_id`/`process_id` — metadados de controle sem valor de negócio).
+  Antes só aparecia o badge "Campos extraídos" sem mostrar o que foi
+  extraído — o extrator vinha funcionando e ninguém via.
+- **`auto_link_document` no fluxo de upload:** `POST /documents/confirm-upload`
+  passa a chamar o helper de `checklist_engine.py` quando o `document_type`
+  do upload casa com um item pendente do checklist — o item vira `received`
+  com `document_id` automaticamente. O frontend (`DocumentUploadZone.tsx`)
+  já enviava `checklist_item_id` opcional; o schema só não aceitava.
+
+### Sem agente novo, sem chain nova
+
+Escopo fechado de fix — não toquei prompt/chain/registry de agente.
+A interação IA ↔ checklist é determinística: matching exato por
+`doc_type` string. Suficiente pro ciclo da Isis; melhorias semânticas
+(matching fuzzy, embedding-based) ficam pra rodada futura se aparecer
+demanda real.
