@@ -281,3 +281,203 @@ def test_get_process_timeline_serializes_audit_logs(client: TestClient, db_sessi
     ]
     assert all(item["entity_id"] == process.id for item in payload)
     assert any(item["details"] == '{"channels":["email"],"email_sent":true}' for item in payload)
+
+
+# ---------------------------------------------------------------------------
+# fix/extrator-por-processo — POST /processes/{id}/extract
+# ---------------------------------------------------------------------------
+
+
+def _seed_process_with_docs(db_session, *, num_with_text: int, num_without_text: int):
+    """Helper: cria tenant + user + client + process + N docs (com/sem extracted_text)."""
+    from app.models.document import Document, OcrStatus
+
+    tenant = Tenant(name="Tenant Extract")
+    db_session.add(tenant)
+    db_session.flush()
+
+    user = User(
+        email="consultor.extract@example.com",
+        full_name="Consultor Extract",
+        hashed_password=get_password_hash("extract123"),
+        tenant_id=tenant.id,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+
+    process_client = Client(
+        tenant_id=tenant.id,
+        full_name="Cliente Extract",
+        email="cliente.extract@example.com",
+        client_type=ClientType.pf,
+        status=ClientStatus.active,
+    )
+    db_session.add(process_client)
+    db_session.flush()
+
+    process = Process(
+        tenant_id=tenant.id,
+        client_id=process_client.id,
+        title="Processo Extract",
+        process_type="licenciamento",
+        status=ProcessStatus.triagem,
+    )
+    db_session.add(process)
+    db_session.flush()
+
+    docs_with_text = []
+    for i in range(num_with_text):
+        d = Document(
+            tenant_id=tenant.id,
+            process_id=process.id,
+            client_id=process_client.id,
+            original_file_name=f"with-text-{i}.pdf",
+            filename=f"with-text-{i}.pdf",
+            content_type="application/pdf",
+            storage_key=f"tenant_{tenant.id}/with-text-{i}.pdf",
+            document_type="matricula",
+            ocr_status=OcrStatus.done,
+            extracted_text=f"Texto extraído do doc {i} — MATRÍCULA Nº 123",
+        )
+        db_session.add(d)
+        docs_with_text.append(d)
+
+    docs_no_text = []
+    for i in range(num_without_text):
+        d = Document(
+            tenant_id=tenant.id,
+            process_id=process.id,
+            client_id=process_client.id,
+            original_file_name=f"no-text-{i}.pdf",
+            filename=f"no-text-{i}.pdf",
+            content_type="application/pdf",
+            storage_key=f"tenant_{tenant.id}/no-text-{i}.pdf",
+            document_type="ccir",
+            ocr_status=OcrStatus.pending,
+        )
+        db_session.add(d)
+        docs_no_text.append(d)
+
+    db_session.commit()
+    return tenant, user, process, docs_with_text, docs_no_text
+
+
+def test_extract_dispatches_extrator_for_cached_docs_and_ocr_for_others(
+    client: TestClient, db_session, monkeypatch
+):
+    """3 docs: 2 com extracted_text → extrator direto; 1 sem → chain ocr_then_extract."""
+    from app.workers import agent_tasks, ocr_tasks
+
+    tenant, _user, process, docs_with, docs_no = _seed_process_with_docs(
+        db_session, num_with_text=2, num_without_text=1
+    )
+
+    extract_calls: list[dict] = []
+    ocr_calls: list[dict] = []
+
+    class _FakeAsync:
+        def __init__(self, id_: str):
+            self.id = id_
+
+    def fake_run_agent_delay(**kwargs):
+        extract_calls.append(kwargs)
+        return _FakeAsync(f"task-extract-{len(extract_calls)}")
+
+    def fake_ocr_delay(**kwargs):
+        ocr_calls.append(kwargs)
+        return _FakeAsync(f"task-ocr-{len(ocr_calls)}")
+
+    monkeypatch.setattr(agent_tasks.run_agent, "delay", fake_run_agent_delay)
+    monkeypatch.setattr(ocr_tasks.ocr_then_extract, "delay", fake_ocr_delay)
+
+    headers = _login(client, "consultor.extract@example.com", "extract123")
+    response = client.post(
+        f"/api/v1/processes/{process.id}/extract",
+        json={},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["process_id"] == process.id
+    assert payload["total_docs"] == 3
+    assert len(payload["jobs"]) == 2
+    assert len(payload["pending_ocr"]) == 1
+    assert all(j["method"] == "extract" for j in payload["jobs"])
+    assert payload["pending_ocr"][0]["method"] == "ocr_then_extract"
+
+    # Confirma que as tasks foram efetivamente enfileiradas
+    assert len(extract_calls) == 2
+    assert len(ocr_calls) == 1
+    assert extract_calls[0]["agent_name"] == "extrator"
+    assert extract_calls[0]["process_id"] == process.id
+    assert ocr_calls[0]["doc_id"] == docs_no[0].id
+    assert ocr_calls[0]["force"] is False
+
+    # AuditLog gravado
+    audit = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.entity_type == "process",
+            AuditLog.entity_id == process.id,
+            AuditLog.action == "extractor_dispatched",
+        )
+        .one()
+    )
+    assert "2 job(s)" in audit.details and "1 chain" in audit.details
+
+
+def test_extract_returns_404_when_process_has_no_documents(
+    client: TestClient, db_session, monkeypatch
+):
+    tenant, _user, process, _, _ = _seed_process_with_docs(
+        db_session, num_with_text=0, num_without_text=0
+    )
+    headers = _login(client, "consultor.extract@example.com", "extract123")
+    response = client.post(
+        f"/api/v1/processes/{process.id}/extract", json={}, headers=headers
+    )
+    assert response.status_code == 404
+    assert "sem documentos" in response.json()["detail"].lower()
+
+
+def test_extract_force_true_routes_cached_docs_through_ocr(
+    client: TestClient, db_session, monkeypatch
+):
+    """Com force=True, mesmo docs com extracted_text vão pra ocr_then_extract (re-OCR)."""
+    from app.workers import agent_tasks, ocr_tasks
+
+    tenant, _user, process, _, _ = _seed_process_with_docs(
+        db_session, num_with_text=2, num_without_text=0
+    )
+
+    extract_calls: list[dict] = []
+    ocr_calls: list[dict] = []
+
+    class _FakeAsync:
+        def __init__(self, id_: str):
+            self.id = id_
+
+    monkeypatch.setattr(
+        agent_tasks.run_agent, "delay",
+        lambda **kw: (extract_calls.append(kw), _FakeAsync("x"))[1],
+    )
+    monkeypatch.setattr(
+        ocr_tasks.ocr_then_extract, "delay",
+        lambda **kw: (ocr_calls.append(kw), _FakeAsync("y"))[1],
+    )
+
+    headers = _login(client, "consultor.extract@example.com", "extract123")
+    response = client.post(
+        f"/api/v1/processes/{process.id}/extract",
+        json={"force": True},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["jobs"]) == 0
+    assert len(payload["pending_ocr"]) == 2
+    assert len(extract_calls) == 0
+    assert len(ocr_calls) == 2
+    assert all(c["force"] is True for c in ocr_calls)

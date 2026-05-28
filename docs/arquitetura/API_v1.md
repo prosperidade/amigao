@@ -221,6 +221,44 @@ e o gate de `/validate` exige decisão. A UI dos 5 botões precisa expor a trans
 `status_achado` (PATCH `/issues`) no mesmo fluxo da decisão, senão trava no gate sem
 caminho.
 
+### Extração por processo (`POST /api/v1/processes/{id}/extract`) — fix/extrator-por-processo
+
+Dispara extração de campos em **todos** os documentos do processo em um clique.
+Para cada `Document` (`tenant_id` + `process_id` + `deleted_at IS NULL`):
+
+- **Com `extracted_text` cacheado e `force=false`:** enfileira
+  `workers.run_agent.delay(agent_name="extrator", process_id=…, metadata={document_id, document_type})`.
+  Entra em `jobs` da resposta com `method="extract"`.
+- **Sem `extracted_text` ou `force=true`:** enfileira
+  `workers.ocr_then_extract.delay(doc_id=…, force=…)`. A chain roda OCR
+  (pypdf → Gemini Vision → OpenAI Vision) e ao final despacha o
+  `extrator`. Entra em `pending_ocr` com `method="ocr_then_extract"`.
+
+**Auditoria:** grava `AuditLog(action="extractor_dispatched", details="…")`.
+**404:** processo sem documentos. **200:** mesmo se *zero* tasks
+enfileiram com sucesso (skipped/failures vão no shape).
+
+**Body (opcional):**
+```json
+{ "force": false }
+```
+
+**Resposta 200:**
+```json
+{
+  "process_id": 42,
+  "total_docs": 3,
+  "jobs":         [{"document_id": 11, "filename": "matricula.pdf", "document_type": "matricula", "method": "extract", "task_id": "…"}],
+  "pending_ocr":  [{"document_id": 12, "filename": "ccir.pdf",      "document_type": "ccir",      "method": "ocr_then_extract", "task_id": "…"}],
+  "skipped":      []
+}
+```
+
+> **Por que existe.** Antes, "Executar" do `extrator` na página `/agents`
+> sem metadata era no-op silencioso ("Nenhum documento fornecido"). O
+> caminho explícito por processo cobre o fluxo natural da consultora:
+> abrir caso → subir docs → clicar uma vez.
+
 ### Webhooks / async
 
 Endpoints assíncronos que dependem de Celery retornam 202 com `job_id`:

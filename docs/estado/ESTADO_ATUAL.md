@@ -1,9 +1,9 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-28 (pós `fix/upload-checklist-binding` — vínculo doc↔checklist + exclusão em cascata cliente/imóvel)
+**Data do instantâneo:** 2026-05-28 (pós-`fix/extrator-por-processo` — extração por processo + UI honesta; logo após `fix/upload-checklist-binding` que vinculou doc↔checklist e habilitou cascade delete cliente/imóvel)
 **Próxima atualização:** follow-on do badge (espelhar exclusão `descartada`/`resolvida`) OU próxima frente (#18 hash-chain verifier? geoespacial 🛰️?)
 **Responsável de atualização:** quem fechar a próxima sprint
-**Frente em revisão:** `fix/upload-checklist-binding` (PR aberto) — PROMPT_8/9/10/11 já em main
+**Frente em revisão:** `fix/extrator-por-processo` (PR aberto — POST `/processes/{id}/extract` + UI de extrator/upload/exclusão). `fix/upload-checklist-binding` (PR #14) já em main; PROMPT_8/9/10/11 também.
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
@@ -145,7 +145,7 @@
   - **Follow-on aberto:** badge "N pendentes" do `DiagnosisAssinatura`
     (PROMPT_9) precisa espelhar a mesma exclusão (`descartada`/`resolvida`)
     pra não super-contar.
-- **`fix/upload-checklist-binding` mergeado em 2026-05-28** — destrava o ciclo de teste da Isis:
+- **`fix/upload-checklist-binding` mergeado em 2026-05-28 (PR #14)** — destrava o ciclo de teste da Isis:
   - **Vínculo doc ↔ item de checklist no upload.** `DocumentConfirmRequest` ganha
     `checklist_item_id?: str` (opcional). O endpoint `POST /documents/confirm-upload`
     persiste a coluna `Document.checklist_item_id` (já existia no model) e — se o
@@ -179,6 +179,31 @@
     o caso de uso é resubir os mesmos dados de teste.
   - Suite ampliada das frentes afetadas: **186 testes passando**, tsc `--noEmit`
     zero erros. Sem migration (todas as colunas já existem no schema).
+- **`fix/extrator-por-processo` em revisão (2026-05-28, logo após PR #14)** — fecha #25
+  (extrator no-op silencioso + falta de extração por processo):
+  - **Backend:** `POST /api/v1/processes/{id}/extract` enfileira por
+    documento: `workers.run_agent("extrator")` quando há
+    `extracted_text` cacheado (com `force=true` opcional pra re-OCR);
+    `workers.ocr_then_extract` (chain OCR→extrator) quando o texto
+    falta. Resposta separa `jobs` × `pending_ocr`; AuditLog
+    `extractor_dispatched` rastreia o disparo. **404** sem docs.
+  - **`ExtratorAgent` agora orienta:** sem `document_id`/`text`, o
+    `reason` aponta pros 3 caminhos (incluindo o endpoint novo); com
+    `document_id` mas `extracted_text` NULL, o `ValueError` diz "OCR
+    ainda não rodou — use POST /processes/{id}/extract" em vez do
+    críptico "texto extraido".
+  - **UI consultor:** card do `extrator` em `/agents` mostra **"Rodar
+    no processo #N"** (disabled sem ID — sem mais no-op silencioso).
+    Step 4 do `IntakeWizard` **trava avanço** se há docs anexados sem
+    "Ler documentos com IA" disparado. `DraftDocumentUploader` ganha
+    botão 🗑 por linha (habilitado pra `ocr_status` em `{null,
+    pending}`) — exclui antes da IA processar. Doc já processado
+    continua removível pela aba Documentos do processo.
+  - **Sem migration. Sem ADR.** Reuso de `ocr_then_extract`,
+    `run_agent`, `ProcessRepository.add_audit`, `DELETE
+    /documents/{id}`. 9 testes em `tests/api/test_processes.py` (3
+    novos) + 4 em `tests/agents/test_extrator_cache.py` (1 novo) verde.
+    Frontend tsc/build verde.
 - **Pipeline ponta a ponta no nível de código + UI:** `extrator → auditor_imovel
   → legislacao → diagnostico → POST /diagnoses (versionado + gate Pydantic) →
   consultor adjudica status_achado e decide alerta por alerta (aba Alertas) →

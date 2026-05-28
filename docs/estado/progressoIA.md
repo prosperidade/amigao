@@ -1058,3 +1058,86 @@ A interação IA ↔ checklist é determinística: matching exato por
 `doc_type` string. Suficiente pro ciclo da Isis; melhorias semânticas
 (matching fuzzy, embedding-based) ficam pra rodada futura se aparecer
 demanda real.
+
+---
+
+## Pulso `fix/extrator-por-processo` — extração por processo + UI honesta (28/05/2026)
+
+### Sintoma fechado
+
+Antes desta rodada: na página `/agents`, clicar "Executar" no card do
+`extrator` sem informar processo virava
+`{"skipped": True, "reason": "Nenhum documento fornecido para extracao"}`
+— a UI exibia "não identificado" no histórico, sem caminho de saída pro
+consultor. Pior: quando um Document existia mas o OCR ainda não tinha
+rodado, o agente levantava `ValueError("Documento N nao possui texto
+extraido (OCR deve rodar primeiro)")` — diagnóstico técnico sem prescrição.
+
+E no funil de cadastro: nada impedia o consultor de avançar do Step 4
+(Documentos) pra Step 5 (Confirmar) sem ter clicado em "🤖 Ler
+documentos com IA" — saía achando que rodou IA. Sem botão pra remover
+um upload errado antes do OCR começar.
+
+### O que entrou (fecha dívida #25)
+
+- **Backend.** Novo `POST /api/v1/processes/{id}/extract` em
+  `app/api/v1/processes.py`. Por documento (filtrando
+  `tenant_id`+`process_id`+`deleted_at IS NULL`):
+  - `extracted_text` cacheado e `force=false` → `workers.run_agent.delay(agent_name="extrator", process_id=…, metadata={document_id, document_type})`. Entra em `jobs`.
+  - Caso contrário (ou `force=true`) → `workers.ocr_then_extract.delay(doc_id=…, force=…)`. Chain OCR (pypdf/Gemini/OpenAI Vision) que despacha o `extrator` ao fim. Entra em `pending_ocr`.
+  - **404** sem documentos. AuditLog `extractor_dispatched` reusa `ProcessRepository.add_audit`.
+- **Mensagens acionáveis no `ExtratorAgent`.**
+  - O `reason` do skipped agora aponta 3 caminhos: `metadata.document_id`,
+    `metadata.text`, ou `POST /api/v1/processes/{id}/extract`. Mantém o
+    payload (`skipped: True`) — UI continua exibindo no histórico,
+    apenas com mensagem útil.
+  - O `ValueError` quando `Document.extracted_text` é NULL menciona
+    explicitamente `POST /processes/{id}/extract` e `workers.ocr_then_extract`.
+- **UI — `AgentsPage.tsx`.** Card do `extrator` (e SÓ dele) troca o
+  "Executar" pelo botão **"Rodar no processo #N"**:
+  - Disabled quando "ID do Processo" está vazio (com tooltip explicando).
+  - Chama nova mutation que bate em `/processes/{id}/extract`.
+  - Demais agentes mantêm o "Executar" sem mudança.
+- **UI — `IntakeWizard.tsx` + `DraftDocumentUploader.tsx`.**
+  - `DraftDocumentUploader` ganha props `onChange` (contagem de docs) e
+    `onImportTriggered` (callback ao "Ler documentos com IA" sucedido).
+  - `canGoNext()` do Step 4 retorna `false` se `uploadedDocCount > 0 && !importTriggered`. Step 4 com zero docs continua liberado (upload é opcional — regra Regente preservada).
+  - Aviso amarelo informativo embaixo do uploader quando o avanço está travado.
+- **UI — exclusão antes do OCR.** `DraftDocumentUploader` ganha botão
+  🗑 por linha, habilitado quando `ocr_status` em `{null, pending}`.
+  Reusa o `DELETE /api/v1/documents/{id}` existente (soft delete via
+  `deleted_at`). Após `processing|done|failed`, exclusão fica em
+  `DocumentsTab` (que já tem essa ação).
+
+### Testes
+
+- `tests/api/test_processes.py` (+3):
+  - 3 docs (2 com texto, 1 sem) → 2 em `jobs` + 1 em `pending_ocr` + AuditLog gravado.
+  - 0 docs → 404.
+  - `force=true` força todos os 2 cacheados pra `ocr_then_extract`.
+- `tests/agents/test_extrator_cache.py` (+1):
+  - Sem args, `reason` contém "POST" + "/extract" + "document_id".
+- O teste pré-existente `test_extrator_raises_when_no_text_and_no_cache` continua passando (assertiva busca `"OCR"` na mensagem — minha nova mensagem mantém).
+
+### Suite verde
+
+- Backend: `pytest tests/api/test_processes.py tests/agents/test_extrator_cache.py` → 13/13 verde.
+- Frontend: `npx tsc --noEmit` clean; `npm run build` succeede.
+
+### Cuidados respeitados
+
+- **Worker Celery é dependência forte.** Documentado em
+  `docs/operacao/RUNBOOK_DEV.md` — sem worker, uploads ficam em
+  `ocr_status='pending'` indefinidamente.
+- **ADR-011 não muda.** `NON_BLOCKING_REVIEW_AGENTS` segue igual; o bloqueio do `extrator` não foi alterado.
+- **AgentRegistry reusado, agente novo não criado.**
+- **Zero migration.** `Process`, `Document`, `AuditLog` já tinham todos os campos.
+
+### Marco condicional (não fechado nesta rodada)
+
+`app/workers/ocr_tasks.py:_dispatch_extrator` ainda passa `process_id=None`
+ao `run_agent.delay(...)` — o `AIJob` resultante (no caminho da chain
+OCR) perde o link com o processo. Fora do escopo do sintoma do PR. Se
+isso começar a doer (consultor procurando o job pela aba do processo e
+não achando), abre nova dívida e ajusta `_dispatch_extrator` pra receber
+e propagar `process_id` opcional.

@@ -124,6 +124,29 @@ export default function AgentsPage() {
     },
   });
 
+  // fix/extrator-por-processo — botão dedicado do extrator: dispara a extração
+  // em TODOS os documentos do processo (docs cacheados → extrator direto;
+  // docs sem texto → chain ocr_then_extract). Substitui o no-op silencioso
+  // de "rodar extrator com metadata: {}".
+  interface ProcessExtractResponse {
+    process_id: number;
+    total_docs: number;
+    jobs: Array<{ document_id: number; method: string }>;
+    pending_ocr: Array<{ document_id: number; method: string }>;
+  }
+  const runExtractorOnProcessMutation = useMutation<ProcessExtractResponse, unknown, number>({
+    mutationFn: async (processId: number) => {
+      const { data } = await api.post<ProcessExtractResponse>(
+        `/processes/${processId}/extract`,
+        {},
+      );
+      return data;
+    },
+    onSuccess: () => {
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs-global'] }), 2000);
+    },
+  });
+
   // --- Metricas ---
 
   const today = new Date().toDateString();
@@ -304,20 +327,50 @@ export default function AgentsPage() {
                         {agentFailed > 0 && <span className="text-red-500 ml-1">{agentFailed} falhas</span>}
                       </span>
                     )}
-                    {/* Sprint W (2026-05-14) — botão Executar direto no card.
-                        Antes era preciso usar o dropdown abaixo; agora basta clicar. */}
-                    <button
-                      type="button"
-                      onClick={() => runAgentMutation.mutate(a.name)}
-                      disabled={runAgentMutation.isPending && runAgentMutation.variables === a.name}
-                      title={processIdInput ? `Executar para o processo #${processIdInput}` : 'Executar (sem contexto de processo)'}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
-                    >
-                      {runAgentMutation.isPending && runAgentMutation.variables === a.name
-                        ? <Loader2 className="w-3 h-3 animate-spin" />
-                        : <Zap className="w-3 h-3" />}
-                      Executar
-                    </button>
+                    {/* fix/extrator-por-processo — botão dedicado pro extrator:
+                        em vez de "Executar" no-op, dispara extração em todos os
+                        docs do processo informado em "ID do Processo" acima.
+                        Demais agentes mantêm o "Executar" original. */}
+                    {a.name === 'extrator' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pid = parseInt(processIdInput);
+                          if (!Number.isFinite(pid)) return;
+                          runExtractorOnProcessMutation.mutate(pid);
+                        }}
+                        disabled={
+                          !processIdInput ||
+                          (runExtractorOnProcessMutation.isPending &&
+                            runExtractorOnProcessMutation.variables === parseInt(processIdInput))
+                        }
+                        title={
+                          processIdInput
+                            ? `Rodar extrator em todos os documentos do processo #${processIdInput}`
+                            : 'Informe o ID do processo no campo acima para rodar o extrator em todos os documentos.'
+                        }
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
+                      >
+                        {runExtractorOnProcessMutation.isPending &&
+                        runExtractorOnProcessMutation.variables === parseInt(processIdInput)
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Zap className="w-3 h-3" />}
+                        {processIdInput ? `Rodar no processo #${processIdInput}` : 'Rodar no processo'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => runAgentMutation.mutate(a.name)}
+                        disabled={runAgentMutation.isPending && runAgentMutation.variables === a.name}
+                        title={processIdInput ? `Executar para o processo #${processIdInput}` : 'Executar (sem contexto de processo)'}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
+                      >
+                        {runAgentMutation.isPending && runAgentMutation.variables === a.name
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Zap className="w-3 h-3" />}
+                        Executar
+                      </button>
+                    )}
                   </div>
                 </div>
               );
