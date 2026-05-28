@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.process import ProcessStatus
 
@@ -64,3 +64,37 @@ class ProcessDetail(Process):
     has_minimal_base: bool = False            # cliente com contato + imóvel com nome
     has_complementary_base: bool = False      # existe ≥1 documento vinculado
     missing_docs_count: int = 0               # itens obrigatórios pendentes no checklist
+
+
+# fix/extrator-por-processo — disparar extrator em todos os documentos do processo
+# em um clique. Backend resolve OCR + extrator por documento.
+class ProcessExtractRequest(BaseModel):
+    force: bool = Field(
+        default=False,
+        description="Bypassa cache de extracted_text e força re-OCR + re-extração.",
+    )
+
+
+class ProcessExtractJob(BaseModel):
+    document_id: int
+    filename: Optional[str] = None
+    document_type: Optional[str] = None
+    method: Literal["extract", "ocr_then_extract"]
+    task_id: Optional[str] = None
+
+
+class ProcessExtractResponse(BaseModel):
+    process_id: int
+    total_docs: int
+    jobs: list[ProcessExtractJob] = Field(
+        default_factory=list,
+        description="Docs com texto cacheado — extrator direto.",
+    )
+    pending_ocr: list[ProcessExtractJob] = Field(
+        default_factory=list,
+        description="Docs sem texto — chain ocr_then_extract que dispara extrator ao fim.",
+    )
+    skipped: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Docs ignorados (motivo no payload).",
+    )

@@ -139,6 +139,10 @@ export default function IntakeWizard() {
   // PDFs ao Gemini (sub-processador estrangeiro). Gate puramente de UI; o
   // consentimento juridicamente vinculante vem do contrato/termo do cliente.
   const [lgpdAck, setLgpdAck] = useState(false);
+  // fix/extrator-por-processo — quantidade de docs anexados + flag de leitura
+  // disparada, para travar o avanço do Step 4 se há docs sem IA rodada.
+  const [uploadedDocCount, setUploadedDocCount] = useState(0);
+  const [importTriggered, setImportTriggered] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     entry_type: 'novo_cliente_novo_imovel',
@@ -334,7 +338,14 @@ export default function IntakeWizard() {
         !!form.client_type
       );
     }
-    // Steps 2, 3 e 4 sempre permitem avançar (todos opcionais agora)
+    // fix/extrator-por-processo — Step 4 (Documentos): se há docs anexados
+    // sem leitura IA disparada, bloqueia o avanço (consultor precisa clicar
+    // "Ler documentos com IA" ou remover os anexos antes).
+    if (step === 4) {
+      if (uploadedDocCount === 0) return true; // upload é opcional
+      return importTriggered;
+    }
+    // Steps 2 e 3 sempre permitem avançar (todos opcionais agora)
     return true;
   };
 
@@ -627,7 +638,11 @@ export default function IntakeWizard() {
 
               {draftId ? (
                 lgpdAck ? (
-                  <DraftDocumentUploader draftId={draftId} />
+                  <DraftDocumentUploader
+                    draftId={draftId}
+                    onChange={docs => setUploadedDocCount(docs.length)}
+                    onImportTriggered={() => setImportTriggered(true)}
+                  />
                 ) : (
                   <div className="p-6 rounded-xl bg-slate-800/30 border border-dashed border-white/10 text-center text-sm text-slate-400">
                     Marque a confirmação acima para liberar o upload de documentos.
@@ -641,6 +656,15 @@ export default function IntakeWizard() {
                   >
                     Reintentar
                   </button>
+                </div>
+              )}
+
+              {/* fix/extrator-por-processo — aviso de avanço travado */}
+              {uploadedDocCount > 0 && !importTriggered && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+                  Você anexou {uploadedDocCount} documento{uploadedDocCount > 1 ? 's' : ''}. Clique em
+                  <span className="px-1 font-semibold">🤖 Ler documentos com IA</span>
+                  antes de avançar (ou remova os anexos com 🗑).
                 </div>
               )}
             </div>

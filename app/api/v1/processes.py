@@ -35,7 +35,16 @@ from app.schemas.macroetapa import (
     StageOutputCreate,
     StageOutputResponse,
 )
-from app.schemas.process import Process, ProcessCreate, ProcessDetail, ProcessStatusUpdate, ProcessUpdate
+from app.schemas.process import (
+    Process,
+    ProcessCreate,
+    ProcessDetail,
+    ProcessExtractJob,
+    ProcessExtractRequest,
+    ProcessExtractResponse,
+    ProcessStatusUpdate,
+    ProcessUpdate,
+)
 from app.services.macroetapa_engine import (
     advance_macroetapa,
     get_macroetapa_status,
@@ -403,6 +412,124 @@ def delete_process(
     repo = ProcessRepository(db, current_user.tenant_id)
     repo.delete(process_id, detail="Processo não encontrado")
     db.commit()
+
+
+@router.post("/{process_id}/extract", response_model=ProcessExtractResponse)
+def extract_process_documents(
+    process_id: int,
+    body: ProcessExtractRequest = ProcessExtractRequest(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Dispara extração de campos em todos os documentos do processo.
+
+    Para cada Document do processo:
+      - Se já há `extracted_text` cacheado e `force=False`: enfileira só
+        o agente `extrator` (rápido, sem custo de OCR).
+      - Caso contrário: enfileira a chain `workers.ocr_then_extract` que
+        roda OCR (pypdf/Gemini/OpenAI Vision) e depois despacha o extrator.
+
+    Resolve o sintoma "rodar o extrator com metadata vazia é no-op" da UI
+    — agora há um caminho explícito de extração por processo.
+    """
+    from app.models.document import Document  # noqa: PLC0415
+
+    repo = ProcessRepository(db, current_user.tenant_id)
+    process = repo.get_or_404(process_id, detail="Processo não encontrado")
+
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.process_id == process.id,
+            Document.tenant_id == current_user.tenant_id,
+            Document.deleted_at.is_(None),
+        )
+        .order_by(Document.created_at.asc())
+        .all()
+    )
+
+    if not docs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processo sem documentos para extrair.",
+        )
+
+    jobs: list[ProcessExtractJob] = []
+    pending_ocr: list[ProcessExtractJob] = []
+
+    from app.workers.agent_tasks import run_agent  # noqa: PLC0415
+    from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
+
+    for doc in docs:
+        has_text = bool((doc.extracted_text or "").strip())
+        if has_text and not body.force:
+            try:
+                t = run_agent.delay(
+                    agent_name="extrator",
+                    tenant_id=current_user.tenant_id,
+                    user_id=current_user.id,
+                    process_id=process.id,
+                    metadata={
+                        "document_id": doc.id,
+                        "document_type": doc.document_type,
+                    },
+                )
+                jobs.append(
+                    ProcessExtractJob(
+                        document_id=doc.id,
+                        filename=doc.filename,
+                        document_type=doc.document_type,
+                        method="extract",
+                        task_id=getattr(t, "id", None),
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "extract_process_documents: falha ao enfileirar extrator doc=%s: %s",
+                    doc.id, exc,
+                )
+        else:
+            try:
+                t = ocr_then_extract.delay(
+                    doc_id=doc.id,
+                    tenant_id=current_user.tenant_id,
+                    user_id=current_user.id,
+                    draft_id=None,
+                    force=body.force,
+                )
+                pending_ocr.append(
+                    ProcessExtractJob(
+                        document_id=doc.id,
+                        filename=doc.filename,
+                        document_type=doc.document_type,
+                        method="ocr_then_extract",
+                        task_id=getattr(t, "id", None),
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "extract_process_documents: falha ao enfileirar ocr_then_extract doc=%s: %s",
+                    doc.id, exc,
+                )
+
+    repo.add_audit(
+        user_id=current_user.id,
+        process=process,
+        action="extractor_dispatched",
+        details=(
+            f"{len(jobs)} job(s) de extrator + {len(pending_ocr)} chain(s) OCR+extrator "
+            f"enfileiradas (force={body.force})"
+        ),
+    )
+    db.commit()
+
+    return ProcessExtractResponse(
+        process_id=process.id,
+        total_docs=len(docs),
+        jobs=jobs,
+        pending_ocr=pending_ocr,
+        skipped=[],
+    )
 
 
 @router.get("/{process_id}/timeline", response_model=list[AuditLogRead])
