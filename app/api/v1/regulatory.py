@@ -28,6 +28,14 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
+from app.models.checklist_template import ProcessChecklist
+from app.models.macroetapa import (
+    DIAGNOSTIC_MACROETAPAS,
+    MACROETAPA_TRANSITIONS,
+    Macroetapa,
+    MacroetapaChecklist,
+    can_advance_macroetapa,
+)
 from app.models.process import Process
 from app.models.property import Property
 from app.models.regulatory import (
@@ -49,6 +57,7 @@ from app.schemas.regulatory import (
 )
 from app.schemas.stage_output import validate_diagnostic_content
 from app.services.audit_hash import stamp_audit_hash
+from app.services.macroetapa_engine import advance_macroetapa
 from app.services.regulatory_coherence import (
     StatusCoherenceError,
     assert_decisao_permitida,
@@ -356,6 +365,59 @@ def validate_diagnosis(
 
     db.commit()
     db.refresh(diag)
+
+    # fix/diagnostico-propaga-estado: a assinatura propaga o estado da
+    # macroetapa. Se o processo está em etapa de diagnóstico
+    # (`diagnostico_preliminar` ou `diagnostico_tecnico`) e o gate
+    # `can_advance_macroetapa` passa, avança a macroetapa imediatamente —
+    # o consultor não precisa de um segundo clique em "Avançar". Se o
+    # gate trava (docs obrigatórios pendentes, checklist incompleto), o
+    # diagnóstico fica assinado mas a etapa não muda; o badge do card já
+    # refletirá o diagnóstico via `compute_macroetapa_state` (PROMPT
+    # passa `diagnosis_validated=True`).
+    try:
+        current_etapa = Macroetapa(process.macroetapa) if process.macroetapa else None
+    except ValueError:
+        current_etapa = None
+
+    if current_etapa in DIAGNOSTIC_MACROETAPAS:
+        checklist = (
+            db.query(MacroetapaChecklist)
+            .filter(
+                MacroetapaChecklist.process_id == process.id,
+                MacroetapaChecklist.macroetapa == current_etapa.value,
+            )
+            .first()
+        )
+        missing_docs = 0
+        pc = (
+            db.query(ProcessChecklist)
+            .filter(ProcessChecklist.process_id == process.id)
+            .first()
+        )
+        if pc and pc.items:
+            for item in pc.items:
+                if item.get("required") and item.get("status") == "pending":
+                    missing_docs += 1
+        can, _blockers = can_advance_macroetapa(
+            checklist,
+            documents_pending_required=missing_docs,
+            current_macroetapa=current_etapa,
+            diagnosis_validated=True,
+        )
+        if can:
+            nexts = MACROETAPA_TRANSITIONS.get(current_etapa, [])
+            if nexts:
+                advance_macroetapa(
+                    db,
+                    process,
+                    nexts[0],
+                    user_id=current_user.id,
+                    tenant_id=current_user.tenant_id,
+                )
+                db.commit()
+                db.refresh(diag)
+
     return diag
 
 

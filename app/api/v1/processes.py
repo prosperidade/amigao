@@ -134,6 +134,26 @@ def get_kanban_view(
     ) if process_ids else []
     pc_map: dict[int, ProcessChecklist] = {pc.process_id: pc for pc in proc_checklists}
 
+    # fix/diagnostico-propaga-estado: set de process_ids com pelo menos uma
+    # RegulatoryDiagnosis com `validated_at` preenchido. O badge da etapa de
+    # diagnóstico e o gate de avanço cobram esse fato (Princípio 1 — humano
+    # assinou). Uma query agregada evita N+1 no kanban.
+    from app.models.regulatory import RegulatoryDiagnosis  # noqa: PLC0415
+
+    validated_diagnosis_ids: set[int] = set()
+    if process_ids:
+        validated_diagnosis_ids = {
+            pid
+            for (pid,) in db.query(RegulatoryDiagnosis.process_id)
+            .filter(
+                RegulatoryDiagnosis.tenant_id == tenant_id,
+                RegulatoryDiagnosis.process_id.in_(process_ids),
+                RegulatoryDiagnosis.validated_at.isnot(None),
+            )
+            .distinct()
+            .all()
+        }
+
     # Contagem de documentos anexados por processo
     doc_counts: dict[int, int] = {}
     if process_ids:
@@ -189,9 +209,18 @@ def get_kanban_view(
         blockers_list = list_macroetapa_blockers(
             cl, documents_pending_required=missing_docs
         )
+        try:
+            current_macroetapa_enum = Macroetapa(etapa) if etapa else None
+        except ValueError:
+            current_macroetapa_enum = None
+        diagnosis_validated = proc.id in validated_diagnosis_ids
         state_enum = (
             compute_macroetapa_state(
-                cl, is_current=True, has_blockers=bool(blockers_list)
+                cl,
+                is_current=True,
+                has_blockers=bool(blockers_list),
+                current_macroetapa=current_macroetapa_enum,
+                diagnosis_validated=diagnosis_validated,
             )
             if cl
             else MacroetapaState.nao_iniciada
@@ -601,16 +630,37 @@ def _compute_can_advance(
             if item.get("required") and item.get("status") == "pending":
                 missing_docs += 1
 
+    # fix/diagnostico-propaga-estado: gate de saída de etapa de diagnóstico
+    # exige assinatura humana do RegulatoryDiagnosis. Consulta única por
+    # processo — não é caminho de listagem, só do detalhe.
+    from app.models.regulatory import RegulatoryDiagnosis  # noqa: PLC0415
+
+    diagnosis_validated = bool(
+        db.query(RegulatoryDiagnosis.id)
+        .filter(
+            RegulatoryDiagnosis.tenant_id == process.tenant_id,
+            RegulatoryDiagnosis.process_id == process.id,
+            RegulatoryDiagnosis.validated_at.isnot(None),
+        )
+        .first()
+    )
+
     can, blockers = can_advance_macroetapa(
         cl,
         documents_pending_required=missing_docs,
         require_complete=require_complete,
+        current_macroetapa=current_etapa,
+        diagnosis_validated=diagnosis_validated,
     )
 
     state_value = None
     if cl:
         state_value = compute_macroetapa_state(
-            cl, is_current=True, has_blockers=bool(blockers)
+            cl,
+            is_current=True,
+            has_blockers=bool(blockers),
+            current_macroetapa=current_etapa,
+            diagnosis_validated=diagnosis_validated,
         ).value
 
     next_etapa = None

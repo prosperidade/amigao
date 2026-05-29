@@ -353,11 +353,18 @@ class MacroetapaChecklist(Base):
 # ---------------------------------------------------------------------------
 
 
+DIAGNOSTIC_MACROETAPAS: frozenset[Macroetapa] = frozenset(
+    {Macroetapa.diagnostico_preliminar, Macroetapa.diagnostico_tecnico}
+)
+
+
 def compute_macroetapa_state(
     checklist: "MacroetapaChecklist",
     *,
     is_current: bool = False,
     has_blockers: bool = False,
+    current_macroetapa: Macroetapa | None = None,
+    diagnosis_validated: bool = False,
 ) -> MacroetapaState:
     """Deriva o estado formal de uma etapa a partir do checklist + flags externas.
 
@@ -365,6 +372,10 @@ def compute_macroetapa_state(
       - sem actions ou todas pendentes E não é a corrente → nao_iniciada
       - has_blockers=True → travada
       - alguma action com needs_human_validation=True não validada → aguardando_validacao
+      - etapa de diagnóstico (`current_macroetapa in DIAGNOSTIC_MACROETAPAS`) sem
+        `RegulatoryDiagnosis.validated_at` preenchido → aguardando_validacao,
+        mesmo com checklist 100% (fix/diagnostico-propaga-estado — Princípio 1:
+        peça formal só "fecha" depois da assinatura do consultor).
       - completion_pct >= 1.0 → concluida (ou pronta_para_avancar se ainda corrente)
       - tem actions completas mas não todas → em_andamento
       - é a corrente sem progresso → aguardando_input
@@ -379,6 +390,14 @@ def compute_macroetapa_state(
             return MacroetapaState.aguardando_validacao
 
     pct = float(checklist.completion_pct or 0.0)
+    is_diagnostic_stage = current_macroetapa in DIAGNOSTIC_MACROETAPAS
+
+    if is_diagnostic_stage and pct >= 1.0 and not diagnosis_validated:
+        # Checklist cheio mas diagnóstico não assinado: ainda não é
+        # pronta_para_avancar — o card precisa concordar com o bloco
+        # "diagnóstico assinado".
+        return MacroetapaState.aguardando_validacao
+
     if pct >= 1.0:
         return MacroetapaState.pronta_para_avancar if is_current else MacroetapaState.concluida
     if pct > 0:
@@ -417,8 +436,18 @@ def can_advance_macroetapa(
     *,
     documents_pending_required: int = 0,
     require_complete: bool = True,
+    current_macroetapa: Macroetapa | None = None,
+    diagnosis_validated: bool = False,
 ) -> tuple[bool, list[str]]:
-    """Regente CAM3FT-005 — só avança se output mínimo OK + sem trava + validações OK."""
+    """Regente CAM3FT-005 — só avança se output mínimo OK + sem trava + validações OK.
+
+    fix/diagnostico-propaga-estado: ao sair de `diagnostico_preliminar` ou
+    `diagnostico_tecnico` o gate exige `RegulatoryDiagnosis.validated_at`
+    preenchido (Princípio 1 — peças formais sempre com assinatura humana).
+    Os callers passam `current_macroetapa` (etapa que está na coluna do card)
+    e `diagnosis_validated` (`True` quando existe diagnóstico assinado para
+    o processo).
+    """
     blockers = list_macroetapa_blockers(
         checklist, documents_pending_required=documents_pending_required
     )
@@ -426,4 +455,6 @@ def can_advance_macroetapa(
         return False, ["Etapa não iniciada (sem checklist)."]
     if require_complete and float(checklist.completion_pct or 0.0) < 1.0:
         blockers.append("Output mínimo não atingido (checklist incompleto).")
+    if current_macroetapa in DIAGNOSTIC_MACROETAPAS and not diagnosis_validated:
+        blockers.append("Diagnóstico desta etapa ainda não foi assinado pelo consultor.")
     return (len(blockers) == 0), blockers

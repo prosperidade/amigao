@@ -1141,3 +1141,87 @@ OCR) perde o link com o processo. Fora do escopo do sintoma do PR. Se
 isso começar a doer (consultor procurando o job pela aba do processo e
 não achando), abre nova dívida e ajusta `_dispatch_extrator` pra receber
 e propagar `process_id` opcional.
+
+---
+
+## Pulso `fix/diagnostico-propaga-estado` — assinatura propaga macroetapa (28/05/2026)
+
+### Sintoma fechado
+
+Antes desta rodada: o consultor abria o `PATCH /processes/{id}/diagnoses/
+{version}/validate`, o backend gravava `validated_at` + AuditLog, devolvia
+200 — e a `Process.macroetapa` ficava onde estava. O card do kanban lia
+só `MacroetapaChecklist.completion_pct` para calcular o badge; o bloco
+"diagnóstico assinado" lia `RegulatoryDiagnosis.validated_at`. Pior: o
+gate `can_advance_macroetapa` não cobrava a assinatura, então mesmo um
+clique manual em "Avançar" passava com diagnóstico não assinado.
+
+### Escopo (conservador — eixo 2)
+
+- **NÃO** unificar `Process.status` com `Process.macroetapa` (isso é o
+  eixo 3 / PR3-agressivo). A divergência entre os dois eixos virou a
+  dívida nova **#26** no `REGISTRO_DIVIDAS`.
+- **NÃO** mexer nas 4 tabelas denormalizadas que carregam o status.
+- **Tocar só** `app/api/v1/regulatory.py` + `app/models/macroetapa.py`
+  no nível semântico; `app/api/v1/processes.py` ganhou propagação dos
+  novos kwargs para honrar o critério "badge concorda imediatamente"
+  sem refatorar — propagação mínima.
+
+### O que mudou
+
+- **`compute_macroetapa_state` e `can_advance_macroetapa`** ganham
+  kwargs `current_macroetapa: Macroetapa | None = None` e
+  `diagnosis_validated: bool = False`. Quando a etapa atual cai em
+  `DIAGNOSTIC_MACROETAPAS = {diagnostico_preliminar,
+  diagnostico_tecnico}`:
+  - O badge devolve `aguardando_validacao` se `pct >= 1.0` mas a
+    assinatura ainda não saiu.
+  - O gate de saída acrescenta o blocker `"Diagnóstico desta etapa
+    ainda não foi assinado pelo consultor."`.
+  - Callers que não passam os kwargs preservam comportamento legado
+    (compatibilidade pra trás).
+- **`PATCH /processes/{id}/diagnoses/{version}/validate`** após o
+  `db.commit()` da assinatura: se `process.macroetapa` é diagnóstica,
+  recalcula `can_advance_macroetapa` com `diagnosis_validated=True` (a
+  assinatura acabou de virar fato no banco) — se passa, chama
+  `advance_macroetapa(process, nexts[0], …)` automaticamente e dá novo
+  commit. Mesmo critério do botão "Avançar" manual: docs obrigatórios
+  + checklist 100% + assinatura.
+- **Kanban (`processes.py`)** executa uma única query agregada por
+  `tenant_id` para carregar o set de `process_id` com
+  `RegulatoryDiagnosis.validated_at IS NOT NULL` — evita N+1 na
+  listagem. `_compute_can_advance` faz a mesma consulta por processo
+  (caminho de detalhe).
+
+### Testes
+
+- `tests/models/test_macroetapa_gate.py` (novo) — 8 unitários puros
+  (sem ORM) que cobrem: gate bloqueia/libera por etapa de diagnóstico,
+  etapa não-diagnóstica fica intocada, badge vira `aguardando_validacao`
+  com checklist 100% sem assinatura.
+- `tests/api/test_regulatory.py::TestValidateAdvancesMacroetapa` (novo) —
+  3 testes E2E: assinar em `diagnostico_preliminar` com gate liberado
+  avança para `coleta_documental`; assinar fora de etapa de diagnóstico
+  não altera macroetapa; assinar com checklist incompleto grava
+  `validated_at` mas mantém macroetapa.
+
+### Suite verde
+
+- Backend, abrangência da área: `pytest tests/api/test_regulatory.py
+  tests/api/test_processes.py tests/test_state_machines.py
+  tests/models/test_macroetapa_gate.py tests/models/test_regulatory.py
+  tests/api/test_dashboard.py tests/api/test_clients.py` → **196/196
+  verde** (189 + 7 dashboard/clients).
+
+### Cuidados respeitados
+
+- **Sem migration, sem ADR.** Mudança puramente semântica — kwargs
+  novos com default seguro, query agregada e dispatch automático após
+  commit existente.
+- **`Process.status` não foi tocado.** A divergência entre os dois
+  eixos virou a dívida **#26** com plano explícito (eixo 3).
+- **`MACROETAPA_TRANSITIONS` intacto.** O auto-advance reusa o destino
+  default `nexts[0]` em vez de inventar transições novas.
+- **Princípio 1 reforçado em código:** peça formal só "fecha" depois da
+  assinatura humana — o badge passou a refletir esse fato; o gate passou
+  a cobrar esse fato.
