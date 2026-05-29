@@ -73,3 +73,8 @@ tmp_*.md
 normas_k3/
 !data/normas_k3/
 ops/normas_k3_preview/
+
+# agente Claude Code
+.claude/
+*.docx
+!docs/**/*.docx
