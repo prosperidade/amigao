@@ -113,6 +113,17 @@ Status: diagnostico
        │  └── Botão "Assinar diagnóstico vN" — gate camada 2 (422 com lista de
        │      pendentes; modal navega pro card correspondente)
        │ Frontend: AlertasTab + AlertaCard + DiagnosisAssinatura
+       │
+       │ fix/diagnostico-propaga-estado (28/05/2026): a assinatura propaga
+       │ o estado. PATCH /validate, depois de gravar `validated_at`, recalcula
+       │ `can_advance_macroetapa(current_macroetapa, diagnosis_validated=True)`
+       │ — se passa (docs obrigatórios + checklist 100% + assinatura), chama
+       │ `advance_macroetapa` no mesmo request e `Process.macroetapa` sobe
+       │ pra próxima etapa (`diagnostico_preliminar → coleta_documental`
+       │ ou `diagnostico_tecnico → caminho_regulatorio`). Gate travado mantém
+       │ `validated_at` gravado mas a etapa fica onde estava — badge do kanban
+       │ vira `aguardando_validacao` para refletir a assinatura. NÃO afeta
+       │ `Process.status` (eixo 3, dívida #26).
        ▼
 Status: planejamento
        │ Workflow template aplicado (por demand_type)

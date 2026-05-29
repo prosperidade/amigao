@@ -1,9 +1,9 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-28 (pós-`fix/extrator-por-processo` — extração por processo + UI honesta; logo após `fix/upload-checklist-binding` que vinculou doc↔checklist e habilitou cascade delete cliente/imóvel)
-**Próxima atualização:** follow-on do badge (espelhar exclusão `descartada`/`resolvida`) OU próxima frente (#18 hash-chain verifier? geoespacial 🛰️?)
+**Data do instantâneo:** 2026-05-28 (pós-`fix/diagnostico-propaga-estado` — assinatura propaga macroetapa e card concorda com bloco "diagnóstico assinado"; logo após `fix/extrator-por-processo` em main que entregou extração por processo + UI honesta)
+**Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
-**Frente em revisão:** `fix/extrator-por-processo` (PR aberto — POST `/processes/{id}/extract` + UI de extrator/upload/exclusão). `fix/upload-checklist-binding` (PR #14) já em main; PROMPT_8/9/10/11 também.
+**Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
@@ -211,6 +211,29 @@
   excluindo só achados descartados/resolvidos — PROMPT_10/11)`.
   Princípio 1 fechado em UI também — **a IA propõe, o consultor decide e assina,
   alerta por alerta.**
+- **`fix/diagnostico-propaga-estado` em revisão (2026-05-28, logo após PR #15)**
+  — fecha o sintoma "card discorda do diagnóstico assinado" e abre a dívida
+  **#26** (unificação `Process.status` × `Process.macroetapa` para o eixo 3):
+  - **`compute_macroetapa_state`** e **`can_advance_macroetapa`** ganham os
+    kwargs `current_macroetapa` + `diagnosis_validated`. Etapa de diagnóstico
+    com checklist 100% mas sem `RegulatoryDiagnosis.validated_at` agora
+    devolve `aguardando_validacao` (badge passa a concordar com o bloco
+    "diagnóstico assinado"); o gate de saída de `diagnostico_preliminar` /
+    `diagnostico_tecnico` cobra `validated_at` preenchido.
+  - **`PATCH /processes/{id}/diagnoses/{version}/validate`** chama
+    `advance_macroetapa` automaticamente quando o gate passa — mesmo
+    critério do botão "Avançar" manual: docs obrigatórios + checklist 100%
+    + agora a assinatura. Quando o gate trava, o `validated_at` ainda é
+    gravado; só a transição de etapa fica suspensa.
+  - **Conservador por desenho:** NÃO toca `Process.status`, nem consolida
+    as duas chains, nem mexe nas 4 tabelas denormalizadas. A unificação
+    propriamente dita virou a dívida **#26** (eixo 3 — PR3-agressivo,
+    isolado, com migration própria).
+  - **Kanban (`processes.py`)** executa uma única query agregada por
+    `tenant_id` para carregar o set de `process_id` com diagnóstico
+    assinado — evita N+1 na listagem.
+  - 4 testes unitários (`tests/models/test_macroetapa_gate.py`) + 3 de
+    API (`TestValidateAdvancesMacroetapa`). Sem migration.
 
 **O que está congelado:**
 

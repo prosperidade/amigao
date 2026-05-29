@@ -768,6 +768,123 @@ class TestValidateDiagnosis:
 
 
 # ---------------------------------------------------------------------------
+# fix/diagnostico-propaga-estado — assinatura propaga macroetapa
+# ---------------------------------------------------------------------------
+
+class TestValidateAdvancesMacroetapa:
+    """Assinar o diagnóstico em etapa de diagnóstico avança a macroetapa
+    automaticamente quando o gate (`can_advance_macroetapa`) passa.
+
+    Conservador: quando o gate trava (checklist incompleto, docs pendentes,
+    etapa não-diagnóstica) a etapa NÃO muda — só o `validated_at` é gravado.
+    """
+
+    def _seed_diagnosis(self, db_session, *, tenant, process, version=1):
+        diag = RegulatoryDiagnosis(
+            tenant_id=tenant.id,
+            process_id=process.id,
+            content={"content": "x", "sources": [{"type": "legislation", "ref": "c1"}]},
+            version=version,
+        )
+        db_session.add(diag)
+        db_session.flush()
+        return diag
+
+    def _seed_diagnostic_stage(self, db_session, process, completion_pct=1.0):
+        """Coloca o processo em diagnostico_preliminar com checklist completo."""
+        from app.models.macroetapa import Macroetapa, MacroetapaChecklist
+        process.macroetapa = Macroetapa.diagnostico_preliminar.value
+        cl = MacroetapaChecklist(
+            tenant_id=process.tenant_id,
+            process_id=process.id,
+            macroetapa=Macroetapa.diagnostico_preliminar.value,
+            actions=[{"id": "dp_01", "label": "x", "completed": True}],
+            completion_pct=completion_pct,
+        )
+        db_session.add(cl)
+        db_session.flush()
+
+    def test_assinar_em_etapa_diagnostico_avanca_para_coleta_documental(
+        self, client: TestClient, db_session
+    ):
+        from app.models.macroetapa import Macroetapa
+
+        tenant, _user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diagnostic_stage(db_session, process, completion_pct=1.0)
+        self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        db_session.commit()
+        process_id = process.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process_id}/diagnoses/1/validate", headers=headers,
+        )
+        assert r.status_code == 200
+
+        db_session.expire_all()
+        persisted = db_session.query(Process).get(process_id)
+        assert persisted.macroetapa == Macroetapa.coleta_documental.value
+
+    def test_assinar_fora_de_etapa_de_diagnostico_nao_avanca(
+        self, client: TestClient, db_session
+    ):
+        """Garante o caráter conservador do fix: só etapas de diagnóstico
+        sofrem auto-advance."""
+        from app.models.macroetapa import Macroetapa, MacroetapaChecklist
+
+        tenant, _user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        process.macroetapa = Macroetapa.coleta_documental.value
+        db_session.add(MacroetapaChecklist(
+            tenant_id=tenant.id,
+            process_id=process.id,
+            macroetapa=Macroetapa.coleta_documental.value,
+            actions=[{"id": "cd_01", "label": "x", "completed": True}],
+            completion_pct=1.0,
+        ))
+        self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        db_session.commit()
+        process_id = process.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process_id}/diagnoses/1/validate", headers=headers,
+        )
+        assert r.status_code == 200
+
+        db_session.expire_all()
+        persisted = db_session.query(Process).get(process_id)
+        # etapa intocada
+        assert persisted.macroetapa == Macroetapa.coleta_documental.value
+
+    def test_assinar_com_checklist_incompleto_nao_avanca_mas_grava_validated(
+        self, client: TestClient, db_session
+    ):
+        """Gate trava por checklist < 100% → `validated_at` é gravado mas
+        macroetapa fica onde estava."""
+        from app.models.macroetapa import Macroetapa
+
+        tenant, _user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diagnostic_stage(db_session, process, completion_pct=0.5)
+        self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        db_session.commit()
+        process_id = process.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process_id}/diagnoses/1/validate", headers=headers,
+        )
+        assert r.status_code == 200
+        assert r.json()["validated_at"] is not None
+
+        db_session.expire_all()
+        persisted = db_session.query(Process).get(process_id)
+        assert persisted.macroetapa == Macroetapa.diagnostico_preliminar.value
+
+
+# ---------------------------------------------------------------------------
 # PROMPT_6 — PATCH /properties/{prop_id}/issues/{issue_id}
 # Reconciliação dos 3 status (Opção A) + os 5 botões P4
 # ---------------------------------------------------------------------------
