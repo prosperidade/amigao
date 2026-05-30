@@ -33,14 +33,27 @@ from app.models.base import Base
 
 
 class SourceType(str, enum.Enum):
-    """Tipos de fonte aceitos no catalogo. Reflete `source_type` (string)."""
+    """Tipos de fonte aceitos no catalogo. Reflete `source_type` (string).
 
+    A coluna `source_type` no banco e `String(50)`, nao enum Postgres — o
+    enum aqui e apenas documentacao dos valores aceitos. Aceitar valores
+    novos NAO exige migration (so adicionar valor ao enum em PR de quem
+    introduz a fonte).
+    """
+
+    # Conjunto base (Sprint U/W).
     legislation = "legislation"
     oficio = "oficio"
     manual = "manual"
     jurisprudence = "jurisprudence"
     skill = "skill"
     other = "other"
+
+    # Sprint corpus-semad (2026-05-20) — taxonomia A/B/C/D do material SEMAD-GO.
+    matriz_ipe = "matriz_ipe"               # A. Fluxograma decisorio IPE (perguntas SIM/NAO)
+    norma_procedural = "norma_procedural"   # B. Texto procedural denso (compensacao, IN SEMAD)
+    gabarito_laudo = "gabarito_laudo"       # C. Estrutura de um tipo de laudo tecnico
+    manual_ipe = "manual_ipe"               # D. Passo-a-passo no Portal IPE (capturas de tela)
 
 
 class _Vector(UserDefinedType):
