@@ -229,6 +229,17 @@ Mapeia origem de cada campo do cliente:
 
 Sprint V (commit `65110a0`) implementou. Sprint V follow-up (commit `93355c3`) adicionou badge no frontend "extraído pela IA".
 
+**Reconciliação no intake (feat/intake-campos-backend, 2026-05-30):** durante o
+draft, a procedência fica em `IntakeDraft.form_data["field_sources"][campo]`
+(`"manual"` | `"extracted"`) e o valor resolvido em `form_data["reconciled"][campo]`,
+gravados por `POST /intake/drafts/{id}/reconcile`. No commit do draft, esses são
+aplicados a `Client`/`Property.field_sources`. As três famílias de campos do
+intake (decisão Isis 2026-05-28) vivem em schemas Pydantic (`app/schemas/intake.py`),
+não em colunas próprias — o `form_data` (JSONB livre) carrega tudo:
+- **`ManualFields`** — digitados pelo consultor (contato com e-mail OBRIGATÓRIO, funil, pessoa, `possui_car`, `tipo_atividade`, `audio_url`).
+- **`ExtractedFields`** — lidos pela IA (nirf, ccir, sigef, car, município/uf, coordenadas, áreas), cada um `{value, confidence, source_document_id}`.
+- **`TriagemFields`** — 2 eixos independentes: `urgencia` (4 níveis) + `valor_estrategico` (3 níveis) + observação.
+
 ### `AIJob.result` (JSONB)
 
 Estrutura variável por agente. Convenção:

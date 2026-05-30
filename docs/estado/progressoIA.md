@@ -1319,3 +1319,41 @@ Docs de estrutura atualizados: `BASE_REGULATORIA` (linha do corpus + total 22.57
 As 2 branches não-mergeadas (`chore/captura-redesign-e-scripts` e `feat/corpus-semad-ingestao`)
 foram verificadas commit a commit antes de agir: a primeira era ponteiro órfão (sua remoção de
 artefatos de redesign já estava em `main` via `acc55cf`) → apagada; a segunda era trabalho real → PR #24.
+
+---
+
+## Intake — campos derivados (backend) (30/05/2026)
+
+Decisões da Isis (2026-05-28) sobre os campos do cadastro, **dividido em 2 PRs** por
+escolha do Andre: **PR 1 (esta) = backend testável; PR 2 (follow-up) = frontend/UX**.
+
+**Entregue (backend):**
+- **E-mail obrigatório** no contato — `IntakeClientCreate.email` virou requerido + validador
+  (`create-case`/commit com e-mail vazio/ausente → 422). Decisão Isis (não é mais opcional).
+- **3 famílias de schema** em `app/schemas/intake.py` (decisão Isis): `ManualFields` (consultor
+  digita; inclui `audio_url` e `possui_car`), `ExtractedFields` (IA lê dos docs — cada campo
+  `{value, confidence, source_document_id}`; nirf/ccir/sigef/car/município/uf/coordenadas/áreas),
+  `TriagemFields` (2 eixos independentes: `urgencia` 4 níveis + `valor_estrategico` 3 níveis).
+- **2 endpoints novos** no draft: `GET /intake/drafts/{id}/extracted-fields` (preview lateral —
+  valor/confiança/doc de origem/flag de divergência) e `POST /intake/drafts/{id}/reconcile`
+  (Opção A: consultor escolhe origem `manual`|`extracted` por campo; grava `field_sources`
+  no `form_data`, aplicado a `Client`/`Property.field_sources` no commit; AuditLog hash chain).
+- **`audio_url`** aceito no payload do caso (entrada da entrevista). A transcrição (Whisper)
+  é PR própria do agente de atendimento — aqui só carregamos a referência.
+- **Regra `prad`** no classifier — era o 16º `DemandType` sem regra (KeyError latente se
+  selecionado direto). Agora os **16 demand_types são classificáveis**.
+- **`field_sources`** já existia em `Client` e `Property` (Sprints V/L) → **sem migration**.
+
+**Testes:** `tests/api/test_intake.py` (7) + `tests/services/test_intake_classifier.py` (18
+via parametrize) = **25 verdes**; 14 testes de intake pré-existentes sem regressão.
+
+**Decisões de escopo (registradas, não "puladas"):**
+- Sintoma/Dor/"Possui arquivo do CAR" **não existem no backend** (nunca foram colunas; são
+  campos de UI). Sua remoção é da UI → PR 2.
+- Rota é `/intake/...` (singular, convenção existente), não `/intakes/...` como no prompt.
+- Docs de agente (`ATENDIMENTO`/Whisper, `EXTRATOR`, `ECOSSISTEMA` 3.2) e `FLUXOS_E2E`
+  (preview lateral) descrevem UX/transcrição **ainda não construídas** → documentados no PR 2,
+  quando seus assuntos existirem (regra: documento vivo = fonte de verdade, não promessa).
+- Dívida **#29** aberta: critério do "Valor Estratégico — nível Baixo" (Isis não definiu).
+
+**Pendente:** Etapa 3 (frontend) = PR 2. Validação fim-a-fim com a Isis pendente.

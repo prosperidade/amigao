@@ -42,6 +42,10 @@ from app.schemas.intake import (
     IntakeImportResponse,
     IntakeExtractedDocument,
     IntakeExtractionResultsResponse,
+    IntakeReconcileRequest,
+    IntakeReconcileResponse,
+    IntakeExtractedFieldsResponse,
+    ExtractedFieldView,
 )
 from app.services.intake_classifier import classify_demand, get_demand_rules
 
@@ -1006,3 +1010,188 @@ def commit_draft(
     db.commit()
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Preview lateral + reconciliação cliente × IA (decisões Isis 2026-05-28)
+# ---------------------------------------------------------------------------
+
+# Mapa: campo extraído pela IA → caminho do valor manual no form_data do draft.
+# Só serve para detectar divergência (manual ≠ extraído) no preview lateral.
+_EXTRACTED_TO_MANUAL = {
+    "car_numero": ("new_property", "car_number"),
+    "car_code": ("new_property", "car_number"),
+    "ccir_numero": ("new_property", "ccir_number"),
+    "ccir": ("new_property", "ccir_number"),
+    "municipio": ("new_property", "municipality"),
+    "uf": ("new_property", "state"),
+    "area_total_ha": ("new_property", "area_hectares"),
+    "cpf_cnpj": ("new_client", "cpf_cnpj"),
+}
+
+
+def _manual_value_for(form_data: dict, field: str):
+    """Valor digitado pelo consultor correspondente a um campo extraído (ou None)."""
+    path = _EXTRACTED_TO_MANUAL.get(field)
+    if not path:
+        return None
+    section, key = path
+    sub = form_data.get(section) if isinstance(form_data, dict) else None
+    if isinstance(sub, dict):
+        return sub.get(key)
+    return None
+
+
+def _load_draft_or_404(db, draft_id, tenant_id) -> IntakeDraft:
+    draft = db.query(IntakeDraft).filter(
+        IntakeDraft.id == draft_id,
+        IntakeDraft.tenant_id == tenant_id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rascunho não encontrado.")
+    return draft
+
+
+@router.get(
+    "/drafts/{draft_id}/extracted-fields",
+    response_model=IntakeExtractedFieldsResponse,
+)
+def get_draft_extracted_fields(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Preview lateral — campos que a IA extraiu dos documentos do draft.
+
+    Cada campo carrega valor, confiança (se disponível), documento de origem e
+    a flag `diverges_from_manual` (valor digitado ≠ extraído, e ainda não
+    reconciliado). Alimenta o PreviewPanel + abertura do modal de reconciliação.
+    """
+    from app.models.document import Document  # noqa: PLC0415
+    from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+
+    draft = _load_draft_or_404(db, draft_id, current_user.tenant_id)
+    form_data = draft.form_data or {}
+    reconciled = (form_data.get("reconciled") or {}) if isinstance(form_data, dict) else {}
+
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.intake_draft_id == draft_id,
+            Document.tenant_id == current_user.tenant_id,
+            Document.deleted_at.is_(None),
+        )
+        .all()
+    )
+    doc_by_id = {d.id: d for d in docs}
+
+    jobs = (
+        db.query(AIJob)
+        .filter(
+            AIJob.tenant_id == current_user.tenant_id,
+            AIJob.agent_name == "extrator",
+            AIJob.status == AIJobStatus.completed,
+        )
+        .order_by(AIJob.finished_at.desc().nullslast(), AIJob.id.desc())
+        .all()
+    )
+    latest_by_doc: dict[int, AIJob] = {}
+    for j in jobs:
+        try:
+            doc_id = (j.result or {}).get("document_id")
+        except AttributeError:
+            continue
+        if isinstance(doc_id, int) and doc_id in doc_by_id and doc_id not in latest_by_doc:
+            latest_by_doc[doc_id] = j
+
+    # Agrega por campo: primeiro valor não-vazio vence (mesma regra de extraction-results).
+    seen: dict[str, ExtractedFieldView] = {}
+    for doc_id, j in latest_by_doc.items():
+        d = doc_by_id[doc_id]
+        fields = (j.result or {}).get("extracted_fields") or {}
+        for k, raw in fields.items():
+            if k in seen:
+                continue
+            # value pode ser escalar ou {"value":..., "confidence":...}
+            if isinstance(raw, dict) and "value" in raw:
+                value = raw.get("value")
+                confidence = raw.get("confidence")
+            else:
+                value = raw
+                confidence = None
+            if value in (None, "", []):
+                continue
+            manual = _manual_value_for(form_data, k)
+            diverges = (
+                manual not in (None, "", [])
+                and k not in reconciled
+                and str(manual).strip() != str(value).strip()
+            )
+            seen[k] = ExtractedFieldView(
+                field=k,
+                value=value,
+                confidence=confidence,
+                source_document_id=doc_id,
+                source_document_name=d.original_file_name,
+                diverges_from_manual=diverges,
+            )
+
+    fields_list = list(seen.values())
+    return IntakeExtractedFieldsResponse(
+        draft_id=draft_id,
+        fields=fields_list,
+        has_divergence=any(f.diverges_from_manual for f in fields_list),
+    )
+
+
+@router.post(
+    "/drafts/{draft_id}/reconcile",
+    response_model=IntakeReconcileResponse,
+)
+def reconcile_draft_field(
+    draft_id: int,
+    payload: IntakeReconcileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Reconciliação cliente × IA (Opção A — decisão na divergência).
+
+    O consultor escolhe a origem vencedora de UM campo divergente. Grava
+    `form_data["field_sources"][field]` ("manual" | "extracted") e fixa o valor
+    em `form_data["reconciled"][field]`. As colunas reais (Client/Property
+    `field_sources`) são preenchidas no commit do draft. Registra AuditLog.
+    """
+    draft = _load_draft_or_404(db, draft_id, current_user.tenant_id)
+
+    # JSONB: reconstruir o dict para o SQLAlchemy detectar a mudança.
+    form_data = dict(draft.form_data or {})
+    field_sources = dict(form_data.get("field_sources") or {})
+    field_sources[payload.field] = payload.source
+    form_data["field_sources"] = field_sources
+    reconciled = dict(form_data.get("reconciled") or {})
+    reconciled[payload.field] = payload.value
+    form_data["reconciled"] = reconciled
+    draft.form_data = form_data
+    draft.refresh_expiration()
+
+    audit = AuditLog(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        entity_type="intake_draft",
+        entity_id=draft.id,
+        action="reconciled",
+        details=f"Campo '{payload.field}' reconciliado (origem: {payload.source}).",
+    )
+    db.add(audit)
+    db.flush()
+    from app.services.audit_hash import stamp_audit_hash  # noqa: PLC0415
+    stamp_audit_hash(db, audit)
+    db.commit()
+
+    return IntakeReconcileResponse(
+        draft_id=draft_id,
+        field=payload.field,
+        source=payload.source,
+        value=payload.value,
+        field_sources=field_sources,
+    )
