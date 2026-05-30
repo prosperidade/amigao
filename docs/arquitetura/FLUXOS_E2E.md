@@ -64,11 +64,24 @@ Consultor promove demand_type específico
        │ → Process.status pode avançar para triagem ou diagnostico
 ```
 
+**Preview lateral + reconciliação (campos derivados — decisões Isis 2026-05-28):**
+o wizard tem layout em 2 colunas quando há rascunho: à esquerda o formulário
+multi-step; à direita o `PreviewPanel`, que faz polling de
+`GET /intake/drafts/{id}/extracted-fields` (5s) e mostra cada campo extraído pela
+IA com badge de confiança (verde >0.9 / amarelo 0.7–0.9 / vermelho <0.7) e
+documento de origem. Quando o valor digitado diverge do extraído, abre o
+`ReconcileModal` (Opção A): o consultor escolhe a origem vencedora →
+`POST /intake/drafts/{id}/reconcile` grava em `field_sources`. A triagem usa
+2 eixos independentes (`PriorityStep`: urgência 4 níveis + valor estratégico
+3 níveis). O áudio da entrevista é anexável (Step 4) e vai para transcrição.
+
 **Onde isso vive no código:**
 
 | Passo | Backend | Frontend |
 |---|---|---|
-| Wizard 5 passos | `app/api/v1/intake.py` | `frontend/src/pages/Intake/IntakeWizard.tsx` |
+| Wizard 5 passos + preview/reconciliação | `app/api/v1/intake.py` | `frontend/src/pages/Intake/IntakeWizard.tsx` + `frontend/src/components/IntakeWizard/{PreviewPanel,ReconcileModal,PriorityStep}.tsx` |
+| Preview de extração | `GET /intake/drafts/{id}/extracted-fields` | `PreviewPanel.tsx` (polling 5s) |
+| Reconciliação cliente×IA | `POST /intake/drafts/{id}/reconcile` | `ReconcileModal.tsx` |
 | Auto-extração | `app/workers/ocr_tasks.py` + `app/agents/extrator.py` | (background) |
 | Diagnóstico preliminar | `app/agents/diagnostico.py` + chain `diagnostico_completo` | `DiagnosisPanel.tsx` |
 | Commit do draft | `app/api/v1/intake.py:commit_draft` | (segue para `/processes/{id}`) |

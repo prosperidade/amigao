@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import DiagnosisPanel from './DiagnosisPanel';
 import DraftDocumentUploader from './DraftDocumentUploader';
+import PriorityStep, { URGENCIA_OPTIONS, VALOR_ESTRATEGICO_OPTIONS } from '@/components/IntakeWizard/PriorityStep';
+import PreviewPanel from '@/components/IntakeWizard/PreviewPanel';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -50,10 +52,14 @@ interface FormState {
   client_type: 'pf' | 'pj';
   source_channel: string;
 
-  // Etapa 2 — Demanda
+  // Etapa 2 — Demanda + triagem (2 eixos independentes — decisão Isis 2026-05-28)
   description: string;
   initial_summary: string;
   urgency: string;
+  valor_estrategico: string;
+  observacoes_triagem: string;
+  // Áudio da entrevista (storage key após upload) — vai p/ transcrição no backend
+  audio_url: string;
 
   // Etapa 3 — Imóvel
   property_mode: 'none' | 'existing' | 'new';
@@ -116,13 +122,6 @@ const SOURCE_CHANNEL_OPTIONS = [
   { value: 'site', label: '🌐 Site' },
 ];
 
-const URGENCY_OPTIONS = [
-  { value: 'baixa', label: '🟢 Baixa — pode aguardar' },
-  { value: 'media', label: '🟡 Média — nas próximas semanas' },
-  { value: 'alta', label: '🟠 Alta — urgente (banco, prazo, crédito)' },
-  { value: 'critica', label: '🔴 Crítica — auto de infração, embargo, prazo vencendo' },
-];
-
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function IntakeWizard() {
@@ -143,12 +142,16 @@ export default function IntakeWizard() {
   // disparada, para travar o avanço do Step 4 se há docs sem IA rodada.
   const [uploadedDocCount, setUploadedDocCount] = useState(0);
   const [importTriggered, setImportTriggered] = useState(false);
+  // Áudio da entrevista — upload via presigned URL do draft.
+  const [audioUploading, setAudioUploading] = useState(false);
+  const [audioName, setAudioName] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
     entry_type: 'novo_cliente_novo_imovel',
     client_mode: 'new', client_id: '', client_name: '', client_phone: '',
     client_email: '', client_cpf_cnpj: '', client_type: 'pf', source_channel: 'whatsapp',
     description: '', initial_summary: '', urgency: 'media',
+    valor_estrategico: 'medio', observacoes_triagem: '', audio_url: '',
     property_mode: 'none', property_id: '', property_name: '',
     property_municipality: '', property_state: '', property_car: '',
     intake_notes: '',
@@ -179,6 +182,15 @@ export default function IntakeWizard() {
   };
 
   const isEnrichFlow = form.entry_type === 'complementar_base_existente';
+
+  // Valores digitados, indexados pelo nome do campo extraído pela IA — usados
+  // pelo PreviewPanel/ReconcileModal para mostrar "seu valor" na divergência.
+  const previewManualValues: Record<string, unknown> = {
+    car_numero: form.property_car,
+    municipio: form.property_municipality,
+    uf: form.property_state,
+    cpf_cnpj: form.client_cpf_cnpj,
+  };
 
   // ── Etapa 2: classificar demanda ──────────────────────────────────────────
   const handleClassify = async () => {
@@ -212,6 +224,14 @@ export default function IntakeWizard() {
       source_channel: form.source_channel,
       intake_notes: form.intake_notes || null,
       demand_type: classifyResult?.demand_type,
+      audio_url: form.audio_url || null,
+      // Triagem — 2 eixos independentes (decisão Isis). Persistem no form_data
+      // do draft; valor_estrategico ainda não tem coluna em Process (futuro).
+      triagem: {
+        urgencia: form.urgency,
+        valor_estrategico: form.valor_estrategico,
+        observacoes_triagem: form.observacoes_triagem || null,
+      },
     };
 
     if (form.client_mode === 'existing') {
@@ -323,6 +343,36 @@ export default function IntakeWizard() {
     }
   };
 
+  // ── Áudio da entrevista (decisão Isis) — upload via presigned URL do draft ──
+  const handleAudioUpload = async (file: File) => {
+    setAudioUploading(true);
+    setError(null);
+    try {
+      const id = draftId ?? (await persistDraft());
+      if (!id) {
+        setError('Não consegui preparar o rascunho para anexar o áudio.');
+        return;
+      }
+      const { data: presign } = await api.post(`/intake/drafts/${id}/upload-url`, {
+        filename: file.name,
+        content_type: file.type || 'audio/mpeg',
+        document_type: 'audio_entrevista',
+        document_category: 'audio',
+      });
+      await fetch(presign.upload_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'audio/mpeg' },
+        body: file,
+      });
+      setForm(prev => ({ ...prev, audio_url: presign.storage_key }));
+      setAudioName(file.name);
+    } catch {
+      setError('Erro ao enviar o áudio. Tente novamente.');
+    } finally {
+      setAudioUploading(false);
+    }
+  };
+
   const canGoNext = () => {
     if (step === 0) {
       const opt = ENTRY_TYPE_OPTIONS.find(o => o.value === form.entry_type);
@@ -352,7 +402,7 @@ export default function IntakeWizard() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 flex items-start justify-center py-10 px-4">
-      <div className="w-full max-w-3xl">
+      <div className="w-full max-w-5xl">
 
         {/* Header */}
         <div className="mb-8 text-center">
@@ -387,7 +437,8 @@ export default function IntakeWizard() {
           })}
         </div>
 
-        {/* Card */}
+        {/* Card + preview lateral (2 colunas quando há rascunho com docs) */}
+        <div className={`grid gap-6 items-start ${draftId ? 'lg:grid-cols-[1fr_360px]' : ''}`}>
         <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 shadow-2xl">
 
           {error && (
@@ -524,7 +575,14 @@ export default function IntakeWizard() {
                 </p>
               </div>
 
-              <Select label="Urgência" value={form.urgency} onChange={v => set('urgency', v)} options={URGENCY_OPTIONS} />
+              <PriorityStep
+                urgencia={form.urgency}
+                valorEstrategico={form.valor_estrategico}
+                observacoes={form.observacoes_triagem}
+                onChangeUrgencia={v => set('urgency', v)}
+                onChangeValorEstrategico={v => set('valor_estrategico', v)}
+                onChangeObservacoes={v => set('observacoes_triagem', v)}
+              />
 
               {form.description.trim().length >= 10 && !classifyResult && (
                 <button
@@ -659,6 +717,44 @@ export default function IntakeWizard() {
                 </div>
               )}
 
+              {/* Áudio da entrevista (decisão Isis) — entra como input p/ transcrição */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🎙️</span>
+                  <span className="text-sm font-medium text-white">Áudio da entrevista (opcional)</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Anexe a gravação do primeiro contato. O agente de atendimento transcreve
+                  (Whisper) e usa como contexto. Mesmo consentimento LGPD acima se aplica.
+                </p>
+                <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer ${
+                  audioUploading
+                    ? 'bg-white/5 border-white/10 text-slate-500 cursor-wait'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:border-emerald-400'
+                }`}>
+                  {audioUploading ? (
+                    <><span className="animate-spin">⟳</span> Enviando áudio…</>
+                  ) : form.audio_url ? (
+                    <>🔁 Trocar áudio</>
+                  ) : (
+                    <>📎 Anexar áudio</>
+                  )}
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    disabled={audioUploading}
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) handleAudioUpload(f);
+                    }}
+                  />
+                </label>
+                {form.audio_url && audioName && (
+                  <p className="text-xs text-emerald-300">✓ {audioName} anexado</p>
+                )}
+              </div>
+
               {/* fix/extrator-por-processo — aviso de avanço travado */}
               {uploadedDocCount > 0 && !importTriggered && (
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
@@ -706,8 +802,16 @@ export default function IntakeWizard() {
                   )}
                 </SummaryRow>
                 <SummaryRow icon="🚨" label="Urgência">
-                  {URGENCY_OPTIONS.find(o => o.value === form.urgency)?.label ?? form.urgency}
+                  {URGENCIA_OPTIONS.find(o => o.value === form.urgency)?.label ?? form.urgency}
                 </SummaryRow>
+                <SummaryRow icon="⭐" label="Valor estratégico">
+                  {VALOR_ESTRATEGICO_OPTIONS.find(o => o.value === form.valor_estrategico)?.label ?? form.valor_estrategico}
+                </SummaryRow>
+                {form.audio_url && (
+                  <SummaryRow icon="🎙️" label="Áudio da entrevista">
+                    {audioName ?? 'anexado'}
+                  </SummaryRow>
+                )}
                 {classifyResult && (
                   <SummaryRow icon="📋" label="Documentos esperados">
                     {classifyResult.required_documents.filter(d => d.required).length} obrigatórios, {classifyResult.required_documents.length} no total
@@ -789,6 +893,14 @@ export default function IntakeWizard() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Coluna direita — preview da extração da IA em tempo real */}
+        {draftId && (
+          <div className="lg:sticky lg:top-6 self-start">
+            <PreviewPanel draftId={draftId} manualValues={previewManualValues} />
+          </div>
+        )}
         </div>
       </div>
     </div>
