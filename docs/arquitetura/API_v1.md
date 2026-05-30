@@ -30,6 +30,7 @@ Superfície REST do Regente Ambiental. Para spec interativa com schemas, abra `h
 | Propriedades | `/api/v1/properties` | `app/api/v1/properties.py` | CRUD de imóvel + Imóvel Hub |
 | Tarefas | `/api/v1/tasks` | `app/api/v1/tasks.py` | CRUD + Kanban + transições |
 | Comunicação | `/api/v1/threads` | `app/api/v1/threads.py` | Threads, mensagens, anexos |
+| Credenciais | `/api/v1/credentials` | `app/api/v1/credentials.py` | Cofre de logins de portais por cliente (senha cifrada, ADR-014) |
 | Intake | `/api/v1/intake` | `app/api/v1/intake.py` | Wizard de 5 passos, drafts, commit, import documental |
 | Intake Feedback | `/api/v1/processes/{id}/classify` + `/admin/intake-feedback` | `app/api/v1/intake_feedback.py` | Promoção de `demand_type` + métricas de divergência |
 | Checklists | `/api/v1/processes` | `app/api/v1/checklists.py` | Checklist documental por processo |
@@ -119,6 +120,20 @@ por provider (popula o dropdown do Settings > IA):
 > consultor (formato LiteLLM `provider/model`). Falha de **auth** com a chave do consultor
 > **não** cai no fallback global (não gastar crédito do sistema) — erro claro pedindo revisão
 > em Configurações > IA. `BaseAgent.call_llm` resolve as prefs via `ctx.user_id`.
+
+### Cofre de credenciais de portal (`/api/v1/credentials`, PR 2.3)
+
+CRUD tenant-scoped do modelo `Credential` (logins de portais por cliente — SEMA/IBAMA/SICAR/
+INCRA/banco). Internal user; tenant vem do JWT.
+
+- `POST /api/v1/credentials` — `{client_id, portal, label?, login?, password?, url?, notes?}`.
+  O cliente precisa ser do mesmo tenant (senão 404). A **senha é cifrada** (`EncryptedString`,
+  ADR-014) — ciphertext no banco, **nunca plaintext** na resposta.
+- `GET /api/v1/credentials?client_id=` · `GET /{id}` — devolvem `has_password` (bool), **nunca**
+  a senha. Recuperação para uso é server-side (ORM decifra ao carregar).
+- `PATCH /{id}` — parcial; `password` ausente/vazia **preserva** a atual.
+- `DELETE /{id}` — soft delete (`deleted_at`). 204.
+- Todas as operações geram `AuditLog` (`entity_type=credential`, hash chain SHA-256).
 
 ## Rate limiting
 

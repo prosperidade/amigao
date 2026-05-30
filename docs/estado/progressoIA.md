@@ -1420,3 +1420,34 @@ permanece deferido (não existe no repo; recriá-lo p/ uma seção seria documen
 
 **Não-escopo:** fallback global em falha de auth (proibido); provider fora dos 4; plaintext em
 qualquer lugar. **Validação fim-a-fim com o André pendente** (rodar com chave real de cada provider).
+
+---
+
+## PR 2.3 — Cofre de credenciais de portal por cliente (30/05/2026)
+
+Backend (UI = follow-up, escolha do André). Consome o `EncryptedString` da Frente D em **coluna
+real** — fecha a dívida **#27**.
+
+**Entregue:**
+- **Model** `Credential` (`app/models/credential.py`, tabela `credentials`): `tenant_id` +
+  `client_id` (FK CASCADE) + `portal` (String(50), enum `PortalType`) + `label`/`login`/`url`/
+  `notes` + **`password_encrypted` (`EncryptedString`)** + soft delete. **Primeiro uso real do
+  `EncryptedString` em coluna de tabela.**
+- **Schemas** (`app/schemas/credential.py`): senha write-only; resposta só com `has_password`
+  (nunca plaintext).
+- **API** (`app/api/v1/credentials.py`, router `/api/v1/credentials`): CRUD tenant-scoped, valida
+  cliente do mesmo tenant, soft delete, AuditLog hash chain em todas as operações.
+- **Migration** `c0d1e2f3a4b5`: cria `credentials` **E reunifica 2 heads do Alembic** que estavam
+  divergentes (`e3d4f5g6a7b8` PROMPT_7 + `e6f7a8b9c0d1` PR 2.2, ambas de `d2c3e4f5a6b8`) — bug
+  pré-existente que quebrava `alembic upgrade head`. Agora head único.
+
+**Testes:** `tests/api/test_credentials.py` (6 verdes) — **verificação SQL direta** de que a senha
+está cifrada (não plaintext), nunca volta na API, isolamento por tenant (404 cross-tenant),
+preserve-on-update, soft delete.
+
+**Descoberta importante:** durante o trabalho achei a divergência de 2 heads do Alembic (não causada
+por esta PR) — corrigida via a própria migration de merge. Sem isso, `alembic upgrade head` falhava.
+
+**Não-escopo / pendente:** UI de gerenciar credenciais no Client Hub = **PR follow-up**. Endpoint de
+"revelar senha" para uso humano (hoje a senha só é lida server-side) — decisão futura. Auditoria de
+**leitura** de campo sensível (item 17 da auditoria Eixo 2) segue aberta.

@@ -365,6 +365,12 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   `BaseAgent.call_llm` via `ctx.user_id` + UI na aba Settings > IA. **28 testes verdes** (incl.
   verificação SQL de cripto); `tsc --noEmit` limpo. Fecha parcialmente a dívida #27; abre #30
   (auditoria de uso por chave). Validação com o André pendente.
+- **Pulso 2026-05-30 (`feat/credenciais-portal` — PR 2.3, cofre de credenciais):** modelo `Credential`
+  (tabela `credentials`) com `password_encrypted` usando `EncryptedString` — **1º uso real em coluna**
+  (fecha #27). CRUD tenant-scoped em `/api/v1/credentials` (senha cifrada, nunca plaintext na API,
+  AuditLog hash chain). Migration `c0d1e2f3a4b5` também **reunificou 2 heads divergentes do Alembic**
+  (bug pré-existente que quebrava `alembic upgrade head`). **6 testes verdes** (incl. SQL de cripto +
+  isolamento de tenant). UI no Client Hub = follow-up; auditoria de leitura de campo sensível segue aberta.
 
 ## Infraestrutura
 

@@ -5,6 +5,7 @@ from app.models.client import Client
 from app.models.communication import CommunicationThread, Message
 from app.models.contract import Contract
 from app.models.contract_template import ContractTemplate
+from app.models.credential import Credential, PortalType
 from app.models.document import Document
 from app.models.intake_classification_feedback import IntakeClassificationFeedback
 from app.models.intake_draft import IntakeDraft, IntakeDraftState
