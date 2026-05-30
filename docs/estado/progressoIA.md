@@ -1386,3 +1386,37 @@ código. **Validação fim-a-fim com a Isis pendente.**
 **Escopo deferido:** docs `ATENDIMENTO_AGENTE`/`EXTRATOR_AGENTE`/`ECOSSISTEMA_AGENTICO` seguem
 adiados — descrevem transcrição Whisper / agentes **ainda não construídos** (PRs próprios).
 `FLUXOS_E2E` foi atualizado porque a UX (preview + reconciliação) agora existe.
+
+---
+
+## LLM provider plugável por consultor (white label) (30/05/2026)
+
+Decisão André 2026-05-28: sistema white label — consultor traz a própria chave de LLM.
+Consome a infra da Frente D (ADR-014). 4 providers: anthropic/google/openai/deepseek
+(chinês default = `deepseek` via `settings.LLM_CHINESE_PROVIDER`).
+
+**Entregue:**
+- **Schema** (`AiPreferences`): + `provider`/`model`/`api_key` (write-only) + `api_key_masked`/
+  `api_key_set` (read-only).
+- **Service** (`app/services/user_preferences.py`, novo): `save_ai_preferences` cifra a chave
+  (`encrypt_str`) em `preferences['ai']['api_key_encrypted']` — **nunca plaintext**; save sem
+  api_key **preserva** a existente. `public_ai` mascara a saída. `get_ai_runtime` decifra p/ o gateway.
+- **API**: `PATCH /auth/me/preferences` intercepta o grupo `ai` (cifra/preserva); `GET /auth/me/full`
+  retorna **mascarado**; novo `GET /auth/me/preferences/ai/available-models` (lookup hardcoded).
+- **Gateway** (`ai_gateway.complete(user_preferences=...)`): usa provider/model/chave do consultor
+  (formato LiteLLM); **falha de auth NÃO cai no fallback global** (erro claro). `BaseAgent.call_llm`
+  resolve as prefs via `ctx.user_id`.
+- **Frontend**: aba Settings > IA ganhou seção "Provedor de IA" (dropdown provider + dropdown
+  modelo populado por GET available-models + input password da chave + masked/"Trocar"). Validação:
+  chave obrigatória se provider setado. Tooltip ADR-014.
+
+**Testes:** `test_user_preferences.py` (8) + `test_ai_gateway.py` (+4 user-provider) +
+`test_auth.py` (+4, incl. **verificação SQL direta** de que a api_key está cifrada, não plaintext)
+= **28 verdes** no conjunto. Frontend `npx tsc --noEmit` limpo.
+
+**Governança:** API_v1, MODELO_DE_DADOS (`User.preferences['ai']`), GOVERNANCA_IA (white label),
+REGISTRO_DIVIDAS (#27 parcial + **#30** auditoria de uso por chave de consultor). `ECOSSISTEMA_AGENTICO`
+permanece deferido (não existe no repo; recriá-lo p/ uma seção seria documentar fora de fonte-de-verdade).
+
+**Não-escopo:** fallback global em falha de auth (proibido); provider fora dos 4; plaintext em
+qualquer lugar. **Validação fim-a-fim com o André pendente** (rodar com chave real de cada provider).

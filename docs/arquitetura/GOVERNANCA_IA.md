@@ -38,6 +38,22 @@ Camada única de contato com provedores. **Nenhum serviço chama provider direta
 
 Quando o provider primário falha (timeout, rate limit, erro do provider), o LiteLLM tenta o próximo. Ordem padrão: OpenAI → Gemini → Anthropic.
 
+### White label — provider por consultor (PR LLM, 30/05)
+
+Decisão André 2026-05-28: o sistema é white label — o consultor pode trazer a própria chave de
+LLM (`anthropic`/`google`/`openai`/`deepseek`; chinês default = `deepseek` via
+`settings.LLM_CHINESE_PROVIDER`). Configurado em **Settings > IA** e gravado **criptografado**
+(ADR-014) em `User.preferences['ai']['api_key_encrypted']`.
+
+- `ai_gateway.complete(user_preferences=...)`: quando o consultor tem provider+model+chave
+  completos, usa **só** a combinação dele (formato LiteLLM `provider/model`), **sem cadeia de
+  fallback global** — não gastar crédito do sistema na conta do consultor.
+- **Falha de auth** (chave inválida) com a chave do consultor → erro claro ("Credenciais de IA
+  do consultor inválidas; revise em Configurações > IA"), **nunca** fallback global automático.
+- Config incompleta ou ausente → comportamento atual (cadeia global). `BaseAgent.call_llm`
+  resolve as prefs via `ctx.user_id`.
+- Auditoria de gasto **por chave de consultor** ainda é por-tenant (dívida #30).
+
 ### Modelos por contexto
 
 | Modelo | Uso | Por quê |

@@ -92,6 +92,34 @@ JWT contém:
 
 Tenant guard implícito: toda dependency que devolve usuário também exige que `tenant_id` do JWT exista. Tentativa de manipular entidade de outro tenant retorna 403 em deep check no service layer.
 
+### Preferências de IA — provider por consultor (white label, PR LLM)
+
+Decisão André 2026-05-28. O consultor pode trazer a própria chave de LLM. Vive no grupo `ai`
+de `User.preferences` (JSONB).
+
+**`PATCH /api/v1/auth/me/preferences`** — estendido: o grupo `ai` aceita `provider`
+(`anthropic|google|openai|deepseek`), `model` e `api_key`. A `api_key` é **write-only**: entra
+em plaintext, o service cifra (ADR-014) em `api_key_encrypted` e **nunca persiste plaintext**.
+Um PATCH sem `api_key` **preserva** a chave existente (não apaga). A resposta vem mascarada
+(`api_key: null`, `api_key_masked: "…AB12"`, `api_key_set: true`).
+
+**`GET /api/v1/auth/me/full`** — o grupo `ai` volta sempre mascarado (nunca plaintext).
+
+**`GET /api/v1/auth/me/preferences/ai/available-models`** — lookup table hardcoded de modelos
+por provider (popula o dropdown do Settings > IA):
+
+```json
+{ "anthropic": ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001", "claude-opus-4-20250514"],
+  "google": ["gemini-2.5-flash", "gemini-2.5-pro"],
+  "openai": ["gpt-4o-mini", "gpt-4o"],
+  "deepseek": ["deepseek-chat", "deepseek-reasoner"] }
+```
+
+> **Gateway:** `ai_gateway.complete(user_preferences=...)` resolve provider/model/chave do
+> consultor (formato LiteLLM `provider/model`). Falha de **auth** com a chave do consultor
+> **não** cai no fallback global (não gastar crédito do sistema) — erro claro pedindo revisão
+> em Configurações > IA. `BaseAgent.call_llm` resolve as prefs via `ctx.user_id`.
+
 ## Rate limiting
 
 - Implementação: `slowapi` (`app/core/rate_limit.py`)

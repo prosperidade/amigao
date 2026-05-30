@@ -358,6 +358,13 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   Opção A) + `PriorityStep` (2 eixos: urgência 4 / valor estratégico 3) + áudio da entrevista
   anexável. `npx tsc --noEmit` limpo. `npm run build`/Vitest não rodam neste ambiente (node_modules
   sem dev-deps — `vite`/`@types/node`/`vitest`; pré-existente). Validação fim-a-fim com a Isis pendente.
+- **Pulso 2026-05-30 (`feat/llm-provider-por-consultor` — white label):** consultor traz a própria
+  chave de LLM (anthropic/google/openai/deepseek). Schema `AiPreferences` + service que cifra a chave
+  (`api_key_encrypted` no JSONB, ADR-014, nunca plaintext) + `GET .../ai/available-models` +
+  `ai_gateway.complete(user_preferences=...)` (sem fallback global em erro de auth) +
+  `BaseAgent.call_llm` via `ctx.user_id` + UI na aba Settings > IA. **28 testes verdes** (incl.
+  verificação SQL de cripto); `tsc --noEmit` limpo. Fecha parcialmente a dívida #27; abre #30
+  (auditoria de uso por chave). Validação com o André pendente.
 
 ## Infraestrutura
 

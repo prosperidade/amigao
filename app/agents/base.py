@@ -268,9 +268,32 @@ class BaseAgent(ABC):
         Quando nenhuma skill casa, comportamento idêntico ao anterior.
         """
         composed_system = self._compose_system_with_skills(system)
-        response = complete(prompt, system=composed_system, **kwargs)
+        # White label (André 2026-05-28): se o consultor configurou provider+chave
+        # própria, o gateway usa a combinação dele. Senão (None), default global.
+        user_prefs = kwargs.pop("user_preferences", None)
+        if user_prefs is None:
+            user_prefs = self._resolve_user_ai_preferences()
+        response = complete(prompt, system=composed_system, user_preferences=user_prefs, **kwargs)
         self._llm_response = response
         return response
+
+    def _resolve_user_ai_preferences(self) -> dict | None:
+        """Resolve {provider, model, api_key} do usuário da chain (ctx.user_id).
+
+        Sem user_id/session no contexto, ou config incompleta → None (default global).
+        Best-effort: qualquer falha cai no comportamento global.
+        """
+        uid = getattr(self.ctx, "user_id", None)
+        session = getattr(self.ctx, "session", None)
+        if not uid or session is None:
+            return None
+        try:
+            from app.models.user import User  # noqa: PLC0415
+            from app.services.user_preferences import get_ai_runtime  # noqa: PLC0415
+            user = session.get(User, uid)
+            return get_ai_runtime(user) if user else None
+        except Exception:
+            return None
 
     # --- Skills (Sprint A1 A) ----------------------------------------------
 
