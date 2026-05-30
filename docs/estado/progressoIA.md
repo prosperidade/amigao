@@ -1297,3 +1297,25 @@ não duplicada. Gaps de base regulatória (0 docs) também medidos e anexados à
   arquivos foram rodados diretamente (eles *são* os integrados via Testcontainers).
 - Base do PR foi `origin/main` (não `feat/dashboard-redesign-v2`, deletada após seu conteúdo —
   PR 2.2 — ter sido mergeado em main via PR #21).
+
+---
+
+## Corpus SEMAD em main + faxina de repositório (30/05/2026)
+
+**Corpus SEMAD (PR #24 mergeado).** A branch `feat/corpus-semad-ingestao` (trabalho de 2026-05-20,
+até então sem PR) foi integrada em `main`. Entrega: 282/283 PDFs SEMAD/GO no `knowledge_catalog`
+(99,6%), 1.194 chunks, classificação Gemini 2.5 Flash + embeddings OpenAI `text-embedding-3-small`
+768d, custo ~$2,10. O enum `SourceType` ganhou 4 valores (`norma_procedural` 223 / `matriz_ipe` 36 /
+`manual_ipe` 10 / `gabarito_laudo` 11) — **sem migration** (`source_type` é `String(50)`).
+1 PDF escaneado (Errata) ficou pendente de OCR → **dívida #28**.
+Docs de estrutura atualizados: `BASE_REGULATORIA` (linha do corpus + total 22.573 → 23.767) e
+`MODELO_DE_DADOS` (enumeração de `SourceType` nos 2 pontos).
+
+**Faxina de repositório.** Limpeza de higiene git após meses de sprints: de ~23 branches remotas,
+13 locais e 6 worktrees para **só `main`** em uma worktree. Apagadas 22 branches remotas mergeadas
+(PR 2.2, prompt4–11, captura-*, redesign, ocr, etc.), 12 branches locais e 5 worktrees-fantasma;
+`main` voltou para a worktree principal. **Nenhum trabalho real perdido** — o único pendente
+(corpus SEMAD) foi encaminhado via PR #24 antes de qualquer remoção, em vez de descartado.
+As 2 branches não-mergeadas (`chore/captura-redesign-e-scripts` e `feat/corpus-semad-ingestao`)
+foram verificadas commit a commit antes de agir: a primeira era ponteiro órfão (sua remoção de
+artefatos de redesign já estava em `main` via `acc55cf`) → apagada; a segunda era trabalho real → PR #24.

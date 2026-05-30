@@ -67,6 +67,11 @@ o tratamento de erro continua frágil. **Origem:** Onda A (24/05).
 devolve 500 + retry manual. Tratar com retry server-side. Improvável para consultor único.
 **Origem:** Onda B (24/05).
 
+**28. OCR do PDF SEMAD pendente.** A ingestão do corpus SEMAD (PR #24) indexou 282/283 PDFs;
+`ON_01_2021_SEMAD - Errata.pdf` é escaneado e ficou de fora (sem camada de texto). Rodar pelo
+pipeline OCR existente (`docs/arquitetura/PIPELINE_OCR.md`) e reingerir o único documento.
+Baixo impacto (1 errata). **Origem:** corpus SEMAD (30/05).
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos

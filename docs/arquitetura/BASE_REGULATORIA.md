@@ -203,9 +203,12 @@ Quando os crawlers estiverem ativos:
 | GO | 3.855 | Lei 18.104/2013 + decretos + IN SEMAD |
 | MS | 4.587 | Lei estadual + decretos + IN SEMADESC/IMASUL |
 | MT | 13.411 | Lei estadual + decretos + IN SEMA (volume alto por causa de cobertura mais ampla) |
-| **Total** | **22.573** | — |
+| GO — SEMAD operacional | 1.194 | Corpus operacional SEMAD/GO: 282/283 PDFs (99,6%) — normas procedurais, matrizes IPE, manuais IPE e gabaritos de laudo. Ingerido em 2026-05-20, mergeado em `main` via PR #24 (2026-05-30). Classificação Gemini Flash + embeddings OpenAI 768d. 1 PDF pendente (Errata escaneada → OCR, dívida #28). |
+| **Total** | **23.767** | — |
 
-Próximos UFs na fila (semana de 19-23/05): SP, MG, TO.
+> **Tipos de fonte no corpus SEMAD:** o PR #24 estendeu o enum `SourceType` com 4 valores — `norma_procedural` (223 docs), `matriz_ipe` (36), `manual_ipe` (10), `gabarito_laudo` (11). Distinção validada lendo conteúdo: códigos `A1.X`/`Y1.6` são tipologias descritivas (`norma_procedural`); matrizes IPE reais têm códigos numéricos longos (89, 7841, 8258) com estrutura de fluxograma SIM/NÃO. Sem migration — `source_type` é `String(50)`.
+
+Próximos UFs na fila: SP, MG, TO.
 
 ## Re-indexação
 

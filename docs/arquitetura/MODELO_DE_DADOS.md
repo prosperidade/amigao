@@ -175,7 +175,7 @@ Nova entidade introduzida pelo PROMPT_7. Anatomia:
 |---|---|---|
 | `LegislationDocument` | `legislation_documents` | Diploma legal (lei, decreto, resolução, IN). Metadado, status, hash. |
 | `LegislationAlert` | `legislation_alerts` | Alerta gerado por mudança normativa relevante. |
-| `KnowledgeChunk` | `knowledge_catalog` | Chunk indexável. `embedding vector(768)` (compat com base histórica em Gemini), `source_type ∈ {legislation, oficio, manual, jurisprudence, skill, other}`, filtros: `tenant_id` (NULL = global), `uf`, `jurisdiction`, `agency`, `identifier`. |
+| `KnowledgeChunk` | `knowledge_catalog` | Chunk indexável. `embedding vector(768)` (compat com base histórica em Gemini), `source_type ∈ {legislation, oficio, manual, jurisprudence, skill, other, norma_procedural, matriz_ipe, manual_ipe, gabarito_laudo}`, filtros: `tenant_id` (NULL = global), `uf`, `jurisdiction`, `agency`, `identifier`. Os 4 últimos valores entraram com o corpus SEMAD (PR #24). `source_type` é `String(50)`, não enum Postgres — valor novo NÃO exige migration. |
 | `KnowledgeCatalog` | (camada de serviço) | API de busca em `app/services/knowledge_catalog.py`. |
 
 ### Auditoria
@@ -245,7 +245,7 @@ A função `search()` em `app/services/knowledge_catalog.py` aceita:
 |---|---|---|
 | `query` | str | Busca semântica (embedding cosseno) |
 | `tenant_id` | int? | NULL → busca apenas globais; com valor → globais + do tenant |
-| `source_type` | enum? | legislation, oficio, manual, jurisprudence, skill, other |
+| `source_type` | enum? | legislation, oficio, manual, jurisprudence, skill, other, norma_procedural, matriz_ipe, manual_ipe, gabarito_laudo (4 últimos: corpus SEMAD, PR #24) |
 | `jurisdiction` | str? | federal, estadual, municipal |
 | `uf` | str? | UF (GO, MS, MT, etc.) |
 | `agency` | str? | SEMAD, IBAMA, ICMBio, etc. |
