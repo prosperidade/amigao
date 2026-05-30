@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # CRIPTO DE SEGREDOS (ADR-014 — Frente D)
+    # Chave-mestra Fernet, OBRIGATÓRIA, separada do SECRET_KEY do JWT.
+    # Gerar com `python tools/gen_encryption_key.py`. Sem fallback inseguro:
+    # se não estiver setada, a app falha no startup (ver validate_security).
+    CREDENTIAL_ENCRYPTION_KEY: str
+    # Chave antiga durante rotação (MultiFernet). Opcional.
+    CREDENTIAL_ENCRYPTION_KEY_OLD: str | None = None
+
     # EMAIL / SMTP (Mailtrap defaults for dev)
     SMTP_TLS: bool = True
     SMTP_PORT: int = 587
@@ -251,6 +259,34 @@ class Settings(BaseSettings):
         }
         if self.is_production and secret_key in insecure_production_keys:
             raise ValueError("SECRET_KEY insegura para produção.")
+
+        # Cripto de segredos (ADR-014). Chave OBRIGATÓRIA e em formato Fernet
+        # (urlsafe-base64 de 32 bytes → 44 chars). Sem fallback inseguro.
+        from cryptography.fernet import Fernet  # local: evita custo no import de config
+
+        encryption_key = self.CREDENTIAL_ENCRYPTION_KEY.strip()
+        if not encryption_key:
+            raise ValueError(
+                "CREDENTIAL_ENCRYPTION_KEY é obrigatória (ADR-014). "
+                "Gere com `python tools/gen_encryption_key.py`."
+            )
+        try:
+            Fernet(encryption_key.encode())
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                "CREDENTIAL_ENCRYPTION_KEY inválida — esperado uma chave Fernet "
+                "(urlsafe-base64 de 44 chars). Gere com `python tools/gen_encryption_key.py`."
+            ) from exc
+
+        old_encryption_key = (self.CREDENTIAL_ENCRYPTION_KEY_OLD or "").strip()
+        if old_encryption_key:
+            try:
+                Fernet(old_encryption_key.encode())
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    "CREDENTIAL_ENCRYPTION_KEY_OLD inválida — esperado uma chave "
+                    "Fernet (urlsafe-base64 de 44 chars)."
+                ) from exc
 
         if self.is_production and (
             self.MINIO_ACCESS_KEY == "minioadmin" or self.MINIO_SECRET_KEY == "minioadmin"

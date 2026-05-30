@@ -29,6 +29,7 @@ Antes do primeiro deploy em produção:
 ### Segurança
 
 - [ ] `SECRET_KEY` ≥ 32 chars (`openssl rand -hex 32`), **diferente** do default
+- [ ] `CREDENTIAL_ENCRYPTION_KEY` gerada com `python tools/gen_encryption_key.py` e configurada (Render: env var `sync: false`). **Obrigatória** — a app falha no startup sem ela. **Separada** do `SECRET_KEY` (ADR-014). Guardar backup seguro fora do banco: perda da chave = perda dos segredos
 - [ ] `POSTGRES_PASSWORD` forte, não-default
 - [ ] `REDIS_PASSWORD` configurado (não default)
 - [ ] `MINIO_ACCESS_KEY` e `MINIO_SECRET_KEY` **não** podem ser `minioadmin` em prod (backend valida)
@@ -193,7 +194,7 @@ docker compose exec worker celery -A app.core.celery_app inspect scheduled
 
 ### "Alguém vazou .env"
 
-1. **Trocar imediatamente:** `SECRET_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `SMTP_PASSWORD`, `RESEND_API_KEY`, senhas do banco e MinIO
+1. **Trocar imediatamente:** `SECRET_KEY`, `CREDENTIAL_ENCRYPTION_KEY` (ver "Rotação de chave de criptografia" abaixo — exige re-encrypt, não é troca seca), `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `SMTP_PASSWORD`, `RESEND_API_KEY`, senhas do banco e MinIO
 2. Trocar `SECRET_KEY` **força logout de todos** (JWTs antigos não validam mais) — isso é desejável em vazamento
 3. Comunicar tenants impactados (LGPD art. 48 — se houve incidente com dados pessoais, comunicar ANPD e titulares em prazo razoável)
 4. Auditar `AuditLog` no período possível do vazamento
@@ -239,6 +240,27 @@ Migração de versão major (15 → 16) exige planning:
 - Testar em staging com dump da prod
 - pg_dump + pg_restore (não basta trocar imagem com volume antigo)
 - Verificar compatibilidade de PostGIS e pgvector
+
+## Rotação de chave de criptografia
+
+Aplica-se à `CREDENTIAL_ENCRYPTION_KEY` (cripto de segredos de portal/LLM — ADR-014). Diferente do
+`SECRET_KEY` do JWT, **não dá pra trocar a seco**: o ciphertext no banco foi escrito com a chave
+antiga. A rotação usa `MultiFernet` para conviver com as duas chaves durante a transição.
+
+Esboço do processo (script de re-encrypt será criado na **primeira rotação real**):
+
+1. Gerar a chave nova: `python tools/gen_encryption_key.py`.
+2. Setar `CREDENTIAL_ENCRYPTION_KEY_OLD` = chave **antiga** (a que está em uso hoje).
+3. Atualizar `CREDENTIAL_ENCRYPTION_KEY` = chave **nova**. Reiniciar a app.
+   - A partir daqui, `MultiFernet` **decripta** com qualquer das duas e **encripta** com a nova.
+   - Dados antigos continuam legíveis; dados novos já saem na chave nova.
+4. Rodar o script de re-encrypt (relê e regrava cada segredo, migrando o ciphertext para a chave
+   nova). Enquanto não existir, este passo é manual/indisponível — só há segredo real no banco a
+   partir da PR 2.3 / PR LLM.
+5. Quando todos os segredos estiverem reescritos, **remover** `CREDENTIAL_ENCRYPTION_KEY_OLD` e
+   reiniciar. A chave antiga pode então ser descartada do vault.
+
+> ⚠ Nunca perder a chave em uso antes de re-encriptar: sem ela, os segredos são irrecuperáveis.
 
 ## Pendências e dívidas
 

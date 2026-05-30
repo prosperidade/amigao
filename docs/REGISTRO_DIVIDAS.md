@@ -78,6 +78,13 @@ preparado sem chamador; pluga direto quando o `geom` existir.
 **15.** Alertas de consulta externa (🔌): embargo (IBAMA), auto de infração,
 licença/outorga — aguardam integração.
 
+**27. Aplicar `EncryptedString` em colunas reais.** A infraestrutura de cripto de
+segredos (Fernet + `EncryptedString` + `CREDENTIAL_ENCRYPTION_KEY`) foi entregue pela
+Frente D ([ADR-014](adr/014-cripto-segredos-usuario.md)), mas **nenhuma coluna real a usa
+ainda**. Plugar quando a **PR 2.3** (`Credential` — logins de portal por cliente) e a
+**PR LLM** (`User.preferences.ai.api_key` — chave de IA do consultor, white label)
+entrarem. **Origem:** Frente D (28/05).
+
 ## Backlog de produto (já versionado em ADR)
 
 **16. Loop de aprendizado com material dos consultores** — ADR-010.
@@ -168,6 +175,7 @@ admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
 | **Sintoma "card discorda do diagnóstico assinado"** | Card lia só `completion_pct` enquanto `RegulatoryDiagnosis.validated_at` ficava em outro bloco; nem `can_advance_macroetapa` cobrava assinatura | 2026-05-28 (`fix/diagnostico-propaga-estado`) | `compute_macroetapa_state` e `can_advance_macroetapa` ganharam kwargs `current_macroetapa` + `diagnosis_validated` — etapa de diagnóstico vira `aguardando_validacao` enquanto não houver assinatura, e o gate de saída cobra o `validated_at`. `PATCH /processes/{id}/diagnoses/{version}/validate` chama `advance_macroetapa` automaticamente quando o gate passa (mesmo critério do botão manual: docs obrigatórios + checklist 100% + agora assinatura). Conservador: NÃO toca `Process.status` nem consolida as 2 chains — isso é o **eixo 3** (dívida nova **#26**, abaixo). Kanban (`processes.py`) consulta uma única vez o set de `process_id` com `RegulatoryDiagnosis.validated_at IS NOT NULL` para evitar N+1. 4 testes unitários (`tests/models/test_macroetapa_gate.py`) + 3 de API (`TestValidateAdvancesMacroetapa`). |
 | **25** | Extrator no-op silencioso + sem caminho de extração por processo | 2026-05-28 (`fix/extrator-por-processo`) | Novo `POST /api/v1/processes/{id}/extract` enfileira `workers.run_agent(extrator)` para docs com `extracted_text` cacheado e `workers.ocr_then_extract` (chain OCR→extrator) para docs sem texto, com `force=true` opcional pra re-OCR. `AuditLog(action="extractor_dispatched")` rastreia o disparo. Mensagens do `ExtratorAgent` ganharam orientação acionável (apontam pro endpoint novo) — tanto o `reason` do skipped sem args quanto o `ValueError` quando `document_id` existe mas `extracted_text` é NULL. UI: card do `extrator` no `/agents` agora mostra "Rodar no processo #N" (disabled sem ID); Step 4 do `IntakeWizard` trava avanço se há docs sem leitura disparada; `DraftDocumentUploader` ganha botão 🗑 por linha (habilitado pra `ocr_status` em `{null, pending}`). Sem migration. 3 testes novos em `tests/api/test_processes.py` + 1 em `tests/agents/test_extrator_cache.py`. Suite verde (9 do processes / 4 do extrator). **Marco condicional:** o `_dispatch_extrator` em `app/workers/ocr_tasks.py` ainda passa `process_id=None` ao `run_agent` — `AIJob` resultante perde o link com o processo no caminho da chain OCR. Fora do escopo deste PR; abrir nova dívida se isso passar a doer. |
 | **Eixo 2 workflow/RAG** | Silent failure de workflow sem template + RAG sem filtro estruturado por tipo | 2026-05-29 | `knowledge_catalog.search(demand_type=...)` filtra via `LegislationDocument.demand_types`; `LegislacaoAgent` usa o filtro; `apply_workflow_template` levanta `TemplateNotFoundError`; API retorna 422 acionável; enum `DemandType` expandido com 5 valores. |
+| **Frente D** | Cripto de segredos por usuário (white label LLM + credenciais de portal) | 2026-05-28 (ADR-014) | Padrão Fernet (AES-128-CBC + HMAC-SHA256): módulo `app/core/encryption.py` (`get_fernet`/`encrypt_str`/`decrypt_str` com MultiFernet pra rotação), type decorator `EncryptedString` em `app/models/types.py`, `CREDENTIAL_ENCRYPTION_KEY` obrigatória (falha no startup, sem fallback), `tools/gen_encryption_key.py`. 8 testes verdes. **Nenhuma coluna real alterada** — aplicação fica pra dívida #27 (PR 2.3 + PR LLM). |
 
 ---
 
