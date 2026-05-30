@@ -335,6 +335,14 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   15 do `test_diagnostico_consume_auditor.py` + 8 do `TestValidateDiagnosis` em `test_regulatory.py`).
 - 4 falhas pré-existentes em main resolvidas na Onda A do PROMPT_3 (24/05) — não há mais falhas
   pré-existentes mascarando o estado.
+- **Pulso 2026-05-30 (`fix/pr2.2-fechar-testes` — fecha pendência (a) do PR 2.2):** rodada dos
+  testes integrados do motor de workflow contra o banco dev ativo (Docker up, `db` healthy
+  na 55432). `test_workflow_engine.py` + `test_regulatory.py` + `test_workflows.py`: **23 passed,
+  0 failed**; `test_legislacao_a2.py`: **19 passed**. Total **42 passed, 0 failed, 0 skipped**
+  (2 warnings de teardown de transação, infra de teste). Divergências do prompt registradas:
+  (1) `tests/api/test_legislacao.py` não existe no repo — não rodado; (2) não há marker
+  `pytest.mark.integration` na suíte, então `-m integration` deselecionava tudo — os arquivos
+  foram rodados diretamente (eles *são* os testes integrados via Testcontainers).
 
 ## Infraestrutura
 

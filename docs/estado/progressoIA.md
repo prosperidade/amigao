@@ -1271,3 +1271,29 @@ reusar `SECRET_KEY` (acopla escopos), AES sem MAC (adulteração silenciosa).
 
 **Não-escopo (vira dívida #27):** nenhuma coluna real foi criptografada. A infraestrutura está pronta;
 a aplicação em `Credential` e `User.preferences.ai.api_key` fica para a PR 2.3 e a PR LLM.
+
+---
+
+## PR 2.2 — fechar testes integrados + cobertura real (30/05/2026)
+
+PR de fechamento (sem mudança de código de aplicação). Fecha as 2 pendências de ambiente que
+sobraram quando o motor de workflow por `demand_type` (PR 2.2) foi mergeado em main (PR #21).
+
+**Pendência (a) — testes integrados:** rodaram contra o banco dev ativo (Docker up, `db` healthy
+na 55432). `test_workflow_engine.py` + `test_regulatory.py` + `test_workflows.py` = **23 passed**;
+`test_legislacao_a2.py` = **19 passed**. Total **42 passed, 0 failed, 0 skipped** (2 warnings de
+teardown de transação, infra). Sem failures.
+
+**Pendência (b) — cobertura de templates:** `tools/check_template_coverage.py` rodou e regenerou
+`docs/arquivo/auditorias/2026-05-28_cobertura_templates.md` com contagens reais de
+`LegislationDocument` por `demand_type` (antes "não verificado"). Confirma os 8 gaps de
+`WorkflowTemplate` ativo (`prad`, `sobreposicao`, `supressao`, `due_diligence`, `arrendamento`,
+`condicionantes_antigas`, `misto`, `nao_identificado`) já registrados na **dívida #21** — atualizada,
+não duplicada. Gaps de base regulatória (0 docs) também medidos e anexados à #21.
+
+**Divergências do prompt (registradas, não "consertadas"):**
+- `tests/api/test_legislacao.py` não existe no repo — não rodado.
+- Não há marker `pytest.mark.integration` na suíte → `-m integration` deselecionava 100%; os
+  arquivos foram rodados diretamente (eles *são* os integrados via Testcontainers).
+- Base do PR foi `origin/main` (não `feat/dashboard-redesign-v2`, deletada após seu conteúdo —
+  PR 2.2 — ter sido mergeado em main via PR #21).

@@ -47,7 +47,12 @@ em `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md` aponta ausência 
 template ativo para: `prad`, `sobreposicao`, `supressao`, `due_diligence`,
 `arrendamento`, `condicionantes_antigas`, `misto`, `nao_identificado`. **Origem:**
 Eixo 2 workflow por tipo (29/05). **Nota:** a rodada atual proibiu criar templates;
-ficou apenas o erro explícito e o relatório.
+ficou apenas o erro explícito e o relatório. **Confirmada por rodada real
+(2026-05-30, `fix/pr2.2-fechar-testes`):** script rodou contra o banco dev ativo e
+reproduziu exatamente esses 8 gaps de template. Adicionalmente, mediu os gaps de base
+regulatória (`LegislationDocument` com 0 documentos): `exigencia_bancaria`,
+`sobreposicao`, `supressao`, `due_diligence`, `arrendamento`, `condicionantes_antigas`,
+`misto`, `nao_identificado` — os 8 sem template (exceto `prad`, que tem 2 docs) + `exigencia_bancaria`.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
