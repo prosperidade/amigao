@@ -17,6 +17,7 @@ from app.api.deps import get_current_internal_user, get_db
 from app.models.process import Process
 from app.models.user import User
 from app.services.workflow_engine import (
+    TemplateNotFoundError,
     WorkflowStatus,
     WorkflowStep,
     apply_workflow_template,
@@ -156,19 +157,19 @@ def apply_workflow(
             detail="O processo não possui demand_type definido. Use o intake para classificar primeiro.",
         )
 
-    tasks = apply_workflow_template(
-        db=db,
-        process_id=process_id,
-        tenant_id=current_user.tenant_id,
-        demand_type=demand_type,
-        created_by_user_id=current_user.id,
-    )
-
-    if not tasks:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Nenhum template de trilha encontrado para o tipo '{demand_type}'.",
+    try:
+        tasks = apply_workflow_template(
+            db=db,
+            process_id=process_id,
+            tenant_id=current_user.tenant_id,
+            demand_type=demand_type,
+            created_by_user_id=current_user.id,
         )
+    except TemplateNotFoundError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
 
     db.commit()
     logger.info(

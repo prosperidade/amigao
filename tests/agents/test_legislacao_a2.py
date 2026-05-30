@@ -23,12 +23,14 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import text
 
 from app.agents.base import AgentContext
 from app.agents.legislacao import (
     LegislacaoAgent,
     LegislacaoOutputValidationError,
 )
+from app.models.legislation import LegislationDocument
 from app.schemas.stage_output import Source
 
 
@@ -357,6 +359,70 @@ class TestSourceDerivation:
         chunks = [_fake_chunk(id_=i) for i in range(20)]
         sources = agent._derive_sources(rag_chunks=chunks, legislacao_aplicavel=[], origin="ai")
         assert len(sources) == 10
+
+
+class TestStructuredDemandTypeRag:
+    def test_load_rag_chunks_filters_by_legislation_document_demand_type(self, db_session):
+        car_doc = LegislationDocument(
+            title="Norma CAR",
+            source_type="lei",
+            identifier="CAR-1",
+            scope="federal",
+            status="indexed",
+            full_text="texto car",
+            token_count=10,
+            demand_types=["car"],
+        )
+        lic_doc = LegislationDocument(
+            title="Norma Licenciamento",
+            source_type="lei",
+            identifier="LIC-1",
+            scope="federal",
+            status="indexed",
+            full_text="texto licenciamento",
+            token_count=10,
+            demand_types=["licenciamento"],
+        )
+        db_session.add_all([car_doc, lic_doc])
+        db_session.flush()
+
+        vector = "[" + ",".join(["1.0"] + ["0.0"] * 767) + "]"
+        db_session.execute(
+            text(
+                """
+                INSERT INTO knowledge_catalog (
+                    source_type, source_ref, chunk_index, title, chunk_text,
+                    chunk_tokens, jurisdiction, identifier, embedding,
+                    embedding_model, embedding_dim, content_hash
+                ) VALUES
+                    ('legislation', :car_ref, 0, 'Norma CAR', 'chunk car',
+                     2, 'federal', 'CAR-1', CAST(:vector AS vector),
+                     'test', 768, 'car-hash'),
+                    ('legislation', :lic_ref, 0, 'Norma Licenciamento', 'chunk lic',
+                     2, 'federal', 'LIC-1', CAST(:vector AS vector),
+                     'test', 768, 'lic-hash')
+                """
+            ),
+            {
+                "car_ref": f"legislation_documents:{car_doc.id}",
+                "lic_ref": f"legislation_documents:{lic_doc.id}",
+                "vector": vector,
+            },
+        )
+        db_session.flush()
+
+        agent = LegislacaoAgent(_ctx(metadata={
+            "query": "caminho regulatorio",
+            "demand_type": "car",
+            "state": "",
+        }))
+        agent.ctx.session = db_session
+
+        with patch("app.services.knowledge_catalog.embed_text", return_value=[1.0] + [0.0] * 767):
+            chunks = agent._load_rag_chunks(query="caminho regulatorio", demand_type="car", uf=None)
+
+        assert chunks
+        assert {chunk.title for chunk in chunks} == {"Norma CAR"}
 
 
 class TestNormalizers:

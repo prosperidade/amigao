@@ -241,6 +241,107 @@ _DEMAND_RULES: dict[str, dict] = {
             {"id": "ccir", "label": "CCIR", "doc_type": "ccir", "category": "fundiario", "required": True},
         ],
     },
+    "sobreposicao": {
+        "label": "Sobreposição Territorial / Ambiental",
+        "keywords": ["sobreposição", "sobreposicao", "sobreposto", "conflito de área", "conflito de area",
+                     "uc", "terra indígena", "terra indigena", "vizinho", "confrontante"],
+        "agencies": ["SEMA", "INCRA", "ICMBio", "FUNAI"],
+        "diagnosis": (
+            "O cliente apresenta indício de sobreposição territorial ou ambiental. "
+            "O enquadramento definitivo depende de análise geoespacial e consulta às bases oficiais."
+        ),
+        "next_steps": [
+            "Solicitar matrícula, CAR e arquivos geoespaciais disponíveis",
+            "Identificar a camada de sobreposição apontada pelo cliente ou órgão",
+            "Validar o conflito em bases oficiais antes de definir a estratégia",
+        ],
+        "docs": [
+            {"id": "car", "label": "CAR", "doc_type": "car", "category": "ambiental", "required": True},
+            {"id": "matricula", "label": "Matrícula do Imóvel", "doc_type": "matricula", "category": "fundiario", "required": True},
+            {"id": "mapa_imovel", "label": "Mapa/Shapefile do Imóvel", "doc_type": "mapa", "category": "geoespacial", "required": True},
+        ],
+    },
+    "supressao": {
+        "label": "Supressão de Vegetação",
+        "keywords": ["supressão", "supressao", "desmate", "desmatamento", "autorização de supressão",
+                     "autorizacao de supressao", "asv", "corte de vegetação", "corte de vegetacao"],
+        "agencies": ["SEMA", "IBAMA"],
+        "diagnosis": (
+            "O cliente demanda análise ligada a supressão de vegetação. "
+            "É necessário confirmar vegetação, localização, autorização prévia e eventuais passivos."
+        ),
+        "next_steps": [
+            "Levantar mapa da área pretendida ou suprimida",
+            "Verificar existência de autorização, licença ou auto de infração",
+            "Checar restrições de APP, Reserva Legal e bioma",
+        ],
+        "docs": [
+            {"id": "car", "label": "CAR", "doc_type": "car", "category": "ambiental", "required": True},
+            {"id": "matricula", "label": "Matrícula do Imóvel", "doc_type": "matricula", "category": "fundiario", "required": True},
+            {"id": "mapa_area", "label": "Mapa da Área", "doc_type": "mapa", "category": "geoespacial", "required": True},
+        ],
+    },
+    "due_diligence": {
+        "label": "Due Diligence Ambiental",
+        "keywords": ["due diligence", "diligência", "diligencia", "compra de fazenda", "aquisição",
+                     "aquisicao", "risco ambiental", "análise para compra", "analise para compra"],
+        "agencies": ["SEMA", "IBAMA", "INCRA", "Cartório de Registro de Imóveis"],
+        "diagnosis": (
+            "O cliente precisa avaliar riscos ambientais e fundiários antes de uma operação. "
+            "A triagem deve consolidar documentos, passivos e consultas externas relevantes."
+        ),
+        "next_steps": [
+            "Solicitar pacote documental do imóvel e do vendedor",
+            "Listar passivos ambientais, fundiários e restrições públicas",
+            "Definir relatório de riscos e pendências para decisão do cliente",
+        ],
+        "docs": [
+            {"id": "matricula", "label": "Matrícula Atualizada", "doc_type": "matricula", "category": "fundiario", "required": True},
+            {"id": "car", "label": "CAR", "doc_type": "car", "category": "ambiental", "required": True},
+            {"id": "ccir", "label": "CCIR", "doc_type": "ccir", "category": "fundiario", "required": False},
+        ],
+    },
+    "arrendamento": {
+        "label": "Arrendamento Rural",
+        "keywords": ["arrendamento", "arrendar", "contrato de arrendamento", "parceria rural",
+                     "uso da terra", "cessionário", "cessionario"],
+        "agencies": ["SEMA", "Cartório de Registro de Imóveis"],
+        "diagnosis": (
+            "O cliente apresenta demanda de arrendamento rural com reflexos ambientais. "
+            "É necessário delimitar responsabilidades entre proprietário e arrendatário."
+        ),
+        "next_steps": [
+            "Solicitar contrato ou minuta de arrendamento",
+            "Verificar situação ambiental do imóvel antes do início da operação",
+            "Definir responsabilidades documentais e operacionais das partes",
+        ],
+        "docs": [
+            {"id": "contrato_arrendamento", "label": "Contrato/Minuta de Arrendamento", "doc_type": "contrato", "category": "fundiario", "required": True},
+            {"id": "matricula", "label": "Matrícula do Imóvel", "doc_type": "matricula", "category": "fundiario", "required": True},
+            {"id": "car", "label": "CAR", "doc_type": "car", "category": "ambiental", "required": True},
+        ],
+    },
+    "condicionantes_antigas": {
+        "label": "Condicionantes Antigas",
+        "keywords": ["condicionante", "condicionantes", "licença antiga", "licenca antiga",
+                     "pendência antiga", "pendencia antiga", "renovação com condicionante",
+                     "renovacao com condicionante"],
+        "agencies": ["SEMA", "IBAMA"],
+        "diagnosis": (
+            "O cliente precisa revisar condicionantes antigas de licença, autorização ou processo ambiental. "
+            "O encaminhamento real depende da leitura dos atos e prazos envolvidos."
+        ),
+        "next_steps": [
+            "Solicitar licenças, autorizações e notificações antigas",
+            "Montar linha do tempo de prazos e cumprimento",
+            "Verificar risco de sanção, renovação bloqueada ou exigência complementar",
+        ],
+        "docs": [
+            {"id": "licenca_antiga", "label": "Licença/Autorização Antiga", "doc_type": "licenca", "category": "administrativo", "required": True},
+            {"id": "condicionantes", "label": "Lista de Condicionantes", "doc_type": "notificacao", "category": "administrativo", "required": True},
+            {"id": "comprovantes", "label": "Comprovantes de Cumprimento", "doc_type": "comprovante", "category": "administrativo", "required": False},
+        ],
+    },
     "misto": {
         "label": "Demanda Mista / Múltiplos Passivos",
         "keywords": [],  # fallback - não é detectado por keyword, é atribuído manualmente

@@ -251,6 +251,7 @@ def search(
     jurisdiction: str | None = None,
     uf: str | None = None,
     identifier: str | None = None,
+    demand_type: str | None = None,
     min_similarity: float = 0.0,
 ) -> list[SearchResult]:
     """Busca top-k chunks por similaridade cosseno.
@@ -265,37 +266,49 @@ def search(
     vector_literal = _vector_literal(query_vector)
 
     where: list[str] = []
+    join_sql = ""
     params: dict[str, Any] = {"vector": vector_literal, "limit": limit}
 
     if tenant_id is not None:
-        where.append("(tenant_id IS NULL OR tenant_id = :tenant_id)")
+        where.append("(kc.tenant_id IS NULL OR kc.tenant_id = :tenant_id)")
         params["tenant_id"] = tenant_id
     else:
-        where.append("tenant_id IS NULL")
+        where.append("kc.tenant_id IS NULL")
 
     if source_type:
-        where.append("source_type = :source_type")
+        where.append("kc.source_type = :source_type")
         params["source_type"] = source_type
     if jurisdiction:
-        where.append("jurisdiction = :jurisdiction")
+        where.append("kc.jurisdiction = :jurisdiction")
         params["jurisdiction"] = jurisdiction
     if uf:
-        where.append("uf = :uf")
+        where.append("kc.uf = :uf")
         params["uf"] = uf
     if identifier:
-        where.append("identifier = :identifier")
+        where.append("kc.identifier = :identifier")
         params["identifier"] = identifier
+    if demand_type:
+        join_sql = (
+            "JOIN legislation_documents ld "
+            "ON kc.source_type = 'legislation' "
+            "AND kc.source_ref = CONCAT('legislation_documents:', ld.id::text)"
+        )
+        where.append("CAST(ld.demand_types AS jsonb) @> CAST(:demand_types_filter AS jsonb)")
+        import json as _json
+
+        params["demand_types_filter"] = _json.dumps([demand_type])
 
     where_sql = " AND ".join(where) if where else "TRUE"
     sql = text(
         f"""
         SELECT
-            id, source_type, source_ref, title, section, chunk_text,
-            jurisdiction, uf, agency, identifier,
-            1.0 - (embedding <=> CAST(:vector AS vector)) AS similarity
-        FROM knowledge_catalog
+            kc.id, kc.source_type, kc.source_ref, kc.title, kc.section, kc.chunk_text,
+            kc.jurisdiction, kc.uf, kc.agency, kc.identifier,
+            1.0 - (kc.embedding <=> CAST(:vector AS vector)) AS similarity
+        FROM knowledge_catalog kc
+        {join_sql}
         WHERE {where_sql}
-        ORDER BY embedding <=> CAST(:vector AS vector)
+        ORDER BY kc.embedding <=> CAST(:vector AS vector)
         LIMIT :limit
         """
     )

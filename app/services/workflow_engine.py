@@ -22,6 +22,16 @@ from app.models.workflow_template import WorkflowTemplate
 # Estruturas de retorno
 # ---------------------------------------------------------------------------
 
+class TemplateNotFoundError(ValueError):
+    """Levantado quando nao ha WorkflowTemplate ativo para o demand_type."""
+
+    def __init__(self, demand_type: str | None) -> None:
+        self.demand_type = demand_type
+        super().__init__(
+            f"demand_type '{demand_type or 'nao_informado'}' não tem WorkflowTemplate ativo. "
+            "Cadastre um template de trilha regulatória antes de aplicar o workflow."
+        )
+
 @dataclass
 class WorkflowStep:
     order: int
@@ -69,7 +79,7 @@ def apply_workflow_template(
     """
     template = _find_template(db, tenant_id, demand_type)
     if not template:
-        return []
+        raise TemplateNotFoundError(demand_type)
 
     steps = template.steps or []
     created_tasks: list[Task] = []
