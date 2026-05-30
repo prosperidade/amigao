@@ -144,3 +144,31 @@ def test_extrator_raises_when_no_text_and_no_cache(seeded, db_session):
     # Agent deve ter falhado de forma graceful (BaseAgent captura exceções)
     assert result.success is False
     assert "OCR" in (result.error or "") or "texto extraido" in (result.error or "")
+
+
+# fix/extrator-por-processo — mensagem acionável quando nenhum contexto é passado.
+def test_extrator_skipped_reason_aponta_caminhos_acionaveis(seeded, db_session):
+    """Sem document_id nem text, o reason deve apontar para
+    POST /processes/{id}/extract — não pode ser um "no-op silencioso"
+    como antes ("Nenhum documento fornecido para extracao")."""
+    tenant, user, _process, _doc = seeded
+
+    ctx = AgentContext(
+        tenant_id=tenant.id,
+        user_id=user.id,
+        process_id=None,
+        session=db_session,
+        metadata={},
+    )
+
+    agent = AgentRegistry.create("extrator", ctx)
+    result = agent.run()
+
+    assert result.success is True  # skipped não é falha
+    data = result.data or {}
+    assert data.get("skipped") is True
+    reason = data.get("reason", "")
+    # Caminhos acionáveis presentes
+    assert "POST" in reason
+    assert "/extract" in reason
+    assert "document_id" in reason

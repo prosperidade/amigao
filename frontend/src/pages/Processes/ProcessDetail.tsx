@@ -28,9 +28,10 @@ import ProcessCommercial from './ProcessCommercial';
 import WorkspaceRightPanel from './WorkspaceRightPanel';
 import DecisionsTab from './DecisionsTab';
 import SaidasTab from './SaidasTab';
+import AlertasTab from './AlertasTab';
 import AIPanel from '@/pages/AI/AIPanel';
 
-type TabKey = 'diagnosis' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'timeline' | 'ai' | 'saidas';
+type TabKey = 'diagnosis' | 'alertas' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'timeline' | 'ai' | 'saidas';
 
 const STAGE_ORDER = [
   'entrada_demanda',
@@ -291,7 +292,24 @@ export default function ProcessDetail() {
 
         {/* Área 4 — Área central de trabalho */}
         <main className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 p-5 min-w-0">
-          {activeTab === 'diagnosis' && <DiagnosisTab process={process} />}
+          {activeTab === 'diagnosis' && (
+            <DiagnosisTab
+              process={process}
+              // PROMPT_9 — modal de pendentes do gate camada 2 leva direto pro
+              // card correspondente na aba Alertas (com scroll).
+              onGoToAlerta={(issueId) => {
+                setActiveTab('alertas');
+                // setTimeout pra dar tempo do render da aba completar.
+                setTimeout(() => {
+                  document.getElementById(`alerta-${issueId}`)?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  });
+                }, 50);
+              }}
+            />
+          )}
+          {activeTab === 'alertas' && <AlertasTab processId={processId} propertyId={process.property_id} />}
           {activeTab === 'dossier' && <ProcessDossier processId={processId} />}
           {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}
           {activeTab === 'commercial' && <ProcessCommercial processId={processId} />}

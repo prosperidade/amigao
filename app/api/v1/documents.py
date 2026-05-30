@@ -182,6 +182,7 @@ def confirm_upload(
         size=body.file_size_bytes,
         document_type=body.document_type,
         document_category=normalized_category,
+        checklist_item_id=body.checklist_item_id,
     )
     db.add(db_doc)
     db.flush()
@@ -192,6 +193,31 @@ def confirm_upload(
         action="uploaded",
         details="Documento confirmado via upload direto",
     )
+
+    # Vínculo doc ↔ item de checklist (sintoma original: doc não vira "recebido"
+    # automaticamente). Se o frontend especificar checklist_item_id, marca aquele
+    # item exato; caso contrário tenta auto-vínculo pelo doc_type.
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+    from app.services.checklist_engine import (  # noqa: PLC0415
+        auto_link_document,
+        mark_item_received,
+    )
+
+    checklist = (
+        db.query(ProcessChecklist)
+        .filter(ProcessChecklist.process_id == body.process_id)
+        .first()
+    )
+    if checklist is not None:
+        if body.checklist_item_id:
+            mark_item_received(checklist, body.checklist_item_id, db_doc.id)
+        elif body.document_type:
+            linked_item_id = auto_link_document(
+                db, checklist, db_doc.id, body.document_type
+            )
+            if linked_item_id and not db_doc.checklist_item_id:
+                db_doc.checklist_item_id = linked_item_id
+
     db.commit()
     db.refresh(db_doc)
 

@@ -107,10 +107,11 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
   });
 
   const updateItemMutation = useMutation({
-    mutationFn: (payload: { item_id: string; action: string; waiver_reason?: string }) =>
+    mutationFn: (payload: { item_id: string; action: string; waiver_reason?: string; document_id?: number }) =>
       api.patch(`/processes/${processId}/checklist/items/${payload.item_id}`, {
         action: payload.action,
         waiver_reason: payload.waiver_reason,
+        document_id: payload.document_id,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checklist', processId] });
@@ -119,8 +120,12 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
     },
   });
 
-  const handleReceived = (itemId: string) => {
-    updateItemMutation.mutate({ item_id: itemId, action: 'received' });
+  const handleReceived = (item: ChecklistItem) => {
+    updateItemMutation.mutate({
+      item_id: item.id,
+      action: 'received',
+      document_id: item.document_id ?? undefined,
+    });
   };
 
   const handleWaive = (itemId: string) => {
@@ -301,7 +306,7 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
                           {item.status === 'pending' && (
                             <>
                               <button
-                                onClick={() => handleReceived(item.id)}
+                                onClick={() => handleReceived(item)}
                                 disabled={updateItemMutation.isPending}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-500/20 disabled:opacity-40 transition-all"
                               >

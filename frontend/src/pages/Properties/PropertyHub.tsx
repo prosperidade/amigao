@@ -14,10 +14,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, FileText, BarChart3, Briefcase,
-  AlertTriangle, Plus, Sparkles, Shield,
+  AlertTriangle, Plus, Sparkles, Shield, Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MACROETAPA_STATE_BADGE } from '@/pages/Processes/quadro-types';
+import { DEMAND_LABELS } from '@/pages/Processes/ProcessDetailTypes';
+import { useDecision, useIssues } from '@/lib/regulatory/hooks';
+import {
+  DECISAO_LABEL,
+  FAMILIA_LABEL,
+  SEVERITY_CLS,
+  SEVERITY_LABEL,
+  SEVERITY_ORDER,
+  STATUS_ACHADO_LABEL,
+  STATUS_SANEAMENTO_LABEL,
+} from '@/lib/regulatory/labels';
+import type { RegulatoryIssue } from '@/lib/regulatory/types';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -719,20 +731,166 @@ function DocumentsTab({ propertyId }: { propertyId: number }) {
   );
 }
 
-function AnalysesTab({ propertyId: _propertyId, count, cases }: { propertyId: number; count: number; cases: PropertyCase[] }) {
-  if (count === 0) return <p className="text-sm text-gray-400 italic">Nenhuma análise registrada ainda.</p>;
+/**
+ * AnalysesTab — PROMPT_9 (read-only lens sobre os alertas do imóvel + decisão
+ * por processo).
+ *
+ * Modelo: ADR-012 contextual ao processo. A mesma divergência pesa diferente
+ * por trabalho — render lado a lado. Esta aba é **read-only**: não duplica a
+ * tela de decisão. Click no chip leva à aba Alertas do processo correspondente.
+ *
+ * Layout por issue:
+ *  - cabeçalho: severidade + família + codigo_alerta
+ *  - 2 status perenes (status_achado, status_saneamento) como labels
+ *  - chips dos processos da property (TODOS, mais recente primeiro):
+ *    "Processo #N (demand) · {decisão|pendente} · Decidir/Ver"
+ *  - teto visual: 5 chips visíveis + "+N mais"
+ */
+function AnalysesTab({
+  propertyId,
+  cases,
+}: {
+  propertyId: number;
+  count: number;
+  cases: PropertyCase[];
+}) {
+  const { data: issues, isLoading, error } = useIssues(propertyId, 'open');
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <Loader2 className="w-3 h-3 animate-spin" /> Carregando alertas…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <p className="text-xs text-red-600 dark:text-red-400">
+        Falha ao carregar alertas regulatórios.
+      </p>
+    );
+  }
+  if (!issues || issues.length === 0) {
+    return <p className="text-sm text-gray-400 italic">Nenhum alerta aberto neste imóvel.</p>;
+  }
+
+  // Críticos no topo (igual à aba Alertas), desempate por detected_at.
+  const sortedIssues = [...issues].sort((a, b) => {
+    const sev = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+    if (sev !== 0) return sev;
+    return b.detected_at.localeCompare(a.detected_at);
+  });
+
+  // Casos ordenados por last_activity_at desc (recente primeiro) — fiel
+  // ao "mais recente primeiro" do crave.
+  const sortedCases = [...cases].sort((a, b) => {
+    const aT = a.last_activity_at ?? '';
+    const bT = b.last_activity_at ?? '';
+    return bT.localeCompare(aT);
+  });
+
   return (
-    <div className="text-sm text-gray-500">
-      <p className="mb-2">{count} análise(s) registrada(s) via StageOutput nos casos do imóvel.</p>
-      <p className="text-xs italic mb-3">Abra cada caso para ver os artefatos:</p>
-      <ul className="space-y-1">
-        {cases.slice(0, 5).map(c => (
-          <li key={c.id} className="text-xs">
-            <a href={`/processes/${c.id}`} className="text-emerald-600 hover:underline">Caso #{c.id}</a> — {c.title}
-          </li>
-        ))}
-      </ul>
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500 dark:text-slate-400">
+        Read-only. A decisão é contextual ao processo — cada trabalho decide do
+        zero. Use os chips para abrir a aba Alertas do processo onde quer atuar.
+      </p>
+      {sortedIssues.map(issue => (
+        <AnalysesIssueRow key={issue.id} issue={issue} cases={sortedCases} />
+      ))}
     </div>
+  );
+}
+
+function AnalysesIssueRow({
+  issue,
+  cases,
+}: {
+  issue: RegulatoryIssue;
+  cases: PropertyCase[];
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const visibleCases = showAll ? cases : cases.slice(0, 5);
+  const hidden = cases.length - visibleCases.length;
+
+  return (
+    <div className="rounded-xl border border-gray-100 dark:border-white/10 p-3 bg-white dark:bg-white/5">
+      <div className="flex items-start gap-2 flex-wrap">
+        <span
+          className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold border ${SEVERITY_CLS[issue.severity]}`}
+        >
+          {SEVERITY_LABEL[issue.severity]}
+        </span>
+        {issue.familia && (
+          <span className="text-[11px] text-gray-500 dark:text-slate-400">
+            {FAMILIA_LABEL[issue.familia]}
+          </span>
+        )}
+        <span className="text-xs font-mono text-gray-800 dark:text-slate-200 truncate">
+          {issue.codigo_alerta ?? '(sem código)'}
+        </span>
+      </div>
+      <div className="mt-1 text-[11px] text-gray-500 dark:text-slate-400 flex flex-wrap gap-x-3">
+        <span>Achado: <strong className="text-gray-700 dark:text-slate-200">{STATUS_ACHADO_LABEL[issue.status_achado]}</strong></span>
+        <span>Saneamento: <strong className="text-gray-700 dark:text-slate-200">{STATUS_SANEAMENTO_LABEL[issue.status_saneamento]}</strong></span>
+      </div>
+      {cases.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {visibleCases.map(c => (
+            <IssueProcessChip key={c.id} issueId={issue.id} processCase={c} />
+          ))}
+          {hidden > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="text-[10px] px-2 py-0.5 rounded-full border border-dashed border-gray-300 dark:border-white/20 text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
+            >
+              +{hidden} mais
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] text-gray-400 italic">Nenhum processo vinculado.</p>
+      )}
+    </div>
+  );
+}
+
+function IssueProcessChip({
+  issueId,
+  processCase,
+}: {
+  issueId: number;
+  processCase: PropertyCase;
+}) {
+  // Cada chip carrega sua própria decisão (com cache compartilhado entre
+  // AlertasTab e AnalysesTab via React Query). 404 = sem decisão = "Decidir".
+  const { data: decision, isLoading } = useDecision(processCase.id, issueId);
+  const demand = processCase.demand_type ? DEMAND_LABELS[processCase.demand_type] ?? processCase.demand_type : null;
+  const verbo = decision ? 'Ver' : 'Decidir';
+  const decisaoLabel = decision ? DECISAO_LABEL[decision.decisao] : 'pendente';
+  const cls = decision
+    ? 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+    : 'border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300';
+
+  return (
+    <a
+      href={`/processes/${processCase.id}`}
+      className={`inline-flex items-center gap-1.5 text-[10px] rounded-full px-2 py-0.5 border ${cls} hover:underline`}
+      title={`${processCase.title} — ${decisaoLabel}`}
+    >
+      {isLoading ? (
+        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+      ) : (
+        <>
+          <span>Processo #{processCase.id}{demand ? ` (${demand})` : ''}</span>
+          <span className="opacity-70">·</span>
+          <span>{decisaoLabel}</span>
+          <span className="opacity-70">·</span>
+          <span className="font-semibold">{verbo}</span>
+        </>
+      )}
+    </a>
   );
 }
 

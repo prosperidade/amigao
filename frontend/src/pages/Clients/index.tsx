@@ -1,8 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { Plus, Search, Edit2, Trash2, User as UserIcon, Building2, Mail, Phone, ExternalLink } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, User as UserIcon, Building2, Mail, Phone, ExternalLink, AlertTriangle } from 'lucide-react';
+
+interface CascadePreview {
+  properties: number;
+  processes: number;
+  documents: number;
+  checklists: number;
+  contracts: number;
+  proposals: number;
+}
 
 interface Client {
   id: number;
@@ -66,6 +76,45 @@ export default function ClientsPage() {
       setFormError(axiosErr.response?.data?.detail || 'Não foi possível salvar as alterações do cliente.');
     }
   });
+
+  // Exclusão em cascata — Isis precisa apagar pra resubir casos de teste.
+  // Fluxo: clica trash → fetch /delete-preview → modal mostra contagens →
+  // confirma → DELETE /clients/{id}.
+  const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
+  const [cascadePreview, setCascadePreview] = useState<CascadePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (clientId: number) => {
+      await api.delete(`/clients/${clientId}`);
+    },
+    onSuccess: () => {
+      toast.success('Cliente excluído.');
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      setPendingDelete(null);
+      setCascadePreview(null);
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? 'Erro ao excluir cliente.';
+      toast.error(msg);
+    },
+  });
+
+  const handleDeleteClick = async (client: Client) => {
+    setPendingDelete(client);
+    setCascadePreview(null);
+    setPreviewLoading(true);
+    try {
+      const res = await api.get<CascadePreview>(`/clients/${client.id}/delete-preview`);
+      setCascadePreview(res.data);
+    } catch {
+      toast.error('Não foi possível calcular o impacto da exclusão.');
+      setPendingDelete(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const filteredClients = clients?.filter(c => 
     c.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -204,7 +253,12 @@ export default function ClientsPage() {
                         <button onClick={() => handleEdit(client)} className="p-2 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                        <button
+                          onClick={() => handleDeleteClick(client)}
+                          disabled={deleteMutation.isPending}
+                          title="Excluir cliente e tudo vinculado"
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -216,6 +270,72 @@ export default function ClientsPage() {
           </table>
         </div>
       </div>
+
+      {/* Modal de confirmação de exclusão em cascata */}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 dark:border-zinc-800 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Excluir {pendingDelete.full_name}?</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Esta ação é definitiva. Tudo abaixo será removido em cascata.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {previewLoading && (
+                <div className="text-sm text-gray-500 dark:text-gray-400">Calculando impacto...</div>
+              )}
+              {cascadePreview && (
+                <ul className="text-sm divide-y divide-gray-100 dark:divide-zinc-800 border border-gray-100 dark:border-zinc-800 rounded-lg">
+                  {[
+                    ['Imóveis', cascadePreview.properties],
+                    ['Casos', cascadePreview.processes],
+                    ['Documentos', cascadePreview.documents],
+                    ['Checklists', cascadePreview.checklists],
+                    ['Contratos', cascadePreview.contracts],
+                    ['Propostas', cascadePreview.proposals],
+                  ].map(([label, count]) => (
+                    <li key={label as string} className="flex justify-between px-3 py-2">
+                      <span className="text-gray-600 dark:text-gray-300">{label}</span>
+                      <span className={`font-mono ${(count as number) > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
+                        {count as number}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                A exclusão fica registrada no audit log (LGPD).
+              </p>
+            </div>
+
+            <div className="px-6 py-4 flex justify-end gap-3 border-t border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/30">
+              <button
+                type="button"
+                onClick={() => { setPendingDelete(null); setCascadePreview(null); }}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(pendingDelete.id)}
+                disabled={previewLoading || deleteMutation.isPending || !cascadePreview}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleteMutation.isPending ? 'Excluindo...' : 'Confirmar exclusão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       {isModalOpen && (

@@ -89,9 +89,41 @@ Status: triagem
 Status: diagnostico
        │ Diagnóstico técnico aprofundado:
        │  ├── Mais documentos coletados (checklist por demand_type)
+       │  │   ↳ Upload (`POST /documents/confirm-upload`) vincula automaticamente
+       │  │     ao item pendente do checklist por `document_type` ou via
+       │  │     `checklist_item_id` explícito do frontend; campos extraídos
+       │  │     pelo `extrator` aparecem na DocumentsTab abaixo do badge
+       │  │     (fix/upload-checklist-binding, 2026-05-28).
        │  ├── RegulatoryDiagnosis versionado registrado
        │  └── RegulatoryIssue cadastrado para cada inconsistência
+       │ Gate camada 2 do `/validate` (PROMPT_6/7/10/11): exige decisão por
+       │ crítica com `status_achado in {suspeita, confirmada, ignorada}`.
+       │ Só `descartada`/`resolvida` ficam de fora (nada a decidir). Descartar
+       │ libera; `ignorada` (achado real posto de lado) ainda cobra decisão —
+       │ ignorar um real passa por `ignorar_justificado` (com justificativa).
        │ Frontend: ProcessDetail.tsx + DiagnosisTab + DocumentsTab
+       │
+       │ PROMPT_9 — UI da camada 2 do Princípio 1:
+       │  ├── Aba "Alertas" lista RegulatoryIssue do imóvel (críticos no topo)
+       │  ├── Consultor adjudica status_achado (suspeita → confirmada/descartada/…)
+       │  ├── Decide alerta por alerta — 5 botões da P4 (decisão contextual ao
+       │  │   processo, ADR-012). Regra B: decisão fica desabilitada enquanto
+       │  │   achado = suspeita ("Confirme ou descarte antes de decidir").
+       │  ├── Justificativa obrigatória em ignorar_justificado / fora_escopo (#19)
+       │  └── Botão "Assinar diagnóstico vN" — gate camada 2 (422 com lista de
+       │      pendentes; modal navega pro card correspondente)
+       │ Frontend: AlertasTab + AlertaCard + DiagnosisAssinatura
+       │
+       │ fix/diagnostico-propaga-estado (28/05/2026): a assinatura propaga
+       │ o estado. PATCH /validate, depois de gravar `validated_at`, recalcula
+       │ `can_advance_macroetapa(current_macroetapa, diagnosis_validated=True)`
+       │ — se passa (docs obrigatórios + checklist 100% + assinatura), chama
+       │ `advance_macroetapa` no mesmo request e `Process.macroetapa` sobe
+       │ pra próxima etapa (`diagnostico_preliminar → coleta_documental`
+       │ ou `diagnostico_tecnico → caminho_regulatorio`). Gate travado mantém
+       │ `validated_at` gravado mas a etapa fica onde estava — badge do kanban
+       │ vira `aguardando_validacao` para refletir a assinatura. NÃO afeta
+       │ `Process.status` (eixo 3, dívida #26).
        ▼
 Status: planejamento
        │ Workflow template aplicado (por demand_type)

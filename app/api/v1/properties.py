@@ -96,6 +96,39 @@ def update_property(
     return property_obj
 
 
+@router.get("/{property_id}/delete-preview")
+def get_property_delete_preview(
+    property_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_internal_user),
+) -> Any:
+    """Preview da cascata antes do DELETE — usado pelo modal de confirmação."""
+    from app.services.cascade_delete import preview_property_cascade  # noqa: PLC0415
+
+    _get_property_or_404(db, current_user.tenant_id, property_id)
+    return preview_property_cascade(
+        db, current_user.tenant_id, property_id
+    ).to_dict()
+
+
+@router.delete("/{property_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_property(
+    property_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_internal_user),
+) -> None:
+    """Remove imóvel em cascata controlada (processos, checklists, docs)."""
+    from app.services.cascade_delete import cascade_delete_property  # noqa: PLC0415
+
+    cascade_delete_property(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        property_id=property_id,
+    )
+    db.commit()
+
+
 # ---------------------------------------------------------------------------
 # IMÓVEL HUB (Regente Cam2 — CAM2IH)
 # ---------------------------------------------------------------------------
