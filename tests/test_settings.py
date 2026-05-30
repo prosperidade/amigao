@@ -6,6 +6,8 @@ from app.core.config import Settings
 def build_settings(**overrides) -> Settings:
     values = {
         "SECRET_KEY": "amigao-production-like-secret-key-1234",
+        # ADR-014 — CREDENTIAL_ENCRYPTION_KEY é obrigatória (chave Fernet válida).
+        "CREDENTIAL_ENCRYPTION_KEY": "k9rAqkESM_sjrWwOXc0pEx6Iv04Tp7qqNAkgbIW7q4U=",
         "CLIENT_PORTAL_URL": "https://portal.amigao.com/dashboard",
         "BACKEND_CORS_ORIGINS": "https://portal.amigao.com,https://app.amigao.com",
         "MINIO_PUBLIC_URL": "https://storage.amigao.com",

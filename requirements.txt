@@ -14,6 +14,9 @@ redis[hiredis]
 celery
 python-multipart
 python-jose[cryptography]
+# Cripto de segredos por usuário/cliente — Fernet (ADR-014). Já vinha indireto
+# via python-jose[cryptography]; promovido a dependência direta.
+cryptography>=42.0.0
 passlib[bcrypt]
 boto3
 GeoAlchemy2

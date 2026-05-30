@@ -122,6 +122,13 @@ envVarGroups:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "1440"
 
+      # --- Cripto de segredos (ADR-014) ---
+      # Chave Fernet separada do SECRET_KEY. Gerar com
+      # `python tools/gen_encryption_key.py` e colar no painel Render.
+      # NÃO usar generateValue (Render gera 32-char, não formato Fernet).
+      - key: CREDENTIAL_ENCRYPTION_KEY
+        sync: false
+
       # --- SMTP (transacional interno) ---
       - key: SMTP_TLS
         value: "True"
