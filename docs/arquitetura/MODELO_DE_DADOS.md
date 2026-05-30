@@ -263,6 +263,13 @@ Cada inserção:
 
 Verificação posterior: refazer a cadeia do início e confirmar que cada elo bate. Implementação em `app/services/audit_hash.py`. Usado em 7 pontos críticos do sistema (mudança de status, atribuição de tarefa, geração de peça, classificação, etc.).
 
+### Type decorators portáveis
+
+Tipos de coluna customizados em `app/models/types.py` que se comportam de forma transparente para o código de negócio:
+
+- **`PortableJSON`** — JSONB no PostgreSQL, JSON puro no SQLite (testes). Uso: `Column(PortableJSON)`.
+- **`EncryptedString`** — coluna criptografada em repouso com Fernet (AES-128-CBC + HMAC-SHA256). O round-trip acontece no ORM (encrypt no flush, decrypt no load); o banco guarda só o ciphertext. Uso: `Column(EncryptedString(256))`. Chave-mestra em `CREDENTIAL_ENCRYPTION_KEY`. Ver [ADR-014](../adr/014-cripto-segredos-usuario.md). Ainda não aplicado em coluna real — infraestrutura pronta para a PR `Credential` (logins de portal) e a PR LLM (chave de IA do consultor).
+
 ## Migrations
 
 40 migrations aplicadas. Convenção de nome: `<8-hex>_sprint_<X>_<descricao>.py`.

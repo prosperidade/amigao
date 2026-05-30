@@ -1243,3 +1243,31 @@ clique manual em "Avançar" passava com diagnóstico não assinado.
 - **Princípio 1 reforçado em código:** peça formal só "fecha" depois da
   assinatura humana — o badge passou a refletir esse fato; o gate passou
   a cobrar esse fato.
+
+---
+
+## Frente D — Cripto de segredos por usuário (28/05/2026)
+
+ADR-014 + infraestrutura de criptografia de segredos. **Approach ADR primeiro, código depois.**
+Motivado por dois cenários futuros que precisam guardar segredos de terceiros no banco:
+white label de LLM (consultor traz a própria chave de IA → `User.preferences.ai.api_key`, PR LLM) e
+credenciais de portal por cliente (login/senha de SEMA, banco, SICAR, INCRA → modelo `Credential`, PR 2.3).
+
+**Decisão (ADR-014):** `cryptography.fernet.Fernet` (AES-128-CBC + HMAC-SHA256). Chave-mestra em
+`CREDENTIAL_ENCRYPTION_KEY`, **separada** do `SECRET_KEY` do JWT (escopos de comprometimento isolados).
+`MultiFernet` para rotação sem downtime. Alternativas rejeitadas: cofre externo (custo/lock-in/latência),
+reusar `SECRET_KEY` (acopla escopos), AES sem MAC (adulteração silenciosa).
+
+**Entregue:**
+- `app/core/encryption.py` — `get_fernet()` (MultiFernet com chave atual + antiga opcional),
+  `encrypt_str`/`decrypt_str` (handling de None, `InvalidToken` claro em chave errada).
+- `EncryptedString` (`app/models/types.py`) — type decorator: encrypt no flush, decrypt no load.
+  Código de negócio lê/escreve plaintext; banco guarda ciphertext.
+- `CREDENTIAL_ENCRYPTION_KEY` obrigatória em `config.py` — valida formato Fernet no startup,
+  **sem fallback inseguro** (não deriva do `SECRET_KEY`, não usa default).
+- `tools/gen_encryption_key.py`, `render.yaml` (`sync: false`), `.env.example`.
+- 8 testes verdes: round-trip, None, string vazia, chave errada (`InvalidToken`), rotação MultiFernet,
+  e ORM (plaintext no load, ciphertext em SQL cru, None round-trip).
+
+**Não-escopo (vira dívida #27):** nenhuma coluna real foi criptografada. A infraestrutura está pronta;
+a aplicação em `Credential` e `User.preferences.ai.api_key` fica para a PR 2.3 e a PR LLM.

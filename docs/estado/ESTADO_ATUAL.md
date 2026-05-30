@@ -241,6 +241,14 @@
   `DemandType` ganhou `sobreposicao`, `supressao`, `due_diligence`,
   `arrendamento`, `condicionantes_antigas`. Relatório:
   `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md`.
+- **Frente D (cripto de segredos) fechada em 2026-05-28** — [ADR-014](../adr/014-cripto-segredos-usuario.md):
+  padrão Fernet (AES-128-CBC + HMAC-SHA256) para segredos de terceiros no banco
+  (white label LLM + credenciais de portal). Entregue: `app/core/encryption.py`
+  (`get_fernet`/`encrypt_str`/`decrypt_str` com MultiFernet pra rotação), type decorator
+  `EncryptedString` (`app/models/types.py`), `CREDENTIAL_ENCRYPTION_KEY` obrigatória (falha no
+  startup, sem fallback inseguro, separada do `SECRET_KEY`), `tools/gen_encryption_key.py`.
+  8 testes verdes. **Nenhuma coluna real alterada** — aplicação fica para a PR `Credential`
+  (PR 2.3) e a PR LLM (dívida #27). Infraestrutura, não feature de usuário.
 
 **O que está congelado:**
 
