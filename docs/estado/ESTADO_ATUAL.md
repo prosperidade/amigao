@@ -234,6 +234,13 @@
     assinado — evita N+1 na listagem.
   - 4 testes unitários (`tests/models/test_macroetapa_gate.py`) + 3 de
     API (`TestValidateAdvancesMacroetapa`). Sem migration.
+- **Eixo 2 workflow por tipo — ajuste pontual em 2026-05-29:** RAG vetorial do
+  `LegislacaoAgent` agora filtra `demand_type` de forma estruturada via
+  `LegislationDocument.demand_types`; `WorkflowEngine` levanta
+  `TemplateNotFoundError` e API devolve 422 quando não existe template ativo;
+  `DemandType` ganhou `sobreposicao`, `supressao`, `due_diligence`,
+  `arrendamento`, `condicionantes_antigas`. Relatório:
+  `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md`.
 
 **O que está congelado:**
 

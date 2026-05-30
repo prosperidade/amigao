@@ -40,6 +40,11 @@ class DemandType(str, enum.Enum):
     compensacao = "compensacao"
     exigencia_bancaria = "exigencia_bancaria"
     prad = "prad"
+    sobreposicao = "sobreposicao"
+    supressao = "supressao"
+    due_diligence = "due_diligence"
+    arrendamento = "arrendamento"
+    condicionantes_antigas = "condicionantes_antigas"
     misto = "misto"
     nao_identificado = "nao_identificado"
 

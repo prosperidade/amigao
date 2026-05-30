@@ -91,6 +91,27 @@ def process(db_session, tenant, client_record, property_record) -> Process:
     return pr
 
 
+def test_process_accepts_new_demand_types():
+    new_types = [
+        DemandType.sobreposicao,
+        DemandType.supressao,
+        DemandType.due_diligence,
+        DemandType.arrendamento,
+        DemandType.condicionantes_antigas,
+    ]
+    for demand_type in new_types:
+        process = Process(
+            tenant_id=1,
+            client_id=1,
+            property_id=1,
+            title=f"Processo {demand_type.value}",
+            process_type=demand_type.value,
+            status=ProcessStatus.triagem,
+            demand_type=demand_type,
+        )
+        assert process.demand_type == demand_type
+
+
 @pytest.fixture
 def document(db_session, tenant, property_record) -> Document:
     d = Document(

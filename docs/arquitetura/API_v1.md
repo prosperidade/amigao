@@ -307,6 +307,12 @@ Cliente faz polling em `GET /api/v1/ai/jobs/{job_id}` ou recebe via WebSocket (`
 | `POST /api/v1/agents/{name}/run` | Executa agente específico com metadata |
 | `GET /api/v1/agents/budget` | Orçamento mensal de IA do tenant (Sprint R) |
 
+### Trilha regulatória
+
+| Endpoint | Função |
+|---|---|
+| `POST /api/v1/processes/{id}/apply-workflow` | Aplica o `WorkflowTemplate` do `Process.demand_type` e cria tarefas. **422** quando o processo não tem `demand_type` ou quando o `demand_type` não tem `WorkflowTemplate` ativo. A mensagem indica o tipo sem template para ação operacional. |
+
 ## WebSocket
 
 - Endpoint: `ws://localhost:8000/ws?token=<JWT>`

@@ -357,6 +357,24 @@ frontend/src/types/agent.ts
 - [ ] Dashboard de custos de IA por tenant/agente/chain
 - [ ] Rate limiting por agente (alem do limite horario global)
 
+---
+
+## Eixo 2 — Workflow por tipo de demanda (29/05/2026)
+
+### O que foi feito
+
+- `knowledge_catalog.search()` ganhou filtro estruturado `demand_type` para chunks de legislação, cruzando `knowledge_catalog.source_ref = legislation_documents:{id}` com `LegislationDocument.demand_types`.
+- `LegislacaoAgent` passa esse filtro quando há `demand_type`, mantendo o tipo também na query textual como reforço semântico.
+- `WorkflowEngine.apply_workflow_template()` agora levanta `TemplateNotFoundError` quando não há `WorkflowTemplate`; a API `/processes/{id}/apply-workflow` traduz para 422 claro.
+- `DemandType` ganhou 5 valores: `sobreposicao`, `supressao`, `due_diligence`, `arrendamento`, `condicionantes_antigas`.
+- `tools/check_template_coverage.py` lista cobertura por tipo e escreve `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md`.
+
+### Validação
+
+- `py_compile` verde nos arquivos alterados.
+- Testes unitários sem banco: `tests/services/test_workflow_engine.py` e `tests/models/test_regulatory.py::test_process_accepts_new_demand_types` verdes.
+- Testes com PostgreSQL/Testcontainers ficaram bloqueados nesta máquina por acesso negado ao Docker named pipe.
+
 ### Sprint IA-6 — Inteligencia Avancada
 - [ ] Predicao de prazo de processo com base em historico
 - [ ] Classificacao automatica de email recebido (trigger de AcompanhamentoAgent)

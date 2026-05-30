@@ -278,6 +278,7 @@ class LegislacaoAgent(BaseAgent):
                 source_type="legislation",
                 uf=uf if uf else None,
                 tenant_id=self.ctx.tenant_id,
+                demand_type=demand_type if demand_type else None,
                 min_similarity=0.0,
             )
             # Sem resultados com filtro de UF? tenta uma busca global (legislacao federal).
@@ -288,6 +289,7 @@ class LegislacaoAgent(BaseAgent):
                     limit=getattr(settings, "LEGISLATION_RAG_TOP_K", 8),
                     source_type="legislation",
                     tenant_id=self.ctx.tenant_id,
+                    demand_type=demand_type if demand_type else None,
                     min_similarity=0.0,
                 )
             return results

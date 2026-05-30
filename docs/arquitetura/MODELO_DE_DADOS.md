@@ -201,7 +201,9 @@ Transições válidas estão em `app/models/process.py:VALID_TRANSITIONS`. Tenta
 
 ### Enum `DemandType`
 
-`car`, `retificacao_car`, `licenciamento`, `regularizacao_fundiaria`, `outorga`, `defesa`, `compensacao`, `exigencia_bancaria`, `prad`, `misto`, `nao_identificado`.
+`car`, `retificacao_car`, `licenciamento`, `regularizacao_fundiaria`, `outorga`, `defesa`, `compensacao`, `exigencia_bancaria`, `prad`, `sobreposicao`, `supressao`, `due_diligence`, `arrendamento`, `condicionantes_antigas`, `misto`, `nao_identificado`.
+
+Migration `e6f7a8b9c0d1` adiciona os 5 valores observados na prática pela planilha da Isis. O downgrade recria o enum sem esses valores e remapeia processos nesses tipos para `nao_identificado`.
 
 Decisão de design: novo Process **sempre nasce com `nao_identificado`**. Promoção para demand_type específico é decisão do consultor, registrada via `POST /processes/{id}/classify` (Sprint A1-E).
 
@@ -248,7 +250,7 @@ A função `search()` em `app/services/knowledge_catalog.py` aceita:
 | `uf` | str? | UF (GO, MS, MT, etc.) |
 | `agency` | str? | SEMAD, IBAMA, ICMBio, etc. |
 | `identifier` | str? | Identificador da norma (Lei 12.651/2012) |
-| `demand_types` | list[str]? | Filtro JSONB (Sprint -1 C) — prioriza documentos especializados |
+| `demand_type` | str? | Filtro estruturado no RAG vetorial: `knowledge_catalog.source_ref` faz JOIN lógico com `legislation_documents.id` e exige `LegislationDocument.demand_types @> [demand_type]`. Usado pelo `LegislacaoAgent`; a string da query continua carregando o tipo como reforço semântico. |
 | `limit` | int | Default 10 |
 | `min_similarity` | float | Default 0.7 |
 
