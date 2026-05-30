@@ -353,6 +353,11 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   (16/16 demand_types classificáveis). **25 testes novos verdes** (`test_intake.py` + 18 do
   `test_intake_classifier.py`), 14 pré-existentes sem regressão. Frontend (PreviewPanel/Reconcile/
   PriorityStep) + docs de agente/UX = **PR 2 (follow-up)**. Validação com a Isis pendente.
+- **Pulso 2026-05-30 (`feat/intake-ux-frontend` — PR 2 de 2):** `IntakeWizard` em 2 colunas com
+  `PreviewPanel` (polling do `extracted-fields`, badges de confiança, divergência → `ReconcileModal`
+  Opção A) + `PriorityStep` (2 eixos: urgência 4 / valor estratégico 3) + áudio da entrevista
+  anexável. `npx tsc --noEmit` limpo. `npm run build`/Vitest não rodam neste ambiente (node_modules
+  sem dev-deps — `vite`/`@types/node`/`vitest`; pré-existente). Validação fim-a-fim com a Isis pendente.
 
 ## Infraestrutura
 

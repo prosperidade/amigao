@@ -1357,3 +1357,32 @@ via parametrize) = **25 verdes**; 14 testes de intake pré-existentes sem regres
 - Dívida **#29** aberta: critério do "Valor Estratégico — nível Baixo" (Isis não definiu).
 
 **Pendente:** Etapa 3 (frontend) = PR 2. Validação fim-a-fim com a Isis pendente.
+
+---
+
+## Intake — campos derivados (frontend / Etapa 3) (30/05/2026)
+
+PR 2 (follow-up do backend #26). Consome os endpoints do PR backend sem inventar contrato.
+
+**Entregue (frontend):**
+- **Layout 2 colunas** no `IntakeWizard` quando há rascunho: formulário multi-step à esquerda,
+  `PreviewPanel` à direita.
+- **`PreviewPanel.tsx`** (novo) — polling 5s de `GET /intake/drafts/{id}/extracted-fields`;
+  cada campo com badge de confiança (verde >0.9 / amarelo 0.7–0.9 / vermelho <0.7) + doc de
+  origem; divergência abre o modal.
+- **`ReconcileModal.tsx`** (novo) — 2 valores lado a lado (digitado × IA); escolha →
+  `POST /intake/drafts/{id}/reconcile`.
+- **`PriorityStep.tsx`** (novo) — 2 dropdowns independentes (urgência 4 níveis + valor
+  estratégico 3 níveis); nível "baixo" sem critério (dívida #29).
+- **Áudio da entrevista** anexável no Step 4 (presigned upload → `audio_url`).
+- E-mail obrigatório já validado na UI (mantido). Sintoma/Dor/"Possui arquivo do CAR"
+  **nunca existiram** no FormState → nada a remover (confirmado).
+
+**Verificação:** `npx tsc --noEmit` (gate strict do CLAUDE.md) **limpo, zero erros nos meus
+arquivos**. `npm run build`/Vitest não rodam neste ambiente — node_modules incompleto
+(`vite`/`@vitejs/plugin-react`/`@types/node`/`vitest` ausentes); condição do ambiente, não do
+código. **Validação fim-a-fim com a Isis pendente.**
+
+**Escopo deferido:** docs `ATENDIMENTO_AGENTE`/`EXTRATOR_AGENTE`/`ECOSSISTEMA_AGENTICO` seguem
+adiados — descrevem transcrição Whisper / agentes **ainda não construídos** (PRs próprios).
+`FLUXOS_E2E` foi atualizado porque a UX (preview + reconciliação) agora existe.
