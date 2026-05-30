@@ -6,9 +6,10 @@ Mudanças Regente v3 (2026-04):
   - entry_type adicionado: 5 cenários (novo/existente + docs)
   - initial_summary separado da description técnica
 """
-from typing import Optional
+import enum
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.process import EntryType
 
@@ -43,10 +44,19 @@ class IntakeClassifyResponse(BaseModel):
 class IntakeClientCreate(BaseModel):
     full_name: str
     phone: Optional[str] = None
-    email: Optional[str] = None
+    # Decisão Isis (2026-05-28): e-mail é OBRIGATÓRIO no contato (não opcional).
+    email: str = Field(..., description="E-mail do contato — OBRIGATÓRIO (decisão Isis 2026-05-28).")
     cpf_cnpj: Optional[str] = None
     client_type: Optional[str] = "pf"
     source_channel: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def _email_nao_vazio(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v or "@" not in v:
+            raise ValueError("E-mail é obrigatório e deve ser válido.")
+        return v
 
 
 class IntakePropertyCreate(BaseModel):
@@ -86,6 +96,13 @@ class IntakeCreateCaseRequest(BaseModel):
     urgency: Optional[str] = "media"
     source_channel: Optional[str] = None
     intake_notes: Optional[str] = None
+
+    # Áudio da entrevista (decisão Isis 2026-05-28): entra como input para
+    # transcrição (Whisper) pelo agente de atendimento. A transcrição em si é
+    # PR própria do agente; aqui só carregamos a referência do arquivo.
+    audio_url: Optional[str] = Field(
+        None, description="URL/storage key do áudio da entrevista (transcrição via agente)."
+    )
 
     # Classificação (pode vir do /classify ou ser informada diretamente)
     demand_type: Optional[str] = None
@@ -250,3 +267,159 @@ class IntakeExtractionResultsResponse(BaseModel):
     docs_with_results: int
     by_document: list[IntakeExtractedDocument] = []
     suggestions: dict = {}                # campo → valor mais confiável (ex: cpf_cnpj, matricula)
+
+
+# ---------------------------------------------------------------------------
+# Campos derivados do intake (decisões Isis 2026-05-28)
+#
+# Três famílias de campos, separadas por PROCEDÊNCIA:
+#   - ManualFields    → o consultor digita (contato, funil, pessoa, atividade).
+#   - ExtractedFields → a IA (agent_extrator) lê dos documentos; o consultor
+#                       NÃO digita. Cada campo carrega value/confidence/origem.
+#   - TriagemFields   → 2 eixos independentes de prioridade + observação.
+#
+# Não substituem o `form_data` livre do draft — documentam e validam a estrutura
+# que o wizard envia. Sintoma, Dor e "Possui arquivo do CAR" NÃO entram (decisão
+# Isis: são interpretação do consultor / o sistema infere do anexo).
+# ---------------------------------------------------------------------------
+
+class UrgenciaNivel(str, enum.Enum):
+    urgentissima = "urgentissima"
+    alta = "alta"
+    media = "media"
+    baixa = "baixa"
+
+
+class ValorEstrategico(str, enum.Enum):
+    alto = "alto"
+    medio = "medio"
+    # Nível "baixo": Isis não definiu critério escrito (dívida aberta) —
+    # label sem régua; consultor decide livre.
+    baixo = "baixo"
+
+
+class TipoAtividade(str, enum.Enum):
+    agricultura = "agricultura"
+    pecuaria = "pecuaria"
+    florestal = "florestal"
+    agroindustrial = "agroindustrial"
+    outro = "outro"
+
+
+class ManualContato(BaseModel):
+    nome: str
+    telefone: Optional[str] = None
+    email: str = Field(..., description="OBRIGATÓRIO (decisão Isis).")
+    fonte: Optional[str] = None  # canal de origem / IntakeSource
+
+    @field_validator("email")
+    @classmethod
+    def _email_nao_vazio(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v or "@" not in v:
+            raise ValueError("E-mail é obrigatório e deve ser válido.")
+        return v
+
+
+class ManualFunil(BaseModel):
+    origem: Optional[str] = None
+    indicado_por: Optional[str] = None
+    primeiro_contato_em: Optional[str] = None  # ISO date
+
+
+class ManualPessoa(BaseModel):
+    tipo: str = Field("pf", description="pf | pj")
+    cpf_cnpj: Optional[str] = None
+    nome_legal: Optional[str] = None
+
+
+class ManualFields(BaseModel):
+    """Campos preenchidos manualmente pelo consultor no wizard."""
+    contato: ManualContato
+    funil: Optional[ManualFunil] = None
+    pessoa: Optional[ManualPessoa] = None
+    possui_car: bool = False
+    tipo_atividade: list[TipoAtividade] = Field(default_factory=list)
+    audio_url: Optional[str] = None  # vai para o extrator/transcrição
+
+
+class ExtractedField(BaseModel):
+    """Um campo lido pela IA, com proveniência e confiança."""
+    value: Any = None
+    confidence: Optional[float] = None
+    source_document_id: Optional[int] = None
+
+
+class ExtractedFields(BaseModel):
+    """Campos extraídos pela IA dos documentos — o consultor NÃO digita."""
+    nirf: Optional[ExtractedField] = None
+    ccir_numero: Optional[ExtractedField] = None
+    sigef_numero: Optional[ExtractedField] = None
+    car_numero: Optional[ExtractedField] = None
+    municipio: Optional[ExtractedField] = None
+    uf: Optional[ExtractedField] = None
+    coordenadas_centroide: Optional[ExtractedField] = None
+    area_total_ha: Optional[ExtractedField] = None
+    titular_matricula: Optional[ExtractedField] = None
+    area_app: Optional[ExtractedField] = None
+    area_rl: Optional[ExtractedField] = None
+    area_consolidada: Optional[ExtractedField] = None
+
+
+class TriagemFields(BaseModel):
+    """Dois eixos independentes de prioridade (decisão Isis 2026-05-28)."""
+    urgencia: UrgenciaNivel = UrgenciaNivel.media
+    valor_estrategico: ValorEstrategico = ValorEstrategico.medio
+    observacoes_triagem: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Reconciliação cliente × IA (Opção A — decisão na divergência)
+# ---------------------------------------------------------------------------
+
+class IntakeReconcileRequest(BaseModel):
+    """Resolve a divergência entre o valor digitado e o extraído pela IA.
+
+    O consultor escolhe a origem vencedora para UM campo. A escolha grava
+    `form_data["field_sources"][field]` (= "manual" | "extracted") e fixa o
+    valor resolvido em `form_data["reconciled"][field]`, aplicado às colunas
+    reais (Client/Property.field_sources) no commit do draft.
+    """
+    field: str = Field(..., description="Nome do campo reconciliado.")
+    source: str = Field(..., description='Origem vencedora: "manual" ou "extracted".')
+    value: Any = Field(None, description="Valor escolhido para o campo.")
+
+    @field_validator("source")
+    @classmethod
+    def _source_valida(cls, v: str) -> str:
+        if v not in ("manual", "extracted"):
+            raise ValueError('source deve ser "manual" ou "extracted".')
+        return v
+
+
+class IntakeReconcileResponse(BaseModel):
+    draft_id: int
+    field: str
+    source: str
+    value: Any = None
+    field_sources: dict = {}  # estado atual de form_data["field_sources"]
+
+
+# ---------------------------------------------------------------------------
+# Preview lateral — campos extraídos prontos para a UI (GET extracted-fields)
+# ---------------------------------------------------------------------------
+
+class ExtractedFieldView(BaseModel):
+    field: str
+    value: Any = None
+    confidence: Optional[float] = None
+    source_document_id: Optional[int] = None
+    source_document_name: Optional[str] = None
+    diverges_from_manual: bool = False  # True se o valor manual difere do extraído
+
+
+class IntakeExtractedFieldsResponse(BaseModel):
+    """Resposta do preview lateral: campos extraídos + flag de divergência."""
+    draft_id: int
+    fields: list[ExtractedFieldView] = []
+    has_divergence: bool = False

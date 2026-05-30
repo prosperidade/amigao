@@ -216,6 +216,31 @@ _DEMAND_RULES: dict[str, dict] = {
             {"id": "laudo_solo", "label": "Laudo de Solo (se houver)", "doc_type": "laudo", "category": "ambiental", "required": False},
         ],
     },
+    "prad": {
+        "label": "PRAD — Plano de Recuperação de Área Degradada",
+        "keywords": ["prad", "plano de recuperação", "área degradada", "recuperação de área",
+                     "recuperar área degradada", "cronograma de recuperação"],
+        "agencies": ["SEMA", "IBAMA"],
+        "diagnosis": (
+            "O cliente precisa de um PRAD (Plano de Recuperação de Área Degradada) específico — "
+            "documento técnico com diagnóstico da área, espécies, cronograma e metas de recuperação. "
+            "Distingue-se da compensação genérica por ser o plano formal exigido pelo órgão ou por "
+            "auto de infração. Confirme se há exigência formal e o prazo associado."
+        ),
+        "next_steps": [
+            "Delimitar a área degradada e o passivo a recuperar",
+            "Verificar se há auto de infração ou exigência do órgão com prazo",
+            "Levantar CAR e situação fundiária da área",
+            "Definir espécies, cronograma e metas de recuperação",
+        ],
+        "docs": [
+            {"id": "car", "label": "CAR", "doc_type": "car", "category": "ambiental", "required": True},
+            {"id": "matricula", "label": "Matrícula do Imóvel", "doc_type": "matricula", "category": "fundiario", "required": True},
+            {"id": "exigencia_orgao", "label": "Exigência do Órgão / Auto de Infração (se houver)", "doc_type": "notificacao", "category": "administrativo", "required": False},
+            {"id": "fotos_area_degradada", "label": "Fotos da Área Degradada", "doc_type": "foto", "category": "tecnico", "required": True},
+            {"id": "laudo_solo", "label": "Laudo de Solo (se houver)", "doc_type": "laudo", "category": "ambiental", "required": False},
+        ],
+    },
     "exigencia_bancaria": {
         "label": "Exigência Bancária / Crédito Rural",
         "keywords": ["banco", "financiamento", "crédito rural", "pronaf", "pronamp", "bcb", "exigência banco",

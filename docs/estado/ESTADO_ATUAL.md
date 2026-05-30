@@ -346,6 +346,13 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   (1) `tests/api/test_legislacao.py` não existe no repo — não rodado; (2) não há marker
   `pytest.mark.integration` na suíte, então `-m integration` deselecionava tudo — os arquivos
   foram rodados diretamente (eles *são* os testes integrados via Testcontainers).
+- **Pulso 2026-05-30 (`feat/intake-campos-backend` — campos derivados do intake, decisões Isis,
+  PR 1 de 2):** e-mail obrigatório no contato (422 se vazio); 3 famílias de schema (`ManualFields`/
+  `ExtractedFields`/`TriagemFields`); 2 endpoints novos no draft (`GET .../extracted-fields` preview,
+  `POST .../reconcile` Opção A → `field_sources`); `audio_url` aceito; regra `prad` no classifier
+  (16/16 demand_types classificáveis). **25 testes novos verdes** (`test_intake.py` + 18 do
+  `test_intake_classifier.py`), 14 pré-existentes sem regressão. Frontend (PreviewPanel/Reconcile/
+  PriorityStep) + docs de agente/UX = **PR 2 (follow-up)**. Validação com a Isis pendente.
 
 ## Infraestrutura
 

@@ -259,6 +259,36 @@ enfileiram com sucesso (skipped/failures vão no shape).
 > caminho explícito por processo cobre o fluxo natural da consultora:
 > abrir caso → subir docs → clicar uma vez.
 
+### Preview lateral + reconciliação do intake (feat/intake-campos-backend)
+
+Decisões Isis 2026-05-28. Dois endpoints novos sobre o draft, para a UX de
+cadastro com preview da extração da IA e reconciliação cliente × IA (Opção A —
+decisão na divergência). A UI que os consome vem na PR de frontend.
+
+**`GET /api/v1/intake/drafts/{draft_id}/extracted-fields`** — preview lateral.
+Agrega o AIJob mais recente do `extrator` por documento do draft e devolve, por
+campo: `value`, `confidence`, `source_document_id`, `source_document_name` e
+`diverges_from_manual` (valor digitado ≠ extraído e ainda não reconciliado).
+
+```json
+{ "draft_id": 12, "has_divergence": true,
+  "fields": [ {"field": "car_numero", "value": "GO-IA-999", "confidence": 0.93,
+               "source_document_id": 5, "source_document_name": "car.pdf",
+               "diverges_from_manual": true} ] }
+```
+
+**`POST /api/v1/intake/drafts/{draft_id}/reconcile`** — resolve UM campo
+divergente. Body `{field, source, value}` com `source ∈ {manual, extracted}`
+(fora disso → 422). Grava `form_data["field_sources"][field]` e fixa o valor em
+`form_data["reconciled"][field]`; as colunas reais (`Client`/`Property.field_sources`)
+são preenchidas no commit do draft. Registra `AuditLog` (`entity_type=intake_draft`,
+`action=reconciled`, hash chain). Retorna o `field_sources` atualizado.
+
+> **E-mail obrigatório** (decisão Isis): `IntakeClientCreate.email` virou
+> campo requerido com validação — `create-case`/draft commit com e-mail vazio
+> ou ausente → 422. `audio_url` (entrevista) é aceito no payload e carregado
+> para transcrição futura pelo agente de atendimento (transcrição = PR própria).
+
 ### Webhooks / async
 
 Endpoints assíncronos que dependem de Celery retornam 202 com `job_id`:

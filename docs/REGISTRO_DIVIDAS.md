@@ -42,6 +42,12 @@ validação de existência (o `citation_evaluator`, que não muda). **Origem:** 
 **período × localização jurídica** (ver "Regime de compensação por supressão em GO" na
 skill de Diagnóstico). Pós-contrato. **Origem:** skill de Diagnóstico (gabarito Romilton).
 
+**29. Critério do "Valor Estratégico — nível Baixo" não definido.** Na triagem do intake,
+o eixo `valor_estrategico` tem 3 níveis (alto/médio/baixo). Para o nível **baixo**, a Isis
+respondeu "não sei responder" — é label sem régua escrita; hoje o consultor decide livre.
+Validar o critério na tela quando a Isis testar o wizard. **Proibido** implementar critério
+agora (decisão pendente da sócia). **Origem:** PR intake campos derivados (30/05).
+
 **21. Criar WorkflowTemplate para demand_types sem cobertura.** Auditoria de cobertura
 em `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md` aponta ausência de
 template ativo para: `prad`, `sobreposicao`, `supressao`, `due_diligence`,
