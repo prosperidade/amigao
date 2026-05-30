@@ -95,6 +95,8 @@ Status: diagnostico
        ▼
 Status: planejamento
        │ Workflow template aplicado (por demand_type)
+       │ Se não houver WorkflowTemplate ativo para o tipo:
+       │   POST /processes/{id}/apply-workflow retorna 422 acionável
        │ Macroetapas planejadas + gates definidos
        │ Frontend: MacroetapaStepper.tsx
        ▼

@@ -70,6 +70,13 @@ validação de existência (o `citation_evaluator`, que não muda). **Origem:** 
 **período × localização jurídica** (ver "Regime de compensação por supressão em GO" na
 skill de Diagnóstico). Pós-contrato. **Origem:** skill de Diagnóstico (gabarito Romilton).
 
+**21. Criar WorkflowTemplate para demand_types sem cobertura.** Auditoria de cobertura
+em `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md` aponta ausência de
+template ativo para: `prad`, `sobreposicao`, `supressao`, `due_diligence`,
+`arrendamento`, `condicionantes_antigas`, `misto`, `nao_identificado`. **Origem:**
+Eixo 2 workflow por tipo (29/05). **Nota:** a rodada atual proibiu criar templates;
+ficou apenas o erro explícito e o relatório.
+
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
 **9. `except Exception` genérico no `pdf_generator.py:234`** devolve `{"error": str(e)}` sem
@@ -152,6 +159,7 @@ admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
 | **Camada 2 P1** | 5 botões da P4 — decisão obrigatória por alerta crítico antes da assinatura | 2026-05-26 (PROMPT_6) | `decisao_consultor` enum com os 5 valores + gate no `PATCH /validate` retornando 422 com lista de pendentes. Frontend dos botões fica para rodada futura (UI consome `RegulatoryIssueOut` + PATCH). |
 | **19** | Justificativa obrigatória para `ignorar_justificado` e `fora_escopo` (camada 2 completa) | 2026-05-26 (revisão pós-PROMPT_6) | `@model_validator` no `RegulatoryIssueUpdate` rejeita 422 quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no body sem `justificativa` preenchida (str_strip cuida de strings só-espaços). Aplica APENAS quando `decisao_consultor` está no body — PATCH parcial que só toca outros campos não força re-confirmação. 5 testes em `TestUpdatePropertyIssueJustificativaObrigatoria`. Fecha o buraco no Princípio 2 no caso mais arriscado (descartar uma crítica). |
 | **12** | `PROJECT_NAME='Amigão'` em `config.py:52` | 2026-05-23 (Fase 0) | Já estava `"Regente Ambiental"` quando a Fase 0 auditou. Commit `7877652` documentou. |
+| **Eixo 2 workflow/RAG** | Silent failure de workflow sem template + RAG sem filtro estruturado por tipo | 2026-05-29 | `knowledge_catalog.search(demand_type=...)` filtra via `LegislationDocument.demand_types`; `LegislacaoAgent` usa o filtro; `apply_workflow_template` levanta `TemplateNotFoundError`; API retorna 422 acionável; enum `DemandType` expandido com 5 valores. |
 
 ---
 

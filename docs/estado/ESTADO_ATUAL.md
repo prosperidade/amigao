@@ -71,6 +71,13 @@
   (consultor decide alerta por alerta) → PATCH /validate (assina + gate camada 2 + AuditLog)`.
   **Frontend ainda pendente** (UI dos 5 botões + 3 status editáveis — espera a
   re-modelagem ADR-012 estabilizar para começar).
+- **Eixo 2 workflow por tipo — ajuste pontual em 2026-05-29:** RAG vetorial do
+  `LegislacaoAgent` agora filtra `demand_type` de forma estruturada via
+  `LegislationDocument.demand_types`; `WorkflowEngine` levanta
+  `TemplateNotFoundError` e API devolve 422 quando não existe template ativo;
+  `DemandType` ganhou `sobreposicao`, `supressao`, `due_diligence`,
+  `arrendamento`, `condicionantes_antigas`. Relatório:
+  `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md`.
 
 **O que está congelado:**
 
