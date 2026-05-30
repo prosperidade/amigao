@@ -48,7 +48,13 @@ class OperationalPreferences(BaseModel):
 
 
 class AiPreferences(BaseModel):
-    """Como a IA deve se comportar no apoio ao trabalho."""
+    """Como a IA deve se comportar no apoio ao trabalho.
+
+    White label (André 2026-05-28): o consultor pode trazer a própria chave de
+    LLM (provider + model + api_key). `api_key` é write-only — entra em plaintext
+    no PATCH, o storage criptografa (ADR-014) e NUNCA volta em plaintext: a
+    resposta traz `api_key_masked` + `api_key_set`.
+    """
     model_config = ConfigDict(extra="ignore")
     assistance_level: Literal["automatic", "balanced", "manual"] = "balanced"
     summary_length: Literal["short", "medium", "detailed"] = "medium"
@@ -56,6 +62,12 @@ class AiPreferences(BaseModel):
     show_auto_summaries: bool = True
     require_human_validation_before_advance: bool = True
     save_ai_readings_history: bool = True
+    # Provider plugável por consultor (None = usa default global do sistema).
+    provider: Optional[Literal["anthropic", "google", "openai", "deepseek"]] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None          # write-only — nunca retornado preenchido
+    api_key_masked: Optional[str] = None   # read-only — ex.: "…AB12"
+    api_key_set: bool = False              # read-only — há chave gravada?
 
 
 class UserPreferences(BaseModel):

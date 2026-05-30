@@ -125,6 +125,9 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str = ""
     AI_DEFAULT_MODEL: str = "gpt-4o-mini"
     AI_FALLBACK_MODEL: str = "gemini/gemini-2.5-flash"
+    # White label (André 2026-05-28): provider chinês selecionável pelo consultor.
+    # DeepSeek é o mais maduro para LiteLLM; trocar aqui se mudar.
+    LLM_CHINESE_PROVIDER: str = "deepseek"
     AI_MAX_TOKENS: int = 2048
     AI_TEMPERATURE: float = 0.2
     AI_TIMEOUT_SECONDS: float = 30.0

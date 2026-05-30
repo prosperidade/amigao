@@ -21,6 +21,11 @@ from app.schemas.user_preferences import (
     UserPreferences,
     UserProfileUpdate,
 )
+from app.services.user_preferences import (
+    AVAILABLE_MODELS,
+    preferences_for_output,
+    save_ai_preferences,
+)
 
 router = APIRouter()
 
@@ -136,9 +141,15 @@ def read_users_me(
 def read_me_full(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    """Retorna usuário autenticado + preferências expandidas (6 abas do Settings)."""
+    """Retorna usuário autenticado + preferências expandidas (6 abas do Settings).
+
+    A chave de IA do consultor NUNCA volta em plaintext — `preferences_for_output`
+    mascara o grupo `ai` (api_key=None, api_key_masked, api_key_set).
+    """
     raw_prefs = current_user.preferences or {}
-    prefs = UserPreferences(**raw_prefs) if isinstance(raw_prefs, dict) else UserPreferences()
+    if not isinstance(raw_prefs, dict):
+        raw_prefs = {}
+    prefs = UserPreferences(**preferences_for_output(raw_prefs))
     return UserMeResponse(
         id=current_user.id,
         tenant_id=current_user.tenant_id,
@@ -180,19 +191,39 @@ def update_me_preferences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    """Merge parcial nas preferências (aceita qualquer subset dos 4 grupos)."""
-    # Carrega estado atual e aplica merge por grupo.
+    """Merge parcial nas preferências (aceita qualquer subset dos 4 grupos).
+
+    O grupo `ai` é tratado à parte: a `api_key` (se enviada) é criptografada
+    (ADR-014) antes de gravar e nunca persiste em plaintext; um PATCH sem
+    `api_key` preserva a chave existente. A resposta vem mascarada.
+    """
     raw_prefs = current_user.preferences or {}
     if not isinstance(raw_prefs, dict):
         raw_prefs = {}
-    current = UserPreferences(**raw_prefs)
-    patch = body.model_dump(exclude_unset=True, exclude_none=True)
-    merged = current.model_copy(update=patch)
+    # Dict cru do grupo ai (preserva api_key_encrypted — o schema dropa via extra=ignore).
+    stored_ai = raw_prefs.get("ai") if isinstance(raw_prefs.get("ai"), dict) else {}
 
-    current_user.preferences = merged.model_dump()
+    current = UserPreferences(**preferences_for_output(raw_prefs))
+    patch = body.model_dump(exclude_unset=True, exclude_none=True)
+    ai_patch = patch.pop("ai", None)
+    merged = current.model_copy(update=patch)
+    merged_dict = merged.model_dump()
+
+    # ai: cifra nova chave / preserva a existente; nunca grava plaintext nem masked.
+    merged_dict["ai"] = save_ai_preferences(stored_ai, ai_patch)
+    current_user.preferences = merged_dict
     db.commit()
     db.refresh(current_user)
-    return merged
+    return UserPreferences(**preferences_for_output(current_user.preferences or {}))
+
+
+@router.get("/me/preferences/ai/available-models")
+def list_available_ai_models(
+    current_user: User = Depends(get_current_active_user),
+) -> dict[str, list[str]]:
+    """Lookup table de modelos por provider (white label). Hardcoded — popula o
+    dropdown de modelo no Settings > IA conforme o provider escolhido."""
+    return AVAILABLE_MODELS
 
 
 @router.post("/password-change", status_code=status.HTTP_204_NO_CONTENT)

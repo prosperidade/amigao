@@ -172,3 +172,66 @@ def test_cost_limit_skipped_when_cost_is_zero_or_none(fake_litellm):
 def test_hourly_cost_limit_constant_is_documented_value():
     """Contrato documentado no CONTEXTO_ARQUITETURAL: 5.0 USD/hora por tenant."""
     assert AI_HOURLY_COST_LIMIT_USD == 5.0
+
+
+# ---------------------------------------------------------------------------
+# White label — provider plugável por consultor (André 2026-05-28)
+# ---------------------------------------------------------------------------
+
+
+def test_complete_uses_user_provider_model_and_key(fake_litellm):
+    """complete(user_preferences=...) usa provider/modelo/chave do usuário."""
+    fake_litellm.completion.return_value = _litellm_response_stub("ok", 100, 20)
+    fake_litellm.completion_cost.return_value = 0.001
+
+    with patch("app.core.config.settings", _build_settings_for_complete()):
+        complete(
+            "prompt",
+            user_preferences={"provider": "openai", "model": "gpt-4o", "api_key": "sk-user-key"},
+        )
+
+    _, kwargs = fake_litellm.completion.call_args
+    assert kwargs["model"] == "openai/gpt-4o"
+    assert kwargs["api_key"] == "sk-user-key"
+
+
+def test_complete_user_none_falls_back_to_global(fake_litellm):
+    """Sem user_preferences, usa a cadeia global (default model das settings)."""
+    fake_litellm.completion.return_value = _litellm_response_stub("ok", 100, 20)
+    fake_litellm.completion_cost.return_value = 0.001
+
+    with patch("app.core.config.settings", _build_settings_for_complete()):
+        complete("prompt", user_preferences=None)
+
+    _, kwargs = fake_litellm.completion.call_args
+    assert kwargs["model"] == "gpt-4o-mini"  # default global
+
+
+def test_complete_incomplete_user_pref_falls_back_to_global(fake_litellm):
+    """Pref do usuário sem api_key → ignora e usa global (não meio-configura)."""
+    fake_litellm.completion.return_value = _litellm_response_stub("ok", 10, 5)
+    fake_litellm.completion_cost.return_value = 0.0
+
+    with patch("app.core.config.settings", _build_settings_for_complete()):
+        complete("prompt", user_preferences={"provider": "openai", "model": "gpt-4o"})
+
+    _, kwargs = fake_litellm.completion.call_args
+    assert kwargs["model"] == "gpt-4o-mini"
+
+
+def test_complete_user_auth_error_does_not_fallback_global(fake_litellm):
+    """Falha de AUTH com a chave do consultor NÃO cai no fallback global."""
+    fake_litellm.completion.side_effect = Exception("AuthenticationError: invalid api key")
+
+    with (
+        patch("app.core.config.settings", _build_settings_for_complete(gemini="AIza", anthropic="sk-ant")),
+        pytest.raises(AIGatewayError) as exc_info,
+    ):
+        complete(
+            "prompt",
+            user_preferences={"provider": "deepseek", "model": "deepseek-chat", "api_key": "sk-bad"},
+        )
+
+    # mensagem clara + só UMA tentativa (não tentou os providers globais)
+    assert "Credenciais de IA do consultor inválidas" in exc_info.value.message
+    assert fake_litellm.completion.call_count == 1

@@ -58,7 +58,22 @@ interface AiPrefs {
   show_auto_summaries: boolean;
   require_human_validation_before_advance: boolean;
   save_ai_readings_history: boolean;
+  // White label — provider de LLM por consultor (ADR-014: chave criptografada).
+  provider?: 'anthropic' | 'google' | 'openai' | 'deepseek' | null;
+  model?: string | null;
+  api_key?: string | null;          // write-only — enviado no PATCH, nunca volta preenchido
+  api_key_masked?: string | null;   // read-only — ex.: "…AB12"
+  api_key_set?: boolean;            // read-only — há chave gravada?
 }
+
+type LlmProvider = 'anthropic' | 'google' | 'openai' | 'deepseek';
+
+const LLM_PROVIDER_OPTIONS: { value: LlmProvider; label: string }[] = [
+  { value: 'anthropic', label: 'Anthropic (Claude)' },
+  { value: 'google', label: 'Google (Gemini)' },
+  { value: 'openai', label: 'OpenAI (GPT)' },
+  { value: 'deepseek', label: 'DeepSeek' },
+];
 
 interface UserPreferences {
   profile: ProfilePrefs;
@@ -465,10 +480,29 @@ function OperationalTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => vo
 
 function AiTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }) {
   const [prefs, setPrefs] = useState<AiPrefs>(me.preferences.ai);
+  // Edição da chave: se já há chave gravada, mostra mascarada até clicar "Trocar".
+  const [editingKey, setEditingKey] = useState(false);
+
+  const { data: availableModels } = useQuery({
+    queryKey: ['ai-available-models'],
+    queryFn: () =>
+      api.get<Record<string, string[]>>('/auth/me/preferences/ai/available-models').then(r => r.data),
+    staleTime: 600_000,
+  });
+  const modelOptions = prefs.provider ? (availableModels?.[prefs.provider] ?? []) : [];
+
+  // Validação: chave obrigatória quando o provider está setado e ainda não há
+  // chave gravada nem digitada.
+  const providerNeedsKey =
+    !!prefs.provider && !prefs.api_key_set && !(prefs.api_key && prefs.api_key.trim());
 
   const save = useMutation({
     mutationFn: () => api.patch('/auth/me/preferences', { ai: prefs }),
-    onSuccess: () => { toast.success('Preferências de IA atualizadas'); onSaved(); },
+    onSuccess: () => {
+      toast.success('Preferências de IA atualizadas');
+      setEditingKey(false);
+      onSaved();
+    },
   });
 
   return (
@@ -509,6 +543,80 @@ function AiTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }) {
         </select>
       </Field>
 
+      <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 space-y-3">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Provedor de IA</h4>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            White label: traga sua própria chave de LLM. Deixe o provedor em branco para usar o
+            padrão do sistema. 🔒 Sua chave é criptografada antes de ser gravada no banco (ADR-014).
+          </p>
+        </div>
+
+        <Field label="Provedor">
+          <select
+            value={prefs.provider ?? ''}
+            onChange={e => {
+              const provider = (e.target.value || null) as AiPrefs['provider'];
+              setPrefs({ ...prefs, provider, model: null });
+            }}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
+          >
+            <option value="">Padrão do sistema</option>
+            {LLM_PROVIDER_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Field>
+
+        {prefs.provider && (
+          <>
+            <Field label="Modelo">
+              <select
+                value={prefs.model ?? ''}
+                onChange={e => setPrefs({ ...prefs, model: e.target.value || null })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200"
+              >
+                <option value="">Selecione o modelo…</option>
+                {modelOptions.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field
+              label="Chave de API"
+              hint={providerNeedsKey ? 'Obrigatória quando um provedor é selecionado.' : undefined}
+            >
+              {prefs.api_key_set && !editingKey ? (
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-sm text-gray-500 font-mono">
+                    {prefs.api_key_masked ?? '••••'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingKey(true); setPrefs({ ...prefs, api_key: '' }); }}
+                    className="px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 text-sm text-gray-600 dark:text-gray-300 hover:border-gray-300"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="password"
+                  value={prefs.api_key ?? ''}
+                  onChange={e => setPrefs({ ...prefs, api_key: e.target.value })}
+                  placeholder="sk-..."
+                  autoComplete="off"
+                  className={`w-full px-3 py-2 rounded-lg border bg-white dark:bg-zinc-800 text-sm dark:text-zinc-200 ${
+                    providerNeedsKey ? 'border-red-400' : 'border-gray-200 dark:border-zinc-700'
+                  }`}
+                />
+              )}
+            </Field>
+          </>
+        )}
+      </div>
+
       <div className="pt-3 border-t border-gray-100 dark:border-zinc-800">
         <Toggle
           label="Mostrar sugestões da IA no fluxo"
@@ -533,7 +641,7 @@ function AiTab({ me, onSaved }: { me: UserMeResponse; onSaved: () => void }) {
         />
       </div>
 
-      <SaveButton onClick={() => save.mutate()} pending={save.isPending} />
+      <SaveButton onClick={() => save.mutate()} pending={save.isPending} disabled={providerNeedsKey} />
     </Section>
   );
 }

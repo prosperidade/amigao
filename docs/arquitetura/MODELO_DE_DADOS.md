@@ -248,6 +248,29 @@ Estrutura variável por agente. Convenção:
 - Issues detectadas pelo `citation_evaluator` em `result["citation_issues"]`
 - Quando o agente migra para `StageOutputContent`, o conteúdo segue o schema do tipo (`PecaJuridicaContent`, `DiagnosticoPreliminarContent`, etc.)
 
+### `User.preferences['ai']` (JSONB) — white label (PR LLM, 30/05)
+
+`User.preferences` (JSONB) tem 4 grupos (`profile`/`notifications`/`operational`/`ai`). O grupo
+`ai` ganhou provider de LLM por consultor:
+
+```json
+{
+  "ai": {
+    "assistance_level": "balanced",
+    "provider": "openai",
+    "model": "gpt-4o",
+    "api_key_encrypted": "gAAAAAB...",   // ciphertext Fernet (ADR-014) — única forma persistida
+    "summary_length": "medium"
+  }
+}
+```
+
+- `api_key` (plaintext) **nunca** é gravado nem retornado. Cifrado via `encrypt_str` no
+  `app/services/user_preferences.py` (NÃO `EncryptedString`, que é só p/ coluna String — aqui
+  o storage é JSONB). Saída da API: `api_key=null` + `api_key_masked` + `api_key_set`.
+- `provider ∈ {anthropic, google, openai, deepseek}`. `provider=None` → default global do sistema.
+- `get_ai_runtime(user)` decifra e devolve `{provider, model, api_key}` para o `ai_gateway`.
+
 ### `knowledge_catalog` — filtros disponíveis
 
 A função `search()` em `app/services/knowledge_catalog.py` aceita:

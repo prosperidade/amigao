@@ -159,6 +159,51 @@ def _build_model_list(settings) -> list[tuple[str, str]]:
     return result or [(settings.AI_DEFAULT_MODEL, "")]
 
 
+# White label (André 2026-05-28): provider escolhido pelo consultor → prefixo
+# LiteLLM correspondente. Os 4 providers suportados (DeepSeek = provider chinês default).
+_PROVIDER_LITELLM_PREFIX = {
+    "anthropic": "anthropic/",
+    "google": "gemini/",
+    "openai": "openai/",
+    "deepseek": "deepseek/",
+}
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    """Heurística para erro de autenticação do provider (chave inválida)."""
+    try:
+        import litellm  # noqa: PLC0415
+        if isinstance(exc, getattr(litellm, "AuthenticationError", ())):
+            return True
+    except Exception:
+        pass
+    msg = str(exc).lower()
+    return (
+        "401" in msg
+        or "authentication" in msg
+        or "invalid api key" in msg
+        or "incorrect api key" in msg
+        or "unauthorized" in msg
+    )
+
+
+def _resolve_user_model(user_preferences: Optional[dict]) -> Optional[tuple[str, str]]:
+    """Se as prefs do usuário têm provider+model+api_key completos, devolve
+    (modelo_litellm, api_key). Caso contrário None (cai no global)."""
+    if not user_preferences:
+        return None
+    provider = (user_preferences.get("provider") or "").strip()
+    model = (user_preferences.get("model") or "").strip()
+    api_key = (user_preferences.get("api_key") or "").strip()
+    if not (provider and model and api_key):
+        return None
+    prefix = _PROVIDER_LITELLM_PREFIX.get(provider)
+    if not prefix:
+        return None
+    litellm_model = model if model.startswith(prefix) else f"{prefix}{model}"
+    return (litellm_model, api_key)
+
+
 def complete(
     prompt: str,
     *,
@@ -167,6 +212,7 @@ def complete(
     max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
     max_cost_override_usd: Optional[float] = None,
+    user_preferences: Optional[dict] = None,
 ) -> AIResponse:
     """
     Envia um prompt para o LLM e retorna AIResponse.
@@ -184,7 +230,18 @@ def complete(
 
     from app.core.config import settings
 
-    models: list[tuple[str, str]] = [(model, "")] if model else _build_model_list(settings)
+    # White label: se o consultor configurou provider+model+chave, usa SÓ a
+    # combinação dele (sem fallback global — não gastar crédito do sistema na
+    # conta do consultor). Senão, comportamento atual (override por `model` ou
+    # cadeia global de fallback).
+    user_resolved = _resolve_user_model(user_preferences)
+    if user_resolved:
+        models = [user_resolved]
+    elif model:
+        models = [(model, "")]
+    else:
+        models = _build_model_list(settings)
+    user_scoped = user_resolved is not None
     _max_tokens = max_tokens or settings.AI_MAX_TOKENS
     _temperature = temperature if temperature is not None else settings.AI_TEMPERATURE
     _timeout = settings.AI_TIMEOUT_SECONDS
@@ -268,6 +325,14 @@ def complete(
             raise
         except Exception as exc:
             last_error = str(exc)
+            # White label: falha de AUTH com a chave do consultor NÃO cai no
+            # fallback global (proibido gastar crédito do sistema). Erro claro.
+            if user_scoped and _is_auth_error(exc):
+                logger.warning("ai_gateway.complete user-scoped auth error model=%s", attempt_model)
+                raise AIGatewayError(
+                    message="Credenciais de IA do consultor inválidas; revise em Configurações > IA",
+                    last_error=last_error,
+                )
             logger.warning("ai_gateway.complete fallback model=%s error=%s", attempt_model, exc)
             continue
 

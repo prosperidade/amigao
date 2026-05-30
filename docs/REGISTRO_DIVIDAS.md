@@ -99,7 +99,15 @@ segredos (Fernet + `EncryptedString` + `CREDENTIAL_ENCRYPTION_KEY`) foi entregue
 Frente D ([ADR-014](adr/014-cripto-segredos-usuario.md)), mas **nenhuma coluna real a usa
 ainda**. Plugar quando a **PR 2.3** (`Credential` — logins de portal por cliente) e a
 **PR LLM** (`User.preferences.ai.api_key` — chave de IA do consultor, white label)
-entrarem. **Origem:** Frente D (28/05).
+entrarem. **Origem:** Frente D (28/05). **Parcialmente fechada (30/05, PR LLM):** a chave de
+IA do consultor já é gravada criptografada — mas em `User.preferences['ai']['api_key_encrypted']`
+(JSONB), via `encrypt_str`/`decrypt_str` no service (NÃO `EncryptedString`, que é só p/ coluna
+String). Resta a **PR 2.3** (`Credential` — aí sim usa `EncryptedString` em coluna real).
+
+**30. Auditoria de uso de IA por usuário/tenant (white label).** Com o consultor trazendo a
+própria chave, falta rastrear gasto/tokens consumidos POR chave de consultor (hoje os limites de
+custo — horário/mensal — são por tenant, e o cost cap por job não distingue chave do sistema vs
+do consultor). Útil para billing/transparência quando o white label escalar. **Origem:** PR LLM (30/05).
 
 ## Backlog de produto (já versionado em ADR)
 
