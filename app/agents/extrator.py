@@ -34,6 +34,8 @@ class ExtratorAgent(BaseAgent):
         document_id = self.ctx.metadata.get("document_id")
 
         # Se nao tem document_id nem text, retorna vazio (permite chain continuar)
+        # e dá orientação acionável — antes a mensagem "Nenhum documento fornecido"
+        # virava ruído sem caminho de saída na UI de Agentes.
         if not document_id and not text:
             return {
                 "extracted_fields": {},
@@ -41,7 +43,13 @@ class ExtratorAgent(BaseAgent):
                 "document_id": None,
                 "fields_count": 0,
                 "skipped": True,
-                "reason": "Nenhum documento fornecido para extracao",
+                "reason": (
+                    "Extrator chamado sem documento. Para extrair, forneça um dos: "
+                    "(a) metadata.document_id (ID de um Document do tenant), "
+                    "(b) metadata.text (texto bruto a extrair), ou "
+                    "(c) chame POST /api/v1/processes/{id}/extract para processar "
+                    "todos os documentos de um processo em um clique."
+                ),
             }
 
         # Busca o Document quando há document_id (para leitura do extracted_text e/ou cache posterior)
@@ -60,7 +68,13 @@ class ExtratorAgent(BaseAgent):
             text = doc.extracted_text or ""
             doc_type = doc.document_type or doc_type
             if not text.strip():
-                raise ValueError(f"Documento {document_id} nao possui texto extraido (OCR deve rodar primeiro)")
+                raise ValueError(
+                    f"OCR ainda nao rodou para o documento {document_id}. "
+                    f"Use POST /api/v1/processes/{{id}}/extract — a chain "
+                    f"workers.ocr_then_extract executa o OCR (pypdf/Gemini/OpenAI Vision) "
+                    f"e despacha o extrator automaticamente ao fim. "
+                    f"Alternativa: aguarde ocr_status='done' no Document e re-execute."
+                )
 
         # Sprint -1 D — se o texto veio por metadata e há Document associado sem
         # extracted_text cacheado, persiste para próximos usos (evita re-OCR).

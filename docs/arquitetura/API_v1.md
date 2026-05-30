@@ -111,7 +111,24 @@ Tenant guard implícito: toda dependency que devolve usuário também exige que 
 
 ### Soft delete
 
-Endpoints de DELETE em tabelas críticas (`Process`, `Client`, `Document`) fazem soft delete (`deleted_at`). Restauração via endpoint específico de undo onde aplicável.
+`DELETE /documents/{id}` continua soft delete (`deleted_at`). `DELETE /processes/{id}`
+também é soft delete.
+
+**Exceção — `DELETE /clients/{id}` e `DELETE /properties/{id}` viraram cascata
+hard-delete** (`fix/upload-checklist-binding`, 2026-05-28). Motivação: ciclo de
+teste — a consultora precisa apagar pra resubir os mesmos casos. Cada endpoint
+exige preview antes:
+
+| Endpoint | Função |
+|---|---|
+| `GET    /api/v1/clients/{id}/delete-preview` | Devolve `{properties, processes, documents, checklists, contracts, proposals}` (contagens exatas) sem alterar o banco. Usado pelo modal de confirmação. |
+| `DELETE /api/v1/clients/{id}` | Cascata em ordem segura (documentos do escopo do cliente → checklists → processos → imóveis → contratos → propostas → cliente). Satisfaz FKs RESTRICT (Process/Property/Contract/Proposal em `client_id`). Documentos só caem se pertencem ao escopo do cliente (Document.client_id OU process_id IN procs_owned_by_client OU property_id IN props_owned_by_client) — **nunca toca doc de outro cliente**. AuditLog `cascade_deleted` com hash chain SHA-256, `details` JSON com nome + contagens (LGPD). |
+| `GET    /api/v1/properties/{id}/delete-preview` | Devolve `{properties: 1, processes, documents, checklists, contracts: 0, proposals: 0}`. |
+| `DELETE /api/v1/properties/{id}` | Cascata documentos → checklists → processos do imóvel → imóvel. AuditLog `cascade_deleted` com hash chain SHA-256. |
+
+Lógica isolada em `app/services/cascade_delete.py` (`preview_*` + `cascade_delete_*` +
+`CascadePreview` dataclass). Sem migration — usa FKs existentes. Tudo dentro do
+endpoint roda em uma única transação (commit no router).
 
 ### Paginação
 
@@ -120,6 +137,21 @@ Listagens usam query params `?skip=0&limit=100` (FastAPI default). Soma máxima 
 ### Listagem com filtro
 
 Convenção: query string aceita filtros simples (`?status=execucao&demand_type=car`). Filtros complexos (full-text, semântico) usam endpoint dedicado (`GET /knowledge/search`).
+
+### Confirmação de upload (`POST /documents/confirm-upload`)
+
+`DocumentConfirmRequest` aceita `checklist_item_id?: str` (opcional —
+`fix/upload-checklist-binding`, 2026-05-28). Comportamento de auto-vínculo:
+
+1. Se o body trouxer `checklist_item_id`, o endpoint marca aquele item específico
+   do `ProcessChecklist` como `received` com `document_id = doc.id`.
+2. Senão, se `document_type` estiver setado, `auto_link_document` procura o
+   primeiro item pendente do checklist com `doc_type == document_type` e marca.
+   O `Document.checklist_item_id` é preenchido com o item_id linkado.
+3. Se não houver checklist ou nenhum item casar, o documento é persistido sem
+   vínculo — o consultor ainda pode marcar manualmente via PATCH `/checklist/items`.
+
+Resposta continua `202 Accepted` (extração OCR é enfileirada como antes).
 
 ### Endpoints regulatórios (`/processes/{id}/diagnoses`, `/properties/{id}/issues`)
 
@@ -131,13 +163,15 @@ assinatura humana.
 | `GET   /api/v1/processes/{id}/diagnoses` | Lista versões do `RegulatoryDiagnosis`, mais nova primeiro |
 | `GET   /api/v1/processes/{id}/diagnoses/{version}` | Versão específica |
 | `POST  /api/v1/processes/{id}/diagnoses` | Cria versão nova (gate Pydantic↔JSONB via `validate_diagnostic_content`) — 422 se `content` não respeita `DiagnosticoPreliminarContent`. Versão é `MAX(version)+1` server-side. |
-| `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` | **Camada 1 + 2 do Princípio 1.** Grava `validated_by_user_id` + `validated_at` + AuditLog hash chain. **409** se já validada. **422** (PROMPT_6) com lista de `alertas_pendentes` se houver `RegulatoryIssue` com `severity=critico` + `decisao_consultor IS NULL` + `resolved_at IS NULL` no imóvel do processo. Críticas RESOLVIDAS e não-críticas não bloqueiam. Quando 422 rejeita, NADA é gravado (`validated_*` continua None). |
+| `PATCH /api/v1/processes/{id}/diagnoses/{version}/validate` | **Camada 1 + 2 do Princípio 1.** Grava `validated_by_user_id` + `validated_at` + AuditLog hash chain. **409** se já validada. **422** (PROMPT_6 + ADR-012) com lista de `alertas_pendentes` se houver `RegulatoryIssue` com `severity=critico` + `resolved_at IS NULL` + `status_achado in {suspeita, confirmada, ignorada}` no imóvel **sem `ProcessIssueDecision` deste processo**. **PROMPT_10/11:** só `descartada` e `resolvida` ficam de fora (terminais sem o que decidir). `ignorada` **continua exigindo decisão** (PROMPT_11 corrigiu o #10): é achado real posto de lado e setá-la via `PATCH /issues` não exige justificativa — excluí-la abriria atalho pra silenciar crítico real sem registro (bypassa o #19); ignorar um real passa por `decisao=ignorar_justificado` (com justificativa). `suspeita` força adjudicação antes de assinar (não é deadlock — `PATCH /issues` move o estado). Decisão tomada em OUTRO processo da mesma property não libera (ADR-012). Quando 422 rejeita, NADA é gravado (`validated_*` continua None). **Efeito colateral (`fix/diagnostico-propaga-estado`, 28/05/2026):** após gravar `validated_at`, se `Process.macroetapa` é `diagnostico_preliminar` ou `diagnostico_tecnico` e `can_advance_macroetapa` passa (checklist 100% + docs obrigatórios OK + agora a assinatura), o backend chama `advance_macroetapa` automaticamente — `Process.macroetapa` avança para a próxima etapa no mesmo request. Gate travado (docs pendentes, checklist incompleto) mantém o `validated_at` gravado mas não muda macroetapa. Etapa não-diagnóstica nunca dispara o auto-advance. |
 | `GET   /api/v1/properties/{id}/issues?status=open\|resolved\|all` | Lista `RegulatoryIssue` do imóvel |
-| `PATCH /api/v1/properties/{prop_id}/issues/{issue_id}` | **PROMPT_6 — consultor edita os 3 status + decisão.** Body parcial via `RegulatoryIssueUpdate` (`extra="forbid"`): `status_achado`, `decisao_consultor`, `decisao_consultor_justificativa`, `status_saneamento`. **AuditLog granular por campo** (`<campo>_changed`) com hash chain SHA-256. Mesmo valor (no-op por campo) NÃO gera AuditLog. `decisao_consultor_at` é gerenciado server-side em qualquer mudança de `decisao_consultor`. **Justificativa obrigatória** quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no mesmo body (422 com mensagem citando o valor) — fecha o Princípio 2 no caso de descarte. Validator aplica APENAS quando `decisao_consultor` está no body (PATCH parcial que só toca outros campos não força re-envio). 404 se issue não pertence à property/tenant. |
+| `PATCH /api/v1/properties/{prop_id}/issues/{issue_id}` | **Consultor edita os 2 status perenes** (PROMPT_7 — ADR-012 enxugou). Body parcial via `RegulatoryIssueUpdate` (`extra="forbid"`): `status_achado`, `status_saneamento`. **AuditLog granular por campo** (`<campo>_changed`) com hash chain SHA-256. Mesmo valor (no-op por campo) NÃO gera AuditLog. 404 se issue não pertence à property/tenant. Os 3 campos de decisão saíram daqui — moveram para `PUT /processes/.../decision`. **PROMPT_8 (#17):** rejeita 422 quando o **estado resultante** (corpo aplicado sobre a issue carregada) tem `status_saneamento in {em_validacao, saneado}` sem `status_achado in {confirmada, resolvida}`. Body completo com a combinação proibida estoura fast-fail no `@model_validator` do schema; PATCH parcial é validado no endpoint. |
+| `GET   /api/v1/processes/{process_id}/issues/{issue_id}/decision` | **PROMPT_7 (ADR-012)** — lê a decisão do consultor para `(process_id, issue_id)`. **404** se ainda não há decisão (cada processo recomeça do zero — comportamento contextual). |
+| `PUT   /api/v1/processes/{process_id}/issues/{issue_id}/decision` | **PROMPT_7 (ADR-012)** — **upsert** da decisão. Body via `ProcessIssueDecisionCreate`: `decisao` (obrigatório), `justificativa` (obrigatória quando `decisao in {ignorar_justificado, fora_escopo}` — Princípio 2). Server-side: `decided_by_user_id = current_user.id`, `decided_at = now()`. Primeira chamada cria com `AuditLog(action="created")`; chamadas seguintes atualizam com AuditLog **granular por campo** (`decisao_changed`, `justificativa_changed`). Mesmo valor = no-op. **404** se issue não pertence à property do processo. **PROMPT_8 (#17):** rejeita 422 (com mensagem "Confirme ou descarte o achado antes de decidir") quando `issue.status_achado == suspeita` — decide-se o que fazer com a divergência só depois de confirmar que ela é real. |
 
 **Princípio 1 fechado em 2 camadas:**
 - **Camada 1** (PROMPT_4 Onda B): consultor assina o `RegulatoryDiagnosis` como um todo via `PATCH /validate`.
-- **Camada 2** (PROMPT_6): o gate de `PATCH /validate` exige `decisao_consultor` preenchido em **toda** issue crítica do imóvel. Os 5 valores do enum (`corrigir_antes` / `seguir_com_ressalva` / `solicitar_doc` / `fora_escopo` / `ignorar_justificado`) são **todos** decisões válidas que liberam o gate — o princípio é "obrigar a decidir", não "obrigar a corrigir" (radar-não-cancela preservado).
+- **Camada 2** (PROMPT_6 + ADR-012 / PROMPT_7 + PROMPT_10/11): o gate de `PATCH /validate` exige `ProcessIssueDecision` registrada **neste processo** para issues críticas com `status_achado in {suspeita, confirmada, ignorada}`. Só `descartada` ("não é divergência real") e `resolvida` ("corrigida no mundo") são excluídas — nelas não há o que decidir. `ignorada` **continua exigindo decisão** (PROMPT_11): é achado real posto de lado, e setá-la não exige justificativa — ignorar um real passa por `decisao=ignorar_justificado` (com justificativa, #19), não por um status livre. Os 5 valores do enum de decisão (`corrigir_antes` / `seguir_com_ressalva` / `solicitar_doc` / `fora_escopo` / `ignorar_justificado`) são **todos** decisões válidas que liberam o gate — o princípio é "obrigar a decidir", não "obrigar a corrigir" (radar-não-cancela preservado). Cada processo recomeça do zero — decisão em outro processo da mesma property não libera (ADR-012).
 
 #### Shape do 422 do gate (camada 2)
 
@@ -155,6 +189,75 @@ assinatura humana.
 ```
 
 A UI consome esse shape para mostrar cada alerta pendente e levar o consultor à tela de decisão.
+
+#### Coerência entre status do alerta (PROMPT_8 — #17)
+
+Duas regras semânticas barram combinações que o negócio considera incoerentes, sem
+construir máquina de estados completa. Fonte da verdade:
+`app/services/regulatory_coherence.py`.
+
+- **Regra A (perenes) — `PATCH /properties/{prop}/issues/{id}`**
+  Saneamento em estado **ativo** (`em_validacao`) ou **concluído** (`saneado`) exige
+  `status_achado in {confirmada, resolvida}`. Validada sobre o estado **resultante**
+  (corpo aplicado sobre a issue carregada — cobre PATCH parcial). Quando os 2 status
+  vêm juntos no body, dispara fast-fail no `@model_validator` do
+  `RegulatoryIssueUpdate`. Mensagem: *"Combinação inválida: saneamento '<x>' exige que
+  o achado esteja 'confirmada' ou 'resolvida' (atual: '<y>')."*
+
+- **Regra B (cross-entidade) — `PUT /processes/.../issues/.../decision`**
+  Bloqueia o registro de decisão quando `issue.status_achado == suspeita` —
+  decide-se o que fazer com a divergência só depois de confirmar que ela é real.
+  Mensagem: *"Não é possível registrar decisão: o achado ainda está como 'suspeita'.
+  Confirme ou descarte o achado antes de decidir."*
+
+Shape do 422 (string simples em `detail`, distinto do shape do gate camada 2):
+
+```json
+{ "detail": "Não é possível registrar decisão: o achado ainda está como 'suspeita'. Confirme ou descarte o achado antes de decidir." }
+```
+
+**Heads-up de UX:** pela Regra B, um alerta crítico em `suspeita` não aceita decisão —
+e o gate de `/validate` exige decisão. A UI dos 5 botões precisa expor a transição do
+`status_achado` (PATCH `/issues`) no mesmo fluxo da decisão, senão trava no gate sem
+caminho.
+
+### Extração por processo (`POST /api/v1/processes/{id}/extract`) — fix/extrator-por-processo
+
+Dispara extração de campos em **todos** os documentos do processo em um clique.
+Para cada `Document` (`tenant_id` + `process_id` + `deleted_at IS NULL`):
+
+- **Com `extracted_text` cacheado e `force=false`:** enfileira
+  `workers.run_agent.delay(agent_name="extrator", process_id=…, metadata={document_id, document_type})`.
+  Entra em `jobs` da resposta com `method="extract"`.
+- **Sem `extracted_text` ou `force=true`:** enfileira
+  `workers.ocr_then_extract.delay(doc_id=…, force=…)`. A chain roda OCR
+  (pypdf → Gemini Vision → OpenAI Vision) e ao final despacha o
+  `extrator`. Entra em `pending_ocr` com `method="ocr_then_extract"`.
+
+**Auditoria:** grava `AuditLog(action="extractor_dispatched", details="…")`.
+**404:** processo sem documentos. **200:** mesmo se *zero* tasks
+enfileiram com sucesso (skipped/failures vão no shape).
+
+**Body (opcional):**
+```json
+{ "force": false }
+```
+
+**Resposta 200:**
+```json
+{
+  "process_id": 42,
+  "total_docs": 3,
+  "jobs":         [{"document_id": 11, "filename": "matricula.pdf", "document_type": "matricula", "method": "extract", "task_id": "…"}],
+  "pending_ocr":  [{"document_id": 12, "filename": "ccir.pdf",      "document_type": "ccir",      "method": "ocr_then_extract", "task_id": "…"}],
+  "skipped":      []
+}
+```
+
+> **Por que existe.** Antes, "Executar" do `extrator` na página `/agents`
+> sem metadata era no-op silencioso ("Nenhum documento fornecido"). O
+> caminho explícito por processo cobre o fluxo natural da consultora:
+> abrir caso → subir docs → clicar uma vez.
 
 ### Webhooks / async
 

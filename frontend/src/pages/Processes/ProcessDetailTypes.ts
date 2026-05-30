@@ -4,6 +4,7 @@
 import {
   Stethoscope, LayoutGrid, Briefcase, ListChecks,
   FolderOpen, CalendarDays, Bot, Scale, PackageCheck,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -124,6 +125,7 @@ export interface TabDef {
 
 export const TABS: TabDef[] = [
   { key: 'diagnosis',  label: 'Visão geral', icon: Stethoscope,  block_type: 'permanent' },
+  { key: 'alertas',    label: 'Alertas',     icon: AlertTriangle, block_type: 'active'   },
   { key: 'tasks',      label: 'Ações',       icon: ListChecks,   block_type: 'active'    },
   { key: 'documents',  label: 'Documentos',       icon: FolderOpen,   block_type: 'permanent' },
   { key: 'dossier',    label: 'Dados',            icon: LayoutGrid,   block_type: 'permanent' },

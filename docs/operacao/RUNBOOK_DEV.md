@@ -207,6 +207,14 @@ celery -A app.core.celery_app worker --loglevel=info --pool=solo
 cd frontend && npm run dev
 ```
 
+> **Worker é dependência forte de qualquer pipeline de PDF / extração.**
+> Tasks como `workers.ocr_then_extract`, `workers.run_agent` e a chain
+> `workers.ocr_then_extract → workers.run_agent` que `POST
+> /api/v1/processes/{id}/extract` enfileira **só rodam com o worker no
+> ar**. Sem ele, uploads ficam parados em `ocr_status='pending'`
+> indefinidamente — não há fallback síncrono nesta camada. Em Docker,
+> `docker compose up worker`; em dev nativo, o comando acima.
+
 ## Tarefas comuns
 
 ### Rodar um script de ingestão de legislação

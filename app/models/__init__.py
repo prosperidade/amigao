@@ -20,6 +20,7 @@ from app.models.property import Property
 from app.models.proposal import Proposal
 from app.models.regulatory import (
     DecisaoConsultor,
+    ProcessIssueDecision,
     RegulatoryAlertFactibilidade,
     RegulatoryDiagnosis,
     RegulatoryFamilia,

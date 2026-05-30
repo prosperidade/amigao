@@ -35,7 +35,16 @@ from app.schemas.macroetapa import (
     StageOutputCreate,
     StageOutputResponse,
 )
-from app.schemas.process import Process, ProcessCreate, ProcessDetail, ProcessStatusUpdate, ProcessUpdate
+from app.schemas.process import (
+    Process,
+    ProcessCreate,
+    ProcessDetail,
+    ProcessExtractJob,
+    ProcessExtractRequest,
+    ProcessExtractResponse,
+    ProcessStatusUpdate,
+    ProcessUpdate,
+)
 from app.services.macroetapa_engine import (
     advance_macroetapa,
     get_macroetapa_status,
@@ -125,6 +134,26 @@ def get_kanban_view(
     ) if process_ids else []
     pc_map: dict[int, ProcessChecklist] = {pc.process_id: pc for pc in proc_checklists}
 
+    # fix/diagnostico-propaga-estado: set de process_ids com pelo menos uma
+    # RegulatoryDiagnosis com `validated_at` preenchido. O badge da etapa de
+    # diagnóstico e o gate de avanço cobram esse fato (Princípio 1 — humano
+    # assinou). Uma query agregada evita N+1 no kanban.
+    from app.models.regulatory import RegulatoryDiagnosis  # noqa: PLC0415
+
+    validated_diagnosis_ids: set[int] = set()
+    if process_ids:
+        validated_diagnosis_ids = {
+            pid
+            for (pid,) in db.query(RegulatoryDiagnosis.process_id)
+            .filter(
+                RegulatoryDiagnosis.tenant_id == tenant_id,
+                RegulatoryDiagnosis.process_id.in_(process_ids),
+                RegulatoryDiagnosis.validated_at.isnot(None),
+            )
+            .distinct()
+            .all()
+        }
+
     # Contagem de documentos anexados por processo
     doc_counts: dict[int, int] = {}
     if process_ids:
@@ -180,9 +209,18 @@ def get_kanban_view(
         blockers_list = list_macroetapa_blockers(
             cl, documents_pending_required=missing_docs
         )
+        try:
+            current_macroetapa_enum = Macroetapa(etapa) if etapa else None
+        except ValueError:
+            current_macroetapa_enum = None
+        diagnosis_validated = proc.id in validated_diagnosis_ids
         state_enum = (
             compute_macroetapa_state(
-                cl, is_current=True, has_blockers=bool(blockers_list)
+                cl,
+                is_current=True,
+                has_blockers=bool(blockers_list),
+                current_macroetapa=current_macroetapa_enum,
+                diagnosis_validated=diagnosis_validated,
             )
             if cl
             else MacroetapaState.nao_iniciada
@@ -405,6 +443,124 @@ def delete_process(
     db.commit()
 
 
+@router.post("/{process_id}/extract", response_model=ProcessExtractResponse)
+def extract_process_documents(
+    process_id: int,
+    body: ProcessExtractRequest = ProcessExtractRequest(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Dispara extração de campos em todos os documentos do processo.
+
+    Para cada Document do processo:
+      - Se já há `extracted_text` cacheado e `force=False`: enfileira só
+        o agente `extrator` (rápido, sem custo de OCR).
+      - Caso contrário: enfileira a chain `workers.ocr_then_extract` que
+        roda OCR (pypdf/Gemini/OpenAI Vision) e depois despacha o extrator.
+
+    Resolve o sintoma "rodar o extrator com metadata vazia é no-op" da UI
+    — agora há um caminho explícito de extração por processo.
+    """
+    from app.models.document import Document  # noqa: PLC0415
+
+    repo = ProcessRepository(db, current_user.tenant_id)
+    process = repo.get_or_404(process_id, detail="Processo não encontrado")
+
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.process_id == process.id,
+            Document.tenant_id == current_user.tenant_id,
+            Document.deleted_at.is_(None),
+        )
+        .order_by(Document.created_at.asc())
+        .all()
+    )
+
+    if not docs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processo sem documentos para extrair.",
+        )
+
+    jobs: list[ProcessExtractJob] = []
+    pending_ocr: list[ProcessExtractJob] = []
+
+    from app.workers.agent_tasks import run_agent  # noqa: PLC0415
+    from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
+
+    for doc in docs:
+        has_text = bool((doc.extracted_text or "").strip())
+        if has_text and not body.force:
+            try:
+                t = run_agent.delay(
+                    agent_name="extrator",
+                    tenant_id=current_user.tenant_id,
+                    user_id=current_user.id,
+                    process_id=process.id,
+                    metadata={
+                        "document_id": doc.id,
+                        "document_type": doc.document_type,
+                    },
+                )
+                jobs.append(
+                    ProcessExtractJob(
+                        document_id=doc.id,
+                        filename=doc.filename,
+                        document_type=doc.document_type,
+                        method="extract",
+                        task_id=getattr(t, "id", None),
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "extract_process_documents: falha ao enfileirar extrator doc=%s: %s",
+                    doc.id, exc,
+                )
+        else:
+            try:
+                t = ocr_then_extract.delay(
+                    doc_id=doc.id,
+                    tenant_id=current_user.tenant_id,
+                    user_id=current_user.id,
+                    draft_id=None,
+                    force=body.force,
+                )
+                pending_ocr.append(
+                    ProcessExtractJob(
+                        document_id=doc.id,
+                        filename=doc.filename,
+                        document_type=doc.document_type,
+                        method="ocr_then_extract",
+                        task_id=getattr(t, "id", None),
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "extract_process_documents: falha ao enfileirar ocr_then_extract doc=%s: %s",
+                    doc.id, exc,
+                )
+
+    repo.add_audit(
+        user_id=current_user.id,
+        process=process,
+        action="extractor_dispatched",
+        details=(
+            f"{len(jobs)} job(s) de extrator + {len(pending_ocr)} chain(s) OCR+extrator "
+            f"enfileiradas (force={body.force})"
+        ),
+    )
+    db.commit()
+
+    return ProcessExtractResponse(
+        process_id=process.id,
+        total_docs=len(docs),
+        jobs=jobs,
+        pending_ocr=pending_ocr,
+        skipped=[],
+    )
+
+
 @router.get("/{process_id}/timeline", response_model=list[AuditLogRead])
 def get_process_timeline(
     process_id: int,
@@ -474,16 +630,37 @@ def _compute_can_advance(
             if item.get("required") and item.get("status") == "pending":
                 missing_docs += 1
 
+    # fix/diagnostico-propaga-estado: gate de saída de etapa de diagnóstico
+    # exige assinatura humana do RegulatoryDiagnosis. Consulta única por
+    # processo — não é caminho de listagem, só do detalhe.
+    from app.models.regulatory import RegulatoryDiagnosis  # noqa: PLC0415
+
+    diagnosis_validated = bool(
+        db.query(RegulatoryDiagnosis.id)
+        .filter(
+            RegulatoryDiagnosis.tenant_id == process.tenant_id,
+            RegulatoryDiagnosis.process_id == process.id,
+            RegulatoryDiagnosis.validated_at.isnot(None),
+        )
+        .first()
+    )
+
     can, blockers = can_advance_macroetapa(
         cl,
         documents_pending_required=missing_docs,
         require_complete=require_complete,
+        current_macroetapa=current_etapa,
+        diagnosis_validated=diagnosis_validated,
     )
 
     state_value = None
     if cl:
         state_value = compute_macroetapa_state(
-            cl, is_current=True, has_blockers=bool(blockers)
+            cl,
+            is_current=True,
+            has_blockers=bool(blockers),
+            current_macroetapa=current_etapa,
+            diagnosis_validated=diagnosis_validated,
         ).value
 
     next_etapa = None

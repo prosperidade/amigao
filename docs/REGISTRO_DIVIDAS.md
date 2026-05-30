@@ -1,4 +1,4 @@
-# Registro de dívidas — Regente (consolidado pós-ADR-012 · 2026-05-26)
+# Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
@@ -14,46 +14,18 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 Pipeline ponta-a-ponta no nível de código: auditor cruza → diagnóstico consome → grava
 versionado → consultor assina.*
 
-## P1 — re-modelagem disparada pelo ADR-012 (próxima rodada)
+## P1 — (esvaziada após PROMPT_7)
 
-**20. Re-modelar a decisão do consultor de campo de `RegulatoryIssue` para
-entidade própria por `(processo × issue)` — conforme ADR-012.**
+*A re-modelagem do ADR-012 (dívida #20) foi implementada nesta rodada. Ver
+tabela "Fechadas (histórico)" abaixo.*
 
-A sócia (Isis) validou em 26/05 a opção **(b) cada trabalho recomeça**: o
-**fato** da divergência é perene (Property), mas a **decisão** do consultor
-sobre como tratá-la é **contextual ao processo**. Titularidade torta pesa
-diferente para vender e para dar como garantia ao banco — não dá pra
-herdar a decisão.
+## P2 — (esvaziada após PROMPT_8)
 
-O PROMPT_6 colocou `decisao_consultor`/`justificativa`/`decisao_consultor_at`
-no `RegulatoryIssue` (Property). Esses campos saem de lá e viram uma nova
-entidade `ProcessIssueDecision` (FK process_id + FK issue_id + os 5 botões
-+ justificativa + timestamp). Cada processo começa **sem decisão herdada**;
-o gate da camada 2 passa a olhar essa entidade nova.
-
-**Escopo da próxima rodada (PROMPT_7 — re-modelagem):**
-- Nova tabela `process_issue_decisions` (FK composta `(process_id, issue_id)`).
-- Migration que **MOVE** os 3 campos de decisão do `RegulatoryIssue` para
-  essa nova tabela (com dados existentes preservados — mapear cada
-  decisão antiga para o processo "dono" original).
-- `PATCH /properties/.../issues/{id}` deixa de aceitar campos de decisão
-  (vira só `status_achado` e `status_saneamento`).
-- Novo endpoint `PATCH /processes/{pid}/issues/{iid}/decision` (ou similar
-  — definir).
-- Gate do `PATCH /validate` passa a olhar `ProcessIssueDecision` daquele
-  processo, não `RegulatoryIssue.decisao_consultor`.
-- Validator de justificativa obrigatória (#19) e o gate dos 5 botões
-  acompanham o novo endpoint.
-- Examinar `status_saneamento`: separar saneamento **real** (fato corrigido
-  no mundo → fica em Property) de **avaliação contextual** (parte de
-  `ProcessIssueDecision`). Isis disse "detalhar ao implementar".
-
-**Quando entra:** próxima rodada — bloqueia a UI dos 5 botões (frontend
-depende dessa modelagem estável).
-
-**Origem:** ADR-012 (26/05), validado pela Isis.
-
-## P2 — coerência (depende de #20 estar resolvida)
+*A coerência entre os status (dívida #17) foi implementada nesta rodada
+via 2 regras: helper `assert_status_coerente` sobre estado resultante no
+PATCH `/issues` + bloqueio do PUT `/decision` quando achado em `suspeita`
+(`assert_decisao_permitida`). Sem máquina de estados completa — barrou só
+o absurdo óbvio. Ver tabela "Fechadas" abaixo.*
 
 ## P2 — produto/domínio (precisam da sócia)
 
@@ -114,23 +86,53 @@ licença/outorga — aguardam integração.
 
 *Régua de prioridade aplicada após classificação do Andre.*
 
-### P2 — dívida com risco modesto (espera #20 — ADR-012)
-
-**17. Coerência entre os 3 status reconciliados.** A Opção A do
-`RECONCILIACAO_STATUS_ALERTAS.md` foi implementada como **3 enums soltos**
-— o `PATCH /properties/{prop}/issues/{id}` aceita qualquer combinação.
-Consultor não gera combinações absurdas de propósito — mas o sistema
-não deveria permitir gravá-las. **Resolver no MVP:** `@model_validator`
-barrando contradições óbvias.
-
-> ⚠ **Depende da #20 (re-modelagem ADR-012)**: começamos a implementar
-> em 26/05 (`chore/prompt6-coerencia-status`) e descartamos quando o
-> ADR-012 da Isis chegou — `decisao_consultor` vai sair do
-> `RegulatoryIssue` e ir para `ProcessIssueDecision`. As regras de
-> coerência ficam diferentes (uma cruza entidades). Implementar **depois**
-> da re-modelagem da próxima rodada. **Origem:** revisão do PROMPT_6 (26/05).
-
 ### P3 — com marco condicional
+
+**21. Pares de status semanticamente incoerentes fora das 2 regras do PROMPT_8.**
+As 2 regras de `regulatory_coherence.py` foram desenhadas como "barrar o
+absurdo óbvio" — escopo fechado, não máquina de estados completa. Sobram
+pares teoricamente incoerentes que o sistema aceita por desenho:
+`status_achado=resolvida` com `status_saneamento=pendente` (achado já
+sanado mas saneamento ainda pendente); `descartada+pendente`,
+`ignorada+pendente` e variações com `nao_aplicavel`/`descartado` no
+saneamento sobre achados terminais. **Dimensionamento:** consultor não é
+adversário (P2 da rodada, agora P3 do que sobrou) — não cria isso de
+propósito; UI dos 5 botões pode até prevenir naturalmente pelo fluxo de
+clique. **Marco para revisitar:** apenas se aparecer dado real bagunçando
+o estado (ex.: import legado, regressão de UI deixando registros em
+combinações fantasmas). Aí valeria considerar máquina de estados completa
+ou regras adicionais. **Origem:** revisão pós-PROMPT_8 (26/05 — Andre
+notou ao revisar o escopo).
+
+**22. Workaround `--experimental-require-module` no runner do Vitest.**
+Os primeiros testes de componente do frontend (PROMPT_9) usam jsdom 27,
+que puxa `@asamuzakjp/css-color` (CJS) que `require()` `@csstools/css-calc`
+(ESM). Node 22.11 só aceita isso com a flag experimental
+`--experimental-require-module`. Como `poolOptions.execArgv` do Vitest não
+propaga aos workers Tinypool, o workaround é o runner
+`frontend/scripts/run-vitest.mjs` que injeta a flag via `NODE_OPTIONS`.
+**Marco para remover:** quando o jsdom corrigir a dep CJS/ESM upstream
+**ou** quando o projeto subir pra Node 22.12+ (que ativou `require(esm)`
+por default). Sem urgência — o runner é local, isolado e cross-platform.
+**Origem:** PROMPT_9 (26/05).
+
+**26. Unificação `Process.status` × `Process.macroetapa` (eixo 3 — PR3-agressivo).**
+Hoje o sistema mantém duas máquinas de estado paralelas: o enum legado
+`ProcessStatus` (em `app/models/process.py`) e o novo enum `Macroetapa`
+(em `app/models/macroetapa.py`), conectados pelo dicionário fixo
+`STATUS_TO_MACROETAPA`. Card do kanban lê `macroetapa`; outras telas e
+endpoints legados ainda olham `status`; cada update precisa decidir qual
+fonte respeitar. **Por que continua aberta:** o fix
+`fix/diagnostico-propaga-estado` (PR atual) foi deliberadamente
+conservador — só propaga o estado da assinatura para a `macroetapa` e
+adiciona um gate em `can_advance_macroetapa`. A unificação propriamente
+dita (eleger uma fonte única, migrar dados, ajustar as 4 tabelas
+denormalizadas que carregam o status, podar `STATUS_TO_MACROETAPA`)
+ficou para um PR3 agressivo, isolado, com migration própria. **Marco
+para destravar:** quando alguma feature ou bug exigir resolver
+divergências entre os dois eixos (e.g. relatório que mistura `status` e
+`macroetapa`, regra de negócio que conflita por causa do mapeamento
+fixo). **Origem:** PR `fix/diagnostico-propaga-estado` (2026-05-28).
 
 **18. Hash chain de `AuditLog` sem rotina de verificação.**
 `app/services/audit_hash.py` tem **só escritores** (`compute_audit_hash`,
@@ -157,8 +159,14 @@ admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
 | **4** | Mapeamento `grade` 4→`severity` 3 que colapsava alto+crítico | 2026-05-25 (PROMPT_5 Onda A) | `_GRADE_TO_SEVERITY` removido de `property_audit.py`. `AuditFinding.grade` e `RegulatoryIssue.severity` agora compartilham 4 níveis (`informativo`/`atencao`/`alto`/`critico`). Auditor emite codigos reais (📄) e grade direto; 🛰️/🔌 ficam no catálogo mas não emitidos até infra. Diagnóstico mapeia `familia` (11) → `RiscoCategoria` (7) via `_FAMILIA_TO_CATEGORIA` (substitui `_FINDING_TYPE_TO_CATEGORIA` do PROMPT_4). |
 | **5** | Reconciliar `status_saneamento` × `status` do auditor × `decisao_consultor` (3 status circulantes) | 2026-05-26 (PROMPT_6 — Opção A do RECONCILIACAO_STATUS_ALERTAS) | 3 enums novos: `StatusAchado` (5 valores), `DecisaoConsultor` (os 5 botões P4), `StatusSaneamento` (5 valores). 5 colunas em `RegulatoryIssue`: `status_achado` (NOT NULL default `suspeita`), `decisao_consultor` (nullable), `decisao_consultor_justificativa`, `decisao_consultor_at`, `status_saneamento` (NOT NULL default `pendente`). PATCH `/properties/{prop}/issues/{id}` edita com AuditLog granular por campo. Gate no PATCH `/validate` rejeita 422 se houver crítica sem decisão (camada 2 do Princípio 1 fechada). Migration `d2c3e4f5a6b8`. |
 | **Camada 2 P1** | 5 botões da P4 — decisão obrigatória por alerta crítico antes da assinatura | 2026-05-26 (PROMPT_6) | `decisao_consultor` enum com os 5 valores + gate no `PATCH /validate` retornando 422 com lista de pendentes. Frontend dos botões fica para rodada futura (UI consome `RegulatoryIssueOut` + PATCH). |
-| **19** | Justificativa obrigatória para `ignorar_justificado` e `fora_escopo` (camada 2 completa) | 2026-05-26 (revisão pós-PROMPT_6) | `@model_validator` no `RegulatoryIssueUpdate` rejeita 422 quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no body sem `justificativa` preenchida (str_strip cuida de strings só-espaços). Aplica APENAS quando `decisao_consultor` está no body — PATCH parcial que só toca outros campos não força re-confirmação. 5 testes em `TestUpdatePropertyIssueJustificativaObrigatoria`. Fecha o buraco no Princípio 2 no caso mais arriscado (descartar uma crítica). |
+| **19** | Justificativa obrigatória para `ignorar_justificado` e `fora_escopo` (camada 2 completa) | 2026-05-26 (revisão pós-PROMPT_6) | `@model_validator` no `RegulatoryIssueUpdate` rejeita 422 quando `decisao_consultor in {ignorar_justificado, fora_escopo}` no body sem `justificativa` preenchida (str_strip cuida de strings só-espaços). Aplica APENAS quando `decisao_consultor` está no body — PATCH parcial que só toca outros campos não força re-confirmação. 5 testes em `TestUpdatePropertyIssueJustificativaObrigatoria`. PROMPT_7 migrou o validator para `ProcessIssueDecisionCreate` (mesma regra, schema novo). |
+| **20** | Re-modelar `decisao_consultor` como entidade contextual ao processo (ADR-012) | 2026-05-26 (PROMPT_7) | Nova entidade `ProcessIssueDecision` (FK composta `(process_id, issue_id)` unique). Campos `decisao`/`justificativa`/`decided_at`/`decided_by_user_id` (renomeados em relação ao PROMPT_6; `decided_by_user_id` é novo). Migration `e3d4f5g6a7b8` cria tabela e dropa as 3 colunas do `RegulatoryIssue` (drop sem backfill — sem dados em prod). Endpoints novos: `GET` e `PUT /api/v1/processes/{pid}/issues/{iid}/decision` com upsert + AuditLog granular por campo (hash chain SHA-256). Gate `PATCH /validate` cruza issues críticas × `ProcessIssueDecision` deste processo. Validator de justificativa obrigatória migrou para o schema novo. Cada processo recomeça do zero (titularidade torta pesa diferente para venda e para crédito). `TestProcessIssueDecision` (11 testes novos) + `test_decisao_de_outro_processo_nao_libera_gate` confirma comportamento contextual. |
+| **17** | Coerência entre os status reconciliados | 2026-05-26 (PROMPT_8) | Helper puro `app/services/regulatory_coherence.py` com 2 regras semânticas (escopo fechado, sem máquina de estados completa). **Regra A — perenes:** `assert_status_coerente(status_achado, status_saneamento)` exige `status_achado in {confirmada, resolvida}` quando `status_saneamento in {em_validacao, saneado}`. Aplicada (i) no `@model_validator` do `RegulatoryIssueUpdate` (fast-fail quando os 2 status vêm juntos no body) e (ii) no endpoint `PATCH /properties/.../issues/{id}` sobre o estado **resultante** (fonte da verdade — cobre PATCH parcial). **Regra B — cross-entidade:** `assert_decisao_permitida(status_achado)` rejeita `PUT /processes/.../decision` quando `status_achado == suspeita`. Mensagens de erro acionáveis: a primeira cita `confirmada`/`resolvida`, a segunda diz "Confirme ou descarte o achado antes de decidir". Sem migration (validação, não modelagem). `TestCoerenciaStatusPerene` (7 testes) + `TestDecisaoBloqueadaSeAchadoSuspeita` (3 testes). Suite 635/635 verde. |
+| **23** | Gate camada 2 cobrando decisão em achado terminal (trap revelado pós-PROMPT_9) | 2026-05-26 (PROMPT_10, corrigido por PROMPT_11) | Gate de `PATCH /diagnoses/{version}/validate` filtra `status_achado in {suspeita, confirmada, ignorada}` — só `descartada` ("não é divergência real") e `resolvida` ("corrigida no mundo") são excluídas, pois nelas não há o que decidir. **PROMPT_11 corrigiu a versão original do #10**, que excluía `ignorada` por erro de simetria: `ignorada` significa "achado REAL posto de lado" e setá-la via `PATCH /issues` não exige justificativa — excluí-la abriria atalho pra silenciar crítico real sem registro, recriando a porta que o #19 fechou. Quem quer ignorar registra `decisao=ignorar_justificado` (com justificativa, #19); a Regra B permite porque `ignorada` ≠ `suspeita`. `suspeita` permanece pra forçar adjudicação antes de assinar (não é deadlock). `resolved_at IS NULL` mantido como critério ortogonal. Testes no `TestValidateDiagnosisGateCamada2`: `descartada`/`resolvida` liberam; `suspeita`/`confirmada`/`ignorada` continuam exigindo (422). Sem migration, sem ADR. **Follow-on aberto:** badge "N pendentes" do `DiagnosisAssinatura` (PROMPT_9) precisa espelhar a mesma exclusão (`descartada`/`resolvida`) pra não super-contar. |
 | **12** | `PROJECT_NAME='Amigão'` em `config.py:52` | 2026-05-23 (Fase 0) | Já estava `"Regente Ambiental"` quando a Fase 0 auditou. Commit `7877652` documentou. |
+| **24** | Upload de documento não casava com item do checklist + UI de exclusão sem cascata (ciclo de teste travado) | 2026-05-28 (`fix/upload-checklist-binding`) | (i) `DocumentConfirmRequest` ganhou `checklist_item_id?: str`; `confirm_upload` persiste a coluna e chama `auto_link_document` quando o `document_type` casa com um item pendente. (ii) `ProcessChecklist.handleReceived` passa `item.document_id` no PATCH. (iii) `DocumentsTab` renderiza `Object.entries(AIJob.result)` em `<dl>` (antes era só badge sem dado). (iv) Cascade delete service `app/services/cascade_delete.py` + endpoints `GET /{clients,properties}/{id}/delete-preview` + `DELETE` com cascata em ordem segura (RESTRICT-friendly) + `AuditLog cascade_deleted` com hash chain SHA-256 (LGPD); nunca toca doc de outro cliente. (v) Modais de confirmação em Clients/Properties listam contagens exatas antes de confirmar. Suite 186 testes verde, tsc verde. Sem migration. |
+| **Sintoma "card discorda do diagnóstico assinado"** | Card lia só `completion_pct` enquanto `RegulatoryDiagnosis.validated_at` ficava em outro bloco; nem `can_advance_macroetapa` cobrava assinatura | 2026-05-28 (`fix/diagnostico-propaga-estado`) | `compute_macroetapa_state` e `can_advance_macroetapa` ganharam kwargs `current_macroetapa` + `diagnosis_validated` — etapa de diagnóstico vira `aguardando_validacao` enquanto não houver assinatura, e o gate de saída cobra o `validated_at`. `PATCH /processes/{id}/diagnoses/{version}/validate` chama `advance_macroetapa` automaticamente quando o gate passa (mesmo critério do botão manual: docs obrigatórios + checklist 100% + agora assinatura). Conservador: NÃO toca `Process.status` nem consolida as 2 chains — isso é o **eixo 3** (dívida nova **#26**, abaixo). Kanban (`processes.py`) consulta uma única vez o set de `process_id` com `RegulatoryDiagnosis.validated_at IS NOT NULL` para evitar N+1. 4 testes unitários (`tests/models/test_macroetapa_gate.py`) + 3 de API (`TestValidateAdvancesMacroetapa`). |
+| **25** | Extrator no-op silencioso + sem caminho de extração por processo | 2026-05-28 (`fix/extrator-por-processo`) | Novo `POST /api/v1/processes/{id}/extract` enfileira `workers.run_agent(extrator)` para docs com `extracted_text` cacheado e `workers.ocr_then_extract` (chain OCR→extrator) para docs sem texto, com `force=true` opcional pra re-OCR. `AuditLog(action="extractor_dispatched")` rastreia o disparo. Mensagens do `ExtratorAgent` ganharam orientação acionável (apontam pro endpoint novo) — tanto o `reason` do skipped sem args quanto o `ValueError` quando `document_id` existe mas `extracted_text` é NULL. UI: card do `extrator` no `/agents` agora mostra "Rodar no processo #N" (disabled sem ID); Step 4 do `IntakeWizard` trava avanço se há docs sem leitura disparada; `DraftDocumentUploader` ganha botão 🗑 por linha (habilitado pra `ocr_status` em `{null, pending}`). Sem migration. 3 testes novos em `tests/api/test_processes.py` + 1 em `tests/agents/test_extrator_cache.py`. Suite verde (9 do processes / 4 do extrator). **Marco condicional:** o `_dispatch_extrator` em `app/workers/ocr_tasks.py` ainda passa `process_id=None` ao `run_agent` — `AIJob` resultante perde o link com o processo no caminho da chain OCR. Fora do escopo deste PR; abrir nova dívida se isso passar a doer. |
 | **Eixo 2 workflow/RAG** | Silent failure de workflow sem template + RAG sem filtro estruturado por tipo | 2026-05-29 | `knowledge_catalog.search(demand_type=...)` filtra via `LegislationDocument.demand_types`; `LegislacaoAgent` usa o filtro; `apply_workflow_template` levanta `TemplateNotFoundError`; API retorna 422 acionável; enum `DemandType` expandido com 5 valores. |
 
 ---

@@ -68,9 +68,17 @@ interface Props {
   onChange?: (docs: DraftDoc[]) => void;
   /** CAM1-005 Parte B — callback opcional quando o consultor aplica uma sugestão. */
   onApplySuggestion?: (field: string, value: unknown) => void;
+  /** fix/extrator-por-processo — avisa o pai que a leitura IA foi disparada,
+   *  para o IntakeWizard liberar o avanço do Step 4. */
+  onImportTriggered?: () => void;
 }
 
-export default function DraftDocumentUploader({ draftId, onChange, onApplySuggestion }: Props) {
+export default function DraftDocumentUploader({
+  draftId,
+  onChange,
+  onApplySuggestion,
+  onImportTriggered,
+}: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<DraftDoc[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -207,6 +215,7 @@ export default function DraftDocumentUploader({ draftId, onChange, onApplySugges
     try {
       await api.post(`/intake/drafts/${draftId}/import`, {});
       await refresh();
+      onImportTriggered?.();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao disparar leitura IA';
       setError(msg);
@@ -214,6 +223,28 @@ export default function DraftDocumentUploader({ draftId, onChange, onApplySugges
       setImporting(false);
     }
   };
+
+  // fix/extrator-por-processo — exclui um upload antes da IA processar.
+  // Reusa o soft delete já existente em DELETE /documents/{id}.
+  // Habilitado só quando ocr_status ∈ (null, 'pending'); pra processing/done/failed,
+  // o consultor remove pela aba Documentos do processo (que já tem essa ação).
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const deleteDoc = async (docId: number, filename: string) => {
+    if (!window.confirm(`Excluir "${filename}"? O arquivo original fica preservado no storage.`)) return;
+    setDeletingId(docId);
+    setError(null);
+    try {
+      await api.delete(`/documents/${docId}`);
+      await refresh();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao excluir documento.';
+      setError(msg);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const canDelete = (s: string | null) => s === null || s === 'pending';
 
   const badgeFor = (s: string | null) => {
     if (s === 'done') return { label: 'Lido', cls: 'bg-emerald-500/20 text-emerald-300' };
@@ -265,6 +296,7 @@ export default function DraftDocumentUploader({ draftId, onChange, onApplySugges
         <div className="space-y-2">
           {docs.map(d => {
             const b = badgeFor(d.ocr_status);
+            const canRemove = canDelete(d.ocr_status);
             return (
               <div key={d.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/5 border border-white/5 text-sm">
                 <span className="text-lg">📄</span>
@@ -276,6 +308,17 @@ export default function DraftDocumentUploader({ draftId, onChange, onApplySugges
                   </div>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${b.cls}`}>{b.label}</span>
+                {canRemove && (
+                  <button
+                    type="button"
+                    onClick={() => deleteDoc(d.id, d.filename)}
+                    disabled={deletingId === d.id}
+                    title="Excluir este upload antes da IA processar"
+                    className="text-xs px-2 py-1 rounded-md text-red-300 hover:text-red-200 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+                  >
+                    {deletingId === d.id ? '⟳' : '🗑'}
+                  </button>
+                )}
               </div>
             );
           })}
