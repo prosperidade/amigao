@@ -56,6 +56,7 @@ Esquema completo do banco do Regente Ambiental. Toda mudança aqui passa por mig
 | Entidade | Tabela | Função |
 |---|---|---|
 | `Client` | `clients` | Cliente da consultoria (PF/PJ). Tem `field_sources` (JSONB) marcando origem de cada campo: manual / extraído / confirmado. |
+| `Credential` | `credentials` | Cofre de logins de portais externos por cliente (SEMA/IBAMA/SICAR/INCRA/banco). `password_encrypted` usa `EncryptedString` (ADR-014) — ciphertext em repouso, plaintext só no ORM. `login` plaintext (identificador). FK `client_id` (CASCADE) + `tenant_id` (RESTRICT). Soft delete. **Primeiro uso real do `EncryptedString` em coluna** (PR 2.3). |
 | `Property` | `properties` | Imóvel rural. `geom` (PostGIS polígono SIRGAS 2000). Hoje vazia em todas as 9 propriedades — pendência. |
 | `PreCadastro` | `pre_cadastros` | Lead da landing. **Sem `tenant_id`** (lead anônimo). |
 

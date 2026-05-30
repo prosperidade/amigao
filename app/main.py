@@ -15,6 +15,7 @@ from app.api.v1 import (
     checklists,
     clients,
     contracts,
+    credentials,
     dashboard,
     decisions,
     documents,
@@ -134,6 +135,7 @@ app.add_middleware(
 # Rotas
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Autenticação"])
 app.include_router(clients.router, prefix=f"{settings.API_V1_STR}/clients", tags=["Clientes"])
+app.include_router(credentials.router, prefix=f"{settings.API_V1_STR}/credentials", tags=["Credenciais de Portal"])
 app.include_router(processes.router, prefix=f"{settings.API_V1_STR}/processes", tags=["Processos"])
 app.include_router(documents.router, prefix=f"{settings.API_V1_STR}/documents", tags=["Documentos"])
 app.include_router(properties.router, prefix=f"{settings.API_V1_STR}/properties", tags=["Propriedades Rurais"])
