@@ -86,8 +86,10 @@ Quatro perguntas, nesta ordem:
 
 ## Índice atual (inventário vivo)
 
-*Atualizado em 2026-05-25 (rodada de governança documental — todos os candidatos
-listados antes foram arquivados em `docs/_archive/`).*
+*Atualizado em 2026-05-30 (revisão de fim de rodada: nenhum documento nasceu, morreu ou
+mudou de estado; foram atualizados `BASE_REGULATORIA` e `MODELO_DE_DADOS` — ambos já no índice —
+pelo merge do corpus SEMAD, PR #24. Rodada anterior em 2026-05-25 arquivou os candidatos
+em `docs/_archive/`).*
 
 **Manifesto:** `01-VISAO_PRODUTO` · `02-IDENTIDADE` · `03-PRINCIPIOS` · `04-ROADMAP` (em `docs/manifesto/`)
 **Arquitetura:** `ARQUITETURA_GERAL` · `MODELO_DE_DADOS` · `MAQUINA_DE_ESTADOS` · `FLUXOS_E2E` · `MULTITENANT_LGPD` · `PIPELINE_OCR` · `GOVERNANCA_IA` · `OBSERVABILIDADE` · `WHITELABEL` · `INTEGRACOES_GOVTECH` · `API_v1` · `BASE_REGULATORIA` · **`GOVERNANCA_DOCUMENTAL` (este)** (em `docs/arquitetura/`)

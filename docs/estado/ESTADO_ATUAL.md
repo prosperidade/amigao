@@ -1,6 +1,6 @@
 # Estado Atual — Regente Ambiental
 
-**Data do instantâneo:** 2026-05-28 (pós-`fix/diagnostico-propaga-estado` — assinatura propaga macroetapa e card concorda com bloco "diagnóstico assinado"; logo após `fix/extrator-por-processo` em main que entregou extração por processo + UI honesta)
+**Data do instantâneo:** 2026-05-30 (pós-PR #23 fechamento do PR 2.2 — testes integrados 42/42 + cobertura real; pós-PR #24 corpus SEMAD operacional em main; + faxina de repositório: de ~23 branches remotas / 6 worktrees para só `main`)
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
@@ -313,7 +313,10 @@ Ver `app/main.py:135-161`. Áreas: auth, clientes, processos, documentos, propri
 | GO | 3.855 | idem |
 | MS | 4.587 | idem |
 | MT | 13.411 | idem |
-| **Total** | **22.573** | — |
+| GO — SEMAD operacional | 1.194 | Gemini Flash classify + OpenAI 768d (PR #24, 30/05) |
+| **Total** | **23.767** | — |
+
+Corpus SEMAD operacional (PR #24): 282/283 PDFs, 4 source types novos (`norma_procedural`/`matriz_ipe`/`manual_ipe`/`gabarito_laudo`). 1 PDF pendente de OCR (dívida #28). Detalhe em `docs/arquitetura/BASE_REGULATORIA.md`.
 
 Próximos estados na fila: SP, MG, TO (próxima semana).
 
