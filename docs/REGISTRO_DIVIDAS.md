@@ -86,6 +86,16 @@ reescreve SHAs e quebra os worktrees/branches ativos de outros trabalhos. Fazer 
 dedicada, combinada com o Andre, com todos os worktrees fechados. **Origem:** fix deploy
 Render (30/05).
 
+**34. Duas trilhas de orçamento paralelas e desalinhadas.** O agente `orcamento`
+(`_estimate_by_rules`, 3 tipos — `app/agents/orcamento.py`) e o serviço determinístico
+`app/services/proposal_generator.py` (`PRICE_TABLE`, ~8 tipos, prazos distintos) têm tabelas de
+preço **diferentes**. O endpoint `GET /api/v1/proposals/generate-draft` usa o **serviço**
+(`app/api/v1/proposals.py:114`), não o agente — então o valor que o consultor vê pode divergir
+conforme o caminho (chain `gerar_proposta` via agente × endpoint via serviço). Unificar numa fonte
+única de preço (eleger serviço ou agente, migrar a outra para consumi-la). **Não urgente** (consultor
+único, valores são rascunho que ele revisa e assina). **Origem:** verificação dos sister files
+(31/05, quitação #32) — ver `docs/agentes/ORCAMENTO_AGENTE.md` seção 10.
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos
