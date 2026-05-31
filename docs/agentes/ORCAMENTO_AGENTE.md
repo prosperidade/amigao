@@ -111,7 +111,7 @@ do banco (`get_active_prompt`) com fallback hardcoded em `_fallback_prompts`
   distintos) têm tabelas de preço **diferentes**. O endpoint
   `GET /api/v1/proposals/generate-draft` usa o **serviço**
   (`app/api/v1/proposals.py:114`), **não** o agente. Risco de divergência de
-  valores conforme o caminho. (Não há dívida numerada específica.)
+  valores conforme o caminho. **Dívida #34** (`REGISTRO_DIVIDAS.md`, P3).
 - **Sister file desta família era a dívida #32** (`docs/REGISTRO_DIVIDAS.md:123`)
   — este documento a quita parcialmente.
 
