@@ -86,10 +86,12 @@ Quatro perguntas, nesta ordem:
 
 ## Índice atual (inventário vivo)
 
-*Atualizado em 2026-05-30 (revisão de fim de rodada: nenhum documento nasceu, morreu ou
-mudou de estado; foram atualizados `BASE_REGULATORIA` e `MODELO_DE_DADOS` — ambos já no índice —
-pelo merge do corpus SEMAD, PR #24. Rodada anterior em 2026-05-25 arquivou os candidatos
-em `docs/_archive/`).*
+*Atualizado em 2026-05-30 (rodada de fix de deploy Render: nenhum documento nasceu, morreu ou
+mudou de estado; foram atualizados `TROUBLESHOOTING` — nova categoria 8 "Deploy/produção (Render)"
+com os dois incidentes (clone "File name too long" + runtime `CREDENTIAL_ENCRYPTION_KEY`) — e
+`REGISTRO_DIVIDAS` (dívida #31, bloat do histórico). O corpus SEMAD saiu do git (PR #31):
+ver item resolvido em "Em aberto" abaixo. Revisão anterior do mesmo dia cobriu `BASE_REGULATORIA`
+e `MODELO_DE_DADOS` pelo merge do corpus, PR #24).*
 
 **Manifesto:** `01-VISAO_PRODUTO` · `02-IDENTIDADE` · `03-PRINCIPIOS` · `04-ROADMAP` (em `docs/manifesto/`)
 **Arquitetura:** `ARQUITETURA_GERAL` · `MODELO_DE_DADOS` · `MAQUINA_DE_ESTADOS` · `FLUXOS_E2E` · `MULTITENANT_LGPD` · `PIPELINE_OCR` · `GOVERNANCA_IA` · `OBSERVABILIDADE` · `WHITELABEL` · `INTEGRACOES_GOVTECH` · `API_v1` · `BASE_REGULATORIA` · **`GOVERNANCA_DOCUMENTAL` (este)** (em `docs/arquitetura/`)
@@ -119,7 +121,7 @@ em `docs/_archive/`).*
 **Em aberto (para o próximo ciclo, ou decisão do Andre):**
 - `VALIDACAO_DEPLOY.md` (raiz, tracked, do commit `86ae4f7`) — convenção diz `docs/operacao/`. Mover é mudança ortogonal; deixar como dívida.
 - `Diagnóstico de Situação Ambiental — Imóvel Rural.docx` + `Complemento SiKILL Auditor.docx` (raiz untracked do worktree dashboard) — material de domínio da sócia; durável já está nas skills. Deixar para o Andre decidir se quer preservar como insumo histórico em `docs/_archive/dominio/`.
-- `Licenciamento (SEMAD)/`, `Manuais (SEMAD)/` (raiz untracked) — material de referência regulatória da sócia; sem decisão de destino.
+- ~~`Licenciamento (SEMAD)/`, `Manuais (SEMAD)/` (raiz untracked) — material de referência regulatória da sócia; sem decisão de destino.~~ **Resolvido (30/05):** foram commitados no PR #25 dentro de `docs/base_regulatoria/SEMAD/`, mas os nomes de arquivo (> 255 bytes) quebravam o `git clone` do Render no Linux. Decisão tomada — corpus bruto **fica fora do git** (`git rm --cached` + `.gitignore`, PR #31); fonte permanece no disco do dev e o conteúdo já está indexado no `knowledge_catalog`. Ver `TROUBLESHOOTING` cat. 8 e dívida #31.
 - `normas_k3/` (raiz untracked, 9 PDFs + 1 docx) — PDFs originais. O **MANIFESTO** está no repo (acima); os PDFs vivem fora — já indexados no `knowledge_catalog`.
 
 ## Sobre o runbook (a dor que originou este documento)
