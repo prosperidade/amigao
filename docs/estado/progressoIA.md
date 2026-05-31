@@ -1504,3 +1504,30 @@ endpoint usa o serviço); `financeiro` docstring promete projeção de custos n�
 `marketing` tem `prompt_slugs` (4) ≠ `VALID_CONTENT_TYPES` (5); `vigia` docstring diz "6h" mas o
 schedule real é 2×/dia. **Validação Isis** ficou marcada como pendente em todos (não há registro de
 validação fim-a-fim por agente além do caso Romilton do pipeline OCR).
+
+---
+
+## Dívida #33 (parcial) — auditoria de uso da api_key do consultor (31/05/2026)
+
+Mudança de código. Fecha a parte **com uso real** da #33. No white label (ADR-014) o consultor traz
+a própria chave; ela é decifrada em `BaseAgent` a cada execução e, até agora, esse **uso** não era
+auditado (só a escrita da config era).
+
+**Implementado:**
+- `app/agents/events.py:emit_ai_key_use_event()` — grava `AuditLog` `action="ai_key_used"` (hash
+  chain via `register_notification_audit`), `entity_type="user"`, com `provider`/`model`/`trace_id`/
+  `process_id` e a chave **mascarada** (`…últimos4`). Plaintext nunca é persistido nem logado.
+  Best-effort (try/except — auditoria nunca derruba o agente, padrão do `emit_agent_event`).
+- `app/agents/base.py:call_llm` — quando a chave própria do consultor é resolvida, audita o uso
+  **uma vez por execução** (`self._ai_key_audited`). Caminho global (chave do sistema) não audita.
+  Mascaramento feito no `base.py` (plaintext não sai dali).
+- `tests/agents/test_base_agent_ai_key_audit.py` — 5 testes: audita com chave do consultor /
+  nunca vaza plaintext / não audita no caminho global / dedupe por execução / falha de auditoria
+  não quebra o `call_llm`.
+
+**Verificação:** 199 testes verdes (`tests/agents` + base + `user_preferences`), exit 0, sem
+regressão.
+
+**Resta da #33 (adiado, sem uso real hoje):** auditar a senha de portal (`Credential`) — só quando
+ganhar consumidor (login automatizado / endpoint de revelação). Item 1 da auditoria de leitura
+sensível segue aberto; #18 (verificação da hash chain) também.

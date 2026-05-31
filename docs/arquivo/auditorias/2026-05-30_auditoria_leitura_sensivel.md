@@ -62,3 +62,13 @@ orientadas a ESCRITA.** Não há `action="read"` / `"view"` / `"access"`.
 
 Itens 1–2 ficam como **dívida nova** (ver REGISTRO_DIVIDAS) — PR própria, fora
 do escopo doc-only desta rodada.
+
+## Atualização (2026-05-31) — item 2 implementado
+
+A recomendação **2** (auditar a decifragem/uso da `api_key` de LLM do consultor) foi
+implementada em `feat/divida-33-audit-uso-api-key`: `BaseAgent.call_llm` agora emite `AuditLog`
+`action="ai_key_used"` (hash chain) uma vez por execução, com a chave mascarada (`…últimos4`,
+nunca plaintext), best-effort. A linha "Decifragem/uso da `api_key`…" da tabela acima passa de
+❌ para ✅ a partir desta data. Recomendações **1** (senha de portal — segue sem consumidor) e
+**3** (verificação da hash chain, dívida **#18**) permanecem abertas. Ver dívida **#33** (parcial)
+no `REGISTRO_DIVIDAS`.

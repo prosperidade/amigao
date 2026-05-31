@@ -114,6 +114,9 @@ class BaseAgent(ABC):
         self.ctx = ctx
         self._started_at: float = 0.0
         self._llm_response: AIResponse | None = None
+        # Dívida #33: auditamos o uso da api_key do consultor no máximo uma vez
+        # por execução de agente (call_llm pode ser chamado mais de uma vez).
+        self._ai_key_audited: bool = False
 
     # --- Template method ---------------------------------------------------
 
@@ -273,9 +276,35 @@ class BaseAgent(ABC):
         user_prefs = kwargs.pop("user_preferences", None)
         if user_prefs is None:
             user_prefs = self._resolve_user_ai_preferences()
+        # Dívida #33: a chave do consultor está prestes a ser usada — audita o
+        # ato (mascarada), uma vez por execução. Default global (None) não audita.
+        if user_prefs and not self._ai_key_audited:
+            self._audit_ai_key_use(user_prefs)
+            self._ai_key_audited = True
         response = complete(prompt, system=composed_system, user_preferences=user_prefs, **kwargs)
         self._llm_response = response
         return response
+
+    def _audit_ai_key_use(self, prefs: dict) -> None:
+        """Registra no AuditLog o uso da api_key do consultor (dívida #33).
+
+        Mascara a chave antes de passar adiante — plaintext nunca sai daqui.
+        Best-effort: nada nesta auditoria pode derrubar a execução do agente.
+        """
+        try:
+            from app.agents.events import emit_ai_key_use_event  # noqa: PLC0415
+
+            key = (prefs or {}).get("api_key") or ""
+            masked = f"…{key[-4:]}" if len(key) >= 4 else ("****" if key else None)
+            emit_ai_key_use_event(
+                self.name,
+                self.ctx,
+                provider=(prefs or {}).get("provider"),
+                model=(prefs or {}).get("model"),
+                api_key_masked=masked,
+            )
+        except Exception as exc:  # pragma: no cover - defensivo
+            logger.warning("agent.%s: falha ao auditar uso de api_key: %s", self.name, exc)
 
     def _resolve_user_ai_preferences(self) -> dict | None:
         """Resolve {provider, model, api_key} do usuário da chain (ctx.user_id).

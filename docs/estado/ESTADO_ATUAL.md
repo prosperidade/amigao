@@ -383,6 +383,12 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   verificação corrigiu uma alegação errada do mestre (`diagnostico` `requires_review`: "não" → **sim**,
   `diagnostico.py:448`) e registrou divergências docstring×código na seção 10 de cada sister file.
   **Dívida #32 FECHADA.**
+- **Pulso 2026-05-31 (`feat/divida-33-audit-uso-api-key` — código):** a `api_key` do consultor
+  (white label) passou a ser auditada no uso: `BaseAgent.call_llm` emite `AuditLog`
+  `action="ai_key_used"` (hash chain) por execução, chave mascarada, best-effort
+  (`emit_ai_key_use_event`). 5 testes novos; **199 verdes** sem regressão. **Dívida #33 parcialmente
+  fechada** (resta a senha de portal, sem consumidor hoje). Também registrada a **dívida #34** (duas
+  trilhas de orçamento desalinhadas).
 
 ## Infraestrutura
 
