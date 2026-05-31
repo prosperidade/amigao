@@ -78,6 +78,14 @@ devolve 500 + retry manual. Tratar com retry server-side. Improvável para consu
 pipeline OCR existente (`docs/arquitetura/PIPELINE_OCR.md`) e reingerir o único documento.
 Baixo impacto (1 errata). **Origem:** corpus SEMAD (30/05).
 
+**31. Histórico do git carrega 254 MB de corpus SEMAD removido.** A PR #31 tirou
+`docs/base_regulatoria/` do HEAD (destravou o `git clone` do Render — ver `TROUBLESHOOTING`
+categoria 8), mas os blobs seguem no histórico, então todo `git clone` ainda baixa ~254 MB.
+Enxugar exige reescrita de histórico (`git filter-repo` + `push --force`) — **invasivo**:
+reescreve SHAs e quebra os worktrees/branches ativos de outros trabalhos. Fazer em janela
+dedicada, combinada com o Andre, com todos os worktrees fechados. **Origem:** fix deploy
+Render (30/05).
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos

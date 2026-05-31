@@ -2,7 +2,7 @@
 
 **Documento:** Operação · playbooks de incidente
 **Estado:** vivo · adicionar nova entrada cada vez que algo dói duas vezes
-**Última revisão:** 2026-05-15
+**Última revisão:** 2026-05-30
 
 ---
 
@@ -407,6 +407,46 @@ git remote set-url origin git@github.com:<org>/regente-ambiental.git
 ### Vejo `amigao_*` em métricas / banco / bucket — bug?
 
 **Não.** É codinome técnico interno, decisão documentada em [`../adr/004-regente-vs-amigao.md`](../adr/004-regente-vs-amigao.md). Branding visível é Regente Ambiental; identificadores internos seguem com `amigao_*` até sprint dedicada de reidentificação.
+
+## Categoria 8 — Deploy / produção (Render)
+
+### Deploy do Render falha no `git clone` com "File name too long"
+
+**Sintoma:** nos logs do deploy, **antes** de qualquer build:
+
+```
+error: unable to create file docs/.../A1.1 - Conversão do uso do solo ... REG.pdf: File name too long
+fatal: unable to checkout working tree
+==> Unable to clone https://github.com/prosperidade/amigao
+```
+
+**Causa:** algum arquivo versionado tem **nome > 255 bytes** (`NAME_MAX` do kernel Linux). O Windows do dev permite commitar (com `core.longpaths`/prefixo `\\?\`); o Linux do Render não consegue criar o arquivo no checkout. **Nenhuma config de git resolve** — `core.longpaths` é só para o limite de *path* do Windows, não para o limite de *nome* do Linux.
+
+**Diagnóstico:** caçar os ofensores rastreados:
+
+```bash
+git ls-files | awk -F/ 'length($NF) > 200 { print length($NF)"  "$0 }' | sort -rn
+```
+
+**Solução:** remover/renomear. No caso real (30/05) eram os 286 PDFs do corpus SEMAD em `docs/base_regulatoria/` (254 MB) — tirados do git com `git rm --cached` + regra no `.gitignore` (PR #31), pois já estavam no `knowledge_catalog` e o `.dockerignore` já excluía `docs/`. **Regra:** corpus bruto / binários grandes não entram no git. (Histórico ainda pesa — dívida #31; ver `REGISTRO_DIVIDAS`.)
+
+---
+
+### Deploy do Render falha em runtime com "CREDENTIAL_ENCRYPTION_KEY Field required"
+
+**Sintoma:** o build passa, mas em `==> Deploying...` o processo sai com status 1:
+
+```
+pydantic_core.ValidationError: 1 validation error for Settings
+CREDENTIAL_ENCRYPTION_KEY
+  Field required [type=missing]
+```
+
+**Causa:** a chave Fernet (ADR-014) é setting **obrigatória** do `config.py`, declarada no `render.yaml` como `sync: false` no grupo `regente-shared` — **não tem valor até ser preenchida à mão** no painel.
+
+**Solução:** Render → **Env Groups → `regente-shared`** → setar `CREDENTIAL_ENCRYPTION_KEY` com uma chave de `python tools/gen_encryption_key.py`. Setar **no grupo** (não por serviço) é o que garante que **api e worker usem a MESMA chave** — obrigatório, pois leem/gravam as mesmas colunas cifradas no banco; chaves diferentes por serviço quebram a descriptografia cruzada. **Não** usar `generateValue` do Render (gera 32 chars, não formato Fernet, 44 chars). No Docker local o equivalente é listar a var no `environment:` de **cada** serviço do `docker-compose.yml` (ele não usa `env_file`).
+
+---
 
 ## Como adicionar novo playbook
 
