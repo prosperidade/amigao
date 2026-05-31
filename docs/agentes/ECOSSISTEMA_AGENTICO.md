@@ -102,6 +102,11 @@ pré-contrato a chains. `NON_BLOCKING_REVIEW_AGENTS = {auditor_imovel}`.
   `Credential.password_encrypted` (PR 2.3). Em JSONB: `api_key` em
   `User.preferences.ai` (cifrada via `encrypt_str` no `save_ai_preferences`,
   não via `EncryptedString` — JSONB não é coluna String).
+- **5.7 Auditoria de uso da `api_key` do consultor (dívida #33, parcial).** O uso
+  server-side da chave própria do consultor é auditado: `BaseAgent.call_llm` emite
+  `AuditLog` `action="ai_key_used"` (hash chain) uma vez por execução, com a chave
+  mascarada (`emit_ai_key_use_event`, `app/agents/events.py`). A senha de portal
+  (`Credential`) ainda não é auditada no uso — sem consumidor hoje (resto da #33).
 
 ## 6. Skills vs Tools
 

@@ -155,6 +155,14 @@ a senha ganhar consumidor real (login automatizado / endpoint de revelação) ou
 uso da `api_key`, adicionar `AuditLog` no ato de uso. Conecta com **#30** (uso de IA por chave) e
 **#18** (verificação da hash chain). NÃO implementar agora — PR própria. **Origem:** auditoria de
 leitura sensível (30/05).
+**🟡 PARCIALMENTE FECHADA (31/05, `feat/divida-33-audit-uso-api-key`):** a parte com uso real — a
+`api_key` de LLM do consultor — passou a ser auditada. `BaseAgent.call_llm` emite `AuditLog`
+`action="ai_key_used"` (hash chain) **uma vez por execução** quando a chave própria do consultor é
+usada, com a chave **sempre mascarada** (`…últimos4`; plaintext nunca persistido/logado);
+best-effort (falha de auditoria não derruba o agente). Helper `emit_ai_key_use_event`
+(`app/agents/events.py`); 5 testes em `tests/agents/test_base_agent_ai_key_audit.py`. **Resta** (sem
+uso real hoje, por isso adiado): auditar a senha de portal (`Credential`) — só quando ganhar
+consumidor (login automatizado / endpoint de revelação). Conexão com **#30**/**#18** mantida.
 
 ## Backlog de produto (já versionado em ADR)
 
