@@ -389,6 +389,11 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   (`emit_ai_key_use_event`). 5 testes novos; **199 verdes** sem regressão. **Dívida #33 parcialmente
   fechada** (resta a senha de portal, sem consumidor hoje). Também registrada a **dívida #34** (duas
   trilhas de orçamento desalinhadas).
+- **Pulso 2026-05-31 (`feat/divida-18-verify-audit-chain` — código):** a hash chain de `AuditLog`
+  ganhou verificador: `verify_audit_chain(db, tenant_id)` recomputa conteúdo + elo de cada registro e
+  `GET /api/v1/admin/audit/verify-chain` (superusuário, read-only) expõe os elos quebrados. 10 testes
+  novos. **Dívida #18 FECHADA** — auditabilidade deixa de ser cerimônia. Fecha também o item 3 da
+  auditoria de leitura sensível (30/05).
 
 ## Infraestrutura
 

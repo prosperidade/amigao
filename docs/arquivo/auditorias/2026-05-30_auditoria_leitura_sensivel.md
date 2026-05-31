@@ -70,5 +70,7 @@ implementada em `feat/divida-33-audit-uso-api-key`: `BaseAgent.call_llm` agora e
 `action="ai_key_used"` (hash chain) uma vez por execução, com a chave mascarada (`…últimos4`,
 nunca plaintext), best-effort. A linha "Decifragem/uso da `api_key`…" da tabela acima passa de
 ❌ para ✅ a partir desta data. Recomendações **1** (senha de portal — segue sem consumidor) e
-**3** (verificação da hash chain, dívida **#18**) permanecem abertas. Ver dívida **#33** (parcial)
-no `REGISTRO_DIVIDAS`.
+**3** (verificação da hash chain, dívida **#18**) — esta **também foi fechada em 31/05**: existe
+agora `verify_audit_chain` + endpoint admin `GET /admin/audit/verify-chain` (ver #18 no
+`REGISTRO_DIVIDAS`). Permanece aberta apenas a recomendação **1** (senha de portal — sem consumidor).
+Ver dívida **#33** (parcial) no `REGISTRO_DIVIDAS`.

@@ -1531,3 +1531,26 @@ regressão.
 **Resta da #33 (adiado, sem uso real hoje):** auditar a senha de portal (`Credential`) — só quando
 ganhar consumidor (login automatizado / endpoint de revelação). Item 1 da auditoria de leitura
 sensível segue aberto; #18 (verificação da hash chain) também.
+
+---
+
+## Dívida #18 — verificador da hash chain de AuditLog (31/05/2026)
+
+Mudança de código. **Fecha a #18.** A hash chain tinha só escritores (`compute_audit_hash`,
+`get_last_hash_for_tenant`, `stamp_audit_hash`) — sem rotina de verificação, era cerimônia.
+
+**Implementado:**
+- `app/services/audit_hash.py` — `verify_audit_chain(db, tenant_id) -> list[BrokenLink]` + helper
+  puro `_verify_chain(audits)`. Percorre a cadeia carimbada (`hash_sha256` não nulo) em ordem de
+  `id` e faz duas checagens ortogonais por registro: **conteúdo** (recomputa `hash_sha256` com o
+  `hash_previous` persistido) e **elo** (`hash_previous` == hash do anterior). `BrokenLink` carrega
+  `audit_id`/`position`/`reason` (`content_tampered` | `broken_previous_link`)/`expected`/`found`.
+- `app/api/v1/audit.py` — `GET /api/v1/admin/audit/verify-chain` (montado em `/admin`), **read-only,
+  superusuário**, tenant do JWT. Devolve `{tenant_id, total_checked, ok, broken_links}`.
+  `app/schemas/audit.py` com os response models. Wiring em `app/main.py`.
+- Testes: `tests/services/test_audit_hash.py` (7) + `tests/api/test_audit.py` (3) = **10 verdes**
+  (cadeia válida / conteúdo adulterado / linha removida / isolamento por tenant / 403 não-superuser /
+  detecção ponta a ponta).
+
+**Conexão:** fecha o item 3 da auditoria de leitura sensível (30/05) e o último gap de
+auditabilidade que rimava com a #33. Restam só os itens sem uso real (senha de portal, #33 parcial).

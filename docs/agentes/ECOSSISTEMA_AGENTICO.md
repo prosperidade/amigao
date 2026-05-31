@@ -107,6 +107,10 @@ pré-contrato a chains. `NON_BLOCKING_REVIEW_AGENTS = {auditor_imovel}`.
   `AuditLog` `action="ai_key_used"` (hash chain) uma vez por execução, com a chave
   mascarada (`emit_ai_key_use_event`, `app/agents/events.py`). A senha de portal
   (`Credential`) ainda não é auditada no uso — sem consumidor hoje (resto da #33).
+- **5.8 Verificação da hash chain (dívida #18, fechada 31/05).** `verify_audit_chain(db, tenant_id)`
+  (`app/services/audit_hash.py`) recomputa cada hash em ordem e compara com o persistido (conteúdo +
+  elo), devolvendo os elos quebrados. Exposto em `GET /api/v1/admin/audit/verify-chain` (superusuário,
+  read-only). A hash chain deixou de ser só escrita — agora tem verificador.
 
 ## 6. Skills vs Tools
 

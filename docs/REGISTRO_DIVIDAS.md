@@ -232,6 +232,15 @@ garantida" como se o verificador existisse. **Resolver:** adicionar
 hash em ordem e compara com o `hash_sha256` persistido; expor via endpoint
 admin (read-only, auth restrita). **Origem:** revisão do PROMPT_6 (26/05).
 **Nota:** dívida pré-existente (vem do A1).
+**✅ FECHADA (31/05, `feat/divida-18-verify-audit-chain`):** `app/services/audit_hash.py` ganhou
+`verify_audit_chain(db, tenant_id) -> list[BrokenLink]` (+ helper puro `_verify_chain`) que percorre
+a cadeia carimbada do tenant em ordem de `id` e faz duas checagens ortogonais por registro:
+integridade do **conteúdo** (recomputa `hash_sha256`) e do **elo** (`hash_previous` aponta para o
+anterior). Exposto em `GET /api/v1/admin/audit/verify-chain` (`app/api/v1/audit.py`), read-only,
+**superusuário**, tenant do JWT. 10 testes (`tests/services/test_audit_hash.py` +
+`tests/api/test_audit.py`): cadeia válida, conteúdo adulterado, linha removida (elo quebrado),
+isolamento por tenant, 403 para não-superuser. Agora a auditabilidade tem verificador — deixa de ser
+cerimônia.
 
 ---
 
