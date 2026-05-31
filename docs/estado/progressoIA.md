@@ -1554,3 +1554,35 @@ Mudança de código. **Fecha a #18.** A hash chain tinha só escritores (`comput
 
 **Conexão:** fecha o item 3 da auditoria de leitura sensível (30/05) e o último gap de
 auditabilidade que rimava com a #33. Restam só os itens sem uso real (senha de portal, #33 parcial).
+
+---
+
+## PR 2.1 — canal WhatsApp inbound a caso já aberto (31/05/2026)
+
+Integração de canal a **caso JÁ ABERTO** (mensagens inbound **NÃO criam caso** — decisão 2026-05-28).
+WhatsApp via Evolution (provider plugável; Z-API stub). E-mail inbound (Resend) **adiado** (sem plano
+habilitado) → dívida **#35**. **Construído DORMENTE:** ativa só ao preencher credenciais.
+
+**Backend:**
+- `app/services/messaging/` — `WhatsAppProvider` (abstrato) + `InboundMessage`; `EvolutionProvider`
+  (real, httpx, send + parse); `ZAPIProvider` (stub); `registry.get_whatsapp_provider()`.
+- `app/api/v1/messaging.py` — `POST /messaging/whatsapp/webhook`: HMAC (`EVOLUTION_WEBHOOK_SECRET`),
+  acha `Client` por telefone → `Process` aberto mais recente → `Message` no thread; mídia → `Document`
+  (`source="whatsapp"`); sem caso → thread órfão + alerta `inbound_orphan`; sem Client → ignora; 401 se
+  HMAC inválido; 200 caso contrário (provider faz retry em 5xx).
+- `CommunicationThread.provider` + `provider_account_id` (migration `pr21_wa_provider`, reversível;
+  expostos no schema Pydantic de resposta).
+- Config: `WHATSAPP_PROVIDER`, `EVOLUTION_API_URL/KEY/WEBHOOK_SECRET`, `ZAPI_*` (placeholder),
+  `EMAIL_INBOUND_PROVIDER`, `RESEND_INBOUND_WEBHOOK_SECRET`. Propagadas em docker-compose (api/worker),
+  `render.yaml` (sync:false) e `.env.example`.
+
+**Infra:** serviço `evolution` (atendai/evolution-api:v2.1.1) no docker-compose sob profile `whatsapp`
+(dormente; sobe com `docker compose --profile whatsapp up -d evolution`).
+
+**Testes:** `tests/services/test_evolution_provider.py` (8) + `tests/api/test_messaging_webhook.py` (5)
+= **13 verdes** (parse texto/mídia, send, erros; thread de caso aberto, mídia→Document, remetente
+desconhecido, thread órfão+alerta, HMAC 401).
+
+**Pré-requisitos pra ativar (não-código):** gerar API key da Evolution, parear o número (QR), criar o
+database `evolution` no Postgres, preencher `EVOLUTION_API_URL/KEY` no `.env`. **Dívida #35** (Z-API +
+e-mail inbound).

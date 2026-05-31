@@ -96,6 +96,14 @@ conforme o caminho (chain `gerar_proposta` via agente × endpoint via serviço).
 único, valores são rascunho que ele revisa e assina). **Origem:** verificação dos sister files
 (31/05, quitação #32) — ver `docs/agentes/ORCAMENTO_AGENTE.md` seção 10.
 
+**35. Implementar ZAPIProvider quando demandar.** A PR 2.1 (WhatsApp inbound a caso aberto) deixou
+o contrato `WhatsAppProvider` + `EvolutionProvider` (real, httpx) e o `ZAPIProvider` em **stub**
+(`app/services/messaging/zapi_provider.py` — `NotImplementedError`). Se/quando o consultor precisar
+de Z-API (ex.: produção hospedada paga em vez de Evolution self-hosted), implementar `send_message`
++ `parse_inbound_webhook` e plugar via `WHATSAPP_PROVIDER=zapi` (config já pronta). **No mesmo balaio:**
+**e-mail inbound (Resend) ficou adiado** na PR 2.1 — só os placeholders de config existem; retomar
+quando o Resend Inbound for habilitado no domínio/plano (MX + webhook secret). **Origem:** PR 2.1 (31/05).
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos

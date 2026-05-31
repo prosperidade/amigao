@@ -155,6 +155,28 @@ envVarGroups:
       - key: RESEND_FROM_NAME
         value: "Regente Ambiental"
 
+      # --- Canal WhatsApp (PR 2.1) — dormente até preencher no Dashboard ---
+      - key: WHATSAPP_PROVIDER
+        value: evolution
+      - key: EVOLUTION_API_URL
+        sync: false              # URL da instância Evolution (vazio = canal off)
+      - key: EVOLUTION_API_KEY
+        sync: false
+      - key: EVOLUTION_WEBHOOK_SECRET
+        sync: false              # HMAC do webhook inbound
+      # Z-API — placeholders (provider em stub, não implementado)
+      - key: ZAPI_API_URL
+        sync: false
+      - key: ZAPI_API_KEY
+        sync: false
+      - key: ZAPI_WEBHOOK_SECRET
+        sync: false
+      # E-mail inbound — não implementado nesta PR (Resend Inbound não habilitado)
+      - key: EMAIL_INBOUND_PROVIDER
+        sync: false
+      - key: RESEND_INBOUND_WEBHOOK_SECRET
+        sync: false
+
       # --- IA / LLM ---
       - key: AI_ENABLED
         value: "True"

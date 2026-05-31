@@ -61,6 +61,11 @@ sempre com `demand_type="nao_identificado"`; só o consultor (ou a promoção vi
 - Na chain `intake` (`["atendimento"]`), disparada ao avançar para a macroetapa
   `entrada_demanda` (`MACROETAPA_AGENT_CHAIN`).
 - Recebe entrada manual do `IntakeWizard` (texto que o consultor digita).
+- **Canal inbound (PR 2.1):** mensagens de WhatsApp do cliente entram no
+  `CommunicationThread` do caso **já aberto** (webhook `/messaging/whatsapp/webhook`),
+  virando contexto vivo do processo (e mídia → `Document`). O agente **não** cria
+  caso a partir de inbound (decisão fechada 2026-05-28); hoje a ingestão alimenta o
+  thread/documentos — disparo automático do `atendimento` sobre inbound é frente futura.
 
 ## 9. Cross-agente
 

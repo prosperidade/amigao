@@ -362,9 +362,71 @@ Alembic upgrade head aplicou todas as migrations
 Sócia roda 1 caso end-to-end (validação humana)
 ```
 
+## Fluxo 7 — WhatsApp inbound a caso já aberto (PR 2.1)
+
+Cliente manda WhatsApp; a mensagem entra no caso aberto correspondente. Inbound
+**nunca cria caso** (decisão fechada 2026-05-28) — só anexa a um `Process` existente.
+Dormente até as credenciais da Evolution serem configuradas.
+
+```
+Cliente manda mensagem de WhatsApp
+       │ Provider externo (Evolution API — serviço docker sob profile "whatsapp")
+       │
+       ▼
+POST /api/v1/messaging/whatsapp/webhook   (sem JWT — provider externo chama)
+       │ Backend: app/api/v1/messaging.py
+       │
+       ├── Valida HMAC-SHA256 do corpo cru (header X-Hub-Signature-256 ×
+       │   EVOLUTION_WEBHOOK_SECRET). Sem secret → não exige (modo dormente).
+       │   HMAC inválido → 401. Corpo não-JSON / não parseável → 200 {ignored}.
+       │
+       ├── get_whatsapp_provider().parse_inbound_webhook(payload) → InboundMessage
+       │   (provider plugável: EvolutionProvider real, ZAPIProvider stub)
+       │
+       ▼
+Identifica o Client pelo telefone
+       │ Normaliza dígitos, casa pelos ÚLTIMOS 8 dígitos (phone/secondary_phone).
+       │ tenant_id é derivado do Client encontrado.
+       │
+       ├─────────────────────────────┬──────────────────────────────┐
+       ▼ (Client + caso aberto)       ▼ (Client, sem caso aberto)     ▼ (sem Client)
+Pega Process mais recente        Thread órfã (process_id NULL)    Ignora com log
+NÃO terminal (status ∉           + Message gravada                 → 200 {ignored,
+{concluido, arquivado,           + alerta interno:                   reason:
+cancelado}, deleted_at NULL)       publish_realtime_event              "unknown_sender"}
+       │                            ("messaging.inbound_orphan")     (NÃO cria caso)
+       ▼                            + AuditLog action="inbound_orphan"
+Grava Message na                        │
+CommunicationThread do caso             ▼
+(channel="whatsapp",              200 {status:"ok", orphan:true, ...}
+ provider="evolution",
+ external_msg_id = id do provider)
+       │
+       ├── Se media_url presente: baixa via httpx e grava Document
+       │   (source="whatsapp", document_category="whatsapp_inbound").
+       │   Best-effort — falha no download não derruba o webhook.
+       │
+       ▼
+200 {status:"ok", thread_id, message_id, orphan:false, document_id}
+```
+
+**Onde isso vive no código:**
+
+| Passo | Backend |
+|---|---|
+| Webhook + identificação + persistência | `app/api/v1/messaging.py` |
+| Provider plugável (parse do payload) | `app/services/messaging/` (`EvolutionProvider`, `ZAPIProvider` stub, `registry.get_whatsapp_provider()`) |
+| Thread + mensagem + colunas de provider | `CommunicationThread` (`provider`/`provider_account_id`) + `Message.external_msg_id` |
+| Alerta órfão | `publish_realtime_event` + `register_notification_audit` (`app/services/notifications.py`) |
+
+> **Limitação:** sem idempotência por `external_msg_id` — reentrega do provider duplica
+> `Message`. **E-mail inbound (Resend) NÃO existe** nesta PR — só placeholders de config.
+> Detalhe da superfície em [`API_v1.md`](./API_v1.md); contexto de integração em
+> [`INTEGRACOES_GOVTECH.md`](./INTEGRACOES_GOVTECH.md).
+
 ## Pendências e dívidas
 
-1. **Inbox connector para Acompanhamento** — fluxo 4 hoje é manual.
+1. **Inbox connector para Acompanhamento** — fluxo 4 hoje é manual. (WhatsApp inbound — fluxo 7 — já cobre o canal de mensagem; e-mail inbound via Resend segue não construído.)
 2. **Self-onboarding pós-waitlist** — fluxo 5 termina em conversão manual.
 3. **Mobile offline-first** — fluxo de campo (foto, GPS, checklist) congelado.
 4. **Portal cliente** — cliente final não acompanha próprio caso ainda; congelado.

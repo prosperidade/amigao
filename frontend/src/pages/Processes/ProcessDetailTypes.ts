@@ -4,7 +4,7 @@
 import {
   Stethoscope, LayoutGrid, Briefcase, ListChecks,
   FolderOpen, CalendarDays, Bot, Scale, PackageCheck,
-  AlertTriangle,
+  AlertTriangle, MessageCircle,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,7 +45,37 @@ export interface Document {
   original_file_name?: string;
   file_size_bytes: number;
   document_type?: string;
+  // PR 2.1 — categoria usada para identificar mídia inbound de WhatsApp
+  // (document_category === 'whatsapp_inbound'). Serializada em DocumentResponse.
+  document_category?: string;
   created_at: string;
+}
+
+// PR 2.1 — Comunicação (threads + mensagens). Espelha app/schemas/communication.py.
+// Obs: `provider`/`provider_account_id` existem no modelo mas NÃO são serializados
+// pelo schema atual — por isso só expomos `channel` (e `external_id`).
+export interface Message {
+  id: number;
+  thread_id: number;
+  sender_id: number | null;
+  content: string;
+  is_internal: boolean;
+  status: string;            // 'sent' | 'delivered' | 'read' | 'failed' | 'received'
+  external_msg_id: string | null;
+  created_at: string;
+}
+
+export interface CommunicationThread {
+  id: number;
+  tenant_id: number;
+  process_id: number | null;
+  client_id: number | null;
+  title: string;
+  channel: string;           // 'whatsapp' | 'email' | 'internal'
+  external_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+  messages: Message[];
 }
 
 export interface TimelineEntry {
@@ -128,6 +158,7 @@ export const TABS: TabDef[] = [
   { key: 'alertas',    label: 'Alertas',     icon: AlertTriangle, block_type: 'active'   },
   { key: 'tasks',      label: 'Ações',       icon: ListChecks,   block_type: 'active'    },
   { key: 'documents',  label: 'Documentos',       icon: FolderOpen,   block_type: 'permanent' },
+  { key: 'messages',   label: 'Comunicação',      icon: MessageCircle, block_type: 'permanent' },
   { key: 'dossier',    label: 'Dados',            icon: LayoutGrid,   block_type: 'permanent' },
   { key: 'ai',         label: 'IA',               icon: Bot,          block_type: 'active'    },
   { key: 'timeline',   label: 'Histórico',      icon: CalendarDays, block_type: 'permanent' },

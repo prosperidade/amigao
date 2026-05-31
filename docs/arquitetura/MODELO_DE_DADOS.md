@@ -162,6 +162,25 @@ Nova entidade introduzida pelo PROMPT_7. Anatomia:
 |---|---|---|
 | `Communication` | `communications` | E-mails, threads do portal cliente, mensagens internas. |
 | `Thread` | `threads` (via `Communication`) | Conversa agrupada por contexto. |
+| `CommunicationThread` | `communication_threads` | Conversa por `channel` (`whatsapp`, etc.) ligada a `client_id` e (opcional) `process_id`. Ganhou `provider`/`provider_account_id` na PR 2.1 — ver subseção abaixo. |
+| `Message` | `messages` | Mensagem dentro de uma `CommunicationThread`. `external_msg_id` guarda o id do provider externo (ex.: id da mensagem na Evolution). |
+
+#### `CommunicationThread` — colunas de canal/provider (PR 2.1)
+
+O canal WhatsApp inbound (PR 2.1) precisa saber **de qual provider/instância** veio a
+conversa. Duas colunas novas:
+
+- `provider` (`String`, **NOT NULL**, `server_default "internal"`) — origem da thread.
+  Valores em uso: `evolution` / `zapi` / `resend_inbound` / `internal`. O `server_default`
+  marca as threads pré-existentes como `internal` na migration.
+- `provider_account_id` (`String`, **nullable**) — identifica a conta/instância no provider
+  (ex.: nome da instância Evolution que recebeu a mensagem).
+
+> O id da mensagem no provider externo NÃO fica aqui — vive em `Message.external_msg_id`
+> (coluna que já existia), preenchido a cada inbound.
+
+**Migration:** `pr21_wa_provider` (down_revision `c0d1e2f3a4b5`) — adiciona as 2 colunas,
+reversível.
 
 ### IA — execução e configuração
 

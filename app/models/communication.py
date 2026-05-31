@@ -16,6 +16,9 @@ class CommunicationThread(Base):
     title = Column(String, nullable=False)
     channel = Column(String, nullable=False) # 'whatsapp', 'email', 'internal'
     external_id = Column(String, nullable=True) # Ex: group ID do WhatsApp
+    # PR 2.1 — provider concreto do canal e conta/instância de origem.
+    provider = Column(String, nullable=False, server_default="internal")  # 'evolution', 'zapi', 'resend_inbound', 'internal'
+    provider_account_id = Column(String, nullable=True)  # instância Evolution / conta de origem
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
