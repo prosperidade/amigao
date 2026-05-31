@@ -78,3 +78,8 @@ ops/normas_k3_preview/
 .claude/
 *.docx
 !docs/**/*.docx
+
+# Corpus regulatório bruto (PDFs SEMAD etc.) — já ingerido no knowledge_catalog.
+# 254 MB + nomes de arquivo > 255 bytes quebram o checkout do git no Linux
+# (deploy Render falhava com "File name too long"). Fonte fica fora do git.
+docs/base_regulatoria/
