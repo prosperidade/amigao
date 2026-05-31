@@ -11,6 +11,7 @@ from app.api.middleware import RequestContextMiddleware, SecurityHeadersMiddlewa
 from app.api.v1 import (
     agents,
     ai,
+    audit,
     auth,
     checklists,
     clients,
@@ -151,6 +152,7 @@ app.include_router(regulatory.process_router, prefix=f"{settings.API_V1_STR}/pro
 app.include_router(regulatory.property_router, prefix=f"{settings.API_V1_STR}/properties", tags=["Diagnóstico Regulatório"])
 app.include_router(intake_feedback.classify_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Classificação de Demanda"])
 app.include_router(intake_feedback.admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["Admin / Métricas"])
+app.include_router(audit.router, prefix=f"{settings.API_V1_STR}/admin", tags=["Admin / Auditoria"])
 app.include_router(proposals.router, prefix=f"{settings.API_V1_STR}/proposals", tags=["Propostas Comerciais"])
 app.include_router(contracts.router, prefix=f"{settings.API_V1_STR}/contracts", tags=["Contratos"])
 app.include_router(ai.router, prefix=f"{settings.API_V1_STR}", tags=["IA"])
