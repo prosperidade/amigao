@@ -111,6 +111,23 @@ class Settings(BaseSettings):
     RESEND_FROM_EMAIL: EmailStr = "contato@regenteambiental.com.br"
     RESEND_FROM_NAME: str = "Regente Ambiental"
 
+    # ── PR 2.1 — Canal de mensagens (WhatsApp inbound/outbound) ──────────────
+    # Integração de canal a CASO JÁ ABERTO (mensagens inbound NÃO criam caso).
+    # Tudo DORMENTE por default (None): a feature só ativa quando as credenciais
+    # forem preenchidas. Provider plugável — Evolution agora, Z-API em stub.
+    WHATSAPP_PROVIDER: str = "evolution"
+    EVOLUTION_API_URL: str | None = None
+    EVOLUTION_API_KEY: str | None = None
+    EVOLUTION_WEBHOOK_SECRET: str | None = None  # HMAC do webhook inbound
+    # Z-API — placeholders (provider em STUB, não implementado nesta PR).
+    ZAPI_API_URL: str | None = None
+    ZAPI_API_KEY: str | None = None
+    ZAPI_WEBHOOK_SECRET: str | None = None
+    # E-mail inbound — NÃO implementado nesta PR (Resend Inbound não habilitado).
+    # Placeholders documentados para quando o domínio/plano habilitar.
+    EMAIL_INBOUND_PROVIDER: str | None = None  # "resend" quando habilitado
+    RESEND_INBOUND_WEBHOOK_SECRET: str | None = None
+
     CLIENT_PORTAL_URL: str = "http://localhost:3000/dashboard"
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://172.31.32.1:3000"
 

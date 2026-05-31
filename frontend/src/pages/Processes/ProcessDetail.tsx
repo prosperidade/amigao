@@ -22,6 +22,7 @@ import ProcessHeader from './ProcessHeader';
 import DiagnosisTab from './DiagnosisTab';
 import TasksTab from './TasksTab';
 import DocumentsTab from './DocumentsTab';
+import MessagesTab from './MessagesTab';
 import TimelineTab from './TimelineTab';
 import ProcessDossier from './ProcessDossier';
 import ProcessCommercial from './ProcessCommercial';
@@ -31,7 +32,7 @@ import SaidasTab from './SaidasTab';
 import AlertasTab from './AlertasTab';
 import AIPanel from '@/pages/AI/AIPanel';
 
-type TabKey = 'diagnosis' | 'alertas' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'timeline' | 'ai' | 'saidas';
+type TabKey = 'diagnosis' | 'alertas' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'messages' | 'timeline' | 'ai' | 'saidas';
 
 const STAGE_ORDER = [
   'entrada_demanda',
@@ -315,6 +316,7 @@ export default function ProcessDetail() {
           {activeTab === 'commercial' && <ProcessCommercial processId={processId} />}
           {activeTab === 'tasks' && <TasksTab processId={processId} />}
           {activeTab === 'documents' && <DocumentsTab processId={processId} />}
+          {activeTab === 'messages' && <MessagesTab processId={processId} />}
           {activeTab === 'timeline' && <TimelineTab processId={processId} />}
           {activeTab === 'saidas' && <SaidasTab processId={processId} viewingStage={viewingStage} />}
           {activeTab === 'ai' && (

@@ -394,6 +394,13 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   `GET /api/v1/admin/audit/verify-chain` (superusuário, read-only) expõe os elos quebrados. 10 testes
   novos. **Dívida #18 FECHADA** — auditabilidade deixa de ser cerimônia. Fecha também o item 3 da
   auditoria de leitura sensível (30/05).
+- **Pulso 2026-05-31 (`feat/whatsapp-email-inbound-canal` — PR 2.1, código+infra):** canal **WhatsApp
+  inbound a caso já aberto** (inbound NÃO cria caso). `POST /messaging/whatsapp/webhook` (HMAC) →
+  identifica `Client` por telefone → `Message` no thread do caso aberto; mídia → `Document`; sem caso →
+  thread órfão + alerta; sem Client → ignora. Provider plugável (`EvolutionProvider` real, `ZAPIProvider`
+  stub). `CommunicationThread.provider`/`provider_account_id` (migration `pr21_wa_provider`). Serviço
+  `evolution` no docker-compose (profile `whatsapp`). **13 testes novos.** **DORMENTE** até creds no
+  `.env`. E-mail inbound (Resend) adiado → **dívida #35**.
 
 ## Infraestrutura
 

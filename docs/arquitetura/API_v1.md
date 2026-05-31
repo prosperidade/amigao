@@ -3,7 +3,7 @@
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada novo router ou mudança de contrato
 **Última revisão:** 2026-05-15
-**Verificado em:** `app/main.py:134-161` (28 routers + WebSocket)
+**Verificado em:** `app/main.py:134-161` (29 routers + WebSocket)
 
 ---
 
@@ -19,7 +19,7 @@ Superfície REST do Regente Ambiental. Para spec interativa com schemas, abra `h
 - **Erros:** `{"detail": "..."}` padrão FastAPI. Códigos: 400, 401, 403, 404, 409, 422, 429, 500.
 - **Versionamento:** versão major por prefixo (`/api/v1`, `/api/v2` no futuro). Estratégia em [`../adr/`](../adr/) (a formalizar).
 
-## Mapa de routers (28)
+## Mapa de routers (29)
 
 | Tag (OpenAPI) | Prefixo | Arquivo | Resumo |
 |---|---|---|---|
@@ -30,6 +30,7 @@ Superfície REST do Regente Ambiental. Para spec interativa com schemas, abra `h
 | Propriedades | `/api/v1/properties` | `app/api/v1/properties.py` | CRUD de imóvel + Imóvel Hub |
 | Tarefas | `/api/v1/tasks` | `app/api/v1/tasks.py` | CRUD + Kanban + transições |
 | Comunicação | `/api/v1/threads` | `app/api/v1/threads.py` | Threads, mensagens, anexos |
+| Mensageria / Canais | `/api/v1/messaging` | `app/api/v1/messaging.py` | Webhook inbound de WhatsApp (Evolution) — sem JWT, valida HMAC (PR 2.1) |
 | Credenciais | `/api/v1/credentials` | `app/api/v1/credentials.py` | Cofre de logins de portais por cliente (senha cifrada, ADR-014) |
 | Intake | `/api/v1/intake` | `app/api/v1/intake.py` | Wizard de 5 passos, drafts, commit, import documental |
 | Intake Feedback | `/api/v1/processes/{id}/classify` + `/admin/intake-feedback` | `app/api/v1/intake_feedback.py` | Promoção de `demand_type` + métricas de divergência |
@@ -332,6 +333,57 @@ são preenchidas no commit do draft. Registra `AuditLog` (`entity_type=intake_dr
 > ou ausente → 422. `audio_url` (entrevista) é aceito no payload e carregado
 > para transcrição futura pelo agente de atendimento (transcrição = PR própria).
 
+### Canal WhatsApp inbound (`POST /api/v1/messaging/whatsapp/webhook`, PR 2.1)
+
+`app/api/v1/messaging.py` — webhook chamado pelo **provider externo** (Evolution API)
+quando o cliente manda mensagem de WhatsApp. Integra a mensagem a um **caso já aberto** —
+inbound **nunca cria caso** (decisão fechada 2026-05-28).
+
+**Autenticação — não usa JWT.** O provider externo é quem chama, então não há `Authorization`
+nem `X-Auth-Profile`. A autenticidade vem de **HMAC-SHA256 do corpo cru** no header
+`X-Hub-Signature-256` (aceita `sha256=<hex>` ou `<hex>` puro), validado contra
+`EVOLUTION_WEBHOOK_SECRET`. **Sem secret configurado** o webhook **não exige assinatura**
+(modo dormente — útil enquanto não há credenciais). HMAC inválido → **401**.
+
+**Fluxo de identificação (resumo — detalhe em [`FLUXOS_E2E.md`](./FLUXOS_E2E.md) fluxo 7):**
+
+1. Acha o `Client` pelo telefone (normalizado, casando pelos **últimos 8 dígitos** em
+   `phone`/`secondary_phone`). O `tenant_id` é derivado do `Client`.
+2. Pega o `Process` **mais recente não terminal** (status ∉ `{concluido, arquivado, cancelado}`,
+   `deleted_at IS NULL`). Grava `Message` (`status="received"`, `external_msg_id` = id do provider)
+   na `CommunicationThread` de canal `whatsapp` do caso.
+3. **Sem caso aberto** → grava `Message` em `CommunicationThread` **órfão** (`process_id NULL`)
+   + alerta interno (`publish_realtime_event` evento `messaging.inbound_orphan` + `AuditLog action="inbound_orphan"`).
+4. **Sem `Client`** → ignora com log (resposta `status:"ignored"`), não cria caso.
+5. **Mídia:** se `media_url` presente **E** há caso aberto, baixa via `httpx` e grava como
+   `Document` (`source="whatsapp"`, `document_category="whatsapp_inbound"`). Best-effort —
+   falha no download não derruba o webhook.
+
+**Respostas:**
+
+```json
+// 200 — ingerido com sucesso (caso aberto ou órfão)
+{ "status": "ok", "thread_id": 12, "message_id": 84, "orphan": false, "document_id": 31 }
+
+// 200 — descartado (remetente sem Client, corpo não-JSON, payload não parseável, sem remetente)
+{ "status": "ignored", "reason": "unknown_sender" }   // ou: invalid_json | unparseable | no_sender
+```
+
+`401` apenas quando o HMAC é inválido. Demais condições devolvem `200` (com `status:"ignored"`)
+de propósito — o provider só faz retry em `5xx`, e não queremos reentrega de payload inválido.
+
+> **Provider plugável.** O parsing do payload vem de `app/services/messaging/`
+> (`get_whatsapp_provider()` lê `settings.WHATSAPP_PROVIDER`, default `evolution`).
+> `EvolutionProvider` é real; `ZAPIProvider` é stub. Ver [`INTEGRACOES_GOVTECH.md`](./INTEGRACOES_GOVTECH.md).
+
+> **Limitação conhecida — sem idempotência.** Reentrega do mesmo evento pelo provider
+> grava `Message` duplicada (não há dedupe por `external_msg_id` ainda). Aceitável no
+> estado dormente; endurecer junto com a ativação das credenciais.
+
+> **E-mail inbound (Resend) NÃO existe.** Não há webhook de e-mail nesta superfície — só
+> placeholders de config (`EMAIL_INBOUND_PROVIDER`, `RESEND_INBOUND_WEBHOOK_SECRET`).
+> Resend Inbound não está habilitado no plano/domínio.
+
 ### Webhooks / async
 
 Endpoints assíncronos que dependem de Celery retornam 202 com `job_id`:
@@ -415,8 +467,10 @@ Cliente faz polling em `GET /api/v1/ai/jobs/{job_id}` ou recebe via WebSocket (`
 | `GET /health` | Health check (200 OK quando saudável) |
 | `GET /metrics` | Métricas Prometheus (proteger por rede no prod, não por auth) |
 | `POST /api/v1/waitlist` | Lead anônimo (rate-limited 10/min) |
+| `POST /api/v1/messaging/whatsapp/webhook` | Webhook do provider de WhatsApp — **sem JWT**, mas autenticado por HMAC-SHA256 (`X-Hub-Signature-256`) quando `EVOLUTION_WEBHOOK_SECRET` está setado (ver seção do canal acima) |
 
-Nenhum outro endpoint é público. Todos os demais exigem JWT válido.
+Nenhum outro endpoint é público. Todos os demais exigem JWT válido (o webhook de
+WhatsApp é "sem JWT" por ser chamado por provider externo, mas é gated por HMAC).
 
 ## Pendências e dívidas
 

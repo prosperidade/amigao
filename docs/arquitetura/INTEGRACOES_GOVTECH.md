@@ -63,9 +63,34 @@ Em janela futura (`../manifesto/04-ROADMAP.md`), pode ter integração bidirecio
 
 **Estado atual:**
 - Esqueleto em `AcompanhamentoAgent` (`app/agents/acompanhamento.py`)
-- Connector IMAP/Gmail webhook **não existe ainda** — recebimento é manual hoje (consultor encaminha e-mail)
+- **WhatsApp inbound — IMPLEMENTADO (dormente) na PR 2.1.** Webhook
+  `POST /api/v1/messaging/whatsapp/webhook` (`app/api/v1/messaging.py`) recebe a mensagem
+  do cliente, identifica o `Client` pelo telefone e integra a um **caso já aberto** (inbound
+  nunca cria caso — decisão 2026-05-28). Sem caso → thread órfão + alerta interno; sem `Client`
+  → ignora. Autenticado por **HMAC-SHA256** (`X-Hub-Signature-256` × `EVOLUTION_WEBHOOK_SECRET`);
+  sem secret configurado, fica **dormente** (não exige assinatura). Detalhe da superfície em
+  [`API_v1.md`](./API_v1.md); fluxo ponta a ponta em [`FLUXOS_E2E.md`](./FLUXOS_E2E.md) (fluxo 7).
+  Provider plugável (abaixo). **Falta:** credenciais reais da Evolution + idempotência por
+  `external_msg_id`.
+- **Connector de e-mail inbound (Resend) — NÃO existe ainda.** Recebimento de e-mail do órgão
+  segue manual (consultor encaminha). Só há placeholders de config (`EMAIL_INBOUND_PROVIDER`,
+  `RESEND_INBOUND_WEBHOOK_SECRET`) — Resend Inbound não habilitado no plano/domínio.
 
-**Quando entra:** janela 2 — connector de e-mail inbound é o primeiro passo, vale para qualquer órgão e para banco/cooperativa também.
+**Provider plugável de WhatsApp** (`app/services/messaging/`):
+
+| Componente | Estado |
+|---|---|
+| `WhatsAppProvider` (abstrato) + `InboundMessage` (schema) | Contrato comum |
+| `EvolutionProvider` (httpx) | **Real** — default (`WHATSAPP_PROVIDER=evolution`) |
+| `ZAPIProvider` | **Stub** (`NotImplementedError`) — placeholder de config `ZAPI_*` |
+| `registry.get_whatsapp_provider()` | Resolve o provider por `settings.WHATSAPP_PROVIDER` |
+
+A **instância Evolution** está disponível no `docker-compose` (image
+`atendai/evolution-api:v2.1.1`) sob `profiles: ["whatsapp"]` — fica dormente e sobe sob demanda
+com `docker compose --profile whatsapp up -d evolution`.
+
+**Quando entra:** WhatsApp inbound já entrou (dormente, aguardando credenciais). O connector de
+e-mail inbound (Resend) segue na **janela 2** — vale para qualquer órgão e para banco/cooperativa também.
 
 ### Tipo 5 — Cruzamento de dados espaciais (consumo)
 
@@ -143,11 +168,21 @@ Diretrizes para quando novas integrações entrarem em produção:
 - Idempotência por message_id
 - Replay protection (timestamp + nonce)
 
+> **Aplicado hoje (WhatsApp inbound, PR 2.1):** assinatura **HMAC-SHA256** do corpo cru
+> (`X-Hub-Signature-256`) já é a verificação de origem. **Idempotência por message_id ainda
+> NÃO implementada** — reentrega do provider duplica `Message`. Replay protection idem.
+> Endurecer junto com a ativação das credenciais.
+
 **Persistência:**
 - Cria `Communication` com `source=govtech_inbound`
 - Vincula ao `Process` correspondente
 - Cria `Task` para o consultor responsável
 - Registra em `AuditLog` com hash chain
+
+> **Aplicado hoje (WhatsApp inbound, PR 2.1):** grava `Message` em `CommunicationThread`
+> (`channel="whatsapp"`, `provider="evolution"`) do caso aberto; sem caso → thread órfão
+> (`process_id NULL`) + `AuditLog action="inbound_orphan"` + evento realtime. Mídia vira
+> `Document` (`source="whatsapp"`). Ainda **não cria `Task`** automática.
 
 ### Outbound (envio de dossiê / consulta)
 
@@ -171,7 +206,8 @@ Diretrizes para quando novas integrações entrarem em produção:
 | `Property.geom` popular | Bloqueia agente `auditor_imovel` |
 | Parser shapefile/KML | Não existe |
 | Ingestão de base de UCs/TI/Embargos | Não existe |
-| Connector e-mail inbound | Não existe |
+| Canal WhatsApp inbound (Evolution) | **Implementado, dormente** — webhook + provider plugável prontos; falta credencial real + idempotência |
+| Connector e-mail inbound (Resend) | Não existe — só placeholders de config |
 | Primeira parceria institucional formal | A negociar (SEMAD-GO mais provável) |
 
 ## Próximas leituras

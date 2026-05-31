@@ -60,6 +60,22 @@ verdade — não duplicar aqui). Os mais ativados no ecossistema:
 ### 3.2 IA-driven intake
 Ver bloco acima (implementado na PR Intake backend #26 + frontend #27).
 
+### 3.4 Inbound de canal a caso já aberto (PR 2.1)
+Mensagens inbound **NÃO criam caso** (decisão 2026-05-28). O webhook
+`POST /messaging/whatsapp/webhook` identifica o `Client` pelo telefone, acha o
+`Process` aberto mais recente (status ∉ {concluido, arquivado, cancelado}) e grava
+a `Message` no `CommunicationThread` dele; mídia vira `Document`
+(`source="whatsapp"`). Sem caso aberto → thread órfão (`process_id` NULL) + alerta
+interno (`inbound_orphan`). Sem `Client` → ignora com log. É a porta de entrada de
+canal externo para o consultor/`atendimento` operar sobre um caso vivo.
+
+### 3.6 Provider plugável de WhatsApp (PR 2.1)
+`app/services/messaging/`: `WhatsAppProvider` (abstrato) + `InboundMessage`;
+`EvolutionProvider` (real, httpx); `ZAPIProvider` (**stub** — dívida #35);
+`registry.get_whatsapp_provider()` lê `settings.WHATSAPP_PROVIDER` (default
+`evolution`). Instância Evolution dedicada no docker-compose (profile `whatsapp`),
+dormente até `EVOLUTION_API_URL/KEY` no `.env`.
+
 ### 3.5 Provider plugável (white label) — implementado 2026-05-30 (PR LLM #28)
 4 providers configuráveis em `User.preferences.ai`: **Anthropic, Google, OpenAI,
 DeepSeek**. `api_key` cifrada via `encrypt_str` em
@@ -70,7 +86,7 @@ formato LiteLLM (`anthropic/claude-...`, `gemini/gemini-2.5-pro`, `openai/...`,
 usuário (não gastar crédito do sistema). Provider chinês default = `deepseek`
 (`settings.LLM_CHINESE_PROVIDER`).
 
-*WhatsApp/email externos:* PR 2.1 ainda **não** mergeado — sem implementação.
+*WhatsApp/email externos (PR 2.1):* **WhatsApp inbound implementado** (Evolution, dormente até creds — ver 3.4/3.6). E-mail inbound (Resend) **não** construído (adiado).
 
 ## 4. Orquestração
 
@@ -136,7 +152,7 @@ pré-contrato a chains. `NON_BLOCKING_REVIEW_AGENTS = {auditor_imovel}`.
   backend (#26) · Intake frontend (#27) · PR LLM (#28) · PR 2.3 credenciais (#29)
   · fix compose CREDENTIAL_ENCRYPTION_KEY (#30) · remoção corpus do git (#31) ·
   governança Render (#32).
-- ⏭ Pendente: **PR 2.1** (WhatsApp/email externos — depende de Resend Inbound +
+- ⏭ Pendente: **e-mail inbound** (PR 2.1 entregou só WhatsApp — depende de Resend Inbound +
   URL/key da Evolution). **EIXO 3** (unificação `Process.status` ×
   `macroetapa`, dívida #26).
 
@@ -144,7 +160,7 @@ pré-contrato a chains. `NON_BLOCKING_REVIEW_AGENTS = {auditor_imovel}`.
 
 - **Resend Inbound:** dispensado por ora (ADR-008 escolheu Resend p/ outbound;
   inbound não construído — ver `docs/arquitetura/INTEGRACOES_GOVTECH.md`).
-- **Hosting da Evolution (WhatsApp):** a decidir (URL/key externas) — pré-req do PR 2.1.
+- **Hosting da Evolution (WhatsApp):** resolvido — instância dedicada no docker-compose (profile `whatsapp`). Resta gerar a API key, parear o número (QR) e preencher `EVOLUTION_API_URL/KEY` no `.env` para ativar.
 - **Critério Valor Estratégico "Baixo"** (dívida #29) — Isis decide na tela.
 - **Transcrição de áudio** — frente futura sem PR.
 

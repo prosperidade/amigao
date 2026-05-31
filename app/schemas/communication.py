@@ -27,6 +27,9 @@ class CommunicationThreadBase(BaseModel):
     title: str
     channel: str
     external_id: Optional[str] = None
+    # PR 2.1 — provider concreto do canal e conta/instância de origem.
+    provider: str = "internal"
+    provider_account_id: Optional[str] = None
 
 class CommunicationThreadCreate(CommunicationThreadBase):
     pass
