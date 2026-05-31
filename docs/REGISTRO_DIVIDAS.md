@@ -120,6 +120,25 @@ própria chave, falta rastrear gasto/tokens consumidos POR chave de consultor (h
 custo — horário/mensal — são por tenant, e o cost cap por job não distingue chave do sistema vs
 do consultor). Útil para billing/transparência quando o white label escalar. **Origem:** PR LLM (30/05).
 
+**32. Sister files dos 7 agentes restantes.** A PR de quitação documental (30/05) criou
+`docs/agentes/` com `ECOSSISTEMA_AGENTICO.md` + sister files de `extrator`, `legislacao` e
+`atendimento` (+ `MEMORIA_CHAT.md`). Faltam os sister files de `diagnostico`, `auditor_imovel`,
+`orcamento`, `financeiro`, `redator`, `acompanhamento`, `vigia`, `marketing` — adiados por não
+haver material absorvido fresco que justifique criar agora. Criar em round documental dedicado ou
+quando a feature do agente evoluir. **Origem:** quitação documental (30/05). **Nota:** isto encerra
+o deferimento histórico dos "docs de agente" (que nunca foi dívida numerada — vivia nos pulsos do
+`progressoIA`); os 4 docs centrais estão feitos, os 8 restantes ficam aqui como dívida residual menor.
+
+**33. Auditoria de USO server-side de segredo decifrado.** Apurado em
+`docs/arquivo/auditorias/2026-05-30_auditoria_leitura_sensivel.md`: o `AuditLog` audita
+escrita (create/update/delete/reconciled) mas NÃO audita o uso server-side de segredo decifrado —
+a `api_key` de LLM do consultor é decifrada em `BaseAgent` a cada chamada sem registro; a senha de
+portal (`Credential`) é decifrada no load do ORM mas hoje **não tem consumidor** (não vaza). Quando
+a senha ganhar consumidor real (login automatizado / endpoint de revelação) ou ao querer rastrear
+uso da `api_key`, adicionar `AuditLog` no ato de uso. Conecta com **#30** (uso de IA por chave) e
+**#18** (verificação da hash chain). NÃO implementar agora — PR própria. **Origem:** auditoria de
+leitura sensível (30/05).
+
 ## Backlog de produto (já versionado em ADR)
 
 **16. Loop de aprendizado com material dos consultores** — ADR-010.

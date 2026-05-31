@@ -371,6 +371,12 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   AuditLog hash chain). Migration `c0d1e2f3a4b5` também **reunificou 2 heads divergentes do Alembic**
   (bug pré-existente que quebrava `alembic upgrade head`). **6 testes verdes** (incl. SQL de cripto +
   isolamento de tenant). UI no Client Hub = follow-up; auditoria de leitura de campo sensível segue aberta.
+- **Pulso 2026-05-30 (`docs/sistema-agentico-no-repo` — quitação documental, doc-only):** criados
+  `docs/agentes/` com `ECOSSISTEMA_AGENTICO.md` (mestre) + sister files `EXTRATOR`/`LEGISLACAO`/
+  `ATENDIMENTO`, `docs/MEMORIA_CHAT.md` e a auditoria de leitura sensível — **tudo verificado contra
+  o código** (a doc anterior tinha alegações fabricadas). Achado: `AuditLog` cobre escrita, não uso
+  de segredo decifrado → dívida **#33**. Dívida **#32** (8 sister files restantes). Whisper/transcrição
+  documentada como frente futura (não construída).
 
 ## Infraestrutura
 

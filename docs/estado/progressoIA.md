@@ -1451,3 +1451,34 @@ por esta PR) — corrigida via a própria migration de merge. Sem isso, `alembic
 **Não-escopo / pendente:** UI de gerenciar credenciais no Client Hub = **PR follow-up**. Endpoint de
 "revelar senha" para uso humano (hoje a senha só é lida server-side) — decisão futura. Auditoria de
 **leitura** de campo sensível (item 17 da auditoria Eixo 2) segue aberta.
+
+---
+
+## Quitação documental — sistema agêntico no repo (30/05/2026)
+
+Doc-only. Os docs do sistema agêntico **nunca existiram no repo** (viviam em rascunhos de chat com
+alegações fabricadas). Esta PR cria a infra documental **verificada contra o código real**.
+
+**Criado:**
+- `docs/agentes/ECOSSISTEMA_AGENTICO.md` (mestre, 11 seções) — catálogo real dos 11 agentes,
+  padrões transversais, chains do `orchestrator`, tools shared, roadmap real.
+- `docs/agentes/{EXTRATOR,LEGISLACAO,ATENDIMENTO}_AGENTE.md` (sister files, 12 seções cada).
+- `docs/MEMORIA_CHAT.md` — memória de projeto/método versionada.
+- `docs/arquivo/auditorias/2026-05-30_auditoria_leitura_sensivel.md`.
+
+**Achado da auditoria de leitura sensível:** `AuditLog` audita escrita (create/update/delete/
+reconciled, hash chain SHA-256); **NÃO audita uso server-side de segredo decifrado** (api_key de
+LLM decifrada em `BaseAgent` por chamada; senha de `Credential` decifrada no load mas sem consumidor
+hoje, não vaza). → **dívida #33** aberta (não implementar agora). Senha de portal nunca volta em
+plaintext (sem `GET /secret`).
+
+**Divergências rascunho-de-chat × código real (matéria-prima p/ corrigir a memória do chat):**
+`credential_service.py` (NÃO existe — lógica em `credentials.py`); `GET /credentials/{id}/secret`
+(NÃO existe); campo da senha é `password_encrypted` (não `login_password`); dívidas #11/#15 do
+prompt anterior não eram "docs de agente"/"leitura sensível" (#11=race versionamento, #15=alertas
+IBAMA); `docs/agentes/` não existia. "Bloqueio docker-compose" do chat anterior era phantom de EOL
+— o fix já estava mergeado (PR #30).
+
+**Dívidas:** abertas **#32** (sister files dos 8 agentes restantes) e **#33** (audit de uso de
+segredo). O deferimento histórico dos "docs de agente" (nunca numerado) fica encerrado para os 4
+docs centrais. Sem renumerar dívidas existentes.
