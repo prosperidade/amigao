@@ -128,6 +128,13 @@ haver material absorvido fresco que justifique criar agora. Criar em round docum
 quando a feature do agente evoluir. **Origem:** quitação documental (30/05). **Nota:** isto encerra
 o deferimento histórico dos "docs de agente" (que nunca foi dívida numerada — vivia nos pulsos do
 `progressoIA`); os 4 docs centrais estão feitos, os 8 restantes ficam aqui como dívida residual menor.
+**✅ FECHADA (31/05, `docs/sister-files-agentes`):** criados os 8 sister files restantes
+(`diagnostico`, `auditor_imovel`, `orcamento`, `financeiro`, `redator`, `acompanhamento`, `vigia`,
+`marketing`), todos verificados contra o código real (referências `arquivo:linha`). Os 11 agentes
+agora têm sister file. A rodada também corrigiu uma alegação errada do mestre — `diagnostico`
+estava documentado como `requires_review`="não", mas o código força `True` (`diagnostico.py:448`).
+Achados de divergência docstring×código de cada agente ficaram registrados na seção 10 do
+respectivo sister file (não elevados aqui — não destravam pipeline).
 
 **33. Auditoria de USO server-side de segredo decifrado.** Apurado em
 `docs/arquivo/auditorias/2026-05-30_auditoria_leitura_sensivel.md`: o `AuditLog` audita

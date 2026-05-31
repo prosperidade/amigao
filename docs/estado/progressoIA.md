@@ -1482,3 +1482,25 @@ IBAMA); `docs/agentes/` não existia. "Bloqueio docker-compose" do chat anterior
 **Dívidas:** abertas **#32** (sister files dos 8 agentes restantes) e **#33** (audit de uso de
 segredo). O deferimento histórico dos "docs de agente" (nunca numerado) fica encerrado para os 4
 docs centrais. Sem renumerar dívidas existentes.
+
+---
+
+## Quitação da dívida #32 — 8 sister files restantes (31/05/2026)
+
+Doc-only. Fecha a **#32**. Criados os sister files dos 8 agentes que faltavam, no molde de 12
+seções do `EXTRATOR_AGENTE.md`, **cada um verificado contra o código real** (referências
+`arquivo:linha`; nenhuma alegação fabricada):
+`DIAGNOSTICO`, `AUDITOR_IMOVEL`, `ORCAMENTO`, `FINANCEIRO`, `REDATOR`, `ACOMPANHAMENTO`, `VIGIA`,
+`MARKETING`. Os 11 agentes agora têm sister file (tabela da seção 11 do mestre atualizada).
+
+**Correção do mestre (regra "afirmação que não bate com o código sai"):** o catálogo do
+`ECOSSISTEMA_AGENTICO.md` dava `diagnostico` como `requires_review`="não"; o código força `True`
+(`diagnostico.py:448` — "diagnóstico SEMPRE precisa de validação humana"). Linha 26 corrigida.
+
+**Divergências docstring×código achadas na verificação** (registradas na seção 10 do sister file de
+cada agente, não elevadas ao registro central — não destravam pipeline): `orcamento` tem duas
+trilhas desalinhadas (agente `_estimate_by_rules` × serviço `proposal_generator.PRICE_TABLE`, e o
+endpoint usa o serviço); `financeiro` docstring promete projeção de custos não implementada;
+`marketing` tem `prompt_slugs` (4) ≠ `VALID_CONTENT_TYPES` (5); `vigia` docstring diz "6h" mas o
+schedule real é 2×/dia. **Validação Isis** ficou marcada como pendente em todos (não há registro de
+validação fim-a-fim por agente além do caso Romilton do pipeline OCR).

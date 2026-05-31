@@ -377,6 +377,12 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   o código** (a doc anterior tinha alegações fabricadas). Achado: `AuditLog` cobre escrita, não uso
   de segredo decifrado → dívida **#33**. Dívida **#32** (8 sister files restantes). Whisper/transcrição
   documentada como frente futura (não construída).
+- **Pulso 2026-05-31 (`docs/sister-files-agentes` — quita #32, doc-only):** criados os 8 sister files
+  restantes (`DIAGNOSTICO`, `AUDITOR_IMOVEL`, `ORCAMENTO`, `FINANCEIRO`, `REDATOR`, `ACOMPANHAMENTO`,
+  `VIGIA`, `MARKETING`), verificados contra o código real → **os 11 agentes têm sister file**. A
+  verificação corrigiu uma alegação errada do mestre (`diagnostico` `requires_review`: "não" → **sim**,
+  `diagnostico.py:448`) e registrou divergências docstring×código na seção 10 de cada sister file.
+  **Dívida #32 FECHADA.**
 
 ## Infraestrutura
 

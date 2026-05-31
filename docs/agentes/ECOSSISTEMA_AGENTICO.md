@@ -23,7 +23,7 @@ verdade — não duplicar aqui). Os mais ativados no ecossistema:
 |---|---|---|---|---|
 | `atendimento` | classify_demand | dict (demand_type sugerido) | não | Implementado. Recebe `audio_url` (só armazenado). **Transcrição: frente futura, não construída.** |
 | `extrator` | extract_document | dict (extracted_fields) | não | Implementado. + `field_sources`, reconciliação, `/extracted-fields` (PR Intake). |
-| `diagnostico` | diagnostico_propriedade | DiagnosticoPreliminarContent | não | Implementado. Consome `chain_data["auditor_imovel"]`. |
+| `diagnostico` | diagnostico_propriedade | DiagnosticoPreliminarContent | **sim** | Implementado. `requires_review=True` forçado (`diagnostico.py:448` — "diagnóstico SEMPRE precisa de validação humana"). Consome `chain_data["auditor_imovel"]`. |
 | `auditor_imovel` | diagnostico_propriedade | dict (divergencias/findings) | sim (não-bloqueante) | Implementado. Determinístico (`property_audit`). |
 | `legislacao` | consulta_regulatoria | EnquadramentoRegulatorioContent | sim | Implementado. **Filtro RAG por demand_type via JOIN com `LegislationDocument.demand_types` (PR 2.2).** |
 | `orcamento` | generate_proposal | dict (proposta) | sim | Implementado. |
@@ -152,15 +152,15 @@ mestre. Sister files são VIVOS — afirmação que não bate com o código sai.
 | extrator | `docs/agentes/EXTRATOR_AGENTE.md` | ✅ criado (2026-05-30) |
 | legislacao | `docs/agentes/LEGISLACAO_AGENTE.md` | ✅ criado (2026-05-30) |
 | atendimento | `docs/agentes/ATENDIMENTO_AGENTE.md` | ✅ criado (2026-05-30) |
-| diagnostico | — | ⏳ pendente |
-| auditor_imovel | — | ⏳ pendente (skill validada pela Isis 26/05) |
-| orcamento | — | ⏳ pendente |
-| financeiro | — | ⏳ pendente |
-| redator | — | ⏳ pendente |
-| acompanhamento | — | ⏳ pendente |
-| vigia | — | ⏳ pendente |
-| marketing | — | ⏳ pendente |
+| diagnostico | `docs/agentes/DIAGNOSTICO_AGENTE.md` | ✅ criado (2026-05-31) |
+| auditor_imovel | `docs/agentes/AUDITOR_IMOVEL_AGENTE.md` | ✅ criado (2026-05-31, skill validada pela Isis 26/05) |
+| orcamento | `docs/agentes/ORCAMENTO_AGENTE.md` | ✅ criado (2026-05-31) |
+| financeiro | `docs/agentes/FINANCEIRO_AGENTE.md` | ✅ criado (2026-05-31) |
+| redator | `docs/agentes/REDATOR_AGENTE.md` | ✅ criado (2026-05-31) |
+| acompanhamento | `docs/agentes/ACOMPANHAMENTO_AGENTE.md` | ✅ criado (2026-05-31) |
+| vigia | `docs/agentes/VIGIA_AGENTE.md` | ✅ criado (2026-05-31) |
+| marketing | `docs/agentes/MARKETING_AGENTE.md` | ✅ criado (2026-05-31) |
 
-Os 7 sister files restantes (diagnostico, orcamento, financeiro, redator,
-acompanhamento, vigia, marketing) + auditor_imovel ficam para round documental
-dedicado / quando suas features evoluírem (dívida documental — ver REGISTRO).
+**Os 11 sister files estão criados** (os 3 primeiros — extrator, legislacao,
+atendimento — em 2026-05-30; os 8 restantes em 2026-05-31, quitando a dívida
+documental **#32**). São VIVOS: cada PR que evolui um agente atualiza o seu.
