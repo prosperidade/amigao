@@ -53,14 +53,16 @@ function labelFor(field: string): string {
   return FIELD_LABELS[field] ?? field;
 }
 
+// Semântica de confiança preservada (verde >0.9, amarelo 0.7–0.9, vermelho <0.7),
+// adaptada para fundo claro — não há tokens semânticos success/warning no design system.
 function confidenceBadge(confidence: number | null): { cls: string; text: string } {
   if (confidence === null || confidence === undefined) {
-    return { cls: 'bg-slate-500/20 text-slate-300 border-slate-500/30', text: 's/ score' };
+    return { cls: 'bg-muted text-muted-foreground border-border', text: 's/ score' };
   }
   const pct = `${Math.round(confidence * 100)}%`;
-  if (confidence > 0.9) return { cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', text: pct };
-  if (confidence >= 0.7) return { cls: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30', text: pct };
-  return { cls: 'bg-red-500/20 text-red-300 border-red-500/40', text: pct };
+  if (confidence > 0.9) return { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', text: pct };
+  if (confidence >= 0.7) return { cls: 'bg-yellow-50 text-yellow-700 border-yellow-200', text: pct };
+  return { cls: 'bg-red-50 text-red-700 border-red-200', text: pct };
 }
 
 function display(v: unknown): string {
@@ -93,20 +95,20 @@ export default function PreviewPanel({ draftId, manualValues = {} }: Props) {
   }, [refresh]);
 
   return (
-    <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-5 shadow-xl">
+    <div className="rounded-2xl bg-card border border-border p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-1">
         <span className="text-lg">🤖</span>
-        <h3 className="text-sm font-semibold text-white">Extração da IA</h3>
-        <span className="ml-auto text-[10px] text-slate-500 animate-pulse">● ao vivo</span>
+        <h3 className="text-sm font-semibold text-foreground">Extração da IA</h3>
+        <span className="ml-auto text-[10px] text-muted-foreground animate-pulse">● ao vivo</span>
       </div>
-      <p className="text-xs text-slate-400 mb-4">
+      <p className="text-xs text-muted-foreground mb-4">
         Campos lidos dos documentos anexados. Atualiza sozinho enquanto a IA processa.
       </p>
 
       {!loaded ? (
-        <div className="text-sm text-slate-500 py-6 text-center">Carregando…</div>
+        <div className="text-sm text-muted-foreground py-6 text-center">Carregando…</div>
       ) : fields.length === 0 ? (
-        <div className="text-sm text-slate-500 py-6 text-center">
+        <div className="text-sm text-muted-foreground py-6 text-center">
           Nenhum campo extraído ainda. Anexe documentos para a IA preencher automaticamente.
         </div>
       ) : (
@@ -118,24 +120,24 @@ export default function PreviewPanel({ draftId, manualValues = {} }: Props) {
                 key={f.field}
                 className={`p-3 rounded-xl border ${
                   f.diverges_from_manual
-                    ? 'border-amber-500/40 bg-amber-500/5'
-                    : 'border-white/10 bg-white/5'
+                    ? 'border-amber-300 bg-amber-50'
+                    : 'border-border bg-muted/30'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 flex-1">{labelFor(f.field)}</span>
+                  <span className="text-xs text-muted-foreground flex-1">{labelFor(f.field)}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${badge.cls}`}>
                     {badge.text}
                   </span>
                 </div>
-                <div className="text-sm text-white font-medium mt-0.5 break-words">{display(f.value)}</div>
+                <div className="text-sm text-foreground font-medium mt-0.5 break-words">{display(f.value)}</div>
                 {f.source_document_name && (
-                  <div className="text-[10px] text-slate-500 mt-1">📄 {f.source_document_name}</div>
+                  <div className="text-[10px] text-muted-foreground mt-1">📄 {f.source_document_name}</div>
                 )}
                 {f.diverges_from_manual && (
                   <button
                     onClick={() => setReconciling(f)}
-                    className="mt-2 text-xs text-amber-300 hover:text-amber-200 underline flex items-center gap-1"
+                    className="mt-2 text-xs text-amber-700 hover:text-amber-800 underline flex items-center gap-1"
                   >
                     ⚠️ Diverge do que você digitou — reconciliar
                   </button>
