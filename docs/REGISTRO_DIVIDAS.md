@@ -111,6 +111,17 @@ de Z-API (ex.: produção hospedada paga em vez de Evolution self-hosted), imple
 **e-mail inbound (Resend) ficou adiado** na PR 2.1 — só os placeholders de config existem; retomar
 quando o Resend Inbound for habilitado no domínio/plano (MX + webhook secret). **Origem:** PR 2.1 (31/05).
 
+**37. Reintegrar o Evolution ao compose/boot quando o canal WhatsApp for reativado.** Em
+2026-06-01 (decisão do André) o serviço `evolution` e o profile `whatsapp` saíram do
+`docker-compose.yml` para destravar `docker compose up -d` (o `${EVOLUTION_API_KEY:?...}` da
+definição do serviço abortava o boot do core inteiro, mesmo com a Evolution dormente). O código
+do provider (`app/services/messaging/`) e o webhook (`/api/v1/messaging/whatsapp/webhook`)
+**permanecem** — só foram desacoplados; o webhook responde **503 "WhatsApp não configurado"**
+sem `EVOLUTION_API_URL`/`KEY`. **O que destrava:** ao reativar o WhatsApp, repor o serviço
+`evolution` no compose (definição antiga no git — PR 2.1, #38) e preencher as envs no `.env`.
+**Como reativar:** ver `docs/operacao/RUNBOOK_OPS.md` (seção WhatsApp/Evolution). **Origem:**
+PR ops/evolution-opcional-no-boot (01/06).
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos

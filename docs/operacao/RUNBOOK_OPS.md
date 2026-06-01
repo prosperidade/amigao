@@ -200,6 +200,26 @@ docker compose exec worker celery -A app.core.celery_app inspect scheduled
 4. Auditar `AuditLog` no período possível do vazamento
 5. Postmortem: como aconteceu, prevenção
 
+## WhatsApp / Evolution (fora do boot desde 2026-06-01)
+
+O canal WhatsApp (Evolution API) foi **desacoplado do boot** em 2026-06-01 (decisão do André)
+para destravar `docker compose up -d` — a definição do serviço `evolution` no compose exigia
+`EVOLUTION_API_KEY` (`${EVOLUTION_API_KEY:?...}`) e abortava o startup do core inteiro, mesmo
+com a Evolution dormente. O **código permanece**: provider em `app/services/messaging/` e webhook
+em `/api/v1/messaging/whatsapp/webhook`.
+
+- **Estado atual:** sem `EVOLUTION_API_URL`/`EVOLUTION_API_KEY` no `.env`, o webhook responde
+  **503 "WhatsApp não configurado"**. O boot do core (api, worker, db, redis, minio) **não depende**
+  da Evolution. Ver dívida #37 em [`../REGISTRO_DIVIDAS.md`](../REGISTRO_DIVIDAS.md).
+- **Para reativar o canal WhatsApp:**
+  1. Repor o serviço `evolution` no `docker-compose.yml` (a definição antiga está no git — PR 2.1, #38)
+     sob o profile `whatsapp`, e criar o database `evolution` no Postgres.
+  2. Preencher no `.env`: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_WEBHOOK_SECRET`
+     (e `WHATSAPP_PROVIDER=evolution`, default).
+  3. Subir a instância: `docker compose --profile whatsapp up -d evolution` e parear o número
+     (QR no Manager da Evolution).
+  4. Conferir: o webhook deixa de responder 503 quando as envs estão presentes.
+
 ## Backups e recuperação
 
 ### Estratégia recomendada

@@ -133,3 +133,11 @@ em `docs/agentes/` são a fonte de verdade verificada.
   órfãos — invisíveis na aba Documentos). Upload em massa: `DraftDocumentUploader` com pool de 4, retry
   com backoff, botão remover sempre visível e feedback por item; visual alinhado ao design system.
   Origem: auditoria `2026-05-31_uploads_isis.md`. Validações finais da Isis na UI ainda pendentes.
+- **2026-06-01 — Evolution fora do boot (`ops/evolution-opcional-no-boot`).** **Decisão do André:**
+  tirar o Evolution do compose/boot AGORA para o sistema subir e ser validável E2E; o canal WhatsApp
+  volta DEPOIS, quando o core estiver de pé. Motivo: a definição do serviço `evolution` exigia
+  `EVOLUTION_API_KEY` (`${EVOLUTION_API_KEY:?...}`) e o Compose interpola o arquivo inteiro no `up`,
+  abortando o boot do core mesmo com a Evolution dormente. O serviço `evolution` + profile `whatsapp`
+  saíram do `docker-compose.yml`; o **código do provider e o webhook permanecem** — só desacoplados —
+  e o webhook responde 503 "WhatsApp não configurado" sem as envs. Validado: `docker compose up -d`
+  do core sobe healthy + `/health` 200. Dívida #37 (reintegrar Evolution); reativação no RUNBOOK_OPS.

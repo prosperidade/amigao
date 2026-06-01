@@ -7,6 +7,7 @@ HMAC inválido → 401.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
@@ -18,6 +19,15 @@ from app.models.process import Process, ProcessStatus
 from app.models.tenant import Tenant
 
 _WEBHOOK = "/api/v1/messaging/whatsapp/webhook"
+
+
+@pytest.fixture(autouse=True)
+def _whatsapp_configured(monkeypatch):
+    """Canal WhatsApp ativo: sem EVOLUTION_API_URL/KEY o webhook responde 503
+    ("WhatsApp não configurado") — desacoplado do boot em 2026-06-01. Estes
+    testes exercitam o caminho com o canal configurado."""
+    monkeypatch.setattr(settings, "EVOLUTION_API_URL", "https://evo.local")
+    monkeypatch.setattr(settings, "EVOLUTION_API_KEY", "test-key")
 
 
 def _setup(db_session, *, name: str, phone: str, with_open_process: bool = True, closed: bool = False):
@@ -136,6 +146,18 @@ def test_client_without_open_case_creates_orphan_thread_and_alert(client: TestCl
         {"t": cli.tenant_id},
     ).first()
     assert audit is not None
+
+
+def test_webhook_returns_503_when_whatsapp_not_configured(client: TestClient, monkeypatch):
+    # Sem EVOLUTION_API_URL/KEY o canal está desligado (desacoplado do boot
+    # em 2026-06-01): o webhook existe mas responde 503, nunca quebra o app.
+    monkeypatch.setattr(settings, "EVOLUTION_API_URL", None)
+    monkeypatch.setattr(settings, "EVOLUTION_API_KEY", None)
+
+    r = client.post(_WEBHOOK, json=_payload("5511999998888", text_body="oi"))
+
+    assert r.status_code == 503, r.text
+    assert r.json()["detail"] == "WhatsApp não configurado."
 
 
 def test_invalid_hmac_returns_401(client: TestClient, db_session, monkeypatch):
