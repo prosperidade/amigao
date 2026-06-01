@@ -1662,3 +1662,32 @@ Dívida #36 aberta para validade/alerta proativo quando o produto decidir modela
 execução falhou por `spawn EPERM` do esbuild no sandbox; rerodado com permissão elevada. Docker/SQL
 manual não foram validados neste ambiente: `docker ps` sem acesso ao pipe do Docker Desktop e
 `docker compose ps` bloqueado por `EVOLUTION_API_KEY` ausente.
+
+---
+
+## Evolution fora do boot — `docker compose up` destravado (01/06/2026)
+
+Ops/infra (não-IA), registrado aqui por ser o pulso que destravou a validação E2E que os
+agentes de IA dependiam para subir o stack.
+
+**Problema:** `docker compose up -d` abortava antes de subir qualquer serviço. A definição do
+serviço `evolution` no compose tinha `AUTHENTICATION_API_KEY: "${EVOLUTION_API_KEY:?...}"`; o
+Compose interpola o arquivo inteiro no `up` (antes de filtrar profiles), então a env ausente
+derrubava o boot do core — mesmo com a Evolution dormente sob o profile `whatsapp`.
+
+**Decisão (André, 01/06):** tirar o Evolution do caminho agora; o canal WhatsApp volta quando o
+core estiver de pé.
+
+**Feito:**
+- `docker-compose.yml`: removidos o serviço `evolution`, o profile `whatsapp` e o volume
+  `evolution_data` (comentário no lugar apontando como reativar). As envs `EVOLUTION_*` em
+  `api`/`worker` seguem com default vazio (`:-`), inofensivas.
+- `app/api/v1/messaging.py`: webhook `/whatsapp/webhook` responde **503 "WhatsApp não configurado"**
+  quando faltam `EVOLUTION_API_URL`/`EVOLUTION_API_KEY` — nunca quebra o boot.
+- **Não tocado:** provider (`app/services/messaging/`), stub Z-API, contrato do webhook.
+
+**Verificação:** `docker compose up -d db redis minio api worker` → db/redis/minio healthy, api/worker
+up; `curl http://localhost:8000/health` → `{"status":"ok",...}` HTTP 200. `app.main` importa limpo.
+
+**Dívida:** #37 (reintegrar Evolution ao compose/boot quando o WhatsApp for reativado). Reativação
+documentada em `docs/operacao/RUNBOOK_OPS.md`.

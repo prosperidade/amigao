@@ -208,40 +208,16 @@ services:
       api:
         condition: service_started
 
-  # PR 2.1 — instância Evolution API (WhatsApp) DEDICADA do amigão.
-  # DORMENTE por default: roda só sob o profile "whatsapp" para não pesar o
-  # stack padrão. Subir com: docker compose --profile whatsapp up -d evolution
-  # A app só conversa com ela quando EVOLUTION_API_URL/KEY estiverem no .env.
-  # Pré-uso: criar o database `evolution` no Postgres e parear o número (QR no
-  # Manager da Evolution). Z-API NÃO entra aqui (stub no código).
-  evolution:
-    image: atendai/evolution-api:v2.1.1
-    profiles: ["whatsapp"]
-    ports:
-      - "${EVOLUTION_HOST_PORT:-8080}:8080"
-    environment:
-      AUTHENTICATION_API_KEY: "${EVOLUTION_API_KEY:?defina EVOLUTION_API_KEY no .env para subir a Evolution}"
-      DATABASE_ENABLED: "true"
-      DATABASE_PROVIDER: "postgresql"
-      DATABASE_CONNECTION_URI: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-pgpass2026}@db:5432/evolution"
-      DATABASE_CONNECTION_CLIENT_NAME: "evolution_amigao"
-      CACHE_REDIS_ENABLED: "true"
-      CACHE_REDIS_URI: "redis://:${REDIS_PASSWORD:-redispass2026}@redis:6379/6"
-      CACHE_REDIS_PREFIX_KEY: "evolution_amigao"
-      CACHE_LOCAL_ENABLED: "false"
-    volumes:
-      - evolution_data:/evolution/instances
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+  # PR 2.1 — serviço Evolution API (WhatsApp) REMOVIDO do boot em 2026-06-01.
+  # Decisão (André): tirar o Evolution do caminho para o stack core subir e
+  # ser validável E2E. O provider/webhook WhatsApp PERMANECEM no código
+  # (app/services/messaging/, /api/v1/messaging) — só saíram do compose.
+  # Reativar: ver docs/operacao/RUNBOOK_OPS.md (seção WhatsApp/Evolution) e
+  # docs/REGISTRO_DIVIDAS.md. A definição antiga está no git (PR 2.1, #38).
 
 volumes:
   postgres_data:
   redis_data:
   minio_data:
-  evolution_data:
   # mempalace_data removido em 2026-04-23 (supply-chain red flags). Volume remanescente em ambientes
   # antigos pode ser purgado com: docker volume rm amigao_do_meio_ambiente_mempalace_data

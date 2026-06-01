@@ -262,6 +262,14 @@ async def whatsapp_webhook(
     Sempre tenta responder 200 (provider faz retry em 5xx). Exceção: HMAC
     inválido → 401 (rejeição explícita de payload não autenticado).
     """
+    # Canal WhatsApp desacoplado do boot (2026-06-01): sem EVOLUTION_API_URL/KEY
+    # o webhook existe mas responde 503 — nunca quebra o startup do app.
+    if not (settings.EVOLUTION_API_URL and settings.EVOLUTION_API_KEY):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="WhatsApp não configurado.",
+        )
+
     raw = await request.body()
     if not _verify_hmac(settings.EVOLUTION_WEBHOOK_SECRET, raw, x_hub_signature_256):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura HMAC inválida.")
