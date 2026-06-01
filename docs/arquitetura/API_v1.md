@@ -135,6 +135,9 @@ INCRA/banco). Internal user; tenant vem do JWT.
 - `PATCH /{id}` — parcial; `password` ausente/vazia **preserva** a atual.
 - `DELETE /{id}` — soft delete (`deleted_at`). 204.
 - Todas as operações geram `AuditLog` (`entity_type=credential`, hash chain SHA-256).
+- Primeiro consumidor de UI: aba **Credenciais** no Cliente Hub. A UI usa `has_password`
+  para indicar senha protegida e não oferece "ver senha". O contrato atual não expõe
+  `valid_until`; alerta de vencimento fica em dívida de produto (#36).
 
 ## Rate limiting
 

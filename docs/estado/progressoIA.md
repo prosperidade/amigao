@@ -1636,3 +1636,29 @@ adaptados para fundo claro (não há token semântico `success`/`warning` no des
 do wizard) ainda carregam tema escuro — não estavam no escopo declarado desta PR.
 
 **Verificação:** `tsc --noEmit` limpo + `npm run build` verde. Funcionalidade inalterada.
+
+---
+
+## UI das credenciais de portal no Cliente Hub (31/05/2026)
+
+Frontend follow-up do PR 2.3. Consome o backend real de `Credential` sem inventar campos.
+
+**Entregue:**
+- Aba **Credenciais** adicionada ao `ClientHub`, ao lado de Documentos/Histórico.
+- `frontend/src/components/Clients/CredentialsTab/` novo: listagem por
+  `GET /api/v1/credentials?client_id=X`, estados de loading/erro/vazio, badge de portal,
+  badge `Senha protegida` quando `has_password=true`, link externo de `url`, ações editar/excluir.
+- `CredentialModal` reutilizado para create/edit. Create envia
+  `{client_id, portal, label, login, password, url, notes}`. Edit envia PATCH parcial; se a senha
+  fica vazia, o campo `password` é omitido para preservar a senha existente.
+- Confirmação de exclusão chama `DELETE /api/v1/credentials/{id}` e atualiza a lista.
+
+**Contrato real confirmado:** `CredentialCreate` tem `client_id`, `portal`, `label`, `login`,
+`password`, `url`, `notes`. O campo do backend é `login`, não `login_username`. Não existe
+`valid_until` no model/schema/resposta atual, então a UI não implementa alerta de vencimento falso.
+Dívida #36 aberta para validade/alerta proativo quando o produto decidir modelar isso.
+
+**Verificação:** `npm run test -- CredentialsTab` verde (4/4) e `npm run build` verde. A primeira
+execução falhou por `spawn EPERM` do esbuild no sandbox; rerodado com permissão elevada. Docker/SQL
+manual não foram validados neste ambiente: `docker ps` sem acesso ao pipe do Docker Desktop e
+`docker compose ps` bloqueado por `EVOLUTION_API_KEY` ausente.

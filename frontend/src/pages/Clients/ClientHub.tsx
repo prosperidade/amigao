@@ -16,6 +16,7 @@ import {
   AlertTriangle, Clock, Plus, Sparkles, Folder, RefreshCw, CheckCircle2, Send,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import CredentialsTab from '@/components/Clients/CredentialsTab';
 import { MACROETAPA_LABELS, MACROETAPA_STATE_BADGE } from '@/pages/Processes/quadro-types';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -160,7 +161,7 @@ const STATUS_CLS: Record<string, string> = {
   delinquent: 'bg-amber-100 text-amber-700 border-amber-200',
 };
 
-type TabKey = 'overview' | 'properties' | 'cases' | 'contracts' | 'documents' | 'history';
+type TabKey = 'overview' | 'properties' | 'cases' | 'contracts' | 'documents' | 'credentials' | 'history';
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
@@ -337,13 +338,14 @@ export default function ClientHub() {
         {/* Abas + conteúdo central */}
         <div className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 overflow-hidden min-w-0">
           <div className="border-b border-gray-100 dark:border-white/10 flex gap-0 overflow-x-auto">
-            {(['overview', 'properties', 'cases', 'contracts', 'documents', 'history'] as TabKey[]).map(k => {
+            {(['overview', 'properties', 'cases', 'contracts', 'documents', 'credentials', 'history'] as TabKey[]).map(k => {
               const labels: Record<TabKey, string> = {
                 overview: 'Visão geral',
                 properties: `Imóveis (${kpis.properties_count})`,
                 cases: `Casos (${kpis.cases_active + kpis.cases_completed})`,
                 contracts: `Contratos (${kpis.contracts_emitted})`,
                 documents: 'Documentos',
+                credentials: 'Credenciais',
                 history: 'Histórico',
               };
               const active = tab === k;
@@ -371,6 +373,7 @@ export default function ClientHub() {
             {tab === 'cases' && <CasesTab properties={properties} navigate={navigate} />}
             {tab === 'contracts' && <ContractsTab contracts={contracts} loading={contractsLoading} navigate={navigate} />}
             {tab === 'documents' && <DocumentsTab clientId={clientId} navigate={navigate} />}
+            {tab === 'credentials' && <CredentialsTab clientId={clientId} />}
             {tab === 'history' && <HistoryTab timeline={timeline} />}
           </div>
         </div>

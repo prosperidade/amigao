@@ -128,7 +128,10 @@ pré-contrato a chains. `NON_BLOCKING_REVIEW_AGENTS = {auditor_imovel}`.
   server-side da chave própria do consultor é auditado: `BaseAgent.call_llm` emite
   `AuditLog` `action="ai_key_used"` (hash chain) uma vez por execução, com a chave
   mascarada (`emit_ai_key_use_event`, `app/agents/events.py`). A senha de portal
-  (`Credential`) ainda não é auditada no uso — sem consumidor hoje (resto da #33).
+  (`Credential`) agora tem consumidor de CRUD no Cliente Hub, mas a UI só escreve/edita
+  e lista `has_password`; não há leitura/revelação server-side de plaintext. Auditoria
+  de uso da senha segue pendente só quando houver consumidor que decifre para uso real
+  (login automatizado/endpoint de revelação).
 - **5.8 Verificação da hash chain (dívida #18, fechada 31/05).** `verify_audit_chain(db, tenant_id)`
   (`app/services/audit_hash.py`) recomputa cada hash em ordem e compara com o persistido (conteúdo +
   elo), devolvendo os elos quebrados. Exposto em `GET /api/v1/admin/audit/verify-chain` (superusuário,
