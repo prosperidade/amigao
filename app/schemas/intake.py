@@ -108,6 +108,12 @@ class IntakeCreateCaseRequest(BaseModel):
     demand_type: Optional[str] = None
     process_type: Optional[str] = None
 
+    # PR fix Isis #2: finalização migra os docs do rascunho para o processo.
+    draft_id: Optional[int] = Field(
+        None,
+        description="Se presente, migra os Documents do IntakeDraft para o processo criado (mesma transação).",
+    )
+
 
 class IntakeCaseCreatedResponse(BaseModel):
     client_id: int

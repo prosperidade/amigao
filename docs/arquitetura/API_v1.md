@@ -333,6 +333,12 @@ são preenchidas no commit do draft. Registra `AuditLog` (`entity_type=intake_dr
 > ou ausente → 422. `audio_url` (entrevista) é aceito no payload e carregado
 > para transcrição futura pelo agente de atendimento (transcrição = PR própria).
 
+> **`draft_id` no `/create-case` (fix Isis 2026-05-31):** campo opcional. Quando presente, após criar
+> cliente/imóvel/processo/checklist o endpoint migra os `Document`s do `IntakeDraft` (`process_id IS
+> NULL`, `deleted_at IS NULL`) para o processo + `auto_link` no checklist, na mesma transação. `draft`
+> inexistente ou de outro tenant → 404; já finalizado → 409. Sem `draft_id` → comportamento inalterado.
+> `/drafts/{id}/commit` segue existindo (deprecated).
+
 ### Canal WhatsApp inbound (`POST /api/v1/messaging/whatsapp/webhook`, PR 2.1)
 
 `app/api/v1/messaging.py` — webhook chamado pelo **provider externo** (Evolution API)

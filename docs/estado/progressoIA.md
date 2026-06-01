@@ -1589,6 +1589,33 @@ e-mail inbound).
 
 ---
 
+## Correção dos 2 críticos da Isis — upload + persistência (31/05/2026)
+
+Auditoria `docs/arquivo/auditorias/2026-05-31_uploads_isis.md`. PR único `fix/intake-uploads-criticos-isis`.
+
+**#2 (persistência — buraco de fluxo na finalização):** o wizard finalizava por `/intake/create-case`
+sem `draft_id`; o `/commit` (que migra os docs) nunca era chamado → docs do Step 4 ficavam com
+`process_id=NULL`, invisíveis na aba Documentos. **Fix:** `IntakeCreateCaseRequest.draft_id` (opcional)
++ migração dentro do `create_case` (mesma transação): bulk dos `Document`s `intake_draft_id==draft AND
+process_id IS NULL AND deleted_at IS NULL` → `process/client/property`, `auto_link_document` no
+checklist, `draft.state=card_criado`, `AuditLog action="draft_migrated"`. 404 (inexistente/outro
+tenant), 409 (já finalizado), no-op sem docs. `/commit` mantido (deprecated no docstring). Frontend:
+`buildPayload` envia `draft_id`; `handleSubmit` trata 409.
+
+**#1 (upload em massa — transporte/UX):** `DraftDocumentUploader` reescrito — pool de 4 simultâneos
+(antes loop sequencial), retry 3× com backoff 1/2/4s nas 3 etapas (presign/PUT/confirm) distinguindo
+retryável (timeout/5xx/408/429) de 4xx, timeout backend 20s→30s, **botão remover sempre visível**
+(removido o guard por `ocr_status`), feedback por item + "tentar novamente" individual. Visual migrado
+para tokens do design system (0 ocorrências de `slate-`/`bg-white/`/`border-white/`).
+
+**Fase 6 (DELETE doc de draft):** no-op — `delete_document` já é soft-delete por id+tenant, sem guard
+de `process_id`.
+
+**Testes:** `tests/api/test_intake_draft_migration.py` (6) + `frontend/.../DraftDocumentUploader.test.tsx`
+(5). Backend 6/6; frontend vitest 36/36 (31 pré-existentes + 5); `npm run build` e `tsc --noEmit` verdes.
+
+---
+
 ## PR I — padronização visual do Intake ao design system (31/05/2026)
 
 Mudança **puramente visual** (zero alteração de lógica/fluxo). O wizard de intake — incluindo a

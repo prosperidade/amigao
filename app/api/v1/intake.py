@@ -296,6 +296,69 @@ def create_case(
             db.add(checklist)
             checklist_generated = True
 
+        # --- 5b. Migração de docs do rascunho (corrige Crítico #2 da Isis) ---
+        # Mesma transação: se o caso veio de um IntakeDraft, migra os Documents
+        # anexados no Step 4 (que nascem com process_id=NULL) para o processo e
+        # os vincula ao checklist via auto_link. Sem draft_id → fluxo atual intacto.
+        if payload.draft_id is not None:
+            from app.models.document import Document  # noqa: PLC0415
+            from app.services.checklist_engine import auto_link_document  # noqa: PLC0415
+
+            draft = (
+                db.query(IntakeDraft)
+                .filter(
+                    IntakeDraft.id == payload.draft_id,
+                    IntakeDraft.tenant_id == current_user.tenant_id,
+                )
+                .first()
+            )
+            if not draft:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Rascunho não encontrado.",
+                )
+            if draft.state == IntakeDraftState.card_criado:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Rascunho já commitado.",
+                )
+
+            migrated_docs = (
+                db.query(Document)
+                .filter(
+                    Document.intake_draft_id == draft.id,
+                    Document.process_id.is_(None),
+                    Document.deleted_at.is_(None),
+                )
+                .all()
+            )
+            for doc in migrated_docs:
+                doc.process_id = process.id
+                doc.client_id = client.id
+                if prop:
+                    doc.property_id = prop.id
+                if doc.document_type:
+                    auto_link_document(db, checklist, doc.id, doc.document_type)
+            db.flush()
+
+            draft.state = IntakeDraftState.card_criado
+            draft.linked_process_id = process.id
+
+            mig_audit = AuditLog(
+                tenant_id=current_user.tenant_id,
+                user_id=current_user.id,
+                entity_type="intake_draft",
+                entity_id=draft.id,
+                action="draft_migrated",
+                details=(
+                    f"Migrados {len(migrated_docs)} doc(s) do draft {draft.id} "
+                    f"para process {process.id}"
+                ),
+            )
+            db.add(mig_audit)
+            db.flush()
+            stamp_audit_hash(db, mig_audit)
+
         db.commit()
         db.refresh(process)
     except HTTPException:
@@ -934,6 +997,11 @@ def commit_draft(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     """
+    DEPRECATED (PR fix Isis 2026-05-31): prefira `POST /intake/create-case` com
+    `draft_id` — endpoint único que cria o caso E migra os docs do rascunho na
+    mesma transação (com auto_link no checklist). Mantido por compatibilidade;
+    não remover nem alterar a assinatura.
+
     Converte o rascunho em Process real reusando create_case.
     O draft passa a apontar pro process (linked_process_id) e muda para state=card_criado.
     Documentos vinculados ao draft são migrados pro novo processo.
