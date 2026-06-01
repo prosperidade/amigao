@@ -122,17 +122,16 @@ sem `EVOLUTION_API_URL`/`KEY`. **O que destrava:** ao reativar o WhatsApp, repor
 **Como reativar:** ver `docs/operacao/RUNBOOK_OPS.md` (seção WhatsApp/Evolution). **Origem:**
 PR ops/evolution-opcional-no-boot (01/06).
 
-**38. Falha de um agente aborta a chain inteira (legislacao mata o diagnóstico).** `app/agents/
-orchestrator.py:137` faz `if not result.success: break` — qualquer agente que falha para a chain.
-Como a `legislacao` é passo bloqueante e falha de forma intermitente (timeout de LLM / json_parse),
-ela aborta `diagnostico_completo` **antes** do `diagnostico` (4º passo) rodar → o caso fica **sem
-diagnóstico gravado** (`regulatory_diagnoses` vazio). **Reproduzido rodando** no mergulho 2026-06-01
-(AIJob 124 Timeout → chain 3/4 → 0 diagnoses p/ process 30). **O que destrava:** tornar a falha de
-agentes não-críticos **não-fatal** para a chain (princípio "radar não cancela") — ex.: frozenset
-`NON_FATAL_CHAIN_AGENTS = {legislacao}` espelhando o `NON_BLOCKING_REVIEW_AGENTS`, deixando o
-`diagnostico` rodar com contexto parcial. **Toca orquestração (chains sensíveis) → PR dedicado + aval
-do André.** **PRIORIDADE ALTA** (é a causa direta de "diagnóstico não entrega"). **Origem:** mergulho
-fluxo agêntico (01/06).
+**38. ✅ FECHADA (01/06, `fix/chain-legislacao-timeout`). Falha de um agente abortava a chain inteira
+(legislacao matava o diagnóstico).** `app/agents/orchestrator.py` agora tem exceção escopada por
+chain: em `diagnostico_completo`, `legislacao` é insumo intermediário e fica não-bloqueante tanto para
+`requires_review=True` quanto para falha/timeout. A falha é preservada em
+`ctx.chain_data["legislacao"]` e a chain continua para `diagnostico`; em chains onde `legislacao` é o
+produto final, o comportamento permanece bloqueante. **Revalidado rodando:** com timeout Gemini
+(`litellm.Timeout`, AIJob 134, ~33,6s), a chain continuou e `diagnostico` rodou (AIJob 135), entregando
+3 itens em `passivos_identificados`; em execução sem timeout, `legislacao.requires_review=True` também
+não parou a chain e `diagnostico` rodou (AIJob 139). Auditoria:
+`docs/arquivo/auditorias/2026-06-01_chain_legislacao.md`.
 
 **39. Robustez da `legislacao` (timeout/parsing).** A `legislacao` falha intermitentemente: AIJob 115
 por `json_parse` ("não foi possível extrair JSON da resposta LLM"), AIJob 124 por `litellm.Timeout`

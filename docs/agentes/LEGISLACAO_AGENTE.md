@@ -52,8 +52,9 @@ Por `ctx.metadata`/`chain_data`: `query`, `demand_type` (com fallback para
 `orgao_competente`, `etapas`, `legislacao_aplicavel`, `riscos`,
 `normas_estaduais`, `prazos_legais`, `sources`, `chunks_referenced`.
 **`requires_review=True` sempre** — é insumo regulatório que o consultor revisa
-e assina (Princípio 1). Bloqueia a chain quando exige revisão (não está em
-`NON_BLOCKING_REVIEW_AGENTS`).
+e assina (Princípio 1). Em `diagnostico_completo`, revisão e falha/timeout são
+não-bloqueantes porque a etapa é insumo do `diagnostico`; nas chains em que a
+legislação é produto final, continua bloqueante.
 
 ## 7. Knowledge essencial
 
@@ -72,6 +73,9 @@ e assina (Princípio 1). Bloqueia a chain quando exige revisão (não está em
 - Na chain `analise_regulatoria` (`["legislacao"]`) e `enquadramento_regulatorio`
   (`["extrator", "legislacao"]`), disparada ao avançar para a macroetapa
   `caminho_regulatorio` (`MACROETAPA_AGENT_CHAIN`).
+- Na chain `diagnostico_completo`, roda entre `auditor_imovel` e `diagnostico`.
+  Desde 2026-06-01, timeout ou `requires_review=True` não abortam a entrega do
+  diagnóstico; o erro/output fica em `chain_data["legislacao"]`.
 - Por pedido direto via UI ("rodar legislação no processo").
 
 ## 9. Cross-agente
@@ -92,6 +96,9 @@ e assina (Princípio 1). Bloqueia a chain quando exige revisão (não está em
   condicionantes_antigas) têm regras placeholder no `intake_classifier`;
   refinamento futuro.
 - Sem skill procedural formal (dívida documental menor).
+- **#39** — robustez de timeout/parsing permanece aberta. Medição em 2026-06-01
+  apontou timeout na chamada Gemini (`gemini/gemini-2.5-flash`) com RAG local em
+  ~4,5s e contexto por metadados em ~0,5s.
 
 ## 11. Próximas frentes
 

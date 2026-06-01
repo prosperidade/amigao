@@ -53,6 +53,28 @@ CHAINS: dict[str, list[str]] = {
 # (chain_data), não produto final entregue ao consultor.
 NON_BLOCKING_REVIEW_AGENTS: frozenset[str] = frozenset({"auditor_imovel"})
 
+# Exceções por chain: agentes que são insumo intermediário para o produto final.
+# Em `diagnostico_completo`, a legislação alimenta o diagnóstico, mas não é o
+# artefato final que o consultor assina. Se ela pedir revisão ou falhar por
+# timeout/provider, o diagnóstico ainda deve ser entregue com contexto parcial.
+NON_BLOCKING_REVIEW_BY_CHAIN: dict[str, frozenset[str]] = {
+    "diagnostico_completo": frozenset({"legislacao"}),
+}
+NON_BLOCKING_FAILURE_BY_CHAIN: dict[str, frozenset[str]] = {
+    "diagnostico_completo": frozenset({"legislacao"}),
+}
+
+
+def _is_non_blocking_review(chain_name: str, agent_name: str) -> bool:
+    return (
+        agent_name in NON_BLOCKING_REVIEW_AGENTS
+        or agent_name in NON_BLOCKING_REVIEW_BY_CHAIN.get(chain_name, frozenset())
+    )
+
+
+def _is_non_blocking_failure(chain_name: str, agent_name: str) -> bool:
+    return agent_name in NON_BLOCKING_FAILURE_BY_CHAIN.get(chain_name, frozenset())
+
 
 # Mapeamento intent -> chain (usado pela API)
 INTENT_TO_CHAIN: dict[str, str] = {
@@ -131,10 +153,22 @@ class OrchestratorAgent:
             result = agent.run()
             results.append(result)
 
-            # Acumular dados para o proximo agente
-            ctx.chain_data[agent_name] = result.data
+            # Acumular dados para o proximo agente. Em falha não-bloqueante,
+            # preserva o erro no chain_data para o downstream saber que o
+            # contexto veio parcial, sem precisar inferir de um dict vazio.
+            ctx.chain_data[agent_name] = result.data if result.success else {
+                "success": False,
+                "error": result.error,
+                "agent_name": agent_name,
+            }
 
             if not result.success:
+                if _is_non_blocking_failure(chain_name, agent_name):
+                    logger.warning(
+                        "orchestrator: chain '%s' continua apos falha do agente '%s' (NON_BLOCKING): %s",
+                        chain_name, agent_name, result.error,
+                    )
+                    continue
                 logger.warning(
                     "orchestrator: chain '%s' parou — agente '%s' falhou: %s",
                     chain_name, agent_name, result.error,
@@ -142,7 +176,7 @@ class OrchestratorAgent:
                 break
 
             if stop_on_review and result.requires_review:
-                if agent_name in NON_BLOCKING_REVIEW_AGENTS:
+                if _is_non_blocking_review(chain_name, agent_name):
                     # Sinaliza review (UI exibe badge) mas continua a chain.
                     # Output ja foi acumulado em chain_data acima — proximos agentes
                     # podem consumir os findings/divergencias via chain_data[agent_name].

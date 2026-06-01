@@ -10,6 +10,8 @@
 
 **Pulso 2026-06-01 (mergulho fluxo agêntico):** diagnóstico por EXECUÇÃO (sistema rodando) do fluxo intake→agentes. Reproduzido ponta a ponta: OCR+extrator+atendimento **funcionam** (caso de teste: matrícula → 12 campos). O que trava a entrega do diagnóstico: (1) `create-case` dispara só `atendimento` — a chain `diagnostico_completo` não auto-roda; (2) na chain o `extrator` pulava sem `document_id`; (3) a `legislacao` é bloqueante e flaky (timeout/json_parse) e ao falhar **aborta a chain antes do `diagnostico`** → 0 diagnósticos. **Corrigidos neste PR (revalidados rodando):** CORS-mascara-500 (500 agora carrega ACAO+request_id), path do WS (`/api/v1/ws` conecta), gap do extrator (resolve docs do processo → 9 campos, não pula). **Viram dívida:** #38 (chain aborta na legislacao — ALTA), #39 (robustez legislacao), #40 (2 SKILL.md inválidos), #41 (auto-trigger pós-case — decisão produto), #42 (bucket MinIO presigned), #43 (Error Boundary global). Doc: `docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agentico.md`. Branch `fix/mergulho-fluxo-agentico`.
 
+**Pulso 2026-06-01 (PR #38 — chain legislação):** `diagnostico_completo` agora entrega diagnóstico mesmo quando `legislacao` falha ou pede revisão. Medição rodando mostrou RAG local em ~4,5s, contexto por metadados em ~0,5s e timeout real na chamada Gemini (`gemini/gemini-2.5-flash`, `litellm.Timeout`) em ~33s. Correção escopada em `app/agents/orchestrator.py`: em `diagnostico_completo`, `legislacao` é insumo intermediário e fica não-bloqueante para `requires_review=True` e falha; o erro fica em `chain_data["legislacao"]` e `diagnostico` continua com contexto parcial. Revalidado rodando no `process_id=30`/`tenant_id=2`: cenário com timeout → `diagnostico` rodou depois e entregou 3 passivos (AIJob 135); cenário sem timeout mas com `requires_review=True` → `diagnostico` também rodou e entregou 3 passivos (AIJob 139). Dívida #38 fechada; #39 permanece para robustez própria da legislação. Doc: `docs/arquivo/auditorias/2026-06-01_chain_legislacao.md`.
+
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
 ---
@@ -289,7 +291,7 @@
 
 ### Chains de orquestração (9)
 
-Definidas em `app/agents/orchestrator.py:CHAINS`: `intake`, `diagnostico_completo`, `gerar_proposta`, `gerar_documento`, `analise_regulatoria`, `enquadramento_regulatorio`, `analise_financeira`, `monitoramento`, `marketing_content`. Chain principal: `diagnostico_completo` (extrator → legislacao → diagnostico → redator).
+Definidas em `app/agents/orchestrator.py:CHAINS`: `intake`, `diagnostico_completo`, `gerar_proposta`, `gerar_documento`, `analise_regulatoria`, `enquadramento_regulatorio`, `analise_financeira`, `monitoramento`, `marketing_content`. Chain principal: `diagnostico_completo` (extrator → auditor_imovel → legislacao → diagnostico).
 
 ### Models SQLAlchemy (28 entidades)
 

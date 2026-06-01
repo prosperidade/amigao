@@ -1,8 +1,9 @@
-# ADR-011 — Agentes não-bloqueantes na chain (`NON_BLOCKING_REVIEW_AGENTS`)
+# ADR-011 — Agentes não-bloqueantes na chain
 
 - **Status:** Aceita
 - **Data:** 2026-05-24
 - **Implementada em:** Onda B, commit `6b25602` (`feat/onda-bc-pipeline-ativacao`)
+- **Atualizada em:** 2026-06-01 (`fix/chain-legislacao-timeout`)
 - **Relacionada a:** ADR-006 (skills procedurais), ADR-007 (StageOutputContent), Princípio 1 ("IA propõe; humano decide e assina")
 
 ## Contexto
@@ -35,6 +36,16 @@ agente, e **não produto final** entregue diretamente ao consultor. O auditor qu
 divergências alimentam o Diagnóstico; o produto final que o consultor valida é o diagnóstico, não
 o finding isolado.
 
+Atualização 2026-06-01: a mesma distinção foi refinada para exceções escopadas por chain:
+
+- `NON_BLOCKING_REVIEW_BY_CHAIN["diagnostico_completo"] = {"legislacao"}`
+- `NON_BLOCKING_FAILURE_BY_CHAIN["diagnostico_completo"] = {"legislacao"}`
+
+Na chain `diagnostico_completo`, a legislação é contexto para o diagnóstico. Se ela falha por
+timeout/provider ou retorna `requires_review=True`, o erro/output fica registrado e o diagnóstico
+continua com contexto parcial. Em chains regulatórias onde `legislacao` é o produto final, ela
+continua bloqueante.
+
 ## Consequências
 
 **Positivas**
@@ -45,6 +56,7 @@ o finding isolado.
 **Trade-offs / a ter em mente**
 - Agentes a jusante (Diagnóstico) consomem findings **ainda não validados** pelo consultor. Isso é aceitável e coerente com o diagnóstico **preliminar** (triagem, H3 da skill de Diagnóstico — confiança baixa/média, hipóteses sinalizadas), mas exige que o preliminar use linguagem de cautela (P3) e que o consultor valide o conjunto ao final.
 - A lista é um ponto de decisão sensível: incluir nela um agente que é **produto final** faria o consultor perder a janela de validação antes do downstream. O critério ("insumo, não produto") deve ser respeitado a cada novo agente.
+- Exceções por falha precisam ser escopadas por chain. A mesma etapa pode ser insumo em uma chain e produto final em outra.
 
 ## Alternativas consideradas
 

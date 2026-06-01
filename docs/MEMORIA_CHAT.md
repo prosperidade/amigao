@@ -155,3 +155,12 @@ em `docs/agentes/` são a fonte de verdade verificada.
   #43 Error Boundary global. **Infra p/ André:** Cloudflare WebSockets=ON +
   `VITE_WS_URL=wss://api.regenteambiental.com.br`. Doc:
   `docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agentico.md`.
+- **2026-06-01 — PR #38 chain legislação (`fix/chain-legislacao-timeout`).** Fechou a dívida #38:
+  `diagnostico_completo` não morre mais se `legislacao` falhar ou pedir revisão. Medido rodando:
+  RAG local ~4,5s, contexto por metadados ~0,5s, timeout real na chamada Gemini
+  (`gemini/gemini-2.5-flash`, `litellm.Timeout`, ~33s). Em `diagnostico_completo`, `legislacao`
+  virou não-bloqueante por chain para `requires_review=True` e falha; o erro fica em
+  `chain_data["legislacao"]` e `diagnostico` roda com contexto parcial. Revalidação: com timeout,
+  `diagnostico` rodou depois e entregou 3 passivos (AIJob 135); sem timeout, mas com
+  `legislacao.requires_review=True`, também rodou e entregou 3 passivos (AIJob 139). #39 continua
+  aberta para robustez própria da legislação.
