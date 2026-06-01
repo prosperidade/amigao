@@ -122,6 +122,49 @@ sem `EVOLUTION_API_URL`/`KEY`. **O que destrava:** ao reativar o WhatsApp, repor
 **Como reativar:** ver `docs/operacao/RUNBOOK_OPS.md` (seção WhatsApp/Evolution). **Origem:**
 PR ops/evolution-opcional-no-boot (01/06).
 
+**38. Falha de um agente aborta a chain inteira (legislacao mata o diagnóstico).** `app/agents/
+orchestrator.py:137` faz `if not result.success: break` — qualquer agente que falha para a chain.
+Como a `legislacao` é passo bloqueante e falha de forma intermitente (timeout de LLM / json_parse),
+ela aborta `diagnostico_completo` **antes** do `diagnostico` (4º passo) rodar → o caso fica **sem
+diagnóstico gravado** (`regulatory_diagnoses` vazio). **Reproduzido rodando** no mergulho 2026-06-01
+(AIJob 124 Timeout → chain 3/4 → 0 diagnoses p/ process 30). **O que destrava:** tornar a falha de
+agentes não-críticos **não-fatal** para a chain (princípio "radar não cancela") — ex.: frozenset
+`NON_FATAL_CHAIN_AGENTS = {legislacao}` espelhando o `NON_BLOCKING_REVIEW_AGENTS`, deixando o
+`diagnostico` rodar com contexto parcial. **Toca orquestração (chains sensíveis) → PR dedicado + aval
+do André.** **PRIORIDADE ALTA** (é a causa direta de "diagnóstico não entrega"). **Origem:** mergulho
+fluxo agêntico (01/06).
+
+**39. Robustez da `legislacao` (timeout/parsing).** A `legislacao` falha intermitentemente: AIJob 115
+por `json_parse` ("não foi possível extrair JSON da resposta LLM"), AIJob 124 por `litellm.Timeout`
+("Connection timed out after None seconds" — timeout aparentemente sem limite). Endurecer: timeout
+explícito por chamada, parsing tolerante de JSON + retry, e/ou fallback de provider mais robusto.
+**Origem:** mergulho fluxo agêntico (01/06).
+
+**40. Dois `SKILL.md` inválidos silenciosamente ignorados.** `skills.discover` pula:
+`auditor_imovel/analise_divergencias_documentais/SKILL.md` (`applies_to` deve ser mapping, veio str)
+e `diagnostico/situacao_ambiental_imovel_rural/SKILL.md` (campo `agent` obrigatório no front-matter).
+Os agentes rodam **sem** suas skills procedurais → qualidade degradada e silenciosa. Corrigir o
+front-matter dos 2 arquivos. **Origem:** mergulho fluxo agêntico (01/06).
+
+**41. `create-case` não auto-dispara a chain de diagnóstico.** Ao finalizar o caso, só o
+`atendimento` roda; o consultor precisa acionar diagnóstico/legislação manualmente. Decisão de
+produto/custo: auto-rodar `diagnostico_completo` ao criar o caso (custo de LLM por caso) ou manter
+manual com um botão claro? **Decisão pendente do André.** **Origem:** mergulho fluxo agêntico (01/06).
+
+**42. Bucket MinIO não garantido na geração de URL presigned.** `_ensure_bucket_exists`
+(`app/services/storage.py`) só roda em put/get server-side, não ao gerar a URL presigned. Em ambiente
+novo, o PUT do consultor direto no MinIO dá **404 NoSuchBucket** (visto no mergulho). Prod já tem o
+bucket (latente), mas o intake quebra em qualquer MinIO recém-criado. Garantir o bucket na geração da
+presigned URL (ou no startup). **Origem:** mergulho fluxo agêntico (01/06).
+
+**43. Error Boundary único na raiz apaga o app inteiro.** `frontend/src/App.tsx:33` envolve toda a
+aplicação em um único `<ErrorBoundary>`. Qualquer crash de render (ex.: componente lê `undefined`
+quando uma query falhou) **apaga a aplicação inteira** ("Algo deu errado"), incluindo a navegação.
+O `QueryClient` não usa `throwOnError`, então o gatilho é render-time, não a query em si. Adicionar
+boundaries por rota/seção (degrade local em vez de nuke global). O **gatilho exato** ("Algo deu
+errado" pós-IA/criar-caso) **não foi reproduzido** (precisa de navegador/devtools) → repro pendente.
+**Origem:** mergulho fluxo agêntico (01/06).
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos

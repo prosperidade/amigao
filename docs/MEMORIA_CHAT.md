@@ -141,3 +141,17 @@ em `docs/agentes/` são a fonte de verdade verificada.
   saíram do `docker-compose.yml`; o **código do provider e o webhook permanecem** — só desacoplados —
   e o webhook responde 503 "WhatsApp não configurado" sem as envs. Validado: `docker compose up -d`
   do core sobe healthy + `/health` 200. Dívida #37 (reintegrar Evolution); reativação no RUNBOOK_OPS.
+- **2026-06-01 — Mergulho fluxo agêntico (`fix/mergulho-fluxo-agentico`).** Diagnóstico por EXECUÇÃO
+  (não leitura) do fluxo intake→agentes, sistema rodando (AI_ENABLED=true). **Veredito:** funciona em
+  pedaços — OCR+extrator+atendimento entregam (caso reproduzido: matrícula → 12 campos); o que trava
+  a entrega do diagnóstico é (a) `create-case` dispara só `atendimento` (chain de diagnóstico não
+  auto-roda), (b) na chain o `extrator` pulava sem `document_id`, (c) a `legislacao` é bloqueante e
+  flaky e ao falhar **aborta a chain antes do `diagnostico`** (0 diagnoses gravados). **3 P0
+  corrigidos e revalidados rodando:** (1) CORS mascarava 500 — handler global reanexa CORS+request_id
+  (o "threads CORS" de prod é 500 mascarado, não config); (2) WS path — rota também sob `/api/v1`
+  (prod batia em `/api/v1/ws`→403); (3) extrator resolve os docs do processo quando recebe só
+  `process_id`. **Viraram dívida:** #38 chain aborta na legislacao (ALTA), #39 robustez legislacao,
+  #40 SKILL.md inválidos, #41 auto-trigger pós-case (decisão produto), #42 bucket MinIO presigned,
+  #43 Error Boundary global. **Infra p/ André:** Cloudflare WebSockets=ON +
+  `VITE_WS_URL=wss://api.regenteambiental.com.br`. Doc:
+  `docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agentico.md`.

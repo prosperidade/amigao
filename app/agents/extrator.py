@@ -33,6 +33,55 @@ class ExtratorAgent(BaseAgent):
         doc_type = self.ctx.metadata.get("doc_type", "outro")
         document_id = self.ctx.metadata.get("document_id")
 
+        # Resolução automática de contexto (2026-06-01): quando o extrator é
+        # chamado dentro de uma chain (ex.: diagnostico_completo) ou pela aba
+        # Agentes apenas com process_id — SEM document_id/text no metadata — ele
+        # antes pulava ("chamado sem documento") e o caso ficava sem extração no
+        # fluxo agêntico. O consultor nunca digita id: o sistema propaga o
+        # contexto. Aqui, havendo process_id, resolvemos os documentos do processo
+        # que já têm OCR e extraímos deles (mesma fonte do
+        # POST /processes/{id}/extract), agregando os campos.
+        if not document_id and not text and getattr(self.ctx, "process_id", None):
+            docs = (
+                self.ctx.session.query(Document)
+                .filter(
+                    Document.process_id == self.ctx.process_id,
+                    Document.tenant_id == self.ctx.tenant_id,
+                    Document.deleted_at.is_(None),
+                    Document.extracted_text.isnot(None),
+                )
+                .order_by(Document.id)
+                .all()
+            )
+            docs = [d for d in docs if (d.extracted_text or "").strip()]
+            if docs:
+                aggregated: dict[str, Any] = {}
+                per_doc: list[dict[str, Any]] = []
+                for d in docs:
+                    f, _ = extract_document_fields(
+                        text=d.extracted_text or "",
+                        doc_type=d.document_type or "outro",
+                        document_id=d.id,
+                        tenant_id=self.ctx.tenant_id,
+                        save_job=False,
+                        db_session=self.ctx.session,
+                    )
+                    per_doc.append(
+                        {"document_id": d.id, "doc_type": d.document_type, "fields_count": len(f)}
+                    )
+                    for k, v in (f or {}).items():
+                        if k not in aggregated and v not in (None, "", {}, []):
+                            aggregated[k] = v
+                return {
+                    "extracted_fields": aggregated,
+                    "doc_type": "multiplos",
+                    "document_id": None,
+                    "documents": per_doc,
+                    "fields_count": len(aggregated),
+                    "resolved_from_process": self.ctx.process_id,
+                }
+            # Processo sem documentos com OCR ainda → cai no skip orientativo abaixo.
+
         # Se nao tem document_id nem text, retorna vazio (permite chain continuar)
         # e dá orientação acionável — antes a mensagem "Nenhum documento fornecido"
         # virava ruído sem caminho de saída na UI de Agentes.
