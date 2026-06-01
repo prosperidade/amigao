@@ -48,6 +48,13 @@ respondeu "não sei responder" — é label sem régua escrita; hoje o consultor
 Validar o critério na tela quando a Isis testar o wizard. **Proibido** implementar critério
 agora (decisão pendente da sócia). **Origem:** PR intake campos derivados (30/05).
 
+**36. Validade e alerta proativo de credenciais de portal.** O prompt de UI citava `valid_until`
+e badge de vencimento, mas o contrato real em `CredentialCreate`/`CredentialResponse` não tem esse
+campo; a UI do Cliente Hub foi implementada sem inventá-lo. Se a operação precisar controlar
+expiração de senhas/procurações/acessos de portal, modelar `valid_until` no backend, expor na API e
+criar alerta proativo (cron/Vigia ou dashboard). **Origem:** UI das credenciais no Cliente Hub
+(31/05), divergência entre prompt e schema real.
+
 **21. Criar WorkflowTemplate para demand_types sem cobertura.** Auditoria de cobertura
 em `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md` aponta ausência de
 template ativo para: `prad`, `sobreposicao`, `supressao`, `due_diligence`,

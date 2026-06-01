@@ -5,6 +5,7 @@
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
 **Pulso 2026-05-31 (PR I — visual):** wizard de intake (`/intake`) padronizado ao design system — tema claro alinhado ao Dashboard, tokens (`bg-background`/`bg-card`/`bg-primary`) no lugar do tema escuro próprio (gradiente slate→emerald + glassmorphism). Só estilo; funcionalidade inalterada; `npm run build` verde. Pendência: `DiagnosisPanel`/`DraftDocumentUploader` ainda escuros (fora de escopo). Origem: auditoria `docs/arquivo/auditorias/2026-05-31_ui_credenciais_intake.md` (Frente C).
+**Pulso 2026-05-31 (UI Credenciais):** Cliente Hub ganhou aba **Credenciais** consumindo `/api/v1/credentials` (CRUD completo por cliente). A resposta mostra `has_password` como badge "Senha protegida"; a UI não tenta revelar senha e no edit omite `password` quando o campo fica vazio, preservando a senha atual no backend. Contrato real confirmado: campos `portal`, `label`, `login`, `password`, `url`, `notes` — não há `valid_until` no backend atual (dívida #36 aberta para validade/alerta proativo).
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
@@ -411,6 +412,12 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   de 4 simultâneos, retry 3× com backoff 1/2/4s, timeout backend 20s→30s, **botão remover sempre
   visível**, feedback por item + "tentar novamente" individual; visual migrado pros tokens do design
   system. **Testes:** 6 backend (migração) + 5 frontend (uploader); build/tsc/vitest verdes.
+- **Pulso 2026-05-31 (`feat/ui-credenciais-cliente-hub` — UI):** aba **Credenciais** no Cliente Hub,
+  com listagem, empty/loading/error, modal create/edit e confirmação de exclusão contra
+  `/api/v1/credentials`. Respeita a decisão de produto: senha nunca volta/é revelada; `has_password`
+  vira badge visual; PATCH sem senha preserva a senha. Testes focados do componente: **4/4 verdes**;
+  `npm run build` verde. Docker/compose e verificação SQL manual ficaram bloqueados pelo ambiente
+  local (`docker ps` sem acesso ao pipe; `EVOLUTION_API_KEY` ausente no compose).
 
 ## Infraestrutura
 
