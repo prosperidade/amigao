@@ -62,6 +62,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         req_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())[:8]
+        # Persistido em request.state para o handler global de exceções (que roda
+        # fora desta middleware, no ServerErrorMiddleware) conseguir reportá-lo.
+        request.state.request_id = req_id
         user_id, tenant_header = _extract_auth_context(request)
         incoming_trace_id, _ = parse_traceparent(request.headers.get("traceparent"))
         trace_token, span_token, trace_id, span_id = set_trace_context(trace_id=incoming_trace_id)

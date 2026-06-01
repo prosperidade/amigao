@@ -52,6 +52,24 @@ def test_websocket_valid_token(client: TestClient, db_session, monkeypatch):
         assert "ping" in data
 
 
+def test_websocket_valid_token_api_v1_path(client: TestClient, db_session, monkeypatch):
+    """WS também aceita conexão sob /api/v1/ws (2026-06-01).
+
+    Em produção o front deriva a URL do WS de VITE_API_URL (que inclui /api/v1),
+    conectando em `/api/v1/ws`. A rota nasceu só na raiz (`/ws`) → 403 em prod.
+    Montada nos dois caminhos, ambos devem aceitar a conexão."""
+    monkeypatch.setattr("app.db.session.SessionLocal", lambda: db_session)
+    monkeypatch.setattr("app.api.websockets.emit_operational_alert", lambda **kw: None)
+
+    tenant, user = _create_user(db_session, email="ws.apiv1@example.com")
+    token = create_access_token(subject=user.id, tenant_id=tenant.id)
+
+    with client.websocket_connect(f"{settings.API_V1_STR}/ws?token={token}") as ws:
+        ws.send_text("ping")
+        data = ws.receive_text()
+        assert "ping" in data
+
+
 def test_websocket_invalid_token_rejected():
     """JWT decode raises JWTError for a completely invalid token."""
     with pytest.raises(JWTError):

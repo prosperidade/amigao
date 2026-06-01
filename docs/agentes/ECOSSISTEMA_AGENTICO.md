@@ -110,6 +110,26 @@ usuário (não gastar crédito do sistema). Provider chinês default = `deepseek
 `MACROETAPA_AGENT_CHAIN` (`app/models/macroetapa.py`) liga as 7 macroetapas
 pré-contrato a chains. `NON_BLOCKING_REVIEW_AGENTS = {auditor_imovel}`.
 
+### 4.1 Realidade da orquestração no fluxo de intake (mergulho 2026-06-01)
+
+Verificado RODANDO (ver `docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agentico.md`):
+
+- **`POST /intake/create-case` dispara SOMENTE o `atendimento`.** A chain de
+  diagnóstico (`diagnostico_completo`) **não** é acionada automaticamente ao
+  finalizar o caso — o processo nasce em `entrada_demanda` e o diagnóstico só
+  roda por invocação explícita (`/agents/chain-async`, aba Agentes, ou
+  `POST /processes/{id}/diagnoses`). Auto-trigger é decisão de produto em aberto
+  (dívida #41).
+- **Falha de UM agente ABORTA a chain inteira** (`orchestrator.py:137` — `if not
+  result.success: break`). Como a `legislacao` é bloqueante e falha de forma
+  intermitente (timeout/json_parse), ela mata o `diagnostico` (que vem depois) →
+  caso sem diagnóstico gravado. Plano: `NON_FATAL_CHAIN_AGENTS` (dívida #38).
+- **`extrator` resolve contexto sozinho (fix 2026-06-01):** quando chamado só com
+  `process_id` (caso da chain e da aba Agentes), ele agora resolve os documentos
+  do processo já OCR'd e extrai — antes pulava com "chamado sem documento". Os
+  consumidores downstream (`auditor_imovel`, `diagnostico`) leem os documentos do
+  processo diretamente.
+
 ## 5. Tools shared
 
 - **5.1 LiteLLM gateway** (`app/core/ai_gateway.py`) — camada única; **agora

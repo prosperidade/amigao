@@ -1691,3 +1691,45 @@ up; `curl http://localhost:8000/health` → `{"status":"ok",...}` HTTP 200. `app
 
 **Dívida:** #37 (reintegrar Evolution ao compose/boot quando o WhatsApp for reativado). Reativação
 documentada em `docs/operacao/RUNBOOK_OPS.md`.
+
+---
+
+## Mergulho fluxo agêntico — diagnóstico por execução + 3 P0 (01/06/2026)
+
+Diagnóstico do fluxo intake→agentes RODANDO (não leitura). Doc completo:
+`docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agentico.md`.
+
+**Reproduzido ponta a ponta (sistema de pé, AI_ENABLED=true):**
+- `/intake/classify` → demand_type=misto (LLM) ✅
+- draft → upload MinIO → Document 49 (intake_draft_id=11, process_id=NULL) ✅
+- `/import` → ocr_then_extract: OCR pypdf 345 chars → extrator com document_id=49
+  → **12 campos** (matrícula 12.345, Romilton, 250.0 ha, MS) ✅
+- `create-case` → process 30; doc migrado (process_id=30); checklist auto-link
+  (matricula→received); **só `atendimento` dispara** (AIJob 121) ⚠️
+- chain `diagnostico_completo`: extrator SKIP → auditor ok → **legislacao Timeout
+  (bloqueante) → chain parou 3/4 → diagnostico NÃO rodou → 0 diagnoses** ❌
+
+**Causa raiz da "entrega de diagnóstico não acontece":** soma de (a) create-case
+não auto-dispara a chain, (b) extrator pulava na chain sem document_id, (c)
+legislacao bloqueante e flaky aborta a chain antes do diagnostico.
+
+**Corrigidos neste PR (revalidados rodando, antes/depois):**
+1. **CORS mascara 500** — handler global reanexa CORS+request_id na resposta 500.
+   Antes: 500 sem ACAO (navegador via "CORS"). Depois: 500 com
+   `access-control-allow-origin` + `{detail,request_id}`. (`app/main.py`)
+2. **Path do WS** — router montado também sob `/api/v1`. Antes `/api/v1/ws`=403;
+   depois `/ws` e `/api/v1/ws` conectam. (`app/main.py`)
+3. **Gap do extrator** — `extrator.execute()` resolve os docs OCR do processo
+   quando recebe só `process_id`. Antes: skip (0 campos). Depois:
+   resolved_from_process=30, 9 campos. (`app/agents/extrator.py`)
+
+**Dívidas abertas:** #38 (chain aborta na legislacao — ALTA), #39 (robustez
+legislacao), #40 (2 SKILL.md inválidos), #41 (auto-trigger pós-case — decisão
+produto), #42 (bucket MinIO presigned), #43 (Error Boundary global).
+
+**Infra p/ André:** Cloudflare WebSockets=ON; setar VITE_WS_URL=
+wss://api.regenteambiental.com.br (sem /api/v1). CORS de prod já OK — o "threads
+CORS" é 500 mascarado; pegar request_id no log do regente-api.
+
+**Pergunta em aberto (não reproduzida):** gatilho exato do Error Boundary
+(precisa navegador) e qual 500 específico o /threads dá em produção.

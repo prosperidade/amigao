@@ -220,6 +220,37 @@ em `/api/v1/messaging/whatsapp/webhook`.
      (QR no Manager da Evolution).
   4. Conferir: o webhook deixa de responder 503 quando as envs estão presentes.
 
+## WebSocket e CORS em produção (mergulho 2026-06-01)
+
+### WebSocket (tempo real / toasts de agentes)
+- A rota é `@router.websocket("/ws")` com token por query param `?token=<jwt>`.
+  Desde 2026-06-01 está montada **nos dois caminhos**: `/ws` (dev) e
+  `/api/v1/ws` (produção — o front deriva a URL de `VITE_API_URL`, que inclui
+  `/api/v1`). Antes, produção batia em `/api/v1/ws` → 403.
+- **Cloudflare:** Network → **WebSockets = ON** (padrão; confirmar que não foi
+  desligado). Com proxy laranja em `api.regenteambiental.com.br`, o upgrade passa.
+- **Render:** Web Service suporta WS nativamente — nada a configurar além do
+  deploy.
+- **Recomendado (limpo):** setar no build do front
+  `VITE_WS_URL=wss://api.regenteambiental.com.br` (SEM `/api/v1`). Com o fix de
+  path, `/api/v1/ws` também funciona sem essa env.
+- **Degradação:** se o WS cai, a UI **não** quebra — o `onerror` é silencioso
+  (só não chegam os toasts em tempo real). WS **não** é causa do Error Boundary.
+
+### CORS — "bloqueado por CORS" pode ser um 500 mascarado
+- `BACKEND_CORS_ORIGINS` de produção (`render.yaml`) já inclui os 3 domínios
+  (`app.`, raiz e `www.regenteambiental.com.br`). CORS de config está OK.
+- **Importante:** uma resposta **500** carregava antes resposta SEM
+  `Access-Control-Allow-Origin` (o `ServerErrorMiddleware` fica acima do
+  `CORSMiddleware`) → o navegador reportava como "bloqueado por CORS",
+  **mascarando o erro real**. Desde 2026-06-01 um handler global reanexa os
+  cabeçalhos CORS + `request_id` na resposta 500.
+- **Diagnóstico:** se um endpoint "der CORS" no navegador mas `/clients` e
+  `/properties` não derem, é quase certo um **500 no endpoint**. Agora o corpo do
+  500 traz `request_id` — cruze no log do `regente-api` (Render) para a
+  stacktrace. Sempre `curl` direto o endpoint com `Origin` + `Authorization`
+  antes de mexer em CORS (ver também `feedback_cors_error_can_mask_4xx`).
+
 ## Backups e recuperação
 
 ### Estratégia recomendada

@@ -1,8 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -134,6 +135,31 @@ app.add_middleware(
     ],
 )
 
+# Handler global de exceções não tratadas (2026-06-01).
+# Sem isto, um 500 propaga até o ServerErrorMiddleware (acima do CORSMiddleware)
+# e a resposta sai SEM `Access-Control-Allow-Origin` — o navegador então reporta
+# o erro como "bloqueado por CORS", mascarando o 500 real. Aqui reanexamos os
+# cabeçalhos CORS à resposta de erro para que o front receba o status/corpo reais
+# (e o x-request-id para rastrear no log). Não substitui o tratamento de
+# HTTPException (que continua passando pelo ExceptionMiddleware interno).
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    logger.exception("unhandled_exception path=%s request_id=%s", request.url.path, request_id)
+    headers: dict[str, str] = {}
+    origin = request.headers.get("origin")
+    allowed = settings.cors_origins_list
+    if origin and (origin in allowed or "*" in allowed):
+        headers["Access-Control-Allow-Origin"] = "*" if "*" in allowed else origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "request_id": request_id},
+        headers=headers,
+    )
+
+
 # Rotas
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Autenticação"])
 app.include_router(clients.router, prefix=f"{settings.API_V1_STR}/clients", tags=["Clientes"])
@@ -165,6 +191,11 @@ app.include_router(legislation_alerts.router, prefix=f"{settings.API_V1_STR}/leg
 app.include_router(knowledge.router, prefix=f"{settings.API_V1_STR}/knowledge", tags=["Knowledge Catalog (RAG)"])
 app.include_router(waitlist.router, prefix=f"{settings.API_V1_STR}/waitlist", tags=["Waitlist (Regente)"])
 app.include_router(websocket_router, tags=["Tempo Real"])
+# Também sob o prefixo /api/v1 (2026-06-01): em produção o front deriva a URL do
+# WS a partir de VITE_API_URL (que já inclui /api/v1) → conecta em
+# `/api/v1/ws`. A rota nasceu na raiz (`/ws`), então o path de produção dava 403.
+# Montar nos dois caminhos mantém dev (`/ws`) e produção (`/api/v1/ws`) válidos.
+app.include_router(websocket_router, prefix=settings.API_V1_STR, tags=["Tempo Real"])
 
 
 @app.get("/")
