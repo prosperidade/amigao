@@ -413,15 +413,15 @@ export default function IntakeWizard() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 flex items-start justify-center py-10 px-4">
+    <div className="min-h-screen bg-background flex items-start justify-center py-10 px-4">
       <div className="w-full max-w-5xl">
 
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-white tracking-tight">
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">
             🌿 Novo Caso
           </h1>
-          <p className="text-slate-400 mt-1">Cadastro guiado de caso ambiental</p>
+          <p className="text-muted-foreground mt-1">Cadastro guiado de caso ambiental</p>
           {/* Sprint F Bloco 3: rascunho expira em 15 dias */}
           {draftExpiresAt && <DraftExpirationBadge expiresAt={draftExpiresAt} />}
         </div>
@@ -435,13 +435,13 @@ export default function IntakeWizard() {
             return (
               <div key={num} className="flex-1 flex flex-col items-center gap-1">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
-                  done ? 'bg-emerald-500 border-emerald-500 text-white' :
-                  active ? 'bg-white border-white text-slate-900' :
-                  'bg-transparent border-slate-600 text-slate-500'
+                  done ? 'bg-primary border-primary text-primary-foreground' :
+                  active ? 'bg-primary/10 border-primary text-primary' :
+                  'bg-background border-border text-muted-foreground'
                 }`}>
                   {done ? '✓' : num}
                 </div>
-                <span className={`text-[10px] ${active ? 'text-white font-semibold' : 'text-slate-500'}`}>
+                <span className={`text-[10px] ${active ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
                   {labels[i]}
                 </span>
               </div>
@@ -451,10 +451,10 @@ export default function IntakeWizard() {
 
         {/* Card + preview lateral (2 colunas quando há rascunho com docs) */}
         <div className={`grid gap-6 items-start ${draftId ? 'lg:grid-cols-[1fr_360px]' : ''}`}>
-        <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
 
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
+            <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
               {error}
             </div>
           )}
@@ -463,8 +463,8 @@ export default function IntakeWizard() {
           {step === 0 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-white mb-1">O que você está cadastrando agora?</h2>
-                <p className="text-slate-400 text-sm">Escolha o cenário para o sistema adaptar o fluxo.</p>
+                <h2 className="text-xl font-semibold text-foreground mb-1">O que você está cadastrando agora?</h2>
+                <p className="text-muted-foreground text-sm">Escolha o cenário para o sistema adaptar o fluxo.</p>
               </div>
 
               <div className="grid gap-3">
@@ -477,10 +477,10 @@ export default function IntakeWizard() {
                       disabled={!opt.available}
                       className={`text-left p-4 rounded-xl border transition-all flex items-start gap-3 ${
                         !opt.available
-                          ? 'bg-white/5 border-white/5 text-slate-500 cursor-not-allowed opacity-50'
+                          ? 'bg-muted border-border text-muted-foreground cursor-not-allowed opacity-60'
                           : active
-                          ? 'bg-emerald-500/10 border-emerald-500 text-white'
-                          : 'bg-white/5 border-white/10 text-slate-300 hover:border-white/30'
+                          ? 'bg-primary/10 border-primary text-foreground'
+                          : 'bg-background border-border text-foreground hover:border-primary/50'
                       }`}
                     >
                       <span className="text-2xl">{opt.icon}</span>
@@ -488,14 +488,14 @@ export default function IntakeWizard() {
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">{opt.label}</span>
                           {!opt.available && (
-                            <span className="text-[10px] uppercase tracking-wide bg-white/10 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
                               Em breve
                             </span>
                           )}
                         </div>
-                        <span className="text-xs text-slate-400 mt-0.5 block">{opt.description}</span>
+                        <span className="text-xs text-muted-foreground mt-0.5 block">{opt.description}</span>
                       </div>
-                      {active && <span className="text-emerald-400">✓</span>}
+                      {active && <span className="text-primary">✓</span>}
                     </button>
                   );
                 })}
@@ -507,8 +507,8 @@ export default function IntakeWizard() {
           {step === 1 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-white mb-1">Quem é o cliente?</h2>
-                <p className="text-slate-400 text-sm">Vincule a um cliente existente ou cadastre um novo.</p>
+                <h2 className="text-xl font-semibold text-foreground mb-1">Quem é o cliente?</h2>
+                <p className="text-muted-foreground text-sm">Vincule a um cliente existente ou cadastre um novo.</p>
               </div>
 
               <div className="flex gap-3">
@@ -518,8 +518,8 @@ export default function IntakeWizard() {
                     onClick={() => set('client_mode', mode)}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all ${
                       form.client_mode === mode
-                        ? 'bg-emerald-500 border-emerald-500 text-white'
-                        : 'bg-white/5 border-white/10 text-slate-400 hover:border-white/30'
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'bg-background border-border text-muted-foreground hover:border-primary/50'
                     }`}
                   >
                     {mode === 'new' ? '+ Novo cliente' : '🔍 Cliente existente'}
@@ -552,37 +552,37 @@ export default function IntakeWizard() {
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-white mb-1">Qual é a demanda?</h2>
-                <p className="text-slate-400 text-sm">
+                <h2 className="text-xl font-semibold text-foreground mb-1">Qual é a demanda?</h2>
+                <p className="text-muted-foreground text-sm">
                   Regra Regente: o card pode nascer <strong>sem</strong> descrição completa. Você complementa depois.
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Resumo inicial <span className="text-slate-500 font-normal">(opcional — voz do cliente no primeiro contato)</span>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Resumo inicial <span className="text-muted-foreground font-normal">(opcional — voz do cliente no primeiro contato)</span>
                 </label>
                 <textarea
                   rows={2}
                   value={form.initial_summary}
                   onChange={e => set('initial_summary', e.target.value)}
                   placeholder="Ex: Cliente ligou querendo regularizar CAR para pegar PRONAF"
-                  className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 resize-none"
+                  className="w-full rounded-xl bg-background border border-input text-foreground placeholder:text-muted-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Descrição técnica <span className="text-slate-500 font-normal">(opcional — habilita classificação automática)</span>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Descrição técnica <span className="text-muted-foreground font-normal">(opcional — habilita classificação automática)</span>
                 </label>
                 <textarea
                   rows={4}
                   value={form.description}
                   onChange={e => set('description', e.target.value)}
                   placeholder="Descrição mais detalhada — se tiver 10+ caracteres, o sistema pode pré-classificar a demanda."
-                  className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 resize-none"
+                  className="w-full rounded-xl bg-background border border-input text-foreground placeholder:text-muted-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring resize-none"
                 />
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {form.description.length} caracteres {form.description.length < 10 && form.description.length > 0 ? '(mín. 10 para classificar)' : ''}
                 </p>
               </div>
@@ -600,7 +600,7 @@ export default function IntakeWizard() {
                 <button
                   onClick={handleClassify}
                   disabled={classifying}
-                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground font-semibold transition-all flex items-center justify-center gap-2"
                 >
                   {classifying ? (
                     <><span className="animate-spin">⟳</span> Classificando...</>
@@ -614,7 +614,7 @@ export default function IntakeWizard() {
                   <DiagnosisPanel result={classifyResult} />
                   <button
                     onClick={() => setClassifyResult(null)}
-                    className="text-xs text-slate-400 hover:text-white underline"
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
                   >
                     Reclassificar com outra descrição
                   </button>
@@ -627,8 +627,8 @@ export default function IntakeWizard() {
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-white mb-1">O imóvel</h2>
-                <p className="text-slate-400 text-sm">Vincule um imóvel existente, cadastre um novo ou pule por enquanto.</p>
+                <h2 className="text-xl font-semibold text-foreground mb-1">O imóvel</h2>
+                <p className="text-muted-foreground text-sm">Vincule um imóvel existente, cadastre um novo ou pule por enquanto.</p>
               </div>
 
               <div className="flex gap-3 flex-wrap">
@@ -640,8 +640,8 @@ export default function IntakeWizard() {
                       onClick={() => set('property_mode', mode)}
                       className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all min-w-[140px] ${
                         form.property_mode === mode
-                          ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : 'bg-white/5 border-white/10 text-slate-400 hover:border-white/30'
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'bg-background border-border text-muted-foreground hover:border-primary/50'
                       }`}
                     >
                       {labels[mode]}
@@ -671,36 +671,36 @@ export default function IntakeWizard() {
           {step === 4 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-white mb-1">📎 Documentos (opcional)</h2>
-                <p className="text-slate-400 text-sm">
+                <h2 className="text-xl font-semibold text-foreground mb-1">📎 Documentos (opcional)</h2>
+                <p className="text-muted-foreground text-sm">
                   Upload opcional dos documentos iniciais. Regra Regente: o card nasce mesmo sem docs completos — isso aqui só pré-alimenta a base.
                 </p>
               </div>
 
               {/* Aviso LGPD — uploads disparam OCR/extração via IA externa (Gemini/OpenAI) */}
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="text-amber-300 text-lg leading-none mt-0.5">🛡️</div>
+                  <div className="text-amber-600 text-lg leading-none mt-0.5">🛡️</div>
                   <div className="space-y-2 text-sm">
-                    <p className="font-semibold text-amber-200">Tratamento de dados — LGPD</p>
-                    <p className="text-amber-100/90 leading-relaxed">
+                    <p className="font-semibold text-amber-800">Tratamento de dados — LGPD</p>
+                    <p className="text-amber-700 leading-relaxed">
                       Documentos enviados aqui passam por <strong>extração automática de texto e dados</strong> usando provedores de IA externos (Google Gemini e/ou OpenAI). Isso pode incluir CPF, dados fundiários e ambientais do cliente.
                     </p>
-                    <ul className="text-amber-100/80 text-xs list-disc pl-5 space-y-0.5">
+                    <ul className="text-amber-700 text-xs list-disc pl-5 space-y-0.5">
                       <li>Os dados são processados fora do Brasil em servidores da Google/OpenAI.</li>
                       <li>Apenas campos extraídos são salvos na base; os arquivos originais ficam no nosso storage.</li>
                       <li>O cliente deve estar ciente desse processamento conforme contrato/termo de consentimento.</li>
                     </ul>
                   </div>
                 </div>
-                <label className="flex items-start gap-3 cursor-pointer select-none pt-2 border-t border-amber-500/20">
+                <label className="flex items-start gap-3 cursor-pointer select-none pt-2 border-t border-amber-200">
                   <input
                     type="checkbox"
                     checked={lgpdAck}
                     onChange={e => setLgpdAck(e.target.checked)}
-                    className="mt-1 w-4 h-4 rounded accent-amber-400 cursor-pointer"
+                    className="mt-1 w-4 h-4 rounded accent-amber-600 cursor-pointer"
                   />
-                  <span className="text-sm text-amber-100">
+                  <span className="text-sm text-amber-800">
                     Confirmo que o cliente foi informado e consente com o tratamento dos documentos por IA externa.
                   </span>
                 </label>
@@ -714,15 +714,15 @@ export default function IntakeWizard() {
                     onImportTriggered={() => setImportTriggered(true)}
                   />
                 ) : (
-                  <div className="p-6 rounded-xl bg-slate-800/30 border border-dashed border-white/10 text-center text-sm text-slate-400">
+                  <div className="p-6 rounded-xl bg-muted/50 border border-dashed border-border text-center text-sm text-muted-foreground">
                     Marque a confirmação acima para liberar o upload de documentos.
                   </div>
                 )
               ) : (
-                <div className="p-4 rounded-xl bg-slate-800/50 border border-white/10 text-sm text-slate-300">
+                <div className="p-4 rounded-xl bg-muted border border-border text-sm text-foreground">
                   Preparando rascunho... <button
                     onClick={ensureDraftBeforeStep4}
-                    className="underline hover:text-white"
+                    className="underline hover:text-foreground"
                   >
                     Reintentar
                   </button>
@@ -730,19 +730,19 @@ export default function IntakeWizard() {
               )}
 
               {/* Áudio da entrevista (decisão Isis) — entra como input p/ transcrição */}
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-2">
+              <div className="rounded-xl border border-border bg-card p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🎙️</span>
-                  <span className="text-sm font-medium text-white">Áudio da entrevista (opcional)</span>
+                  <span className="text-sm font-medium text-foreground">Áudio da entrevista (opcional)</span>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   Anexe a gravação do primeiro contato. O agente de atendimento transcreve
                   (Whisper) e usa como contexto. Mesmo consentimento LGPD acima se aplica.
                 </p>
                 <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer ${
                   audioUploading
-                    ? 'bg-white/5 border-white/10 text-slate-500 cursor-wait'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:border-emerald-400'
+                    ? 'bg-muted border-border text-muted-foreground cursor-wait'
+                    : 'bg-background border-border text-foreground hover:border-primary'
                 }`}>
                   {audioUploading ? (
                     <><span className="animate-spin">⟳</span> Enviando áudio…</>
@@ -763,13 +763,13 @@ export default function IntakeWizard() {
                   />
                 </label>
                 {form.audio_url && audioName && (
-                  <p className="text-xs text-emerald-300">✓ {audioName} anexado</p>
+                  <p className="text-xs text-primary">✓ {audioName} anexado</p>
                 )}
               </div>
 
               {/* fix/extrator-por-processo — aviso de avanço travado */}
               {uploadedDocCount > 0 && !importTriggered && (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-800">
                   Você anexou {uploadedDocCount} documento{uploadedDocCount > 1 ? 's' : ''}. Clique em
                   <span className="px-1 font-semibold">🤖 Ler documentos com IA</span>
                   antes de avançar (ou remova os anexos com 🗑).
@@ -782,8 +782,8 @@ export default function IntakeWizard() {
           {step === 5 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-white mb-1">Confirmar e abrir caso</h2>
-                <p className="text-slate-400 text-sm">
+                <h2 className="text-xl font-semibold text-foreground mb-1">Confirmar e abrir caso</h2>
+                <p className="text-muted-foreground text-sm">
                   Revise o resumo. Você pode criar o card agora ou salvar como rascunho pra continuar depois.
                 </p>
               </div>
@@ -801,14 +801,14 @@ export default function IntakeWizard() {
                 <SummaryRow icon="🏷️" label="Tipo de demanda">
                   {classifyResult ? (
                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      classifyResult.urgency_flag === 'critica' ? 'bg-red-500/20 text-red-300' :
-                      classifyResult.urgency_flag === 'alta' ? 'bg-orange-500/20 text-orange-300' :
-                      'bg-emerald-500/20 text-emerald-300'
+                      classifyResult.urgency_flag === 'critica' ? 'bg-destructive/10 text-destructive' :
+                      classifyResult.urgency_flag === 'alta' ? 'bg-orange-100 text-orange-700' :
+                      'bg-primary/10 text-primary'
                     }`}>
                       {classifyResult.demand_label}
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-500/20 text-slate-300">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-muted text-muted-foreground">
                       Não identificado — a IA classifica depois
                     </span>
                   )}
@@ -837,13 +837,13 @@ export default function IntakeWizard() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Observações internas (opcional)</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Observações internas (opcional)</label>
                 <textarea
                   rows={3}
                   value={form.intake_notes}
                   onChange={e => set('intake_notes', e.target.value)}
                   placeholder="Notas para o consultor responsável..."
-                  className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 resize-none"
+                  className="w-full rounded-xl bg-background border border-input text-foreground placeholder:text-muted-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring resize-none"
                 />
               </div>
 
@@ -851,7 +851,7 @@ export default function IntakeWizard() {
                 <button
                   onClick={handleSubmit}
                   disabled={submitting || savingDraft}
-                  className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
+                  className="w-full py-4 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-sm"
                 >
                   {submitting ? (
                     <><span className="animate-spin">⟳</span> {isEnrichFlow ? 'Complementando...' : 'Criando caso...'}</>
@@ -866,7 +866,7 @@ export default function IntakeWizard() {
                   <button
                     onClick={handleSaveDraft}
                     disabled={submitting || savingDraft}
-                    className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-sm font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                    className="w-full py-3 rounded-xl bg-background hover:bg-muted border border-border text-foreground text-sm font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                   >
                     {savingDraft ? (
                       <><span className="animate-spin">⟳</span> Salvando...</>
@@ -880,11 +880,11 @@ export default function IntakeWizard() {
           )}
 
           {/* Navegação */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-white/10">
+          <div className="flex justify-between mt-8 pt-6 border-t border-border">
             <button
               onClick={() => setStep(prev => Math.max(0, prev - 1) as Step)}
               disabled={step === 0}
-              className="px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 disabled:opacity-30 transition-all text-sm font-medium"
+              className="px-6 py-2.5 rounded-xl bg-background border border-border text-foreground hover:bg-muted disabled:opacity-30 transition-all text-sm font-medium"
             >
               ← Voltar
             </button>
@@ -899,7 +899,7 @@ export default function IntakeWizard() {
                   setStep(prev => Math.min(5, prev + 1) as Step);
                 }}
                 disabled={!canGoNext()}
-                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-semibold transition-all text-sm"
+                className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground font-semibold transition-all text-sm"
               >
                 Próximo →
               </button>
@@ -929,14 +929,14 @@ function Input({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
+      <label className="block text-sm font-medium text-foreground mb-2">{label}</label>
       <input
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         maxLength={maxLength}
-        className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 transition-colors"
+        className="w-full rounded-xl bg-background border border-input text-foreground placeholder:text-muted-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring transition-colors"
       />
     </div>
   );
@@ -950,11 +950,11 @@ function Select({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
+      <label className="block text-sm font-medium text-foreground mb-2">{label}</label>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full rounded-xl bg-slate-800 border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 transition-colors"
+        className="w-full rounded-xl bg-background border border-input text-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring transition-colors"
       >
         {options.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -966,11 +966,11 @@ function Select({
 
 function SummaryRow({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
+    <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/50 border border-border">
       <span className="text-lg">{icon}</span>
       <div className="flex-1">
-        <span className="text-xs text-slate-400 block mb-0.5">{label}</span>
-        <span className="text-sm text-white font-medium">{children}</span>
+        <span className="text-xs text-muted-foreground block mb-0.5">{label}</span>
+        <span className="text-sm text-foreground font-medium">{children}</span>
       </div>
     </div>
   );
@@ -987,8 +987,8 @@ function DraftExpirationBadge({ expiresAt }: { expiresAt: string }) {
 
   const urgent = diffDays <= 3;
   const cls = urgent
-    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-    : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+    ? 'bg-amber-50 text-amber-700 border-amber-300'
+    : 'bg-primary/10 text-primary border-primary/30';
 
   return (
     <span

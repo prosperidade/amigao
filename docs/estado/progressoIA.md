@@ -1613,3 +1613,26 @@ de `process_id`.
 
 **Testes:** `tests/api/test_intake_draft_migration.py` (6) + `frontend/.../DraftDocumentUploader.test.tsx`
 (5). Backend 6/6; frontend vitest 36/36 (31 pré-existentes + 5); `npm run build` e `tsc --noEmit` verdes.
+
+---
+
+## PR I — padronização visual do Intake ao design system (31/05/2026)
+
+Mudança **puramente visual** (zero alteração de lógica/fluxo). O wizard de intake — incluindo a
+superfície de leitura IA (`PreviewPanel` de extração em tempo real + `ReconcileModal` de reconciliação
+manual×IA) — usava tema **escuro** próprio (gradiente `slate-900 → emerald-950`, glassmorphism
+`bg-white/5`/`border-white/10`, verde `emerald-500`), destoando do padrão **claro** do Dashboard
+(constatado na auditoria `docs/arquivo/auditorias/2026-05-31_ui_credenciais_intake.md`, Frente C).
+
+**O que mudou:** os 4 componentes do wizard (`IntakeWizard.tsx`, `PreviewPanel.tsx`, `ReconcileModal.tsx`,
+`PriorityStep.tsx`) passam a consumir os tokens do design system (`bg-background`, `bg-card`,
+`border-border`, `text-foreground`, `text-muted-foreground`, `bg-primary`/`text-primary-foreground` =
+Verde Premium Regente `142 76% 36%`). Glassmorphism e família `slate-*` removidos. Os badges de
+confiança do `PreviewPanel` **preservam a semântica** verde>0.9 / amarelo 0.7–0.9 / vermelho<0.7,
+adaptados para fundo claro (não há token semântico `success`/`warning` no design system — só
+`destructive`, usado nos erros).
+
+**Fora de escopo (pendência):** `DiagnosisPanel.tsx` e `DraftDocumentUploader.tsx` (renderizados dentro
+do wizard) ainda carregam tema escuro — não estavam no escopo declarado desta PR.
+
+**Verificação:** `tsc --noEmit` limpo + `npm run build` verde. Funcionalidade inalterada.

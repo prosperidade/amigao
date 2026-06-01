@@ -4,6 +4,7 @@
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
+**Pulso 2026-05-31 (PR I — visual):** wizard de intake (`/intake`) padronizado ao design system — tema claro alinhado ao Dashboard, tokens (`bg-background`/`bg-card`/`bg-primary`) no lugar do tema escuro próprio (gradiente slate→emerald + glassmorphism). Só estilo; funcionalidade inalterada; `npm run build` verde. Pendência: `DiagnosisPanel`/`DraftDocumentUploader` ainda escuros (fora de escopo). Origem: auditoria `docs/arquivo/auditorias/2026-05-31_ui_credenciais_intake.md` (Frente C).
 
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 

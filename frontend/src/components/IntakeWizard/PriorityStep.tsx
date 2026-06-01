@@ -40,11 +40,11 @@ export default function PriorityStep({
     <div className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Urgência</label>
+          <label className="block text-sm font-medium text-foreground mb-2">Urgência</label>
           <select
             value={urgencia}
             onChange={e => onChangeUrgencia(e.target.value)}
-            className="w-full rounded-xl bg-slate-800 border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 transition-colors"
+            className="w-full rounded-xl bg-background border border-input text-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring transition-colors"
           >
             {URGENCIA_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -53,13 +53,13 @@ export default function PriorityStep({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <label className="block text-sm font-medium text-foreground mb-2">
             Valor Estratégico
           </label>
           <select
             value={valorEstrategico}
             onChange={e => onChangeValorEstrategico(e.target.value)}
-            className="w-full rounded-xl bg-slate-800 border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 transition-colors"
+            className="w-full rounded-xl bg-background border border-input text-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring transition-colors"
           >
             {VALOR_ESTRATEGICO_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -68,21 +68,21 @@ export default function PriorityStep({
         </div>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         Os dois eixos são independentes — um caso pode ser urgentíssimo e de baixo valor estratégico,
         ou o inverso.
       </p>
 
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
-          Observações da triagem <span className="text-slate-500 font-normal">(opcional)</span>
+        <label className="block text-sm font-medium text-foreground mb-2">
+          Observações da triagem <span className="text-muted-foreground font-normal">(opcional)</span>
         </label>
         <textarea
           rows={2}
           value={observacoes}
           onChange={e => onChangeObservacoes(e.target.value)}
           placeholder="Contexto da priorização (prazo específico, relação com o cliente, etc.)"
-          className="w-full rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 px-4 py-3 text-sm focus:outline-none focus:border-emerald-400 resize-none"
+          className="w-full rounded-xl bg-background border border-input text-foreground placeholder:text-muted-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring resize-none"
         />
       </div>
     </div>
