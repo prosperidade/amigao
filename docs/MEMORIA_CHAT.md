@@ -123,3 +123,13 @@ Rascunhos de chat (`MEMORIA_CHAT v5`, `ECOSSISTEMA_AGENTICO v1`,
 `EXTRATOR_AGENTE v1`) serviram de inspiração estrutural; **continham alegações
 fabricadas/desatualizadas** e NÃO foram copiados — esta versão e os sister files
 em `docs/agentes/` são a fonte de verdade verificada.
+
+## 15. Eventos significativos
+
+- **2026-05-31 — PR 2.1 (WhatsApp inbound) mergeado (#38).** Canal WhatsApp via Evolution, dormente
+  até credenciais; e-mail inbound adiado (dívida #35). Atualiza o "próximo passo" da seção 13.
+- **2026-05-31 — Correção dos 2 críticos da Isis (`fix/intake-uploads-criticos-isis`).** Persistência:
+  `/intake/create-case` aceita `draft_id` e migra os docs do rascunho para o processo (antes ficavam
+  órfãos — invisíveis na aba Documentos). Upload em massa: `DraftDocumentUploader` com pool de 4, retry
+  com backoff, botão remover sempre visível e feedback por item; visual alinhado ao design system.
+  Origem: auditoria `2026-05-31_uploads_isis.md`. Validações finais da Isis na UI ainda pendentes.

@@ -402,6 +402,15 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
   `evolution` no docker-compose (profile `whatsapp`). **13 testes novos.** **DORMENTE** até creds no
   `.env`. E-mail inbound (Resend) adiado → **dívida #35**.
 
+- **Pulso 2026-05-31 (`fix/intake-uploads-criticos-isis` — 2 críticos da Isis):** **#2 (persistência):**
+  `POST /intake/create-case` passou a aceitar `draft_id` e migra os `Document`s do rascunho
+  (`process_id` NULL → processo) com `auto_link` no checklist, em uma transação (404 draft inexistente/
+  outro tenant; 409 já finalizado; no-op sem docs). `/commit` deprecated (mantido). Antes os docs do
+  Step 4 ficavam órfãos do processo. **#1 (upload em massa):** `DraftDocumentUploader` reescrito — pool
+  de 4 simultâneos, retry 3× com backoff 1/2/4s, timeout backend 20s→30s, **botão remover sempre
+  visível**, feedback por item + "tentar novamente" individual; visual migrado pros tokens do design
+  system. **Testes:** 6 backend (migração) + 5 frontend (uploader); build/tsc/vitest verdes.
+
 ## Infraestrutura
 
 - Docker Compose com serviços: db (Postgres+PostGIS+pgvector), redis, minio, api, worker, client-portal (congelado)

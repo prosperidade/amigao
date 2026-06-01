@@ -60,6 +60,12 @@ verdade — não duplicar aqui). Os mais ativados no ecossistema:
 ### 3.2 IA-driven intake
 Ver bloco acima (implementado na PR Intake backend #26 + frontend #27).
 
+**Finalização (fix Isis 2026-05-31):** o wizard finaliza por `POST /intake/create-case` enviando
+`draft_id`; o backend cria o caso **e migra os docs do rascunho** (que nascem com `process_id=NULL`)
+para o processo, com `auto_link` no checklist, na mesma transação. Antes o wizard nunca chamava
+`/commit` e os docs ficavam órfãos do processo (crítico #2 da Isis). `/drafts/{id}/commit` segue
+existindo (deprecated).
+
 ### 3.4 Inbound de canal a caso já aberto (PR 2.1)
 Mensagens inbound **NÃO criam caso** (decisão 2026-05-28). O webhook
 `POST /messaging/whatsapp/webhook` identifica o `Client` pelo telefone, acha o

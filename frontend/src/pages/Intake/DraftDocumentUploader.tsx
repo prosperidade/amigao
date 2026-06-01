@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AxiosError } from 'axios';
 import { api } from '@/lib/api';
 
 // Tipos documentais sugeridos pelo Regente Cam1 Bloco 3
@@ -34,6 +35,20 @@ const FIELD_LABELS: Record<string, string> = {
   endereco: 'Endereço',
 };
 
+// ── Robustez de upload (auditoria uploads Isis #1) ───────────────────────────
+// Timeout do PUT direto ao storage (presigned). Sem isso, se o R2/MinIO travar
+// a UI fica presa pra sempre (fetch não tem timeout default). Mantém 45s.
+const PUT_TIMEOUT_MS = 45_000;
+// Timeout das chamadas ao backend (presign + confirm). Subiu de 20s -> 30s
+// para cobrir cold start do Render e travamento em head_bucket.
+const BACKEND_TIMEOUT_MS = 30_000;
+const POLL_INTERVAL_MS = 5_000;
+// Pool de uploads simultâneos — substitui o for-await sequencial do original.
+const UPLOAD_CONCURRENCY = 4;
+// 3 tentativas no total; backoff de 1s, 2s e 4s entre elas.
+const RETRY_BACKOFFS_MS = [1_000, 2_000, 4_000];
+const MAX_ATTEMPTS = RETRY_BACKOFFS_MS.length;
+
 interface DraftDoc {
   id: number;
   filename: string;
@@ -62,6 +77,11 @@ interface ExtractionResults {
   suggestions: Record<string, unknown>;
 }
 
+interface PresignResponse {
+  upload_url: string;
+  storage_key: string;
+}
+
 interface Props {
   draftId: number;
   /** Quando os docs mudam (útil pra badges no step de confirmação). */
@@ -73,6 +93,54 @@ interface Props {
   onImportTriggered?: () => void;
 }
 
+type PendingStatus = 'waiting' | 'uploading' | 'error';
+
+interface PendingItem {
+  localId: string;
+  file: File;
+  documentType: string;
+  status: PendingStatus;
+  attempt: number;
+  error?: string;
+}
+
+// Erro do PUT ao storage que vale a pena re-tentar (timeout, rede, 5xx).
+class StorageRetryableError extends Error {}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Decide se um erro de uma etapa de upload deve ser re-tentado.
+ * Retryável: timeout (ECONNABORTED), 5xx, 408, 429, erro de rede (sem response),
+ *            e StorageRetryableError (PUT via fetch).
+ * Não retryável: demais 4xx -> falha imediata.
+ */
+function isRetryable(error: unknown): boolean {
+  if (error instanceof StorageRetryableError) return true;
+  if (error instanceof AxiosError) {
+    if (error.code === 'ECONNABORTED') return true;
+    const status = error.response?.status;
+    if (status === undefined) return true; // erro de rede / sem resposta
+    if (status === 408 || status === 429) return true;
+    return status >= 500;
+  }
+  return false;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof AxiosError) {
+    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+    if (typeof detail === 'string' && detail.length > 0) return detail;
+    if (error.code === 'ECONNABORTED') return 'Tempo de envio esgotado.';
+  }
+  if (error instanceof Error) return error.message;
+  return 'Erro ao enviar arquivo.';
+}
+
 export default function DraftDocumentUploader({
   draftId,
   onChange,
@@ -81,12 +149,18 @@ export default function DraftDocumentUploader({
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<DraftDoc[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [pending, setPending] = useState<PendingItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [pendingType, setPendingType] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [extraction, setExtraction] = useState<ExtractionResults | null>(null);
   const [appliedFields, setAppliedFields] = useState<Set<string>>(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  // Espelho síncrono de `pending` — o handler de retry precisa ler o item atual
+  // sem depender do timing do updater de setState.
+  const pendingRef = useRef<PendingItem[]>([]);
+  pendingRef.current = pending;
 
   const refresh = useCallback(async () => {
     try {
@@ -118,96 +192,199 @@ export default function DraftDocumentUploader({
   useEffect(() => {
     if (!draftId) return;
     refreshExtraction();
-    const hasProcessing = docs.some(d => d.ocr_status === 'processing');
+    const hasProcessing = docs.some((d) => d.ocr_status === 'processing');
     if (!hasProcessing) return;
     const timer = window.setInterval(() => {
       refresh();
       refreshExtraction();
-    }, 5000);
+    }, POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [draftId, docs, refresh, refreshExtraction]);
 
-  const uploadFiles = async (files: FileList) => {
-    if (!files.length) return;
-    setUploading(true);
-    setError(null);
-    // Timeout do PUT direto ao storage. Sem isso, se o R2/MinIO travar
-    // a UI fica presa pra sempre (fetch não tem timeout default).
-    const PUT_TIMEOUT_MS = 45_000;
-    // Timeout pra chamadas do backend (presign + confirm). Cobre cold
-    // start do Render e travamento em head_bucket.
-    const BACKEND_TIMEOUT_MS = 20_000;
-    const failures: string[] = [];
+  const setItem = useCallback((localId: string, patch: Partial<PendingItem>) => {
+    setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, ...patch } : p)));
+  }, []);
 
-    for (const file of Array.from(files)) {
-      try {
-        // 1) Pedir presigned URL
-        const { data: presigned } = await api.post(
-          `/intake/drafts/${draftId}/upload-url`,
-          {
-            filename: file.name,
-            content_type: file.type || 'application/octet-stream',
-            document_type: pendingType || null,
-          },
-          { timeout: BACKEND_TIMEOUT_MS },
-        );
-        // 2) PUT direto ao MinIO/R2 (fora do axios, sem auth) com timeout
-        const putController = new AbortController();
-        const putTimer = window.setTimeout(() => putController.abort(), PUT_TIMEOUT_MS);
-        let putRes: Response;
+  /**
+   * Executa uma das 3 etapas com retry + backoff.
+   * `onAttempt` é chamado a cada tentativa (1-based) para feedback de UI.
+   */
+  const withRetry = useCallback(
+    async <T,>(fn: () => Promise<T>, onAttempt: (attempt: number) => void): Promise<T> => {
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+        onAttempt(attempt);
         try {
-          putRes = await fetch(presigned.upload_url, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type || 'application/octet-stream' },
-            body: file,
-            signal: putController.signal,
-          });
-        } catch (putErr: unknown) {
-          const isAbort = (putErr as { name?: string })?.name === 'AbortError';
-          throw new Error(
-            isAbort
-              ? `Tempo esgotado enviando "${file.name}" pro storage (${PUT_TIMEOUT_MS / 1000}s). Verifique conexão ou CORS do bucket.`
-              : `Falha ao enviar "${file.name}" pro storage: ${(putErr as Error)?.message ?? 'erro desconhecido'}. Pode ser CORS bloqueando.`,
-          );
-        } finally {
-          window.clearTimeout(putTimer);
+          return await fn();
+        } catch (err) {
+          lastError = err;
+          if (!isRetryable(err) || attempt === MAX_ATTEMPTS) {
+            throw err;
+          }
+          await sleep(RETRY_BACKOFFS_MS[attempt - 1]);
         }
-        if (!putRes.ok) {
-          throw new Error(`Upload de "${file.name}" rejeitado pelo storage (HTTP ${putRes.status}).`);
-        }
-        // 3) Confirmar no backend
-        await api.post(
-          `/intake/drafts/${draftId}/documents`,
-          {
-            storage_key: presigned.storage_key,
-            filename: file.name,
-            content_type: file.type || 'application/octet-stream',
-            file_size_bytes: file.size,
-            document_type: pendingType || null,
-          },
-          { timeout: BACKEND_TIMEOUT_MS },
-        );
-      } catch (err: unknown) {
-        const ax = err as { code?: string; response?: { data?: { detail?: string } }; message?: string };
-        const detail = ax?.response?.data?.detail;
-        let msg: string;
-        if (ax?.code === 'ECONNABORTED') {
-          msg = `Tempo esgotado pedindo URL de upload pra "${file.name}". Backend pode estar travado no storage.`;
-        } else {
-          msg = detail ?? ax?.message ?? `Erro no upload de "${file.name}"`;
-        }
-        failures.push(msg);
       }
-    }
+      throw lastError;
+    },
+    [],
+  );
 
-    // Atualiza a lista mesmo se algum arquivo falhou (os que passaram já estão lá)
-    await refresh();
-    if (failures.length) {
-      setError(failures.join(' · '));
+  // PUT direto ao storage (fora do interceptor de auth do axios — presigned URL).
+  // Timeout via AbortController; converte falhas transitórias em
+  // StorageRetryableError pra serem re-tentadas pelo withRetry.
+  const putToStorage = useCallback(async (uploadUrl: string, file: File) => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), PUT_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+        signal: controller.signal,
+      });
+    } catch (putErr: unknown) {
+      const isAbort = (putErr as { name?: string })?.name === 'AbortError';
+      throw new StorageRetryableError(
+        isAbort
+          ? `Tempo esgotado enviando "${file.name}" pro storage (${PUT_TIMEOUT_MS / 1000}s).`
+          : `Falha de rede ao enviar "${file.name}" pro storage.`,
+      );
+    } finally {
+      window.clearTimeout(timer);
     }
-    setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+    if (!res.ok) {
+      // 5xx do storage é transitório (retry); 4xx é definitivo (CORS/assinatura).
+      if (res.status >= 500) {
+        throw new StorageRetryableError(
+          `Storage indisponível ao enviar "${file.name}" (HTTP ${res.status}).`,
+        );
+      }
+      throw new Error(`Upload de "${file.name}" rejeitado pelo storage (HTTP ${res.status}).`);
+    }
+  }, []);
+
+  const uploadOne = useCallback(
+    async (item: PendingItem) => {
+      const onAttempt = (attempt: number) => {
+        setItem(item.localId, { status: 'uploading', attempt, error: undefined });
+      };
+      // 1. Solicita presigned URL ao backend.
+      const { data: presign } = await withRetry(
+        () =>
+          api.post<PresignResponse>(
+            `/intake/drafts/${draftId}/upload-url`,
+            {
+              filename: item.file.name,
+              content_type: item.file.type || 'application/octet-stream',
+              document_type: item.documentType || null,
+            },
+            { timeout: BACKEND_TIMEOUT_MS },
+          ),
+        onAttempt,
+      );
+
+      // 2. Envia o arquivo direto pro storage (presigned PUT).
+      await withRetry(() => putToStorage(presign.upload_url, item.file), onAttempt);
+
+      // 3. Confirma no backend (cria o registro Document).
+      await withRetry(
+        () =>
+          api.post(
+            `/intake/drafts/${draftId}/documents`,
+            {
+              storage_key: presign.storage_key,
+              filename: item.file.name,
+              content_type: item.file.type || 'application/octet-stream',
+              file_size_bytes: item.file.size,
+              document_type: item.documentType || null,
+            },
+            { timeout: BACKEND_TIMEOUT_MS },
+          ),
+        onAttempt,
+      );
+    },
+    [draftId, setItem, withRetry, putToStorage],
+  );
+
+  // Processa um item: sucesso -> remove do pending; falha -> marca 'error'.
+  const processItem = useCallback(
+    async (item: PendingItem): Promise<boolean> => {
+      try {
+        await uploadOne(item);
+        setPending((prev) => prev.filter((p) => p.localId !== item.localId));
+        return true;
+      } catch (err) {
+        setItem(item.localId, { status: 'error', error: errorMessage(err) });
+        return false;
+      }
+    },
+    [uploadOne, setItem],
+  );
+
+  // Pool de concorrência limitada (UPLOAD_CONCURRENCY simultâneos).
+  const runPool = useCallback(
+    async (items: PendingItem[]) => {
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < items.length) {
+          const current = items[cursor];
+          cursor += 1;
+          await processItem(current);
+        }
+      };
+      const workers = Array.from(
+        { length: Math.min(UPLOAD_CONCURRENCY, items.length) },
+        () => worker(),
+      );
+      await Promise.all(workers);
+    },
+    [processItem],
+  );
+
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const fileArr = Array.from(files);
+      if (fileArr.length === 0) return;
+      setError(null);
+
+      const items: PendingItem[] = fileArr.map((file, idx) => ({
+        localId: `${Date.now()}-${idx}-${file.name}`,
+        file,
+        documentType: pendingType,
+        status: 'waiting',
+        attempt: 0,
+      }));
+      setPending((prev) => [...prev, ...items]);
+
+      await runPool(items);
+      await refresh();
+
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    },
+    [pendingType, runPool, refresh],
+  );
+
+  // Re-dispara um único item que falhou (mesma máquina de retry).
+  const retryItem = useCallback(
+    async (localId: string) => {
+      const target = pendingRef.current.find((p) => p.localId === localId);
+      if (!target) return;
+      setPending((prev) =>
+        prev.map((p) =>
+          p.localId === localId ? { ...p, status: 'waiting', attempt: 0, error: undefined } : p,
+        ),
+      );
+      const ok = await processItem({
+        ...target,
+        status: 'waiting',
+        attempt: 0,
+        error: undefined,
+      });
+      if (ok) await refresh();
+    },
+    [processItem, refresh],
+  );
 
   const triggerImport = async () => {
     setImporting(true);
@@ -217,168 +394,247 @@ export default function DraftDocumentUploader({
       await refresh();
       onImportTriggered?.();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao disparar leitura IA';
-      setError(msg);
+      setError(errorMessage(err) || 'Erro ao disparar leitura IA');
     } finally {
       setImporting(false);
     }
   };
 
-  // fix/extrator-por-processo — exclui um upload antes da IA processar.
-  // Reusa o soft delete já existente em DELETE /documents/{id}.
-  // Habilitado só quando ocr_status ∈ (null, 'pending'); pra processing/done/failed,
-  // o consultor remove pela aba Documentos do processo (que já tem essa ação).
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const deleteDoc = async (docId: number, filename: string) => {
-    if (!window.confirm(`Excluir "${filename}"? O arquivo original fica preservado no storage.`)) return;
-    setDeletingId(docId);
-    setError(null);
-    try {
-      await api.delete(`/documents/${docId}`);
-      await refresh();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao excluir documento.';
-      setError(msg);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const canDelete = (s: string | null) => s === null || s === 'pending';
-
-  const badgeFor = (s: string | null) => {
-    if (s === 'done') return { label: 'Lido', cls: 'bg-emerald-500/20 text-emerald-300' };
-    if (s === 'processing') return { label: 'Em leitura', cls: 'bg-sky-500/20 text-sky-300' };
-    if (s === 'failed') return { label: 'Falhou', cls: 'bg-red-500/20 text-red-300' };
-    return { label: 'Enviado', cls: 'bg-slate-500/20 text-slate-300' };
-  };
+  // Soft delete (DELETE /documents/{id}). Disponível em QUALQUER ocr_status
+  // (auditoria uploads Isis #1.D — guard canDelete removido).
+  const deleteDoc = useCallback(
+    async (docId: number) => {
+      setDeletingId(docId);
+      setError(null);
+      try {
+        await api.delete(`/documents/${docId}`);
+        setConfirmDeleteId(null);
+        await refresh();
+      } catch (err: unknown) {
+        setConfirmDeleteId(null);
+        setError(errorMessage(err) || 'Erro ao excluir documento.');
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [refresh],
+  );
 
   return (
     <div className="space-y-4">
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      <div className="flex gap-2 items-end">
+      <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label className="block text-xs font-medium text-slate-400 mb-1">Tipo do próximo upload</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            Tipo do próximo upload
+          </label>
           <select
             value={pendingType}
-            onChange={e => setPendingType(e.target.value)}
-            className="w-full rounded-lg bg-slate-800 border border-white/10 text-white px-3 py-2 text-sm focus:outline-none focus:border-emerald-400"
+            onChange={(e) => setPendingType(e.target.value)}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
           >
-            {DOCUMENT_TYPES.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+            {DOCUMENT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
             ))}
           </select>
         </div>
         <button
+          type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white text-sm font-medium flex items-center gap-2"
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
         >
-          {uploading ? <><span className="animate-spin">⟳</span> Enviando...</> : '📎 Anexar arquivos'}
+          📎 Anexar arquivos
         </button>
         <input
           ref={fileInputRef}
           type="file"
           multiple
           className="hidden"
-          onChange={e => e.target.files && uploadFiles(e.target.files)}
+          onChange={(e) => {
+            if (e.target.files) void uploadFiles(e.target.files);
+          }}
         />
       </div>
 
-      {docs.length === 0 ? (
-        <div className="text-xs text-slate-500 italic">Nenhum documento anexado ainda. Upload é opcional — o card nasce mesmo sem docs.</div>
-      ) : (
+      {/* Itens em envio / com falha — feedback POR item (não caixa agregada) */}
+      {pending.length > 0 && (
         <div className="space-y-2">
-          {docs.map(d => {
-            const b = badgeFor(d.ocr_status);
-            const canRemove = canDelete(d.ocr_status);
-            return (
-              <div key={d.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/5 border border-white/5 text-sm">
+          {pending.map((p) => (
+            <div
+              key={p.localId}
+              className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 text-sm"
+            >
+              <span className="text-lg">📄</span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-foreground">{p.file.name}</div>
+              </div>
+              {p.status === 'error' ? (
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-xs text-destructive">{p.error ?? 'Falhou'}</span>
+                  <button
+                    type="button"
+                    onClick={() => void retryItem(p.localId)}
+                    className="text-xs font-medium text-primary hover:opacity-80"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {p.status === 'uploading'
+                    ? `Enviando (tentativa ${p.attempt})…`
+                    : 'Aguardando…'}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {docs.length === 0 && pending.length === 0 ? (
+        <div className="text-xs italic text-muted-foreground">
+          Nenhum documento anexado ainda. Upload é opcional — o card nasce mesmo sem docs.
+        </div>
+      ) : (
+        docs.length > 0 && (
+          <div className="space-y-2">
+            {docs.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 text-sm"
+              >
                 <span className="text-lg">📄</span>
-                <div className="flex-1 min-w-0">
-                  <div className="truncate text-white">{d.filename}</div>
-                  <div className="text-xs text-slate-500">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-foreground">{d.filename}</div>
+                  <div className="text-xs text-muted-foreground">
                     {d.document_type ?? 'sem tipo'}
                     {d.file_size_bytes > 0 && ` · ${Math.round(d.file_size_bytes / 1024)} KB`}
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${b.cls}`}>{b.label}</span>
-                {canRemove && (
+                <StatusPill status={d.ocr_status} />
+                {/* Botão remover SEMPRE visível, qualquer ocr_status */}
+                {confirmDeleteId === d.id ? (
+                  <span className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void deleteDoc(d.id)}
+                      disabled={deletingId === d.id}
+                      className="text-xs font-medium text-destructive hover:opacity-80 disabled:opacity-40"
+                    >
+                      {deletingId === d.id ? 'Removendo…' : 'Confirmar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Cancelar
+                    </button>
+                  </span>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => deleteDoc(d.id, d.filename)}
-                    disabled={deletingId === d.id}
-                    title="Excluir este upload antes da IA processar"
-                    className="text-xs px-2 py-1 rounded-md text-red-300 hover:text-red-200 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+                    onClick={() => setConfirmDeleteId(d.id)}
+                    title="Excluir este documento"
+                    className="shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
                   >
-                    {deletingId === d.id ? '⟳' : '🗑'}
+                    🗑 remover
                   </button>
                 )}
               </div>
-            );
-          })}
+            ))}
 
-          <button
-            onClick={triggerImport}
-            disabled={importing || docs.length === 0}
-            className="w-full mt-2 py-2.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/30 text-sky-200 text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
-          >
-            {importing ? <><span className="animate-spin">⟳</span> Disparando leitura IA...</> : '🤖 Ler documentos com IA'}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={triggerImport}
+              disabled={importing || docs.length === 0}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-40"
+            >
+              {importing ? (
+                <>
+                  <span className="animate-spin">⟳</span> Disparando leitura IA...
+                </>
+              ) : (
+                '🤖 Ler documentos com IA'
+              )}
+            </button>
+          </div>
+        )
       )}
 
       {/* CAM1-005 Parte B (Sprint L) — Sugestões extraídas pelos agentes */}
-      {extraction && extraction.docs_with_results > 0 && Object.keys(extraction.suggestions).length > 0 && (
-        <div className="rounded-xl bg-violet-500/10 border border-violet-500/30 p-3 space-y-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-violet-200">
-            <span>🤖</span>
-            <span>Sugestões extraídas pela IA</span>
-            <span className="text-[10px] font-normal text-violet-300/70">
-              ({extraction.docs_with_results} de {extraction.docs_total} doc{extraction.docs_total > 1 ? 's' : ''})
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-            {Object.entries(extraction.suggestions).map(([field, value]) => {
-              const applied = appliedFields.has(field);
-              return (
-                <div
-                  key={field}
-                  className={`flex items-center gap-2 p-2 rounded-lg text-xs border ${
-                    applied
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                      : 'bg-white/5 border-white/10 text-slate-200'
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] uppercase tracking-wide text-slate-400">
-                      {FIELD_LABELS[field] ?? field}
+      {extraction &&
+        extraction.docs_with_results > 0 &&
+        Object.keys(extraction.suggestions).length > 0 && (
+          <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+              <span>🤖</span>
+              <span>Sugestões extraídas pela IA</span>
+              <span className="text-[10px] font-normal text-muted-foreground">
+                ({extraction.docs_with_results} de {extraction.docs_total} doc
+                {extraction.docs_total > 1 ? 's' : ''})
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {Object.entries(extraction.suggestions).map(([field, value]) => {
+                const applied = appliedFields.has(field);
+                return (
+                  <div
+                    key={field}
+                    className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${
+                      applied
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-border bg-card text-foreground'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {FIELD_LABELS[field] ?? field}
+                      </div>
+                      <div className="truncate font-medium">{String(value)}</div>
                     </div>
-                    <div className="truncate font-medium">{String(value)}</div>
+                    {onApplySuggestion && !applied && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onApplySuggestion(field, value);
+                          setAppliedFields(new Set([...appliedFields, field]));
+                        }}
+                        className="shrink-0 rounded bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/30"
+                      >
+                        Aplicar
+                      </button>
+                    )}
+                    {applied && <span className="text-[10px] text-emerald-700">✓ aplicado</span>}
                   </div>
-                  {onApplySuggestion && !applied && (
-                    <button
-                      onClick={() => {
-                        onApplySuggestion(field, value);
-                        setAppliedFields(new Set([...appliedFields, field]));
-                      }}
-                      className="shrink-0 text-[10px] px-2 py-0.5 rounded bg-violet-500/30 hover:bg-violet-500/50 text-violet-100 font-medium"
-                    >
-                      Aplicar
-                    </button>
-                  )}
-                  {applied && <span className="text-[10px] text-emerald-300">✓ aplicado</span>}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: string | null }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    pending: { label: 'Aguardando', cls: 'bg-muted text-muted-foreground' },
+    uploaded: { label: 'Enviado', cls: 'bg-muted text-muted-foreground' },
+    processing: { label: 'Em leitura', cls: 'bg-yellow-50 text-yellow-700' },
+    done: { label: 'Lido', cls: 'bg-emerald-50 text-emerald-700' },
+    failed: { label: 'Falhou', cls: 'bg-red-50 text-red-700' },
+  };
+  const item = map[status ?? 'pending'] ?? map.pending;
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${item.cls}`}>
+      {item.label}
+    </span>
   );
 }

@@ -234,6 +234,12 @@ export default function IntakeWizard() {
       },
     };
 
+    // Envia o draft_id para o backend migrar os documentos do rascunho
+    // para o processo recém-criado (auditoria uploads Isis #2 / Fase 3).
+    if (draftId !== null) {
+      payload.draft_id = draftId;
+    }
+
     if (form.client_mode === 'existing') {
       payload.client_id = parseInt(form.client_id);
     } else {
@@ -289,8 +295,14 @@ export default function IntakeWizard() {
         state: { fromIntake: true, caseData: data },
       });
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg || 'Erro ao criar o caso. Tente novamente.');
+      const response = (err as { response?: { status?: number; data?: { detail?: string } } })
+        ?.response;
+      if (response?.status === 409) {
+        // Rascunho já finalizado anteriormente (backend recusou re-commit).
+        setError('Este rascunho já foi finalizado anteriormente.');
+      } else {
+        setError(response?.data?.detail || 'Erro ao criar o caso. Tente novamente.');
+      }
     } finally {
       setSubmitting(false);
     }
