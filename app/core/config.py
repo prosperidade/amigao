@@ -217,6 +217,13 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS: int = 2048
     AI_TEMPERATURE: float = 0.2
     AI_TIMEOUT_SECONDS: float = 30.0
+    # Janela de texto enviada ao extrator de campos (document_extractor).
+    # 2026-06-02: era 3000 hardcoded — truncava escrituras/matrículas reais
+    # (15-25k chars): a capa (certidão CNIB) trazia só nome+CPF e os campos do
+    # imóvel (área/matrícula/município), que ficam DEPOIS do char 3000, vinham
+    # None. 30k chars cobre os docs reais (~7,5k tokens no gpt-4o-mini, folgado
+    # nos 128k de contexto). Configurável p/ ajustar sem deploy.
+    EXTRACTOR_MAX_CHARS: int = 30_000
     # Custo máximo por job (USD) — proteção contra prompt injection gigante
     AI_MAX_COST_PER_JOB_USD: float = 0.10
     # Sprint R — teto mensal padrão por tenant (USD). 0 = ilimitado.

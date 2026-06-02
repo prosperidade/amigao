@@ -204,3 +204,18 @@ em `docs/agentes/` são a fonte de verdade verificada.
   reproduz falha de scan real — exigir o doc real (regra "validar com o doc real"); (3) não confiar no
   `num_retries` do litellm (depende de `tenacity`). doc 115/118 destravam com `force=True` pós-deploy.
   Doc: `docs/trabalhos/ocr_multipagina.md`.
+- **2026-06-02 — Extrator truncava o texto em 3000 chars (`fix/extrator-truncamento`).** Terceiro elo
+  da cadeia OCR→extrator: com o texto inteiro no banco (doc 118, ~20.8k chars), o extrator devolvia só
+  nome+CPF e os 9 campos do imóvel vinham `None`. **Causa raiz:** `document_extractor.py:183` fazia
+  `text[:3000]` — a página 1 do PDF é a certidão CNIB (nome/CPF); os campos do imóvel ficam depois do
+  char 3000, fora da janela. **Fix:** `EXTRACTOR_MAX_CHARS` (config, default 30.000) substitui o 3000
+  hardcoded; prompt da matrícula avisa que o doc tem várias seções (capa + escritura + memorial) e que
+  os campos podem estar em qualquer parte. **Provado rodando no texto real do doc 118:** área=58.7654,
+  município=UIRAPURU, uf=GO, denominação="LOTE 32, PA MÃE MARIA", comarca=CRIXÁS, cartório, proprietário
+  — 7 campos `None`→preenchidos; regressão de doc simples (RG/CPF) OK. **`numero_matricula` segue None e
+  está correto:** a única "Matrícula nº 6253" do doc é dos confrontantes (lotes 31/33); o imóvel é o lote
+  32, referenciado por CIB/CCIR/memorial, sem matrícula própria — forçar 6253 seria atribuir a matrícula
+  de um vizinho. **Não usa skill** (chama `extract_document_fields` direto, sem `_compose_system_with_skills`)
+  → dívida #45. **Lição:** validar contra a realidade do doc antes de "forçar" um campo esperado (6253
+  parecia óbvio mas era do vizinho). doc 118 re-extrai em prod via chain OCR→extrator ou `POST
+  /processes/{id}/extract`. Doc: `docs/trabalhos/extrator_truncamento.md`.

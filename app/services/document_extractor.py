@@ -29,7 +29,16 @@ Inclua um campo "confidence" por campo extraido: "high" | "medium" | "low".
 """
 
 _FALLBACK_DOC_PROMPTS: dict[str, str] = {
-    "matricula": """Extraia do texto desta matricula de imovel:
+    "matricula": """Extraia os campos abaixo desta matricula/escritura de imovel rural.
+
+IMPORTANTE: o documento pode ter VARIAS SECOES e dezenas de paginas — ex.: uma
+certidao na capa (CNIB/indisponibilidade, que costuma trazer so nome e CPF),
+seguida da escritura publica, da matricula do cartorio e do memorial
+descritivo/georreferenciamento. Os campos do IMOVEL (area, matricula, municipio,
+denominacao, comarca, cartorio, limites) normalmente NAO estao na capa — procure
+em TODO o texto, ate o final. Use o valor exatamente como aparece (numeros,
+unidades e pontuacao). Para campos realmente ausentes, use null.
+
 {
   "numero_matricula": null,
   "cartorio": null,
@@ -180,7 +189,7 @@ def extract_document_fields(
     else:
         prompt_template = _FALLBACK_DOC_PROMPTS.get(doc_type, _FALLBACK_DEFAULT_PROMPT)
 
-    prompt = prompt_template.replace("{text}", text[:3000])
+    prompt = prompt_template.replace("{text}", text[: settings.EXTRACTOR_MAX_CHARS])
 
     try:
         response = complete(prompt, system=system_prompt)

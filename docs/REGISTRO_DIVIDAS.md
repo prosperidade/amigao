@@ -80,6 +80,17 @@ o tratamento de erro continua frágil. **Origem:** Onda A (24/05).
 devolve 500 + retry manual. Tratar com retry server-side. Improvável para consultor único.
 **Origem:** Onda B (24/05).
 
+**45. Extrator de campos sem skill procedural.** O `ExtratorAgent.execute()` chama
+`extract_document_fields()` direto — **não** passa por `_compose_system_with_skills`. O
+prompt de extração vive hardcoded em `document_extractor.py` (com fallback; pode vir do
+banco via `prompt_service`), fora do padrão de skills (`.md` versionado) que o diagnóstico
+e o auditor já seguem. O fix de truncamento (`fix/extrator-truncamento`, 02/06) melhorou o
+prompt da matrícula inline, mas o ideal é migrar para skill procedural — versionável,
+revisável pela sócia, por `doc_type`. **Sem urgência.** **Origem:** `fix/extrator-truncamento`
+(02/06). Nota: se prod usa prompt do banco (`extract_matricula`), a melhoria de prompt deste
+PR (fallback hardcoded) só vale onde não há prompt no banco — conferir/atualizar o prompt do
+banco em prod se existir.
+
 **44. OCR Gemini multipágina é sequencial (1 call/página) e sensível a 503.** O fix de
 `fix/ocr-multipagina` resolveu a leitura só-da-1ª-página rasterizando e transcrevendo página a
 página, mas isso é serial: ~10s e ~$0.002-0.01 por página (doc de 6 págs ≈ 90s, $0.02). Sob 503
