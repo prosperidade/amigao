@@ -33,7 +33,10 @@ logger = logging.getLogger(__name__)
     max_retries=2,
     retry_backoff=True,
     retry_backoff_max=120,
-    soft_time_limit=180,
+    # OCR multipágina roda 1 chamada Gemini por página (~10s/pág com thinking
+    # off). Teto de 15 págs ⇒ ~150s + overhead/retries 503; 300s dá folga sem
+    # deixar uma task travada bloquear a fila do worker (pool=solo) por muito tempo.
+    soft_time_limit=300,
 )
 def ocr_then_extract(
     self,
@@ -133,19 +136,25 @@ def ocr_then_extract(
             db.add(doc)
             db.commit()
 
-        # 3) Cache twin — mesmo arquivo já foi OCR'd antes
-        twin = (
-            db.query(Document)
-            .filter(
-                Document.tenant_id == tenant_id,
-                Document.checksum_sha256 == checksum,
-                Document.id != doc.id,
-                Document.extracted_text.isnot(None),
-                Document.deleted_at.is_(None),
+        # 3) Cache twin — mesmo arquivo já foi OCR'd antes.
+        # Pulado quando force=True: reprocessar forçado tem que re-extrair de fato,
+        # não copiar o texto (possivelmente curto/antigo) de um gêmeo — senão o
+        # cache mascara o reprocessamento (ex.: re-OCR pós-fix multipágina copiaria
+        # os 832 chars truncados de uma leitura anterior).
+        twin = None
+        if not force:
+            twin = (
+                db.query(Document)
+                .filter(
+                    Document.tenant_id == tenant_id,
+                    Document.checksum_sha256 == checksum,
+                    Document.id != doc.id,
+                    Document.extracted_text.isnot(None),
+                    Document.deleted_at.is_(None),
+                )
+                .order_by(Document.id.desc())
+                .first()
             )
-            .order_by(Document.id.desc())
-            .first()
-        )
         if twin and (twin.extracted_text or "").strip():
             doc.extracted_text = twin.extracted_text
             doc.extracted_at = datetime.now(UTC)

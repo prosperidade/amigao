@@ -185,3 +185,22 @@ em `docs/agentes/` são a fonte de verdade verificada.
   `model=gemini/gemini-2.5-flash`, `error=None`, $0.00057, 13,8s. **Lição:** modelo de IA
   descontinuável **sempre** por env, nunca hardcoded — o próximo deprecation é troca de variável, não
   de código. Doc: `docs/trabalhos/ocr_gemini_model.md`.
+- **2026-06-02 — OCR só lia 1 página de PDF multipágina (`fix/ocr-multipagina`).** Com o modelo
+  Gemini já corrigido, a escritura do Romilton (doc 118, 6 págs, 2,3 MB) saía com **832 chars = só a
+  certidão CNIB da capa**; páginas 2-6 (área 58,7654 ha, matrícula 6253, CAR GO-5221577) sumiam, e o
+  extrator devolvia quase tudo `None`. **Causa medida (PDF real reproduzido local, sem assumir):** o
+  Gemini com o PDF enviado **inline** transcreve só a 1ª página em docs escaneados multipágina — o
+  custo alto (~9x) provava que ele recebia as 6 págs mas só transcrevia a capa. Teste de síntese
+  enganava (PDF legível pequeno vinha 8/8); só o PDF real expôs a falha. **Fix:**
+  `extract_text_with_gemini` rasteriza cada página (`pypdfium2`, 200 DPI) e faz **1 chamada por
+  página**, concatenando (`reasoning_effort="disable"` → OCR não precisa de thinking, ~2x mais rápido/
+  barato; **retry próprio** por página p/ 503 — litellm `num_retries` exige `tenacity`, ausente, e
+  falhava; página que falha é pulada → texto parcial, não derruba o doc). Inline antigo virou fallback
+  (`_extract_text_with_gemini_inline`) p/ quando a rasterização não está disponível. **+ Bug do cache:**
+  `cache_twin` em `ocr_tasks.py` **não respeitava `force=True`** — reprocessar copiava o texto curto de
+  um gêmeo e mascarava o re-OCR; agora pula o twin em force. `soft_time_limit` 180→300s. **Provado
+  rodando no PDF real:** 832 → ~18-21k chars, `area_ok`/`matricula_ok`/`car_ok` = True. **Lições:**
+  (1) Gemini multipágina = rasterizar + 1 call/página, não PDF inline; (2) síntese pequena não
+  reproduz falha de scan real — exigir o doc real (regra "validar com o doc real"); (3) não confiar no
+  `num_retries` do litellm (depende de `tenacity`). doc 115/118 destravam com `force=True` pós-deploy.
+  Doc: `docs/trabalhos/ocr_multipagina.md`.

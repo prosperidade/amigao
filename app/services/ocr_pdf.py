@@ -2,7 +2,9 @@
 ocr_pdf — Extração de texto de PDFs (Sprint V hardening, 2026-05-08).
 
 Pipeline pré-extrator. Tenta `pypdf` primeiro (PDFs digitais, grátis) e cai
-para Gemini Vision (PDFs escaneados, ~$0.0006 por documento de 8 páginas).
+para Gemini Vision (PDFs escaneados), rasterizando UMA imagem por página e
+transcrevendo página a página — o envio inline do PDF inteiro fazia o Gemini
+ler só a 1ª página em docs multipágina (ver extract_text_with_gemini).
 
 Não lê do MinIO nem persiste — orquestração e audit ficam em
 `app/workers/ocr_tasks.py`.
@@ -30,7 +32,20 @@ PYPDF_MIN_CHARS = 100
 # e derrubou o worker em prod com 404 — ver app/core/config.py:GEMINI_OCR_MODEL.
 OPENAI_VISION_MODEL = "gpt-4o-mini"
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB — proteção anti-DoS
-OCR_TIMEOUT_SECONDS = 90  # Gemini (PDF inline, costuma ser rápido)
+OCR_TIMEOUT_SECONDS = 90  # Gemini inline (fallback de 1 página, costuma ser rápido)
+
+# Gemini OCR por página rasterizada (estratégia principal — ver
+# extract_text_with_gemini). PDF inline fazia o Gemini transcrever só a 1ª página
+# em docs escaneados multipágina (escritura de 6 págs voltava com 832 chars = só
+# a certidão da capa); rasterizar e mandar UMA imagem por chamada resolve.
+GEMINI_OCR_DPI = 200  # mesma resolução do fallback OpenAI (qualidade × tokens)
+GEMINI_OCR_MAX_PAGES = 15  # teto de páginas (custo/tempo no worker pool=solo)
+GEMINI_OCR_PAGE_TIMEOUT_SECONDS = 75  # timeout por página
+# Retry próprio por página p/ 503 transitório do Gemini ("high demand"). NÃO usar
+# o num_retries do litellm: ele depende do pacote `tenacity` (não instalado) e
+# falha com "tenacity import failed" em vez de re-tentar. Backoff linear curto.
+GEMINI_OCR_PAGE_ATTEMPTS = 3
+GEMINI_OCR_RETRY_BACKOFF_SECONDS = 4
 # Fallback OpenAI Vision: timeout mais curto e SEM retries do litellm. O worker
 # é pool=solo — uma task pendurada bloqueia a fila inteira. Em prod o fallback
 # pendurou ~272s (≈ 3 × 90s = timeout × num_retries default do litellm) antes de
@@ -90,8 +105,18 @@ def extract_text_with_pypdf(pdf_bytes: bytes) -> str:
 
 
 def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf") -> OcrResult:
-    """Chama Gemini 2.0 Flash com o PDF inline. Devolve OcrResult com custo/tokens
-    para que o caller persista em AIJob."""
+    """OCR via Gemini Vision, UMA imagem rasterizada por página.
+
+    PDFs escaneados multipágina enviados inline faziam o Gemini transcrever só a
+    1ª página (a escritura de 6 págs do Romilton voltava com ~832 chars = apenas
+    a certidão CNIB da capa; provado rodando 2026-06-02). Rasterizamos cada página
+    em JPEG (pypdfium2) e mandamos uma imagem por chamada, concatenando o texto —
+    assim TODAS as páginas são transcritas (mesma escritura: ~18k chars, 6 págs).
+
+    Uma página que falha (ex.: 503 transitório do Gemini) é pulada com log, sem
+    derrubar o documento inteiro. Se a rasterização não estiver disponível
+    (pypdfium2 ausente), cai para o envio inline antigo (cobre PDFs de 1 página).
+    """
     if not pdf_bytes:
         return OcrResult("", "none", 0, 0.0, 0, 0, 0, "", "", error="empty_bytes")
 
@@ -102,7 +127,113 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
 
     model = settings.GEMINI_OCR_MODEL
 
+    images = _rasterize_pdf_pages_to_jpegs(
+        pdf_bytes, max_pages=GEMINI_OCR_MAX_PAGES, dpi=GEMINI_OCR_DPI
+    )
+    if not images:
+        logger.info("ocr_pdf.gemini: rasterização indisponível/vazia, usando inline")
+        return _extract_text_with_gemini_inline(pdf_bytes, mime_type, model)
+
     import litellm  # noqa: PLC0415
+
+    t0 = time.monotonic()
+    page_texts: list[str] = []
+    cost = 0.0
+    tokens_in = 0
+    tokens_out = 0
+    failed = 0
+    for idx, img_bytes in enumerate(images):
+        b64 = base64.b64encode(img_bytes).decode("ascii")
+        response = None
+        last_exc: Optional[Exception] = None
+        for attempt in range(GEMINI_OCR_PAGE_ATTEMPTS):
+            try:
+                response = litellm.completion(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": OCR_PROMPT},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                            ],
+                        }
+                    ],
+                    api_key=settings.GEMINI_API_KEY,
+                    max_tokens=8000,
+                    temperature=0,
+                    timeout=GEMINI_OCR_PAGE_TIMEOUT_SECONDS,
+                    num_retries=0,  # retry é nosso (litellm exige tenacity)
+                    # OCR é transcrição pura — não precisa do "thinking" do Gemini
+                    # 2.5. Desabilitar corta ~2x a latência/página (~23s → ~10s) e o
+                    # custo, sem perda de qualidade (validado: área/matrícula/CAR OK).
+                    # Mantém o doc de 15 págs dentro do soft_time_limit do worker.
+                    reasoning_effort="disable",
+                )
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < GEMINI_OCR_PAGE_ATTEMPTS - 1:
+                    logger.info(
+                        "ocr_pdf.gemini: página %d/%d tentativa %d falhou (%s), re-tentando",
+                        idx + 1, len(images), attempt + 1, str(exc)[:120],
+                    )
+                    time.sleep(GEMINI_OCR_RETRY_BACKOFF_SECONDS * (attempt + 1))
+
+        if response is None:
+            failed += 1
+            page_texts.append("")
+            logger.warning(
+                "ocr_pdf.gemini: página %d/%d falhou após %d tentativas: %s",
+                idx + 1, len(images), GEMINI_OCR_PAGE_ATTEMPTS, last_exc,
+            )
+            continue
+
+        page = (response.choices[0].message.content or "").strip()
+        page_texts.append(page)
+        usage = response.usage or {}
+        tokens_in += getattr(usage, "prompt_tokens", 0) or 0
+        tokens_out += getattr(usage, "completion_tokens", 0) or 0
+        try:
+            cost += float(litellm.completion_cost(completion_response=response) or 0.0)
+        except Exception:
+            pass
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    text = "\n\n".join(p for p in page_texts if p).strip()
+    error = None
+    if not text:
+        error = f"gemini_all_pages_failed:{failed}/{len(images)}"
+    elif failed:
+        # Texto parcial: devolve o que extraiu (melhor que nada), mas sinaliza.
+        logger.warning(
+            "ocr_pdf.gemini: %d/%d páginas falharam — texto parcial", failed, len(images)
+        )
+    return OcrResult(
+        text=text,
+        method="gemini",
+        chars=len(text),
+        cost_usd=cost,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        duration_ms=elapsed_ms,
+        model_used=model,
+        provider="gemini",
+        error=error,
+    )
+
+
+def _extract_text_with_gemini_inline(
+    pdf_bytes: bytes, mime_type: str, model: str
+) -> OcrResult:
+    """Envio do PDF inteiro inline ao Gemini (estratégia antiga).
+
+    Mantida só como fallback de extract_text_with_gemini quando a rasterização
+    não está disponível. NÃO usar como caminho principal: em PDFs multipágina o
+    Gemini transcreve só a 1ª página por aqui."""
+    import litellm  # noqa: PLC0415
+
+    from app.core.config import settings  # noqa: PLC0415
 
     b64 = base64.b64encode(pdf_bytes).decode("ascii")
     t0 = time.monotonic()
@@ -133,7 +264,6 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
             cost = float(litellm.completion_cost(completion_response=response) or 0.0)
         except Exception:
             cost = 0.0
-        provider = model.split("/", 1)[0]
         return OcrResult(
             text=text,
             method="gemini",
@@ -143,11 +273,11 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
             tokens_out=tokens_out,
             duration_ms=elapsed_ms,
             model_used=model,
-            provider=provider,
+            provider="gemini",
         )
     except Exception as exc:
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        logger.warning("ocr_pdf.gemini falhou: %s", exc)
+        logger.warning("ocr_pdf.gemini inline falhou: %s", exc)
         return OcrResult(
             text="",
             method="gemini",

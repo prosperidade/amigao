@@ -80,6 +80,16 @@ o tratamento de erro continua frágil. **Origem:** Onda A (24/05).
 devolve 500 + retry manual. Tratar com retry server-side. Improvável para consultor único.
 **Origem:** Onda B (24/05).
 
+**44. OCR Gemini multipágina é sequencial (1 call/página) e sensível a 503.** O fix de
+`fix/ocr-multipagina` resolveu a leitura só-da-1ª-página rasterizando e transcrevendo página a
+página, mas isso é serial: ~10s e ~$0.002-0.01 por página (doc de 6 págs ≈ 90s, $0.02). Sob 503
+sustentado do Gemini ("high demand") uma página pode cair mesmo com os 3 retries → texto parcial
+(degrada com elegância, não derruba o doc). Se virar gargalo: paralelizar as chamadas de página
+e/ou cachear por página. **Sem urgência** — docs típicos ≤ alguns págs cabem no `soft_time_limit`
+de 300s. **Origem:** `fix/ocr-multipagina` (02/06). Correlato: imagem do worker **dev** local
+estava defasada (sem `pypdfium2`/`tenacity` que já estão no `requirements.txt` → prod OK); rebuild
+local quando for mexer em deps de OCR.
+
 **28. OCR do PDF SEMAD pendente.** A ingestão do corpus SEMAD (PR #24) indexou 282/283 PDFs;
 `ON_01_2021_SEMAD - Errata.pdf` é escaneado e ficou de fora (sem camada de texto). Rodar pelo
 pipeline OCR existente (`docs/arquitetura/PIPELINE_OCR.md`) e reingerir o único documento.
