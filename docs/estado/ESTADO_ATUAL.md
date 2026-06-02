@@ -20,6 +20,8 @@
 
 **Pulso 2026-06-02 (UI renderer + seletores):** resultado dos agentes saía como JSON cru e o card mostrava `Agente —` / `Modelo —`. Causa raiz (não a hipótese do prompt): `agent_name` **estava** no banco (chain inclusa), mas `_serialize_job` (`GET /ai/jobs`) **não o serializava** → front recebia `undefined` → `GenericResult`/`JSON.stringify`. Fix: serializer expõe `agent_name`+`chain_trace_id`; novo `AuditorResult`; `GenericResult` à prova de `[object Object]`; `IntakeWizard` troca inputs de ID por dropdowns com busca (cliente via `/clients/`, imóvel via `/properties/?client_id=`). Provado rodando: API devolve `agent_name`, 16 clientes/1 imóvel nos seletores, `tsc` verde. Fecha #UX-1/#UX-2. Doc: `docs/trabalhos/ui_renderer_seletores.md`. Branch `fix/ui-renderer-seletores`.
 
+**Pulso 2026-06-01 (PR #38 — chain legislação):** `diagnostico_completo` agora entrega diagnóstico mesmo quando `legislacao` falha ou pede revisão. Medição rodando mostrou RAG local em ~4,5s, contexto por metadados em ~0,5s e timeout real na chamada Gemini (`gemini/gemini-2.5-flash`, `litellm.Timeout`) em ~33s. Correção escopada em `app/agents/orchestrator.py`: em `diagnostico_completo`, `legislacao` é insumo intermediário e fica não-bloqueante para `requires_review=True` e falha; o erro fica em `chain_data["legislacao"]` e `diagnostico` continua com contexto parcial. Revalidado rodando no `process_id=30`/`tenant_id=2`: cenário com timeout → `diagnostico` rodou depois e entregou 3 passivos (AIJob 135); cenário sem timeout mas com `requires_review=True` → `diagnostico` também rodou e entregou 3 passivos (AIJob 139). Dívida #38 fechada; #39 permanece para robustez própria da legislação. Doc: `docs/arquivo/auditorias/2026-06-01_chain_legislacao.md`.
+
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
 ---
@@ -299,7 +301,7 @@
 
 ### Chains de orquestração (9)
 
-Definidas em `app/agents/orchestrator.py:CHAINS`: `intake`, `diagnostico_completo`, `gerar_proposta`, `gerar_documento`, `analise_regulatoria`, `enquadramento_regulatorio`, `analise_financeira`, `monitoramento`, `marketing_content`. Chain principal: `diagnostico_completo` (extrator → legislacao → diagnostico → redator).
+Definidas em `app/agents/orchestrator.py:CHAINS`: `intake`, `diagnostico_completo`, `gerar_proposta`, `gerar_documento`, `analise_regulatoria`, `enquadramento_regulatorio`, `analise_financeira`, `monitoramento`, `marketing_content`. Chain principal: `diagnostico_completo` (extrator → auditor_imovel → legislacao → diagnostico).
 
 ### Models SQLAlchemy (28 entidades)
 

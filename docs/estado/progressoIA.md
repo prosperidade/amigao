@@ -1733,3 +1733,39 @@ CORS" é 500 mascarado; pegar request_id no log do regente-api.
 
 **Pergunta em aberto (não reproduzida):** gatilho exato do Error Boundary
 (precisa navegador) e qual 500 específico o /threads dá em produção.
+
+---
+
+## PR #38 — destravar `diagnostico_completo` quando legislação falha (01/06/2026)
+
+Mudança de orquestração, validada com sistema rodando. Fecha a dívida **#38**.
+
+**Medição da causa:** no `process_id=30`/`tenant_id=2`, a busca local da legislação não era o gargalo:
+RAG+embedding de query levou ~4,5s e retornou 0 chunks; contexto por metadados levou ~0,5s e ficou
+vazio. O timeout medido ocorreu na chamada LLM do `LegislacaoAgent` para
+`gemini/gemini-2.5-flash` via `ai_gateway.complete` (`AI_TIMEOUT_SECONDS=30.0`), com erro
+`litellm.Timeout: Connection timed out after None seconds`.
+
+**Correção:** `app/agents/orchestrator.py` ganhou exceção escopada por chain:
+- em `diagnostico_completo`, `legislacao` é insumo intermediário e não bloqueia por
+  `requires_review=True`;
+- falha/timeout de `legislacao` nessa chain também não aborta a entrega: o erro fica em
+  `ctx.chain_data["legislacao"]` e o `diagnostico` roda com contexto parcial;
+- em chains onde `legislacao` é produto final (`analise_regulatoria`/`enquadramento_regulatorio`),
+  o comportamento segue bloqueante.
+
+Também foi ajustado `BaseAgent.run()` para registrar o nome da exceção quando `str(exc)` vem vazio
+(ex.: `AIGatewayError`), evitando erro vazio no `AgentResult`.
+
+**Revalidação rodando:**
+- Cenário com timeout: `extrator` ok → `auditor_imovel` ok → `legislacao` failed (~33,6s, AIJob 134)
+  → `diagnostico` **rodou** (AIJob 135) e entregou 3 itens em `passivos_identificados`.
+- Cenário sem timeout, mas com revisão: `legislacao` success + `requires_review=True` (AIJob 138) →
+  `diagnostico` **rodou** (AIJob 139) e entregou 3 itens.
+
+**Docs/governança:** nova auditoria
+`docs/arquivo/auditorias/2026-06-01_chain_legislacao.md`; ADR-011 atualizado; `ECOSSISTEMA_AGENTICO`,
+`LEGISLACAO_AGENTE`, `ESTADO_ATUAL`, `REGISTRO_DIVIDAS` e `MEMORIA_CHAT` atualizados.
+
+**Permanece:** #39 (robustez própria da legislação: retry/parsing/timeout), #40 (2 `SKILL.md`
+inválidos), #41 (auto-trigger pós-case, decisão produto).

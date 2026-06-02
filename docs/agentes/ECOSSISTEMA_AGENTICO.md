@@ -25,7 +25,7 @@ verdade — não duplicar aqui). Os mais ativados no ecossistema:
 | `extrator` | extract_document | dict (extracted_fields) | não | Implementado. + `field_sources`, reconciliação, `/extracted-fields` (PR Intake). |
 | `diagnostico` | diagnostico_propriedade | DiagnosticoPreliminarContent | **sim** | Implementado. `requires_review=True` forçado (`diagnostico.py:448` — "diagnóstico SEMPRE precisa de validação humana"). Consome `chain_data["auditor_imovel"]`. |
 | `auditor_imovel` | diagnostico_propriedade | dict (divergencias/findings) | sim (não-bloqueante) | Implementado. Determinístico (`property_audit`). |
-| `legislacao` | consulta_regulatoria | EnquadramentoRegulatorioContent | sim | Implementado. **Filtro RAG por demand_type via JOIN com `LegislationDocument.demand_types` (PR 2.2).** |
+| `legislacao` | consulta_regulatoria | EnquadramentoRegulatorioContent | sim | Implementado. **Filtro RAG por demand_type via JOIN com `LegislationDocument.demand_types` (PR 2.2).** Em `diagnostico_completo`, revisão/falha são não-bloqueantes porque a etapa é insumo do diagnóstico. |
 | `orcamento` | generate_proposal | dict (proposta) | sim | Implementado. |
 | `financeiro` | analise_financeira | dict (insights) | não | Implementado. |
 | `redator` | gerar_documento | PecaJuridica/RespostaNotificacao | sim | Implementado. |
@@ -49,8 +49,10 @@ verdade — não duplicar aqui). Os mais ativados no ecossistema:
 - **Caso só nasce por mão do consultor** (decisão de produto). O `Process` nasce
   com `demand_type="nao_identificado"`.
 - **Provider plugável por consultor** (ver 3.5).
-- **Non-blocking review (ADR-011):** `auditor_imovel` emite `requires_review` sem
-  travar a chain (`NON_BLOCKING_REVIEW_AGENTS`); `legislacao`/`redator` travam.
+- **Non-blocking review/failure (ADR-011):** `auditor_imovel` emite `requires_review` sem
+  travar a chain (`NON_BLOCKING_REVIEW_AGENTS`). Em `diagnostico_completo`, `legislacao`
+  também não bloqueia por revisão ou timeout porque é insumo intermediário; nas chains
+  regulatórias em que é produto final, continua bloqueante.
 - **Decisão contextual ao processo (ADR-012):** decisões do consultor sobre
   achados são por processo, não perenes no imóvel.
 - **Skills procedurais (ADR-006):** compiladas no system prompt via

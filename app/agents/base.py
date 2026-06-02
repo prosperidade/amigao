@@ -192,8 +192,9 @@ class BaseAgent(ABC):
 
         except Exception as exc:
             elapsed_ms = int((time.monotonic() - self._started_at) * 1000)
+            error_message = str(exc) or exc.__class__.__name__
             self._fail_job(job, exc)
-            emit_agent_event(self.name, "failed", self.ctx, error=str(exc))
+            emit_agent_event(self.name, "failed", self.ctx, error=error_message)
 
             # Sprint O — telemetria Prometheus (falha)
             record_agent_execution(
@@ -204,7 +205,7 @@ class BaseAgent(ABC):
                 cost_usd=float(job.cost_usd) if job and job.cost_usd else None,
             )
 
-            logger.error("agent.%s failed error=%s ms=%d", self.name, exc, elapsed_ms)
+            logger.error("agent.%s failed error=%s ms=%d", self.name, error_message, elapsed_ms)
             return AgentResult(
                 success=False,
                 data={},
@@ -214,7 +215,7 @@ class BaseAgent(ABC):
                 requires_review=False,
                 agent_name=self.name,
                 duration_ms=elapsed_ms,
-                error=str(exc),
+                error=error_message,
             )
 
     # --- Abstract methods (subclasses implementam) -------------------------
