@@ -190,6 +190,8 @@ envVarGroups:
         sync: false
       - key: AI_DEFAULT_MODEL
         value: gpt-4o-mini
+      - key: AI_DIAGNOSTICO_MODEL
+        value: gpt-4.1
       - key: AI_FALLBACK_MODEL
         value: gemini/gemini-2.5-flash
       - key: AI_MAX_COST_PER_JOB_USD

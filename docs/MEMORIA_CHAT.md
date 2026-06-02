@@ -239,6 +239,17 @@ em `docs/agentes/` são a fonte de verdade verificada.
   **Lição (reforço):** confirmar a causa medindo (banco + resposta da API) antes de aceitar a hipótese
   escrita no prompt — aqui a hipótese apontava pro lugar errado (chain), o bug estava na serialização.
   Doc: `docs/trabalhos/ui_renderer_seletores.md`.
+- **2026-06-02 — Diagnóstico → GPT-4.1 (`fix/diagnostico-modelo-gpt41`).** Pedido do André: o agente de
+  diagnóstico rodava em `gpt-4o-mini`; trocar pra `gpt-4.1`. **Cirúrgico, só o diagnóstico** — mudar o
+  `AI_DEFAULT_MODEL` global encareceria todos os outros agentes sem ter sido pedido. Seguiu a convenção
+  que o `legislacao` já usa (modelo por env, não hardcoded no agente): novo setting `AI_DIAGNOSTICO_MODEL`
+  (default `gpt-4.1`, vazio→`AI_DEFAULT_MODEL`) em `config.py`; `diagnostico.py` passa `model=` no
+  `call_llm`; `docker-compose.yml` (api+worker) e `render.yaml` ganharam a env. White-label do consultor
+  mantém precedência no gateway; passar `model=` explícito desativa o fallback automático **só** do
+  diagnóstico (igual `legislacao`). **Provado rodando** (container, chave real): setting='gpt-4.1' e
+  `complete(model='gpt-4.1')`→`model_used=gpt-4.1`, `content='OK'` (modelo existe e a chave chama).
+  Reversível por env. **Lição (reforço):** modelo de IA sempre por env — deprecation é troca de variável.
+  Doc: `docs/trabalhos/diagnostico_modelo_gpt41.md`.
 - **2026-06-01 — PR #38 chain legislação (`fix/chain-legislacao-timeout`).** Fechou a dívida #38:
   `diagnostico_completo` não morre mais se `legislacao` falhar ou pedir revisão. Medido rodando:
   RAG local ~4,5s, contexto por metadados ~0,5s, timeout real na chamada Gemini
