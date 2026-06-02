@@ -219,3 +219,21 @@ em `docs/agentes/` são a fonte de verdade verificada.
   → dívida #45. **Lição:** validar contra a realidade do doc antes de "forçar" um campo esperado (6253
   parecia óbvio mas era do vizinho). doc 118 re-extrai em prod via chain OCR→extrator ou `POST
   /processes/{id}/extract`. Doc: `docs/trabalhos/extrator_truncamento.md`.
+
+- **2026-06-02 — UI: renderer dos agentes saía JSON cru + seletores por ID (`fix/ui-renderer-seletores`).**
+  Na aba Agentes o resultado vinha como JSON cru/`[object Object]` e o card mostrava `Agente —`/`Modelo —`.
+  **Causa raiz (NÃO a hipótese do prompt, que dizia "`agent_name` vazio na chain"):** o banco **tem**
+  `agent_name` em todos os jobs (chain inclusa — `BaseAgent._create_running_job` grava sempre); quem
+  descartava era o `_serialize_job` (`GET /ai/jobs`, `app/api/v1/ai.py`), que **não serializava** o campo
+  → o front recebia `agent_name=undefined` → `renderers[undefined]` cai no `GenericResult`/`JSON.stringify`.
+  `model_used`/`tokens` nulos são corretos para `extrator`/`auditor_imovel` (não chamam LLM). **Fix:**
+  (A) serializer expõe `agent_name`+`chain_trace_id`; (B) novo `AuditorResult` (divergências humanizadas;
+  esconde `findings_raw`/`issue_ids`), `divergencias` no `DiagnósticoResult`, `GenericResult` reescrito
+  para nunca emitir `[object Object]`/`JSON.stringify`; (C) `IntakeWizard` troca os inputs "ID do
+  cliente/imóvel" por `SearchSelect` (dropdown com busca) — cliente via `/clients/`, imóvel via
+  `/properties/?client_id=` filtrado pelo cliente (desabilitado sem cliente). **Provado rodando:**
+  `GET /ai/jobs` agora devolve `agent_name` (#139 diagnostico/gpt-4o-mini, #137 auditor_imovel);
+  `/clients/`→16, `/properties/?client_id=3`→1; `tsc --noEmit` verde. **Fecha #UX-1 e #UX-2.**
+  **Lição (reforço):** confirmar a causa medindo (banco + resposta da API) antes de aceitar a hipótese
+  escrita no prompt — aqui a hipótese apontava pro lugar errado (chain), o bug estava na serialização.
+  Doc: `docs/trabalhos/ui_renderer_seletores.md`.
