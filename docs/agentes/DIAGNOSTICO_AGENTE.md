@@ -42,12 +42,21 @@ Catálogo transversal em `docs/agentes/ECOSSISTEMA_AGENTICO.md`.
 
 Skill procedural única: `diagnostico/situacao_ambiental_imovel_rural`
 (`app/skills/diagnostico/situacao_ambiental_imovel_rural/SKILL.md`, v1.1.0,
-`applies_to: agent diagnostico, uf [GO, MS, MT]`). Cobre os movimentos 2
-(preliminar) e 4 (consolidado) do método e opera em **três estágios** do mesmo
-caso com o mesmo schema — `preliminar`, `consolidado`, `saneamento` — via
-`ctx.metadata.stage` (`SKILL.md:25-40`). Princípio operacional declarado:
-"Radar, não cancela" e `requires_review=True` (`SKILL.md:42-54`). Skills são
+front-matter: `agent: diagnostico`, `applies_to: {uf: [GO, MS, MT]}`). Cobre os
+movimentos 2 (preliminar) e 4 (consolidado) do método e opera em **três estágios**
+do mesmo caso com o mesmo schema — `preliminar`, `consolidado`, `saneamento` — via
+`ctx.metadata.stage`. Princípio operacional declarado:
+"Radar, não cancela" e `requires_review=True`. Skills são
 compiladas no system prompt (ADR-006) — ver `ECOSSISTEMA_AGENTICO.md`.
+
+> **Estado (PR #40, 2026-06-01): válida e injetada.** Até 2026-06-01 o front-matter
+> era inválido (faltava `agent:`; `applies_to` era lista) e `discover_skills` a
+> **ignorava silenciosamente** — o diagnóstico rodava sem as heurísticas. O PR
+> `fix/skills-frontmatter-40` corrigiu **só o front-matter** (corpo intacto). Provado
+> rodando: `_compose_system_with_skills()` com `ctx.metadata={"uf":"MS"}` injeta o
+> corpo da skill (~55 KB) entre `<!-- skills:start -->`/`<!-- skills:end -->`.
+> **Ressalva:** a injeção depende de `uf` chegar ao `ctx.metadata`; a chain ainda
+> **não** deriva `uf` do imóvel/processo automaticamente (dívida **#44**, ligada à #38).
 
 ## 4. Tools que usa
 

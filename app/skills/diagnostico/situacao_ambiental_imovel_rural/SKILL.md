@@ -1,9 +1,10 @@
 ---
-name: situacao_ambiental_imovel_rural
-version: 1.1.0
+name: diagnostico/situacao_ambiental_imovel_rural
+agent: diagnostico
+version: "1.1.0"
+description: "Skill base do agente Diagnóstico — situação ambiental de imóvel rural (movimentos 2 e 4 do método)"
 applies_to:
-  - agent: diagnostico
-    uf: [GO, MS, MT]
+  uf: [GO, MS, MT]
 # Nota: omitir demand_type e doc_type significa "qualquer".
 # Esta é a skill base do agente da pré-venda — aplica antes da classificação.
 # Skills mais específicas (ex: diagnostico_car_go) terão precedência pelo matching

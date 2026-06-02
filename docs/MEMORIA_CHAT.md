@@ -77,7 +77,9 @@ status — colisão de número pré-existente, não renumerar), **#26** (eixo 3)
 **#28** (OCR Errata SEMAD), **#29** (critério Valor Estratégico "Baixo"),
 **#30** (auditoria de uso de IA por chave), **#31** (git history carrega 254MB
 de corpus removido). Fechadas recentes: **#27** (EncryptedString em coluna real,
-PR 2.3). Dívidas novas desta PR: ver REGISTRO.
+PR 2.3), **#40** (2 SKILL.md inválidos — front-matter corrigido, skill do
+diagnóstico injetada; PR `fix/skills-frontmatter-40`). Dívida nova: **#44** (chain
+não propaga `uf` ao diagnóstico — ligada à #38). Dívidas novas por PR: ver REGISTRO.
 
 ## 9. Lições codificadas
 
@@ -155,3 +157,13 @@ em `docs/agentes/` são a fonte de verdade verificada.
   #43 Error Boundary global. **Infra p/ André:** Cloudflare WebSockets=ON +
   `VITE_WS_URL=wss://api.regenteambiental.com.br`. Doc:
   `docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agentico.md`.
+- **2026-06-01 — Front-matter dos 2 SKILL.md (`fix/skills-frontmatter-40`), dívida #40 FECHADA.**
+  Os 2 únicos SKILL.md formais tinham front-matter inválido e `discover_skills` os **ignorava
+  silenciosamente** (só WARNING) → agentes rodando sem a skill. Corrigido **só o front-matter** (corpo
+  intacto): diagnóstico ganhou `agent:` + `name` com prefixo + `applies_to: {uf: [GO, MS, MT]}`;
+  auditor ganhou `name` com prefixo + `applies_to: {doc_types: []}` + string→`description`. **Provado
+  rodando** (container api): `discover_skills()` sem warning, `load_skill()` OK, e
+  `DiagnosticoAgent._compose_system_with_skills()` com `ctx.metadata={"uf":"MS"}` injeta o corpo
+  (~55 KB) entre `<!-- skills:start -->`/`<!-- skills:end -->`; controle negativo sem `uf` não injeta.
+  26 testes de skills verdes. **Gap novo: dívida #44** (a chain não propaga `uf` ao diagnóstico —
+  ligada à #38; não resolvida aqui). Docx Word duplicados movidos para `docs/_archive/skills-fontes-word/`.

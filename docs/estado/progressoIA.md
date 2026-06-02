@@ -1733,3 +1733,27 @@ CORS" é 500 mascarado; pegar request_id no log do regente-api.
 
 **Pergunta em aberto (não reproduzida):** gatilho exato do Error Boundary
 (precisa navegador) e qual 500 específico o /threads dá em produção.
+
+## Front-matter dos 2 SKILL.md — dívida #40 fechada (01/06/2026)
+
+`fix/skills-frontmatter-40`. Os 2 únicos SKILL.md formais tinham front-matter
+inválido e `discover_skills` os **ignorava silenciosamente** (só WARNING) — os
+agentes rodavam sem a skill. Corrigido **só o front-matter** (corpo de domínio
+intacto):
+- `diagnostico/situacao_ambiental_imovel_rural`: `+agent: diagnostico`, `name`
+  com prefixo, `applies_to` lista→`{uf: [GO, MS, MT]}`, `version` string.
+- `auditor_imovel/analise_divergencias_documentais`: `name` com prefixo,
+  `applies_to` string→`{doc_types: []}`, string descritiva→`description`.
+
+**Provado rodando** (container `api`): `discover_skills()` lista as 2 **sem
+warning**; `load_skill()` retorna `SkillContent`; `DiagnosticoAgent.
+_compose_system_with_skills()` com `ctx.metadata={"uf":"MS"}` **injeta** o corpo
+(~55 KB) entre `<!-- skills:start -->`/`<!-- skills:end -->` (prompt 45→55.504
+chars). Controle negativo: **sem** `uf` não injeta. 26 testes de skills verdes.
+
+**Gap novo (dívida #44, ligada à #38):** a chain não deriva `uf` do
+imóvel/processo; a skill do diagnóstico só casa quando o caller põe `uf` no
+`metadata`. Resolver a propagação é escopo da #38, não deste PR.
+
+**Limpeza:** docx Word duplicados movidos de `docs/skills/` para
+`docs/_archive/skills-fontes-word/` (fonte de verdade = SKILL.md).

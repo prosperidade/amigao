@@ -164,6 +164,13 @@ Verificado RODANDO (ver `docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agent
   Skills formais hoje: `diagnostico/situacao_ambiental_imovel_rural`,
   `auditor_imovel/analise_divergencias_documentais`. Demais agentes ainda sem
   skill formal dedicada.
+  - **Estado (PR #40, 2026-06-01):** as 2 **agora validam** no loader
+    (`discover_skills()` sem warning de `SkillParseError`). Até então ambas tinham
+    front-matter inválido e eram **ignoradas silenciosamente**. A do **diagnóstico**
+    é de fato injetada no system prompt quando `ctx.metadata["uf"]` está presente
+    (provado rodando: bloco `<!-- skills:start -->` no prompt composto); a do
+    **auditor** entra no catálogo mas não é injetada (agente determinístico, sem LLM).
+    A propagação de `uf` à chain do diagnóstico ainda é gap (**dívida #44**, ligada à #38).
 
 ## 7. Knowledge essencial transversal
 

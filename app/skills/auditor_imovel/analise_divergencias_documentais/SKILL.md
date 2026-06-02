@@ -1,9 +1,10 @@
 ---
-name: analise_divergencias_documentais
-version: 1.1.0
+name: auditor_imovel/analise_divergencias_documentais
 agent: auditor_imovel
-applies_to: cruzamento documental de imóvel rural (matrícula × CAR × GEO/SIGEF × CCIR × ITR/CIB × restrições × realidade)
-movimento: primeiro movimento do método — roda após o ExtratorAgent, antes do Diagnóstico
+version: "1.1.0"
+description: "Cruzamento documental de imóvel rural (matrícula × CAR × GEO/SIGEF × CCIR × ITR/CIB × restrições × realidade) — primeiro movimento do método, após o Extrator, antes do Diagnóstico"
+applies_to:
+  doc_types: []
 ---
 
 # Análise de divergências documentais
