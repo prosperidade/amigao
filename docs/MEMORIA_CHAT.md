@@ -171,3 +171,17 @@ em `docs/agentes/` são a fonte de verdade verificada.
   André no Render Shell. **Lição:** nunca capturar exceção de I/O e devolver vazio — distinguir
   "ausente" (NoSuchKey) de "falhou" (re-levanta com o código). **Não fecha #42** (bucket presigned,
   bug distinto). Doc: `docs/trabalhos/storage_r2_redis.md`.
+- **2026-06-02 — OCR: modelo Gemini descontinuado + timeout do fallback (`fix/ocr-gemini-model`).**
+  Sequência do fix de storage: agora o PDF baixa e o OCR roda, mas o intake "fica rodando" em doc
+  escaneado. **Causa (log do worker em prod):** `app/services/ocr_pdf.py:28` tinha
+  `GEMINI_OCR_MODEL = "gemini/gemini-2.0-flash"` **hardcoded** — modelo descontinuado pelo Google →
+  404 `is no longer available`; caía no fallback OpenAI Vision que pendurava ~272s (≈ 3 × 90s = os
+  `num_retries` default do litellm) até Timeout, com o worker `pool=solo` bloqueado. (O
+  `GEMINI_LEGAL_MODEL` já tinha migrado pra 2.5-flash na Sprint W; o OCR ficou pra trás.) **Fix:**
+  `GEMINI_OCR_MODEL` virou setting (`config.py`, default `gemini/gemini-2.5-flash`, env-configurável);
+  `ocr_pdf.py` lê a setting e usa `num_retries=0`; fallback OpenAI ganhou
+  `OPENAI_VISION_TIMEOUT_SECONDS=75` explícito + `num_retries=0`. **Provado rodando** (worker local,
+  chaves reais): PDF imagem-only → pypdf 0 chars → Gemini 2.5-flash → `chars=146`,
+  `model=gemini/gemini-2.5-flash`, `error=None`, $0.00057, 13,8s. **Lição:** modelo de IA
+  descontinuável **sempre** por env, nunca hardcoded — o próximo deprecation é troca de variável, não
+  de código. Doc: `docs/trabalhos/ocr_gemini_model.md`.

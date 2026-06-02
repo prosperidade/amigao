@@ -292,6 +292,28 @@ em `/api/v1/messaging/whatsapp/webhook`.
   **só** quando o URL é `rediss://`. Em `redis://` local não seta (setar num
   não-SSL faz o Celery abortar).
 
+### Modelo de OCR (Gemini) é env — `GEMINI_OCR_MODEL`
+- O modelo Gemini Vision do OCR (`app/services/ocr_pdf.py`) vem de
+  `settings.GEMINI_OCR_MODEL` (default `gemini/gemini-2.5-flash`). **Quando o
+  Google descontinuar um modelo, atualizar a env `GEMINI_OCR_MODEL` — NÃO o
+  código.** Em 2026-06-02 o worker quebrou com `404 models/gemini-2.0-flash is no
+  longer available` justamente porque o modelo estava hardcoded no código.
+- Sintoma do modelo morto: doc escaneado fica `ocr_failed`/`chars=0`; no log do
+  worker `ocr_pdf.gemini falhou: ... is no longer available`.
+- O fallback OpenAI Vision (`gpt-4o-mini`) tem timeout próprio
+  (`OPENAI_VISION_TIMEOUT_SECONDS=75`) e `num_retries=0` para **não pendurar** a
+  fila do worker (`pool=solo`); antes pendurava ~272s antes de desistir.
+- **Diagnóstico no Render Shell (worker)** — roda o OCR no último doc real:
+  ```bash
+  python -c "
+  from app.db.session import SessionLocal
+  from app.models.document import Document
+  from app.workers.ocr_tasks import ocr_then_extract
+  db = SessionLocal(); doc = db.query(Document).order_by(Document.id.desc()).first(); db.close()
+  print(ocr_then_extract(doc_id=doc.id, tenant_id=1, user_id=1, force=True))
+  "   # esperado: status='ocr_ok', chars>0
+  ```
+
 ## Backups e recuperação
 
 ### Estratégia recomendada
