@@ -155,3 +155,19 @@ em `docs/agentes/` são a fonte de verdade verificada.
   #43 Error Boundary global. **Infra p/ André:** Cloudflare WebSockets=ON +
   `VITE_WS_URL=wss://api.regenteambiental.com.br`. Doc:
   `docs/arquivo/auditorias/2026-06-01_mergulho_fluxo_agentico.md`.
+- **2026-06-01 — Storage R2 + Redis SSL + download silencioso (`fix/storage-r2-region-redis`).**
+  Causa-raiz do "OCR não extrai nada, sem mensagem" (provada no Render Shell do worker): os clients
+  boto3 usavam `region_name="us-east-1"` hardcoded, mas o **Cloudflare R2 exige `region="auto"`** —
+  com `us-east-1` o scope SigV4 não bate no GET server-side → `SignatureDoesNotMatch`; o upload
+  presigned (query-auth) tolerava, então o arquivo **subia mas nunca era lido**. **Agravante:**
+  `download_bytes` engolia **todo** `ClientError` e retornava `b""`, mascarando como `no_bytes`
+  genérico por semanas. **Fix:** setting `S3_REGION` (default `"auto"`, configurável) nos 2 clients;
+  `download_bytes` retorna `b""` só para NoSuchKey e **re-levanta** `StorageDownloadError(code)` para
+  o resto (log ERROR); `ocr_then_extract` registra `storage_error:<code>`. **+Redis:** `redis_url_safe`
+  normaliza `ssl_cert_reqs` (env trazia `CERT_REQUIRED`, redis-py quer `required` → evento realtime
+  voltou); Celery seta `broker_use_ssl` só em `rediss://`. **+Endpoint:** `_with_scheme` respeita
+  `MINIO_SECURE`. Provado rodando local (round-trip MinIO com `region=auto` sem regressão; repro+fix do
+  `SignatureDoesNotMatch` e do CERT do Redis; 20 testes verdes). E2E contra R2 real: snippet pronto pro
+  André no Render Shell. **Lição:** nunca capturar exceção de I/O e devolver vazio — distinguir
+  "ausente" (NoSuchKey) de "falhou" (re-levanta com o código). **Não fecha #42** (bucket presigned,
+  bug distinto). Doc: `docs/trabalhos/storage_r2_redis.md`.

@@ -113,6 +113,8 @@ envVarGroups:
         sync: false
       - key: MINIO_SECURE
         value: "True"
+      - key: S3_REGION
+        value: "auto"           # R2 EXIGE "auto" (us-east-1 → SignatureDoesNotMatch no GET)
 
       # --- JWT ---
       - key: SECRET_KEY

@@ -13,9 +13,17 @@ from app.core.tracing import current_trace_context, reset_trace_context, set_tra
 setup_logging()
 celery_app = Celery(
     "amigao_worker",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=settings.redis_url_safe,
+    backend=settings.redis_url_safe,
 )
+
+# Upstash usa rediss:// (TLS). O Celery exige `broker_use_ssl`/
+# `redis_backend_use_ssl` explícitos para SSL — sem isso o broker rediss://
+# falha ao conectar. Só seta quando o URL é SSL (setar num redis:// não-SSL
+# faz o Celery abortar). Ver `settings.celery_redis_use_ssl`.
+if settings.celery_redis_use_ssl:
+    celery_app.conf.broker_use_ssl = settings.celery_redis_use_ssl
+    celery_app.conf.redis_backend_use_ssl = settings.celery_redis_use_ssl
 
 celery_app.conf.update(
     task_serializer="json",

@@ -88,14 +88,35 @@ def ocr_then_extract(
         db.commit()
 
         # 2) Download bytes
+        from app.services.storage import StorageDownloadError  # noqa: PLC0415
+
         storage = get_storage_service()
-        pdf_bytes = storage.download_bytes(doc.storage_key)
+        try:
+            pdf_bytes = storage.download_bytes(doc.storage_key)
+        except StorageDownloadError as exc:
+            # Falha REAL do storage (ex.: SignatureDoesNotMatch por region errada
+            # no R2). Registra a causa — não mascara como 'no_bytes' nem entra em
+            # retry-storm (config não se cura sozinha; a causa fica visível).
+            doc.ocr_status = OcrStatus.failed
+            db.add(doc)
+            db.commit()
+            logger.error(
+                "ocr_then_extract: storage_key=%s erro de download [%s]: %s",
+                doc.storage_key, exc.code, exc,
+            )
+            _emit_ocr_event(
+                publish_realtime_event, tenant_id, doc,
+                status_label="failed", method="none",
+                chars=0, cost_usd=0.0, error=f"storage_error:{exc.code}",
+            )
+            return {"status": "storage_error", "doc_id": doc_id, "code": exc.code}
+
         if not pdf_bytes:
             doc.ocr_status = OcrStatus.failed
             db.add(doc)
             db.commit()
             logger.warning(
-                "ocr_then_extract: storage_key=%s sem bytes (MinIO)",
+                "ocr_then_extract: storage_key=%s objeto ausente (NoSuchKey)",
                 doc.storage_key,
             )
             _emit_ocr_event(

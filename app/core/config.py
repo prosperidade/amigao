@@ -1,12 +1,76 @@
+import ssl
 from contextlib import contextmanager
 from functools import lru_cache
 from typing import Iterator, Literal
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse, urlsplit, urlunsplit
 
 from pydantic import EmailStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "172.31.32.1"}
+
+# redis-py espera os tokens 'none'/'optional'/'required' em ssl_cert_reqs.
+# Uma env (Upstash em prod) com a constante Python 'CERT_REQUIRED' quebra a
+# criação do cliente: "Invalid SSL Certificate Requirements Flag: CERT_REQUIRED".
+# Mapeia qualquer forma comum para o token correto.
+_SSL_CERT_REQS_TOKENS = {
+    "none": "none", "cert_none": "none", "ssl.cert_none": "none",
+    "optional": "optional", "cert_optional": "optional", "ssl.cert_optional": "optional",
+    "required": "required", "cert_required": "required", "ssl.cert_required": "required",
+}
+_SSL_CERT_REQS_CONST = {
+    "none": ssl.CERT_NONE,
+    "optional": ssl.CERT_OPTIONAL,
+    "required": ssl.CERT_REQUIRED,
+}
+
+
+def _redis_cert_reqs_token(raw: str | None) -> str:
+    """Normaliza um valor de ssl_cert_reqs para 'none'/'optional'/'required'.
+    Default 'required' (Upstash usa cert público válido → verificação segura)."""
+    if not raw:
+        return "required"
+    return _SSL_CERT_REQS_TOKENS.get(raw.strip().lower(), "required")
+
+
+def _normalize_redis_ssl_cert_reqs(url: str) -> str:
+    """Reescreve o param ssl_cert_reqs do URL para o token aceito pelo redis-py.
+    Não-SSL ou sem o param → retorna o URL intacto."""
+    if "ssl_cert_reqs" not in url:
+        return url
+    parts = urlsplit(url)
+    pairs = []
+    changed = False
+    for key, value in _parse_query_pairs(parts.query):
+        if key == "ssl_cert_reqs":
+            token = _redis_cert_reqs_token(value)
+            if token != value:
+                changed = True
+            pairs.append((key, token))
+        else:
+            pairs.append((key, value))
+    if not changed:
+        return url
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(pairs), parts.fragment))
+
+
+def _redis_ssl_cert_reqs_const(url: str) -> int:
+    """Constante ssl.CERT_* para o ssl_cert_reqs do URL (default CERT_REQUIRED)."""
+    raw = None
+    for key, value in _parse_query_pairs(urlsplit(url).query):
+        if key == "ssl_cert_reqs":
+            raw = value
+    return _SSL_CERT_REQS_CONST[_redis_cert_reqs_token(raw)]
+
+
+def _parse_query_pairs(query: str) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for chunk in query.split("&"):
+        if not chunk:
+            continue
+        key, sep, value = chunk.partition("=")
+        pairs.append((key, value if sep else ""))
+    return pairs
 
 
 def _extract_hostname(value: str) -> str:
@@ -73,12 +137,17 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     REALTIME_EVENTS_CHANNEL: str = "amigao_events"
 
-    # STORAGE (MinIO)
+    # STORAGE (MinIO / Cloudflare R2)
     MINIO_SERVER: str = "localhost:9000"
     MINIO_PUBLIC_URL: str = ""
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_SECURE: bool = False
+    # Region do cliente S3. Cloudflare R2 EXIGE "auto" — com "us-east-1" o
+    # scope da assinatura SigV4 (.../us-east-1/s3/aws4_request) não bate no GET
+    # server-side (header-auth) e o R2 responde SignatureDoesNotMatch. O MinIO
+    # ignora a region, então "auto" é seguro como default para os dois.
+    S3_REGION: str = "auto"
 
     # JWT
     SECRET_KEY: str
@@ -223,14 +292,45 @@ class Settings(BaseSettings):
             self.SLOW_REQUEST_THRESHOLD_MS,
         )
 
+    def _with_scheme(self, value: str) -> str:
+        """Prefixa o scheme quando a env vem sem ele. Respeita MINIO_SECURE —
+        em produção (R2) a env chega como `<acct>.r2.cloudflarestorage.com`
+        (sem scheme) e PRECISA ir por https; forçar http aqui quebrava o GET."""
+        if value.startswith(("http://", "https://")):
+            return value
+        scheme = "https" if self.MINIO_SECURE else "http"
+        return f"{scheme}://{value}"
+
     @property
     def minio_internal_endpoint(self) -> str:
-        return self.MINIO_SERVER if self.MINIO_SERVER.startswith(("http://", "https://")) else f"http://{self.MINIO_SERVER}"
+        return self._with_scheme(self.MINIO_SERVER)
 
     @property
     def minio_public_endpoint(self) -> str:
         public_url = self.MINIO_PUBLIC_URL.strip() or self.MINIO_SERVER
-        return public_url if public_url.startswith(("http://", "https://")) else f"http://{public_url}"
+        return self._with_scheme(public_url)
+
+    @property
+    def redis_is_ssl(self) -> bool:
+        return self.REDIS_URL.strip().lower().startswith("rediss://")
+
+    @property
+    def redis_url_safe(self) -> str:
+        """REDIS_URL com o param `ssl_cert_reqs` normalizado para o token que o
+        redis-py aceita (`none`/`optional`/`required`). Upstash usa `rediss://`;
+        uma env com `?ssl_cert_reqs=CERT_REQUIRED` (nome da constante Python)
+        quebra o redis-py: 'Invalid SSL Certificate Requirements Flag'. Normaliza
+        defensivamente, independentemente de como a env foi escrita."""
+        return _normalize_redis_ssl_cert_reqs(self.REDIS_URL)
+
+    @property
+    def celery_redis_use_ssl(self) -> dict | None:
+        """Opções SSL para o broker/backend Celery quando o REDIS_URL é
+        `rediss://`. Retorna None em `redis://` (setar `broker_use_ssl` num URL
+        não-SSL faz o Celery abortar). Ver `app/core/celery_app.py`."""
+        if not self.redis_is_ssl:
+            return None
+        return {"ssl_cert_reqs": _redis_ssl_cert_reqs_const(self.REDIS_URL)}
 
     @property
     def is_production(self) -> bool:
