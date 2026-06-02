@@ -251,6 +251,47 @@ em `/api/v1/messaging/whatsapp/webhook`.
   stacktrace. Sempre `curl` direto o endpoint com `Origin` + `Authorization`
   antes de mexer em CORS (ver também `feedback_cors_error_can_mask_4xx`).
 
+## Storage (Cloudflare R2) e Redis (Upstash) em produção (2026-06-01)
+
+### R2 exige `region="auto"`
+- O cliente S3 (`app/services/storage.py`) usa `region_name=settings.S3_REGION`,
+  **default `"auto"`**. Cloudflare R2 **exige** `auto`: com `us-east-1` o scope da
+  assinatura SigV4 não bate no **GET server-side** → `SignatureDoesNotMatch`. O
+  upload presigned tolera (o arquivo sobe), mas o **download nunca lê** — sintoma
+  clássico de "OCR não extrai nada".
+- `render.yaml` seta `S3_REGION=auto` explícito. Não precisa mexer — o default já
+  cobre R2 e MinIO (o MinIO ignora region).
+- **Diagnóstico no Render Shell (worker):**
+  ```bash
+  python -c "
+  from app.services.storage import get_storage_service
+  s = get_storage_service()
+  print('region:', s.s3_client.meta.region_name)          # tem que ser 'auto'
+  print(len(s.download_bytes('<storage_key_real>')), 'bytes')   # > 0 = OK
+  "
+  ```
+  `SignatureDoesNotMatch` ou `0 bytes` com objeto existente = region/credencial
+  errada. **`download_bytes` agora LEVANTA** `StorageDownloadError(code)` nesse
+  caso (antes engolia e retornava vazio) — a causa aparece no log do worker e no
+  evento `storage_error:<code>`, não mais como `no_bytes` cego.
+
+### `MINIO_SECURE` é respeitado (sem scheme na env)
+- A env do R2 chega como `<acct>.r2.cloudflarestorage.com` (sem `http(s)://`).
+  Os endpoints (`minio_internal_endpoint`/`minio_public_endpoint`) agora usam
+  `https://` quando `MINIO_SECURE=True` e a env não traz scheme (antes forçavam
+  `http://`). Em prod, `MINIO_SECURE=True`.
+
+### Redis `rediss://` (Upstash) e o `ssl_cert_reqs`
+- O app usa `settings.redis_url_safe`, que **normaliza** o param `ssl_cert_reqs`
+  para o token que o redis-py aceita (`none`/`optional`/`required`). Uma env com
+  `?ssl_cert_reqs=CERT_REQUIRED` (nome da constante Python) quebrava com
+  *"Invalid SSL Certificate Requirements Flag: CERT_REQUIRED"* — derrubava o
+  evento realtime (preview ao vivo do OCR). Não precisa anexar nada à URL; a
+  normalização cobre qualquer forma.
+- Celery (`app/core/celery_app.py`) seta `broker_use_ssl`/`redis_backend_use_ssl`
+  **só** quando o URL é `rediss://`. Em `redis://` local não seta (setar num
+  não-SSL faz o Celery abortar).
+
 ## Backups e recuperação
 
 ### Estratégia recomendada

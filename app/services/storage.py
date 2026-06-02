@@ -15,6 +15,17 @@ logger = logging.getLogger(__name__)
 
 BUCKET_NAME = "regente-docs"
 
+
+class StorageDownloadError(Exception):
+    """Falha real ao baixar do storage (S3/MinIO/R2) — distinta de objeto
+    ausente. Carrega o código do erro (ex.: SignatureDoesNotMatch, AccessDenied)
+    para o chamador registrar a causa, em vez de mascarar como 'no_bytes'."""
+
+    def __init__(self, storage_key: str, code: str, message: str = "") -> None:
+        self.storage_key = storage_key
+        self.code = code
+        super().__init__(f"download '{storage_key}' falhou [{code}]: {message}".strip())
+
 # Limita o tempo que uma chamada ao MinIO/R2 pode bloquear o request HTTP
 # do FastAPI. Sem isso, falhas de rede para o endpoint S3 (R2 offline, DNS
 # travado, credenciais inválidas em endpoint legacy) congelam o worker por
@@ -41,7 +52,7 @@ class StorageService:
             endpoint_url=settings.minio_internal_endpoint,
             aws_access_key_id=settings.MINIO_ACCESS_KEY,
             aws_secret_access_key=settings.MINIO_SECRET_KEY,
-            region_name="us-east-1",
+            region_name=settings.S3_REGION,
             config=_S3_BOTO_CONFIG,
         )
         self.presign_client = self.s3_client
@@ -188,15 +199,32 @@ class StorageService:
         }
 
     def download_bytes(self, storage_key: str) -> bytes:
-        """Faz o download de um arquivo do MinIO diretamente para a memória em bytes."""
+        """Baixa um objeto do storage para a memória.
+
+        Retorna ``b""`` SOMENTE quando o objeto realmente não existe (NoSuchKey).
+        Qualquer outra falha (SignatureDoesNotMatch, AccessDenied, rede/timeout)
+        é logada em ERROR com o código e **re-levantada** como
+        ``StorageDownloadError`` — antes, todo erro virava ``b""`` silencioso e
+        o OCR registrava 'no_bytes' genérico, mascarando a causa por semanas.
+        """
         try:
             response = self.s3_client.get_object(Bucket=BUCKET_NAME, Key=storage_key)
             return response["Body"].read()
         except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("NoSuchKey", "404", "NoSuchBucket"):
                 return b""
-            logger.error(f"Erro ao baixar {storage_key} do MinIO: {e}")
-            return b""
+            logger.error(
+                "download_bytes: erro %s ao baixar %s do storage: %s",
+                code, storage_key, e,
+            )
+            raise StorageDownloadError(storage_key, code or "ClientError", str(e)) from e
+        except BotoCoreError as e:
+            logger.error(
+                "download_bytes: falha de conexão ao baixar %s do storage: %s",
+                storage_key, e,
+            )
+            raise StorageDownloadError(storage_key, "BotoCoreError", str(e)) from e
 
 
 @lru_cache(maxsize=1)

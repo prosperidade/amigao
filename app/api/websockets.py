@@ -35,7 +35,7 @@ class ConnectionManager:
 
     async def connect_redis(self):
         if not self.redis:
-            self.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            self.redis = aioredis.from_url(settings.redis_url_safe, decode_responses=True)
             self.pubsub = self.redis.pubsub()
             try:
                 await self.pubsub.subscribe(settings.REALTIME_EVENTS_CHANNEL)

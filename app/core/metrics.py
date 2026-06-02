@@ -298,7 +298,7 @@ def _service_name() -> str:
 
 def _shared_metrics_client():
     return redis.from_url(
-        settings.REDIS_URL,
+        settings.redis_url_safe,
         decode_responses=True,
         socket_connect_timeout=0.2,
         socket_timeout=0.2,
@@ -564,7 +564,7 @@ def refresh_operational_metrics() -> None:
     client = None
     try:
         client = redis.from_url(
-            settings.REDIS_URL,
+            settings.redis_url_safe,
             decode_responses=True,
             socket_connect_timeout=0.5,
             socket_timeout=0.5,

@@ -23,7 +23,7 @@ def _get_redis_client() -> redis.Redis:
         with _redis_lock:
             if _redis_client is None:
                 pool = redis.ConnectionPool.from_url(
-                    settings.REDIS_URL,
+                    settings.redis_url_safe,
                     decode_responses=True,
                     max_connections=10,
                 )
