@@ -48,6 +48,15 @@ Conteúdo de domínio é da sócia (validado por construção, `SKILL.md:194-199
 > e não há chamada a LLM (`auditor_imovel.py:41,155-157`). A skill cobre as tools
 > determinísticas de `property_audit.py` (`property_audit.py:8-9`) e documenta o
 > domínio; é o contrato que `property_audit` implementa, não um system prompt.
+>
+> **Estado (PR #40, 2026-06-01): front-matter válido, entra no catálogo.** Até
+> 2026-06-01 o front-matter era inválido (`applies_to` era string; `name` sem prefixo)
+> e `discover_skills` a **ignorava** com warning. O PR `fix/skills-frontmatter-40`
+> corrigiu **só o front-matter** (`name: auditor_imovel/...`, `applies_to: {doc_types: []}`,
+> string descritiva → `description`). Como o auditor é determinístico, **a correção não
+> muda comportamento** — só faz a skill parar de emitir warning e entrar no catálogo
+> (`discover_skills()` + `load_skill()` retornam `SkillContent`). Corpo de domínio
+> intacto.
 
 ## 4. Tools que usa
 
