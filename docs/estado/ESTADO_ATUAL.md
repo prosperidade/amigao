@@ -16,6 +16,8 @@
 
 **Pulso 2026-06-02 (OCR multipágina — só lia 1 página):** a escritura do Romilton (doc 118, 6 págs) saía com 832 chars = só a certidão da capa; o Gemini, com o PDF enviado inline, transcrevia só a 1ª página (provado no PDF real). Fix: `extract_text_with_gemini` agora rasteriza cada página e faz 1 chamada por página, concatenando (`reasoning_effort=disable` + retry próprio p/ 503). Também: `cache_twin` passou a respeitar `force=True` (não mascara reprocessamento) e `soft_time_limit` 180→300s. Provado rodando no PDF real: 832 → ~18-21k chars, área/matrícula/CAR presentes. Doc: `docs/trabalhos/ocr_multipagina.md`. Branch `fix/ocr-multipagina`.
 
+**Pulso 2026-06-02 (extrator truncava em 3000 chars):** com o OCR já entregando o texto inteiro (~20.8k chars), o extrator devolvia só nome+CPF (da capa) e os 9 campos do imóvel vinham `None` — `document_extractor.py:183` cortava o texto em `text[:3000]` e os campos do imóvel ficam depois disso. Fix: janela configurável `EXTRACTOR_MAX_CHARS` (default 30k) + prompt da matrícula avisa que o doc tem várias seções. Provado rodando no texto real do doc 118: área 58,7654 / município Uirapuru / UF GO / denominação / comarca / cartório passaram de `None` a preenchidos (numero_matricula segue None — correto: 6253 é dos confrontantes lotes 31/33). Doc: `docs/trabalhos/extrator_truncamento.md`. Branch `fix/extrator-truncamento`.
+
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
 ---

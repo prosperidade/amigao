@@ -35,9 +35,24 @@ Registrado como `"extrator"` / `ExtratorAgent`, `job_type="extract_document"`
 ## 3. Skills
 
 Sem skill procedural formal dedicada em `app/skills/extrator/` no momento. O
-comportamento vive em `extract_document_fields()` + prompt do gateway. (Skills
+comportamento vive em `extract_document_fields()` + prompts em
+`app/services/document_extractor.py` (com fallback hardcoded; o prompt real pode
+vir do banco via `prompt_service`). O `ExtratorAgent.execute()` chama o serviço
+direto — **não** passa por `_compose_system_with_skills`. Transformar esse prompt
+numa skill procedural é dívida registrada (#45, `REGISTRO_DIVIDAS`). (Skills
 existentes hoje: `diagnostico/situacao_ambiental_imovel_rural` e
 `auditor_imovel/analise_divergencias_documentais`.)
+
+**Janela de texto (`EXTRACTOR_MAX_CHARS`, default 30.000):** o extrator considera
+os primeiros `settings.EXTRACTOR_MAX_CHARS` chars do `extracted_text`. Era 3.000
+hardcoded (`document_extractor.py:183`) — truncava escrituras/matrículas reais
+(15-25k chars): a capa (certidão CNIB) trazia só nome+CPF e os campos do imóvel
+(área/matrícula/município), que ficam depois do char 3.000, vinham `None`. Fix
+2026-06-02 (`fix/extrator-truncamento`): janela elevada/configurável + prompt da
+matrícula avisa que o doc tem várias seções e que os campos podem estar em
+qualquer parte. Provado no doc 118 (escritura Romilton, 20.817 chars): área
+58,7654 / município Uirapuru / UF GO / denominação / comarca / cartório passaram
+de `None` a preenchidos.
 
 ## 4. Tools que usa
 
