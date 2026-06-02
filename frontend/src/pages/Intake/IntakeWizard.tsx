@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import DiagnosisPanel from './DiagnosisPanel';
 import DraftDocumentUploader from './DraftDocumentUploader';
@@ -36,6 +37,21 @@ interface ClassifyResult {
   urgency_flag: string | null;
   relevant_agencies: string[];
   checklist_template_demand_type: string;
+}
+
+// Shapes mínimos retornados por GET /clients/ e GET /properties/ — só o que
+// os seletores precisam exibir/enviar.
+interface ClientOption {
+  id: number;
+  full_name: string;
+  cpf_cnpj: string | null;
+}
+
+interface PropertyOption {
+  id: number;
+  name: string;
+  municipality: string | null;
+  state: string | null;
 }
 
 interface FormState {
@@ -159,6 +175,28 @@ export default function IntakeWizard() {
 
   const set = (field: keyof FormState, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
+
+  // ── Seletores cliente/imóvel (#UX-1/#UX-2) ────────────────────────────────
+  // O consultor não decora IDs. Os dropdowns abaixo listam clientes/imóveis da
+  // base e enviam o id por baixo. Imóveis são filtrados pelo cliente escolhido.
+  const { data: clients = [], isLoading: clientsLoading } = useQuery<ClientOption[]>({
+    queryKey: ['intake-clients'],
+    queryFn: () => api.get('/clients/').then(r => r.data),
+    enabled: form.client_mode === 'existing',
+    staleTime: 60_000,
+  });
+
+  const { data: clientProperties = [], isLoading: propsLoading } = useQuery<PropertyOption[]>({
+    queryKey: ['intake-properties', form.client_id],
+    queryFn: () =>
+      api.get('/properties/', { params: { client_id: parseInt(form.client_id) } }).then(r => r.data),
+    enabled: form.property_mode === 'existing' && !!form.client_id,
+    staleTime: 60_000,
+  });
+
+  // Selecionar outro cliente invalida o imóvel previamente escolhido.
+  const selectExistingClient = (id: string) =>
+    setForm(prev => ({ ...prev, client_id: id, property_id: '' }));
 
   // Regente Cam1: entry_type força certos modes no Step 1 e 3
   const selectEntryType = (t: EntryType) => {
@@ -528,7 +566,19 @@ export default function IntakeWizard() {
               </div>
 
               {form.client_mode === 'existing' ? (
-                <Input label="ID do cliente" value={form.client_id} onChange={v => set('client_id', v)} placeholder="ex: 42" />
+                <SearchSelect
+                  label="Cliente"
+                  value={form.client_id}
+                  onChange={selectExistingClient}
+                  loading={clientsLoading}
+                  placeholder="Selecione o cliente..."
+                  emptyText="Nenhum cliente cadastrado ainda."
+                  options={clients.map(c => ({
+                    value: String(c.id),
+                    label: c.full_name,
+                    sublabel: c.cpf_cnpj ?? undefined,
+                  }))}
+                />
               ) : (
                 <div className="space-y-4">
                   <Input label="Nome completo *" value={form.client_name} onChange={v => set('client_name', v)} placeholder="João da Silva" />
@@ -651,7 +701,25 @@ export default function IntakeWizard() {
               </div>
 
               {form.property_mode === 'existing' && (
-                <Input label="ID do imóvel" value={form.property_id} onChange={v => set('property_id', v)} placeholder="ex: 7" />
+                form.client_id ? (
+                  <SearchSelect
+                    label="Imóvel"
+                    value={form.property_id}
+                    onChange={v => set('property_id', v)}
+                    loading={propsLoading}
+                    placeholder="Selecione o imóvel..."
+                    emptyText="Este cliente ainda não tem imóveis cadastrados."
+                    options={clientProperties.map(p => ({
+                      value: String(p.id),
+                      label: p.name,
+                      sublabel: [p.municipality, p.state].filter(Boolean).join(' · ') || undefined,
+                    }))}
+                  />
+                ) : (
+                  <div className="p-4 rounded-xl bg-muted/50 border border-dashed border-border text-sm text-muted-foreground">
+                    Escolha um cliente existente (etapa Cliente) para listar os imóveis dele.
+                  </div>
+                )
               )}
 
               {form.property_mode === 'new' && (
@@ -795,7 +863,8 @@ export default function IntakeWizard() {
                 </SummaryRow>
                 <SummaryRow icon="👤" label="Cliente">
                   {form.client_mode === 'existing'
-                    ? `Cliente ID #${form.client_id}`
+                    ? (clients.find(c => String(c.id) === form.client_id)?.full_name
+                        ?? (form.client_id ? `Cliente #${form.client_id}` : '—'))
                     : form.client_name}
                 </SummaryRow>
                 <SummaryRow icon="🏷️" label="Tipo de demanda">
@@ -831,7 +900,10 @@ export default function IntakeWizard() {
                 )}
                 {form.property_mode !== 'none' && (
                   <SummaryRow icon="🌾" label="Imóvel">
-                    {form.property_mode === 'existing' ? `Imóvel ID #${form.property_id}` : form.property_name}
+                    {form.property_mode === 'existing'
+                      ? (clientProperties.find(p => String(p.id) === form.property_id)?.name
+                          ?? (form.property_id ? `Imóvel #${form.property_id}` : '—'))
+                      : form.property_name}
                   </SummaryRow>
                 )}
               </div>
@@ -960,6 +1032,87 @@ function Select({
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+/**
+ * SearchSelect — dropdown com busca para escolher por nome (não por ID).
+ * Usado nos seletores de cliente e imóvel do intake (#UX-1/#UX-2).
+ */
+function SearchSelect({
+  label, value, onChange, options, placeholder, disabled, emptyText, loading,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string; sublabel?: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+  emptyText?: string;
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = options.find(o => o.value === value) ?? null;
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? options.filter(o =>
+        o.label.toLowerCase().includes(q) || (o.sublabel ?? '').toLowerCase().includes(q))
+    : options;
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-foreground mb-2">{label}</label>
+      <div className="relative">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => !disabled && setOpen(o => !o)}
+          className="w-full flex items-center justify-between rounded-xl bg-background border border-input text-foreground px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className={selected ? 'text-foreground' : 'text-muted-foreground'}>
+            {selected ? selected.label : (placeholder ?? 'Selecione...')}
+          </span>
+          <span className="text-muted-foreground ml-2">▾</span>
+        </button>
+        {open && !disabled && (
+          <>
+            {/* backdrop pra fechar ao clicar fora */}
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <div className="absolute z-20 mt-1 w-full rounded-xl border border-border bg-card shadow-lg max-h-64 overflow-hidden flex flex-col">
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Buscar..."
+                className="px-3 py-2 text-sm bg-background border-b border-border focus:outline-none text-foreground placeholder:text-muted-foreground"
+              />
+              <div className="overflow-y-auto">
+                {loading ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">Carregando...</p>
+                ) : filtered.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">{emptyText ?? 'Nenhum resultado.'}</p>
+                ) : (
+                  filtered.map(o => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => { onChange(o.value); setOpen(false); setQuery(''); }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors ${
+                        o.value === value ? 'bg-primary/10 text-primary' : 'text-foreground'
+                      }`}
+                    >
+                      <span className="block font-medium">{o.label}</span>
+                      {o.sublabel && <span className="block text-xs text-muted-foreground">{o.sublabel}</span>}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

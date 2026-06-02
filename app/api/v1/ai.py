@@ -276,6 +276,12 @@ def _serialize_job(j: AIJob) -> dict[str, Any]:
         "entity_id": j.entity_id,
         "job_type": j.job_type.value if j.job_type else None,
         "status": j.status.value if j.status else None,
+        # agent_name é a CHAVE que o frontend usa para escolher o renderer
+        # humanizado (AgentResultRenderer). Sem ele a UI cai no GenericResult e
+        # despeja JSON cru. A coluna é populada no banco (BaseAgent.run) tanto no
+        # disparo avulso quanto na chain — só não estava sendo exposta aqui.
+        "agent_name": j.agent_name,
+        "chain_trace_id": j.chain_trace_id,
         "model_used": j.model_used,
         "provider": j.provider,
         "tokens_in": j.tokens_in,

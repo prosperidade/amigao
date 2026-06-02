@@ -53,6 +53,7 @@ export interface AIJob {
   job_type: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   agent_name: string | null;
+  chain_trace_id: string | null;
   model_used: string | null;
   provider: string | null;
   tokens_in: number | null;
@@ -69,6 +70,7 @@ export const AGENT_LABELS: Record<string, string> = {
   atendimento: 'Atendimento',
   extrator: 'Extrator de Documentos',
   diagnostico: 'Diagnóstico Ambiental',
+  auditor_imovel: 'Auditoria do Imóvel',
   legislacao: 'Legislação',
   redator: 'Redator de Documentos',
   orcamento: 'Orçamento',

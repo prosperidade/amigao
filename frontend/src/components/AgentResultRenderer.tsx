@@ -182,6 +182,7 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
   const prioridades = arr(
     r.prioridade_acoes ?? (r.metadata as Record<string, unknown> | undefined)?.prioridade_acoes,
   );
+  const divergencias = objArr(r.divergencias);
 
   return (
     <div className="space-y-3">
@@ -229,8 +230,70 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
         </Section>
       )}
 
+      {divergencias.length > 0 && (
+        <Section icon={Search} title="Divergências Documentais" color="text-amber-600 dark:text-amber-400">
+          <div className="space-y-2">
+            {divergencias.map((d, i) => (
+              <div key={i} className="p-2.5 bg-amber-50 dark:bg-amber-500/5 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                {str(d.tema) && (
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wider mb-1">{str(d.tema)}</p>
+                )}
+                {str(d.divergencia) && <p className="text-sm text-gray-800 dark:text-slate-200">{str(d.divergencia)}</p>}
+                {str(d.impacto) && <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 italic">Impacto: {str(d.impacto)}</p>}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {observacoesText && (
         <p className="text-xs text-gray-500 dark:text-slate-400 italic mt-2">{observacoesText}</p>
+      )}
+    </div>
+  );
+}
+
+function AuditorResult({ r }: { r: Record<string, unknown> }) {
+  // auditor_imovel cruza documentos extraídos (matrícula × CAR × CCIR/etc.) e
+  // produz `divergencias` ({tema, divergencia, impacto}). findings_raw, issue_ids,
+  // method e geom_present são meta internos — não exibir ao consultor.
+  const divergencias = objArr(r.divergencias);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        {r.requires_review === true && <ReviewBadge />}
+      </div>
+
+      {str(r.content) && (
+        <p className="text-sm text-gray-700 dark:text-slate-200 leading-relaxed bg-gray-50 dark:bg-white/5 p-3 rounded-lg">
+          {str(r.content)}
+        </p>
+      )}
+
+      {divergencias.length > 0 ? (
+        <Section icon={AlertTriangle} title="Divergências Encontradas" color="text-amber-600 dark:text-amber-400">
+          <div className="space-y-2">
+            {divergencias.map((d, i) => (
+              <div key={i} className="p-3 bg-amber-50 dark:bg-amber-500/5 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                {str(d.tema) && (
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wider mb-1">
+                    {str(d.tema)}
+                  </p>
+                )}
+                {str(d.divergencia) && (
+                  <p className="text-sm text-gray-800 dark:text-slate-200">{str(d.divergencia)}</p>
+                )}
+                {str(d.impacto) && (
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 italic">Impacto: {str(d.impacto)}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : (
+        <p className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+          <CheckCircle2 className="w-4 h-4" /> Nenhuma divergência documental encontrada.
+        </p>
       )}
     </div>
   );
@@ -558,14 +621,65 @@ function MarketingResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
+// Campos meta/internos que não interessam ao consultor (nunca exibir como label).
+const GENERIC_HIDDEN_KEYS = new Set([
+  'confidence', 'requires_review', 'geom_present', 'method', 'issue_ids', 'metadata',
+]);
+
 function GenericResult({ r }: { r: Record<string, unknown> }) {
+  // Rede de segurança para agentes sem renderer dedicado. NUNCA faz
+  // JSON.stringify nem deixa vazar "[object Object]": escalares viram linha
+  // label/valor, arrays de string viram bullets, arrays/objetos com campos
+  // escalares viram cards rotulados, e qualquer aninhamento mais profundo é
+  // omitido em vez de despejado.
+  const entries = Object.entries(r).filter(
+    ([k, v]) => v != null && v !== '' && !GENERIC_HIDDEN_KEYS.has(k) && !k.endsWith('_raw'),
+  );
+  if (entries.length === 0) {
+    return <p className="text-sm text-gray-400 italic">Sem detalhes para exibir.</p>;
+  }
+  const scalarFields = (obj: Record<string, unknown>) =>
+    Object.entries(obj).filter(
+      ([k, v]) => v != null && v !== '' && typeof v !== 'object' && !k.endsWith('_raw'),
+    );
   return (
-    <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3">
-      {Object.entries(r).filter(([_, v]) => v != null && v !== '').map(([key, value]) => (
-        <KeyValue key={key} label={key.replace(/_/g, ' ')} value={
-          typeof value === 'object' ? JSON.stringify(value) : String(value)
-        } />
-      ))}
+    <div className="space-y-3">
+      {entries.map(([key, value]) => {
+        const label = key.replace(/_/g, ' ');
+        if (typeof value !== 'object') {
+          return <KeyValue key={key} label={label} value={String(value)} />;
+        }
+        if (Array.isArray(value)) {
+          if (value.length === 0) return null;
+          const allScalar = value.every((v) => v == null || typeof v !== 'object');
+          return (
+            <Section key={key} icon={ListChecks} title={label} color="text-gray-500 dark:text-slate-400">
+              {allScalar ? (
+                <BulletList items={value.filter((v) => v != null).map((v) => String(v))} />
+              ) : (
+                <div className="space-y-2">
+                  {objArr(value).map((obj, i) => (
+                    <div key={i} className="p-2 bg-white dark:bg-white/5 rounded border border-gray-100 dark:border-white/10">
+                      {scalarFields(obj).map(([k, v]) => (
+                        <KeyValue key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+          );
+        }
+        return (
+          <Section key={key} icon={ListChecks} title={label} color="text-gray-500 dark:text-slate-400">
+            <div className="bg-white dark:bg-white/5 rounded p-2">
+              {scalarFields(value as Record<string, unknown>).map(([k, v]) => (
+                <KeyValue key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
+              ))}
+            </div>
+          </Section>
+        );
+      })}
     </div>
   );
 }
@@ -578,6 +692,7 @@ const AGENT_ICON: Record<string, React.ElementType> = {
   atendimento: Sparkles,
   extrator: Search,
   diagnostico: Stethoscope,
+  auditor_imovel: Building2,
   legislacao: Scale,
   redator: FileText,
   orcamento: DollarSign,
@@ -591,6 +706,7 @@ const AGENT_TITLE: Record<string, string> = {
   atendimento: 'Classificação da Demanda',
   extrator: 'Campos Extraídos do Documento',
   diagnostico: 'Diagnóstico Ambiental',
+  auditor_imovel: 'Auditoria do Imóvel',
   legislacao: 'Enquadramento Regulatório',
   redator: 'Documento Gerado',
   orcamento: 'Proposta de Orçamento',
@@ -616,6 +732,7 @@ export default function AgentResultRenderer({ agentName, result }: Props) {
     atendimento: (r) => <AtendimentoResult r={r} />,
     extrator: (r) => <ExtratorResult r={r} />,
     diagnostico: (r) => <DiagnósticoResult r={r} />,
+    auditor_imovel: (r) => <AuditorResult r={r} />,
     legislacao: (r) => <LegislaçãoResult r={r} />,
     redator: (r) => <RedatorResult r={r} />,
     orcamento: (r) => <OrçamentoResult r={r} />,

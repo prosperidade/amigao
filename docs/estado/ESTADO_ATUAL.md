@@ -18,6 +18,8 @@
 
 **Pulso 2026-06-02 (extrator truncava em 3000 chars):** com o OCR já entregando o texto inteiro (~20.8k chars), o extrator devolvia só nome+CPF (da capa) e os 9 campos do imóvel vinham `None` — `document_extractor.py:183` cortava o texto em `text[:3000]` e os campos do imóvel ficam depois disso. Fix: janela configurável `EXTRACTOR_MAX_CHARS` (default 30k) + prompt da matrícula avisa que o doc tem várias seções. Provado rodando no texto real do doc 118: área 58,7654 / município Uirapuru / UF GO / denominação / comarca / cartório passaram de `None` a preenchidos (numero_matricula segue None — correto: 6253 é dos confrontantes lotes 31/33). Doc: `docs/trabalhos/extrator_truncamento.md`. Branch `fix/extrator-truncamento`.
 
+**Pulso 2026-06-02 (UI renderer + seletores):** resultado dos agentes saía como JSON cru e o card mostrava `Agente —` / `Modelo —`. Causa raiz (não a hipótese do prompt): `agent_name` **estava** no banco (chain inclusa), mas `_serialize_job` (`GET /ai/jobs`) **não o serializava** → front recebia `undefined` → `GenericResult`/`JSON.stringify`. Fix: serializer expõe `agent_name`+`chain_trace_id`; novo `AuditorResult`; `GenericResult` à prova de `[object Object]`; `IntakeWizard` troca inputs de ID por dropdowns com busca (cliente via `/clients/`, imóvel via `/properties/?client_id=`). Provado rodando: API devolve `agent_name`, 16 clientes/1 imóvel nos seletores, `tsc` verde. Fecha #UX-1/#UX-2. Doc: `docs/trabalhos/ui_renderer_seletores.md`. Branch `fix/ui-renderer-seletores`.
+
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
 ---
