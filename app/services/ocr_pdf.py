@@ -25,10 +25,17 @@ logger = logging.getLogger(__name__)
 # devolver 0-30 chars (pontuação solta de ruído OCR embutido).
 PYPDF_MIN_CHARS = 100
 
-GEMINI_OCR_MODEL = "gemini/gemini-2.0-flash"
+# Modelo Gemini do OCR vem de settings.GEMINI_OCR_MODEL (env-configurável).
+# Hardcode anterior ("gemini/gemini-2.0-flash") foi descontinuado pelo Google
+# e derrubou o worker em prod com 404 — ver app/core/config.py:GEMINI_OCR_MODEL.
 OPENAI_VISION_MODEL = "gpt-4o-mini"
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB — proteção anti-DoS
-OCR_TIMEOUT_SECONDS = 90
+OCR_TIMEOUT_SECONDS = 90  # Gemini (PDF inline, costuma ser rápido)
+# Fallback OpenAI Vision: timeout mais curto e SEM retries do litellm. O worker
+# é pool=solo — uma task pendurada bloqueia a fila inteira. Em prod o fallback
+# pendurou ~272s (≈ 3 × 90s = timeout × num_retries default do litellm) antes de
+# desistir. Capamos wall-time real com timeout explícito + num_retries=0.
+OPENAI_VISION_TIMEOUT_SECONDS = 75
 OPENAI_MAX_PAGES = 10  # rasteriza no máximo 10 páginas pra controlar custo
 OPENAI_RASTER_DPI = 200  # 200 dpi balanço qualidade × tokens
 
@@ -93,13 +100,15 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
     if not settings.GEMINI_API_KEY:
         return OcrResult("", "none", 0, 0.0, 0, 0, 0, "", "", error="gemini_api_key_missing")
 
+    model = settings.GEMINI_OCR_MODEL
+
     import litellm  # noqa: PLC0415
 
     b64 = base64.b64encode(pdf_bytes).decode("ascii")
     t0 = time.monotonic()
     try:
         response = litellm.completion(
-            model=GEMINI_OCR_MODEL,
+            model=model,
             messages=[
                 {
                     "role": "user",
@@ -113,6 +122,7 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
             max_tokens=8000,
             temperature=0,
             timeout=OCR_TIMEOUT_SECONDS,
+            num_retries=0,
         )
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         text = (response.choices[0].message.content or "").strip()
@@ -123,7 +133,7 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
             cost = float(litellm.completion_cost(completion_response=response) or 0.0)
         except Exception:
             cost = 0.0
-        provider = GEMINI_OCR_MODEL.split("/", 1)[0]
+        provider = model.split("/", 1)[0]
         return OcrResult(
             text=text,
             method="gemini",
@@ -132,7 +142,7 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             duration_ms=elapsed_ms,
-            model_used=GEMINI_OCR_MODEL,
+            model_used=model,
             provider=provider,
         )
     except Exception as exc:
@@ -146,7 +156,7 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
             tokens_in=0,
             tokens_out=0,
             duration_ms=elapsed_ms,
-            model_used=GEMINI_OCR_MODEL,
+            model_used=model,
             provider="gemini",
             error=str(exc),
         )
@@ -227,7 +237,8 @@ def extract_text_with_openai_vision(pdf_bytes: bytes) -> OcrResult:
             api_key=settings.OPENAI_API_KEY,
             max_tokens=8000,
             temperature=0,
-            timeout=OCR_TIMEOUT_SECONDS,
+            timeout=OPENAI_VISION_TIMEOUT_SECONDS,
+            num_retries=0,
         )
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         text = (response.choices[0].message.content or "").strip()

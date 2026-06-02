@@ -256,6 +256,14 @@ class Settings(BaseSettings):
     # Threshold de contexto acima do qual o roteador troca Flash → Pro.
     GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS: int = 3_200_000  # ~800K tokens
 
+    # Modelo Gemini Vision do pipeline de OCR (app/services/ocr_pdf.py).
+    # 2026-06-02: migrado de gemini-2.0-flash (descontinuado pelo Google — o
+    # worker em prod quebrou com 404 "models/gemini-2.0-flash is no longer
+    # available") para gemini-2.5-flash, alinhado ao GEMINI_LEGAL_MODEL.
+    # Configurável por env para que o próximo deprecation seja só troca de
+    # variável, sem mexer no código.
+    GEMINI_OCR_MODEL: str = "gemini/gemini-2.5-flash"
+
     # Sprint O — Gemini como provider default do agente legislação (decisão da sócia 2026-04-21).
     # Claude continua como fallback quando Gemini não estiver configurado.
     LEGISLATION_USE_GEMINI_DEFAULT: bool = True

@@ -39,7 +39,7 @@ ocr_then_extract task (Celery)
             ├── Tentativa A: pypdf (grátis, PDFs digitais)
             │    Se texto extraído >= 100 chars → ok
             │
-            ├── Tentativa B: Gemini 2.0 Flash via LiteLLM
+            ├── Tentativa B: Gemini 2.5 Flash via LiteLLM
             │    PDFs nativos (PDFs com embedded text difícil)
             │    Custo: ~$0.0006 por doc de 8 páginas
             │
@@ -96,12 +96,16 @@ Esse cache pega caso comum: cliente envia mesma matrícula 3 vezes (uma no intak
 - Limite mínimo: `PYPDF_MIN_CHARS = 100` (PDFs escaneados frequentemente retornam pontuação solta de ruído)
 - Falha → tenta B
 
-### B — Gemini 2.0 Flash via LiteLLM
+### B — Gemini 2.5 Flash via LiteLLM
 
-- Modelo: `gemini/gemini-2.0-flash`
+- Modelo: `settings.GEMINI_OCR_MODEL` (env-configurável; default `gemini/gemini-2.5-flash`)
+- 2026-06-02: migrado de `gemini-2.0-flash` (descontinuado pelo Google → 404
+  no worker). **Quando um modelo for descontinuado, trocar a env `GEMINI_OCR_MODEL`,
+  não o código.**
 - Aceita PDF nativo (não precisa rasterizar)
 - Janela enorme (1M tokens)
 - Custo: ~$0.0006 por doc de 8 páginas
+- `num_retries=0` (não multiplica o timeout em caso de erro)
 - Falha → tenta C
 
 ### C — OpenAI gpt-4o-mini Vision
@@ -109,6 +113,8 @@ Esse cache pega caso comum: cliente envia mesma matrícula 3 vezes (uma no intak
 - Rasteriza com `pypdfium2` (máx 10 páginas, 200 DPI)
 - Manda imagens base64 ao Vision API
 - Custo: maior (tokens de imagem caros)
+- `timeout=OPENAI_VISION_TIMEOUT_SECONDS` (75s) + `num_retries=0` — fallback
+  não pode pendurar a fila do worker (`pool=solo`); antes do fix pendurava ~272s
 - Último recurso
 
 ## Constraints e proteções
@@ -116,7 +122,8 @@ Esse cache pega caso comum: cliente envia mesma matrícula 3 vezes (uma no intak
 | Constraint | Valor | Razão |
 |---|---|---|
 | `MAX_PDF_BYTES` | 50 MB | Proteção anti-DoS |
-| `OCR_TIMEOUT_SECONDS` | 90s | Task tem soft time limit; passou disso, retry com backoff |
+| `OCR_TIMEOUT_SECONDS` | 90s | Timeout da chamada Gemini |
+| `OPENAI_VISION_TIMEOUT_SECONDS` | 75s | Timeout do fallback OpenAI Vision (`num_retries=0` — não pendura a fila) |
 | `OPENAI_MAX_PAGES` | 10 páginas | Controla custo do Vision |
 | `OPENAI_RASTER_DPI` | 200 | Balanço qualidade × tokens |
 | `task.max_retries` | 2 | OCR não é idempotente em custo — não retentar para sempre |

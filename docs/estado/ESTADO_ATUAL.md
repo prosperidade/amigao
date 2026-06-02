@@ -12,6 +12,8 @@
 
 **Pulso 2026-06-01 (storage R2 + Redis SSL + download silencioso):** corrigida a causa-raiz do "OCR não extrai nada" — clients boto3 com `region="us-east-1"` hardcoded (R2 exige `auto` → `SignatureDoesNotMatch` no GET) + `download_bytes` que engolia o erro como `no_bytes`. Também: Redis `rediss://` normaliza `ssl_cert_reqs` (evento realtime voltou) e endpoint respeita `MINIO_SECURE`. Provado rodando local (MinIO sem regressão, repro+fix do SignatureDoesNotMatch e do CERT do Redis, 20 testes). Detalhe e snippet de prova R2 pro Render Shell: `docs/trabalhos/storage_r2_redis.md`. Branch `fix/storage-r2-region-redis`.
 
+**Pulso 2026-06-02 (OCR — modelo Gemini descontinuado):** com o storage corrigido o OCR roda, mas doc escaneado ficava `ocr_failed` — `app/services/ocr_pdf.py` tinha `gemini-2.0-flash` **hardcoded** (descontinuado pelo Google → 404) e o fallback OpenAI Vision pendurava ~272s (litellm re-tentando 3×). Fix: modelo virou env `GEMINI_OCR_MODEL` (default `gemini/gemini-2.5-flash`); fallback OpenAI com timeout próprio (75s) + `num_retries=0`. Provado rodando local (PDF imagem-only → Gemini 2.5-flash → `chars=146`, sem 404). Doc: `docs/trabalhos/ocr_gemini_model.md`. Branch `fix/ocr-gemini-model`.
+
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
 ---
