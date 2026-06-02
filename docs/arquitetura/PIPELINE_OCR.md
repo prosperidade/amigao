@@ -40,8 +40,11 @@ ocr_then_extract task (Celery)
             │    Se texto extraído >= 100 chars → ok
             │
             ├── Tentativa B: Gemini 2.5 Flash via LiteLLM
-            │    PDFs nativos (PDFs com embedded text difícil)
-            │    Custo: ~$0.0006 por doc de 8 páginas
+            │    Rasteriza CADA página (pypdfium2, 200 DPI) e faz 1 chamada
+            │    por página, concatenando — o PDF inline fazia o Gemini ler
+            │    só a 1ª página em docs multipágina (escritura 6 págs: 832
+            │    chars → ~18k com o per-page). reasoning_effort=disable +
+            │    retry próprio por página (503). Teto 15 págs.
             │
             └── Tentativa C: OpenAI gpt-4o-mini Vision
                  PDFs escaneados (precisa rasterizar)
@@ -99,14 +102,25 @@ Esse cache pega caso comum: cliente envia mesma matrícula 3 vezes (uma no intak
 ### B — Gemini 2.5 Flash via LiteLLM
 
 - Modelo: `settings.GEMINI_OCR_MODEL` (env-configurável; default `gemini/gemini-2.5-flash`)
+- Modelo: `settings.GEMINI_OCR_MODEL` (env-configurável; default `gemini/gemini-2.5-flash`)
 - 2026-06-02: migrado de `gemini-2.0-flash` (descontinuado pelo Google → 404
   no worker). **Quando um modelo for descontinuado, trocar a env `GEMINI_OCR_MODEL`,
   não o código.**
-- Aceita PDF nativo (não precisa rasterizar)
-- Janela enorme (1M tokens)
-- Custo: ~$0.0006 por doc de 8 páginas
-- `num_retries=0` (não multiplica o timeout em caso de erro)
-- Falha → tenta C
+- **2026-06-02: rasteriza CADA página (pypdfium2, `GEMINI_OCR_DPI`=200) e faz 1
+  chamada por página, concatenando.** O envio inline do PDF inteiro fazia o
+  Gemini transcrever **só a 1ª página** em docs escaneados multipágina (a
+  escritura de 6 págs do Romilton voltava com 832 chars = só a certidão da capa;
+  por página → ~18k chars, todas as páginas). O custo alto provava que o Gemini
+  recebia tudo mas só transcrevia a capa.
+- `reasoning_effort="disable"` — OCR é transcrição pura; sem o "thinking" do 2.5
+  a latência/página cai ~2x (~23s → ~10s) e o custo também, sem perda de qualidade.
+- **Retry próprio por página** (`GEMINI_OCR_PAGE_ATTEMPTS`=3, backoff) p/ 503
+  transitório. NÃO usar `num_retries` do litellm: depende do pacote `tenacity`
+  (ausente) e falha com "tenacity import failed" em vez de re-tentar.
+- Página que falha após os retries é pulada (log) — texto parcial, não derruba o doc.
+- Inline antigo (`_extract_text_with_gemini_inline`) só como fallback quando a
+  rasterização não está disponível (pypdfium2 ausente).
+- Teto `GEMINI_OCR_MAX_PAGES`=15. Falha total → tenta C
 
 ### C — OpenAI gpt-4o-mini Vision
 
@@ -122,10 +136,15 @@ Esse cache pega caso comum: cliente envia mesma matrícula 3 vezes (uma no intak
 | Constraint | Valor | Razão |
 |---|---|---|
 | `MAX_PDF_BYTES` | 50 MB | Proteção anti-DoS |
-| `OCR_TIMEOUT_SECONDS` | 90s | Timeout da chamada Gemini |
+| `GEMINI_OCR_DPI` | 200 | Resolução da rasterização Gemini por página |
+| `GEMINI_OCR_MAX_PAGES` | 15 | Teto de páginas no Gemini (custo/tempo, worker pool=solo) |
+| `GEMINI_OCR_PAGE_TIMEOUT_SECONDS` | 75s | Timeout por página (Gemini) |
+| `GEMINI_OCR_PAGE_ATTEMPTS` | 3 | Tentativas por página (retry próprio p/ 503) |
+| `OCR_TIMEOUT_SECONDS` | 90s | Timeout do Gemini inline (fallback de 1 página) |
 | `OPENAI_VISION_TIMEOUT_SECONDS` | 75s | Timeout do fallback OpenAI Vision (`num_retries=0` — não pendura a fila) |
 | `OPENAI_MAX_PAGES` | 10 páginas | Controla custo do Vision |
 | `OPENAI_RASTER_DPI` | 200 | Balanço qualidade × tokens |
+| `task.soft_time_limit` | 300s | OCR multipágina (≤15 págs × ~10s) cabe com folga |
 | `task.max_retries` | 2 | OCR não é idempotente em custo — não retentar para sempre |
 | `task.retry_backoff` | True | Exponencial até 120s |
 

@@ -14,6 +14,8 @@
 
 **Pulso 2026-06-02 (OCR — modelo Gemini descontinuado):** com o storage corrigido o OCR roda, mas doc escaneado ficava `ocr_failed` — `app/services/ocr_pdf.py` tinha `gemini-2.0-flash` **hardcoded** (descontinuado pelo Google → 404) e o fallback OpenAI Vision pendurava ~272s (litellm re-tentando 3×). Fix: modelo virou env `GEMINI_OCR_MODEL` (default `gemini/gemini-2.5-flash`); fallback OpenAI com timeout próprio (75s) + `num_retries=0`. Provado rodando local (PDF imagem-only → Gemini 2.5-flash → `chars=146`, sem 404). Doc: `docs/trabalhos/ocr_gemini_model.md`. Branch `fix/ocr-gemini-model`.
 
+**Pulso 2026-06-02 (OCR multipágina — só lia 1 página):** a escritura do Romilton (doc 118, 6 págs) saía com 832 chars = só a certidão da capa; o Gemini, com o PDF enviado inline, transcrevia só a 1ª página (provado no PDF real). Fix: `extract_text_with_gemini` agora rasteriza cada página e faz 1 chamada por página, concatenando (`reasoning_effort=disable` + retry próprio p/ 503). Também: `cache_twin` passou a respeitar `force=True` (não mascara reprocessamento) e `soft_time_limit` 180→300s. Provado rodando no PDF real: 832 → ~18-21k chars, área/matrícula/CAR presentes. Doc: `docs/trabalhos/ocr_multipagina.md`. Branch `fix/ocr-multipagina`.
+
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
 ---
