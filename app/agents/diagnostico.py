@@ -145,7 +145,11 @@ class DiagnosticoAgent(BaseAgent):
             "legal_context": json.dumps(legal_data, ensure_ascii=False, default=str),
         })
 
-        response = self.call_llm(user_prompt, system=system_prompt)
+        # Modelo dedicado por env (AI_DIAGNOSTICO_MODEL); vazio cai no default
+        # global. White-label do consultor (user_preferences) ainda tem precedência
+        # no gateway. Mesma convenção do agente legislacao.
+        diag_model = settings.AI_DIAGNOSTICO_MODEL or settings.AI_DEFAULT_MODEL
+        response = self.call_llm(user_prompt, system=system_prompt, model=diag_model)
         parsed = OutputValidationPipeline.parse_llm_json(response.content)
 
         # Sprint A2-diagnostico-A.1 (path IA) — extrai chaves brutas do JSON do LLM

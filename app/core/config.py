@@ -211,6 +211,12 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str = ""
     AI_DEFAULT_MODEL: str = "gpt-4o-mini"
     AI_FALLBACK_MODEL: str = "gemini/gemini-2.5-flash"
+    # Modelo dedicado do agente de diagnóstico (André 2026-06-02). O diagnóstico
+    # é a peça mais complexa do funil (cruza extrator + auditor + legislação),
+    # então roda num modelo mais capaz que o default. Por env, nunca hardcoded no
+    # agente — deprecation futura é troca de variável, não de código. Vazio = cai
+    # no AI_DEFAULT_MODEL. Mesma convenção do GEMINI_LEGAL_MODEL (legislacao).
+    AI_DIAGNOSTICO_MODEL: str = "gpt-4.1"
     # White label (André 2026-05-28): provider chinês selecionável pelo consultor.
     # DeepSeek é o mais maduro para LiteLLM; trocar aqui se mudar.
     LLM_CHINESE_PROVIDER: str = "deepseek"
