@@ -33,6 +33,12 @@ registrava "523 mypy errors"), nunca enforçados.
   (puxa runtime via `-r` + ruff/mypy/pytest/testcontainers). Sem isso, ao deixar
   o lint verde, o `backend-test` (que tem `needs: backend-lint` e estava
   *skipping*) rodaria pela 1ª vez e quebraria por falta de pytest.
+- **`backend-test` roda `python -m pytest` (não `pytest` cru).** Ao destravar, o
+  job falhou em 41s com `ModuleNotFoundError: No module named 'app'` no import do
+  `conftest`: `pytest` cru **não** insere o cwd no `sys.path`; o `-m` insere a raiz
+  do repo. (O `backend-migrations` já resolvia via `prepend_sys_path = .` no
+  `alembic.ini`.) Reproduzido local: bare `pytest` falha igual, `python -m pytest`
+  coleta 753.
 - Passo mypy → **`continue-on-error: true`** (advisory) com comentário + dívida
   **#46**. Decisão do André: ruff é o gate real; mypy roda e reporta, mas não
   derruba o check. Corrigir 495 erros de tipagem é refactor de assinaturas/lógica,
