@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -56,12 +57,11 @@ def _validate_file(filename: str, content_type: str) -> str:
             status_code=400,
             detail=f"Extensão '.{ext}' não permitida. Permitidas: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
-    if content_type in MIME_EXTENSION_MAP:
-        if ext not in MIME_EXTENSION_MAP[content_type]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Content-type '{content_type}' incompatível com extensão '.{ext}'",
-            )
+    if content_type in MIME_EXTENSION_MAP and ext not in MIME_EXTENSION_MAP[content_type]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content-type '{content_type}' incompatível com extensão '.{ext}'",
+        )
     return ext
 
 
@@ -299,14 +299,14 @@ def delete_document(
     current_user: User = Depends(get_current_internal_user),
 ):
     """Soft-delete de documento (marca `deleted_at`). Restrito ao consultor."""
-    from datetime import datetime, timezone  # noqa: PLC0415
+    from datetime import datetime  # noqa: PLC0415
 
     doc_repo = DocumentRepository(db, current_user.tenant_id)
     doc = doc_repo.get_scoped(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado")
 
-    doc.deleted_at = datetime.now(timezone.utc)
+    doc.deleted_at = datetime.now(UTC)
     db.add(doc)
     doc_repo.add_audit(
         user_id=current_user.id,

@@ -16,18 +16,17 @@ Sprint F Bloco 3 (Camada 1 — decisão sócia 2026-04-19):
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from app.models.base import Base
+from app.models.types import PortableJSON
 
 # Regra de negócio: rascunho expira em 15 dias após a última edição.
 INTAKE_DRAFT_TTL_DAYS = 15
-
-from app.models.base import Base
-from app.models.types import PortableJSON
 
 
 class IntakeDraftState(str, enum.Enum):
@@ -87,12 +86,12 @@ class IntakeDraft(Base):
 
     def refresh_expiration(self, ttl_days: int = INTAKE_DRAFT_TTL_DAYS) -> None:
         """Estende a data de expiração para agora + ttl_days. Chame ao criar/editar."""
-        self.expires_at = datetime.now(timezone.utc) + timedelta(days=ttl_days)
+        self.expires_at = datetime.now(UTC) + timedelta(days=ttl_days)
 
     def is_expired(self, now: datetime | None = None) -> bool:
         if self.expires_at is None:
             return False
-        ref = now or datetime.now(timezone.utc)
+        ref = now or datetime.now(UTC)
         return self.expires_at < ref
 
 

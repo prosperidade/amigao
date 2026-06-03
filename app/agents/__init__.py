@@ -4,11 +4,6 @@ Sistema de Agentes IA — Regente Ambiental.
 Re-exports das classes publicas e registro de todos os agentes.
 """
 
-from app.agents.base import AgentContext, AgentRegistry, AgentResult, BaseAgent
-from app.agents.events import emit_agent_event
-from app.agents.orchestrator import CHAINS, INTENT_TO_CHAIN, OrchestratorAgent
-from app.agents.validators import OutputValidationPipeline
-
 # Importar todos os agentes para que se registrem via @AgentRegistry.register
 from app.agents import (  # noqa: F401
     acompanhamento,
@@ -23,6 +18,10 @@ from app.agents import (  # noqa: F401
     redator,
     vigia,
 )
+from app.agents.base import AgentContext, AgentRegistry, AgentResult, BaseAgent
+from app.agents.events import emit_agent_event
+from app.agents.orchestrator import CHAINS, INTENT_TO_CHAIN, OrchestratorAgent
+from app.agents.validators import OutputValidationPipeline
 
 __all__ = [
     "AgentContext",

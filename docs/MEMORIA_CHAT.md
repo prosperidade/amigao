@@ -285,6 +285,24 @@ em `docs/agentes/` são a fonte de verdade verificada.
   julgamento caso-a-caso — corrigir a estrutura (estabilizar ref, sync no render, key+lazy-init) é melhor que
   adicionar dep cegamente (vira loop) ou `disable` atalho. **Backend Lint segue dívida separada** (fora deste
   PR). Doc: `docs/trabalhos/lint_react_hooks.md`.
+- **2026-06-03 — Backend Lint verde / diagnosticar antes de corrigir (`fix/backend-lint`).** O check
+  `backend-lint` (ruff + mypy) estava vermelho desde #52. **Diagnóstico (não assumi):** li o `ci.yml` e
+  puxei o log real → `ruff: command not found` (exit 127). **Era (A) infra + (B) código:** o CI instalava
+  só `requirements.txt`, mas ruff/mypy vivem em `requirements-dev.txt` → o lint **nunca rodou**; atrás disso,
+  77 erros reais de ruff e **~495 de mypy** (pré-existentes, sobretudo `Column[int]` do SQLAlchemy).
+  **Fix:** (1) `ci.yml` — `backend-lint` e `backend-test` passam a instalar `requirements-dev.txt` (sem isso,
+  ao destravar o lint, o `backend-test` que tinha `needs: backend-lint` e estava *skipping* rodaria pela 1ª
+  vez e quebraria por falta de pytest); (2) ruff 77→0: `ruff --fix` (62 autofix: imports/datetime.UTC/aspas)
+  + 15 manuais sem mudar comportamento (reorder E402, `contextlib.suppress`, `zip(strict=False)` p/ preservar
+  comportamento, combinar with/if, ternário, `Union`→`|`) — **2 `# noqa` justificados** (B027 em
+  `BaseAgent.validate_preconditions`, hook opcional no-op que não pode virar `@abstractmethod`; B017 em teste
+  de WS cuja exceção varia por versão do starlette); (3) mypy vira **advisory** (`continue-on-error: true`) —
+  decisão do André: ruff é o gate, mypy reporta mas não derruba; corrigir 495 é refactor de tipagem,
+  **dívida #46**; (4) `ruff==0.15.13`/`mypy==2.1.0` **pinados** (gate reproduzível). **Validação:** ruff=0;
+  baseline da suíte **753 passed** e pós-fix **753 passed** (lint não mudou comportamento; testcontainers +
+  Postgres real). **Princípio:** diagnosticar (ler workflow + log real) antes de tocar arquivo — o vermelho
+  era infra escondendo código. **Nenhuma regra afrouxada.** RUNBOOK_DEV ganhou seção de lint/tipagem. Doc:
+  `docs/trabalhos/backend_lint.md`.
 - **2026-06-01 — PR #38 chain legislação (`fix/chain-legislacao-timeout`).** Fechou a dívida #38:
   `diagnostico_completo` não morre mais se `legislacao` falhar ou pedir revisão. Medido rodando:
   RAG local ~4,5s, contexto por metadados ~0,5s, timeout real na chamada Gemini

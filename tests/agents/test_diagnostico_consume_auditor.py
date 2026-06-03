@@ -29,9 +29,9 @@ import pytest
 
 from app.agents.base import AgentContext
 from app.agents.diagnostico import (
-    DiagnosticoAgent,
     _FAMILIA_TO_CATEGORIA,
     _GRADE_TO_GRAU,
+    DiagnosticoAgent,
 )
 
 

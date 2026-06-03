@@ -69,6 +69,17 @@ regulatória (`LegislationDocument` com 0 documentos): `exigencia_bancaria`,
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
+**46. Tipagem mypy do backend (~495 erros) é advisory, não enforçada.** O job
+`backend-lint` do CI nunca rodou mypy de fato (morria antes, em `ruff: command not
+found` — corrigido em `fix/backend-lint`, 03/06). Com o ruff verde, o mypy passou a
+rodar e acusou **~495 erros em 77 arquivos**, sobretudo `Column[int]` vs `int` do
+SQLAlchemy (acesso a atributos ORM em runtime). Como corrigi-los é refactor de
+tipagem em massa (mexe em assinaturas/lógica), o passo mypy ficou **`continue-on-error:
+true`** (advisory): roda e reporta, mas não derruba o check. **Fix incremental:**
+anotar tipos / usar `Mapped[...]` do SQLAlchemy 2.0 por módulo, baixando o número aos
+poucos; quando zerar, remover o `continue-on-error`. **Sem urgência.** **Origem:**
+`fix/backend-lint` (03/06).
+
 **9. `except Exception` genérico no `pdf_generator.py:234`** devolve `{"error": str(e)}` sem
 `status` — engole qualquer erro. O logo foi só o gatilho (resolvido na Onda A do PROMPT_3);
 o tratamento de erro continua frágil. **Origem:** Onda A (24/05).

@@ -9,7 +9,6 @@ Se um agente retorna requires_review=True, a chain para (human-in-the-loop).
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from app.agents.base import AgentContext, AgentRegistry, AgentResult
 from app.agents.events import emit_agent_event

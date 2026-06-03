@@ -8,7 +8,7 @@ e são limpos 1x/dia por esta task.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from app.core.celery_app import celery_app
 from app.db.session import SessionLocal
@@ -31,7 +31,7 @@ def cleanup_expired_intake_drafts(self) -> dict:
       - drafts em estado `card_criado` ou `base_complementada` nunca são deletados
         (já viraram processo; expires_at deles é NULL via backfill)
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db = SessionLocal()
     try:
         expired = (

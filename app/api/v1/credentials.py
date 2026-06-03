@@ -6,6 +6,7 @@ CRUD tenant-scoped sobre `Credential`. A senha é criptografada em repouso
 Toda operação é auditada (AuditLog, hash chain SHA-256).
 """
 import logging
+from datetime import UTC
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -153,9 +154,9 @@ def delete_credential(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> None:
-    from datetime import datetime, timezone  # noqa: PLC0415
+    from datetime import datetime  # noqa: PLC0415
 
     cred = _load_or_404(db, cred_id, current_user.tenant_id)
-    cred.deleted_at = datetime.now(timezone.utc)
+    cred.deleted_at = datetime.now(UTC)
     _audit(db, current_user, cred.id, "deleted", f"Credencial {cred.id} removida (soft delete).")
     db.commit()

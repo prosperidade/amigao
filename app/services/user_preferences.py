@@ -17,7 +17,6 @@ from typing import Any, Optional
 
 from app.core.encryption import decrypt_str, encrypt_str
 
-
 # Lookup table de modelos por provider (hardcoded — ajustar ao trocar provider chinês).
 AVAILABLE_MODELS: dict[str, list[str]] = {
     "anthropic": [

@@ -108,9 +108,12 @@ def test_websocket_nonexistent_user_rejected(client: TestClient, db_session, mon
 
     token = create_access_token(subject=999999, tenant_id=tenant.id)
 
-    with pytest.raises(Exception):
-        with client.websocket_connect(f"/ws?token={token}") as ws:
-            ws.receive_text()
+    # B017 silenciado de propósito: a rejeição do WS pelo TestClient pode aflorar
+    # como tipos diferentes (WebSocketDisconnect/RuntimeError) conforme a versão do
+    # starlette; o teste só garante que conectar com token de usuário inexistente
+    # NÃO sobe a conexão.
+    with pytest.raises(Exception), client.websocket_connect(f"/ws?token={token}") as ws:  # noqa: B017
+        ws.receive_text()
 
 
 def test_websocket_handler_catches_jwt_errors():

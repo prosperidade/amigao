@@ -130,7 +130,7 @@ class RegulatoryIssueUpdate(BaseModel):
     status_saneamento: StatusSaneamento | None = None
 
     @model_validator(mode="after")
-    def _coerencia_quando_body_completo(self) -> "RegulatoryIssueUpdate":
+    def _coerencia_quando_body_completo(self) -> RegulatoryIssueUpdate:
         """PROMPT_8 (#17) — fast-fail no body quando os 2 status vêm juntos.
 
         A fonte da verdade fica no endpoint (que conhece o estado resultante
@@ -182,7 +182,7 @@ class ProcessIssueDecisionCreate(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _justificativa_obrigatoria_em_descarte(self) -> "ProcessIssueDecisionCreate":
+    def _justificativa_obrigatoria_em_descarte(self) -> ProcessIssueDecisionCreate:
         """Fecha o buraco que vinha do #19 do REGISTRO_DIVIDAS (PROMPT_6
         revisão): `ignorar_justificado` e `fora_escopo` exigem justificativa
         não-vazia. Aplicado em criação E atualização (PUT é upsert), porque

@@ -257,6 +257,25 @@ docker compose exec api python scripts/reindex_sync.py
 
 Detalhes completos em `CLAUDE.md` na raiz.
 
+### Lint backend (ruff) e tipagem (mypy)
+
+`ruff` e `mypy` ficam em `requirements-dev.txt` (não vão pro runtime). O CI
+(`backend-lint`) instala `requirements-dev.txt` e roda:
+
+```bash
+ruff check app/ tests/      # gate do CI — tem que ficar verde
+mypy app/ --ignore-missing-imports   # ADVISORY (non-blocking) — dívida #46
+```
+
+- **ruff é o gate enforçado.** Antes de commitar backend: `python -m ruff check app/ tests/`
+  (ou `--fix` para autofix seguro). Versão pinada (`ruff==0.15.13`) para o CI ser
+  reproduzível — bump de versão é mudança consciente.
+- **mypy é advisory** (`continue-on-error: true` no CI): há ~495 erros de tipagem
+  pré-existentes (sobretudo `Column[int]` do SQLAlchemy). Roda e reporta, mas não
+  derruba o check. Correção é incremental (dívida aberta), não obrigatória por PR.
+- Config de ambos em `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`), incluindo
+  `per-file-ignores` para arquivos legados.
+
 ## Pendências e dívidas operacionais
 
 1. **`client-portal/` e `mobile/` congelados** — ver [`../adr/009-mobile-clientportal-congelados.md`](../adr/009-mobile-clientportal-congelados.md). Não tente subir esses serviços; podem não buildar.

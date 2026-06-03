@@ -150,8 +150,9 @@ class TestNaoTocaDiagnostico:
     """Garantia arquitetural: A2 NÃO importa nada de diagnostico.py (escopo do A3)."""
 
     def test_modulo_nao_importa_diagnostico(self):
-        import app.agents.auditor_imovel as mod
         import inspect
+
+        import app.agents.auditor_imovel as mod
         source = inspect.getsource(mod)
         assert "from app.agents.diagnostico" not in source
         assert "import app.agents.diagnostico" not in source

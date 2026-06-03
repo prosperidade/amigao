@@ -33,7 +33,6 @@ from app.agents.legislacao import (
 from app.models.legislation import LegislationDocument
 from app.schemas.stage_output import Source
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

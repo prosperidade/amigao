@@ -13,10 +13,11 @@ Tasks Celery (sync_resend_audience, send_welcome_email) são stubadas via fixtur
 Rate limit é resetado entre testes via ``_reset_rate_limit`` (autouse).
 """
 
+from datetime import UTC
+
 import pytest
 
 from app.models.pre_cadastro import PreCadastro
-
 
 WAITLIST_URL = "/api/v1/waitlist"
 
@@ -131,13 +132,13 @@ def test_signup_idempotent_email_case_insensitive(client, db_session):
 
 def test_signup_blocked_when_soft_deleted(client, db_session):
     """Lead que exerceu opt-out (deleted_at != NULL) não reativa com novo signup."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     deleted_lead = PreCadastro(
         email="optedout@example.com",
         nome="Saiu da lista",
-        consentimento_dado_em=datetime.now(timezone.utc),
-        deleted_at=datetime.now(timezone.utc),
+        consentimento_dado_em=datetime.now(UTC),
+        deleted_at=datetime.now(UTC),
     )
     db_session.add(deleted_lead)
     db_session.flush()

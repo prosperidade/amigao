@@ -9,7 +9,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-
 # ─── Sub-grupos de preferências ───────────────────────────────────────────────
 
 class ProfilePreferences(BaseModel):

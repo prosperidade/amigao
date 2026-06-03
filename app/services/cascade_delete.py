@@ -37,7 +37,6 @@ from app.models.property import Property
 from app.models.proposal import Proposal
 from app.services.audit_hash import stamp_audit_hash
 
-
 # ---------------------------------------------------------------------------
 # Estruturas
 # ---------------------------------------------------------------------------

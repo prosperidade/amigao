@@ -7,7 +7,6 @@ orgaos ambientais, extrair prazos e sugerir proximas acoes.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.agents.base import AgentRegistry, BaseAgent

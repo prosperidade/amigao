@@ -7,7 +7,9 @@ Endpoints:
   GET  /intake/templates     — lista templates de checklist por tipo de demanda
   GET  /intake/demand-types  — lista tipos de demanda disponíveis
 """
+import contextlib
 import logging
+from datetime import UTC
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,6 +27,7 @@ from app.models.property import Property as PropertyModel
 from app.models.user import User
 from app.schemas.intake import (
     DocumentRequirement,
+    ExtractedFieldView,
     IntakeCaseCreatedResponse,
     IntakeClassifyRequest,
     IntakeClassifyResponse,
@@ -38,14 +41,13 @@ from app.schemas.intake import (
     IntakeDraftUploadUrlResponse,
     IntakeEnrichRequest,
     IntakeEnrichResponse,
+    IntakeExtractedDocument,
+    IntakeExtractedFieldsResponse,
+    IntakeExtractionResultsResponse,
     IntakeImportRequest,
     IntakeImportResponse,
-    IntakeExtractedDocument,
-    IntakeExtractionResultsResponse,
     IntakeReconcileRequest,
     IntakeReconcileResponse,
-    IntakeExtractedFieldsResponse,
-    ExtractedFieldView,
 )
 from app.services.intake_classifier import classify_demand, get_demand_rules
 
@@ -515,7 +517,7 @@ def list_drafts(
 ) -> Any:
     """Lista rascunhos do tenant, filtrando os já commitados/expirados por padrão."""
     from datetime import datetime, timezone  # noqa: PLC0415
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     q = db.query(IntakeDraft).filter(IntakeDraft.tenant_id == current_user.tenant_id)
     if state:
         q = q.filter(IntakeDraft.state == state)
@@ -761,8 +763,8 @@ def confirm_draft_upload(
 
     ext = body.filename.split(".")[-1].lower() if "." in body.filename else None
     # CAM2IH-010 (Sprint H) — normaliza categoria para a taxonomia Regente canônica.
-    from app.models.document_categories import normalize_category  # noqa: PLC0415
     from app.models.document import DocumentSource  # noqa: PLC0415
+    from app.models.document_categories import normalize_category  # noqa: PLC0415
     normalized_category = normalize_category(body.document_category) or body.document_category
     doc = Document(
         tenant_id=current_user.tenant_id,
@@ -918,8 +920,8 @@ def get_draft_extraction_results(
       - `by_document`: detalhe por documento (origem das sugestões)
       - `suggestions`: campo → valor mais confiável (primeiro não-vazio por prioridade)
     """
-    from app.models.document import Document  # noqa: PLC0415
     from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+    from app.models.document import Document  # noqa: PLC0415
 
     draft = db.query(IntakeDraft).filter(
         IntakeDraft.id == draft_id,
@@ -1030,10 +1032,8 @@ def commit_draft(
     # O entry_type salvo no draft é a intenção explícita do usuário; sobrepõe
     # qualquer default do schema.
     if draft.entry_type:
-        try:
+        with contextlib.suppress(ValueError):
             payload.entry_type = EntryType(draft.entry_type)
-        except ValueError:
-            pass
 
     response = create_case(db=db, payload=payload, current_user=current_user)
 
@@ -1135,8 +1135,8 @@ def get_draft_extracted_fields(
     a flag `diverges_from_manual` (valor digitado ≠ extraído, e ainda não
     reconciliado). Alimenta o PreviewPanel + abertura do modal de reconciliação.
     """
-    from app.models.document import Document  # noqa: PLC0415
     from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+    from app.models.document import Document  # noqa: PLC0415
 
     draft = _load_draft_or_404(db, draft_id, current_user.tenant_id)
     form_data = draft.form_data or {}

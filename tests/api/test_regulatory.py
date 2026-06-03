@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 
 from app.core.security import get_password_hash
+from app.models.audit_log import AuditLog
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
-from app.models.audit_log import AuditLog
 from app.models.regulatory import (
     DecisaoConsultor,
     ProcessIssueDecision,
@@ -20,7 +20,6 @@ from app.models.regulatory import (
     RegulatoryIssueSeverity,
     RegulatoryIssueType,
     StatusAchado,
-    StatusSaneamento,
 )
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -1240,7 +1239,7 @@ class TestProcessIssueDecisionJustificativaObrigatoria:
             issue = _seed_issue(
                 db_session, tenant=tenant, prop=prop,
                 severity=RegulatoryIssueSeverity.critico,
-                codigo_alerta=f"AREA_MATRICULA_X_CAR",  # mesmo código pode repetir; chave é (process, issue)
+                codigo_alerta="AREA_MATRICULA_X_CAR",  # mesmo código pode repetir; chave é (process, issue)
                 status_achado=StatusAchado.confirmada,
             )
             db_session.commit()

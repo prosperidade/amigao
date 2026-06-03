@@ -53,10 +53,11 @@ def _setup(db_session, *, name: str, phone: str, with_open_process: bool = True,
 
 
 def _payload(remote: str, *, text_body: str = "", media: str | None = None, msg_id: str = "MSG1") -> dict:
-    if media:
-        message = {"imageMessage": {"url": media, "caption": text_body}}
-    else:
-        message = {"conversation": text_body}
+    message = (
+        {"imageMessage": {"url": media, "caption": text_body}}
+        if media
+        else {"conversation": text_body}
+    )
     return {
         "event": "messages.upsert",
         "instance": "amigao",

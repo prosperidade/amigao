@@ -143,6 +143,7 @@ def _setup_and_login(client: TestClient, db_session, email: str) -> tuple[dict, 
 def test_patch_ai_api_key_stored_encrypted_not_plaintext(client: TestClient, db_session):
     """PATCH /auth/me/preferences com ai.api_key: nunca em texto plano no banco."""
     import json
+
     from sqlalchemy import text
 
     headers, user_id = _setup_and_login(client, db_session, "llm.enc@example.com")

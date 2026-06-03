@@ -232,7 +232,7 @@ class BaseAgent(ABC):
 
     # --- Hooks opcionais ---------------------------------------------------
 
-    def validate_preconditions(self) -> None:
+    def validate_preconditions(self) -> None:  # noqa: B027 — hook opcional: base no-op de propósito, subclasses sobrescrevem se precisarem (não é abstrato)
         """Override para checar dados obrigatorios antes da execucao."""
         pass
 

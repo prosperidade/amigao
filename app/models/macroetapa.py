@@ -24,7 +24,6 @@ from sqlalchemy.sql import func
 from app.models.base import Base
 from app.models.types import PortableJSON
 
-
 # ---------------------------------------------------------------------------
 # Enum
 # ---------------------------------------------------------------------------
@@ -359,7 +358,7 @@ DIAGNOSTIC_MACROETAPAS: frozenset[Macroetapa] = frozenset(
 
 
 def compute_macroetapa_state(
-    checklist: "MacroetapaChecklist",
+    checklist: MacroetapaChecklist,
     *,
     is_current: bool = False,
     has_blockers: bool = False,
@@ -408,7 +407,7 @@ def compute_macroetapa_state(
 
 
 def list_macroetapa_blockers(
-    checklist: "MacroetapaChecklist | None",
+    checklist: MacroetapaChecklist | None,
     *,
     documents_pending_required: int = 0,
 ) -> list[str]:
@@ -432,7 +431,7 @@ def list_macroetapa_blockers(
 
 
 def can_advance_macroetapa(
-    checklist: "MacroetapaChecklist | None",
+    checklist: MacroetapaChecklist | None,
     *,
     documents_pending_required: int = 0,
     require_complete: bool = True,
