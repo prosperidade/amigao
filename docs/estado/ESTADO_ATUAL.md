@@ -26,6 +26,8 @@
 
 **Pulso 2026-06-02 (diagnóstico → GPT-4.1):** o agente de diagnóstico saiu de `gpt-4o-mini` para **`gpt-4.1`** via novo setting `AI_DIAGNOSTICO_MODEL` (default `gpt-4.1`, por env — mesma convenção do `GEMINI_LEGAL_MODEL`, nunca hardcoded no agente). Só o diagnóstico mudou; os demais agentes seguem no default. Adicionado em `docker-compose.yml` (api+worker) e `render.yaml`. Provado rodando: `settings.AI_DIAGNOSTICO_MODEL='gpt-4.1'` e chamada real ao gateway `complete(model='gpt-4.1')` → `model_used=gpt-4.1`, `content='OK'`. Reversível por env. Doc: `docs/trabalhos/diagnostico_modelo_gpt41.md`. Branch `fix/diagnostico-modelo-gpt41`.
 
+**Pulso 2026-06-03 (UI — termos técnicos):** termos técnicos vazavam pra tela (`snake_case` cru, JSON cru, `[object Object]`, `demand_type.toUpperCase()`) porque os dicionários de rótulo de campo eram fragmentados/incompletos e vários pontos humanizavam com `key.replace(/_/g,' ')`. Centralizado em `frontend/src/lib/labels/fieldLabels.ts` (`labelFor`, `humanizeValue`, `isMetaField` + `FIELD_LABELS` com matrícula/RG). Corrigidos `AgentResultRenderer` (extrator+genérico), `DocumentsTab` (fim do `JSON.stringify`), `WorkflowTimeline` (usa `DEMAND_TYPE_LABELS`), `PreviewPanel`/`DraftDocumentUploader` (importam o módulo). Achado: os 2 `CATEGORY_LABELS` **não** eram duplicados (taxonomias distintas) — mantidos. Provado por teste de render (8 casos: matrícula+RG+genérico, sem termo técnico/JSON/meta) + 48/48 suite + tsc/build verdes. Doc: `docs/trabalhos/ui_termos_tecnicos.md`. Branch `fix/ui-termos-tecnicos`.
+
 > Este documento é regenerado a cada sprint. Reflete o estado real da plataforma agora, não o estado planejado. Quando algo muda no código, muda aqui.
 
 ---

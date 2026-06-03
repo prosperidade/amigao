@@ -6,6 +6,7 @@ import { Document } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
 import ProcessChecklist from './ProcessChecklist';
 import DocumentUploadZone from '@/components/DocumentUploadZone';
+import { labelFor, isMetaField, humanizeValue } from '@/lib/labels/fieldLabels';
 
 interface DocumentsTabProps {
   processId: number;
@@ -63,21 +64,11 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
     const docId = j.result.document_id;
     if (typeof docId !== 'number') continue;
     const fields = Object.entries(j.result).filter(
-      ([k, v]) => !EXCLUDED_KEYS.has(k) && v !== null && v !== undefined && v !== '',
+      ([k, v]) => !EXCLUDED_KEYS.has(k) && !isMetaField(k) && v !== null && v !== undefined && v !== '',
     );
     if (fields.length > 0) extractedFieldsByDoc.set(docId, fields);
   }
   const extractedDocIds = new Set(extractedFieldsByDoc.keys());
-
-  const renderFieldValue = (v: unknown): string => {
-    if (v === null || v === undefined) return '—';
-    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
-    try {
-      return JSON.stringify(v);
-    } catch {
-      return String(v);
-    }
-  };
 
   const handleDownload = async (docId: number, filename: string) => {
     try {
@@ -156,9 +147,9 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                     <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs bg-white dark:bg-white/5 rounded-lg border border-purple-100 dark:border-purple-500/20 p-3">
                       {fields.map(([key, value]) => (
                         <div key={key} className="flex gap-2 min-w-0">
-                          <dt className="text-gray-500 dark:text-slate-400 capitalize shrink-0">{key.replace(/_/g, ' ')}:</dt>
-                          <dd className="text-gray-800 dark:text-slate-200 truncate" title={renderFieldValue(value)}>
-                            {renderFieldValue(value)}
+                          <dt className="text-gray-500 dark:text-slate-400 shrink-0">{labelFor(key)}:</dt>
+                          <dd className="text-gray-800 dark:text-slate-200 truncate" title={humanizeValue(value)}>
+                            {humanizeValue(value)}
                           </dd>
                         </div>
                       ))}

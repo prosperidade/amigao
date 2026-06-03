@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '@/lib/api';
+import { labelFor, humanizeValue } from '@/lib/labels/fieldLabels';
 
 // Tipos documentais sugeridos pelo Regente Cam1 Bloco 3
 const DOCUMENT_TYPES = [
@@ -14,26 +15,7 @@ const DOCUMENT_TYPES = [
   { value: 'kml_sigef', label: 'KML / croqui / SIGEF' },
 ] as const;
 
-// CAM1-005 Parte B (Sprint L) — labels pt-BR dos campos comuns extraídos pelo agente.
-const FIELD_LABELS: Record<string, string> = {
-  cpf_cnpj: 'CPF / CNPJ',
-  nome: 'Nome',
-  razao_social: 'Razão social',
-  matricula: 'Matrícula',
-  car_code: 'Código CAR',
-  car: 'CAR',
-  ccir: 'CCIR',
-  nirf: 'NIRF',
-  area_ha: 'Área (ha)',
-  area: 'Área',
-  municipality: 'Município',
-  municipio: 'Município',
-  state: 'UF',
-  uf: 'UF',
-  property_name: 'Nome do imóvel',
-  registry_number: 'Matrícula',
-  endereco: 'Endereço',
-};
+// Rótulos pt-BR dos campos extraídos vêm de @/lib/labels/fieldLabels (fonte única).
 
 // ── Robustez de upload (auditoria uploads Isis #1) ───────────────────────────
 // Timeout do PUT direto ao storage (presigned). Sem isso, se o R2/MinIO travar
@@ -596,9 +578,9 @@ export default function DraftDocumentUploader({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {FIELD_LABELS[field] ?? field}
+                        {labelFor(field)}
                       </div>
-                      <div className="truncate font-medium">{String(value)}</div>
+                      <div className="truncate font-medium">{humanizeValue(value)}</div>
                     </div>
                     {onApplySuggestion && !applied && (
                       <button

@@ -13,6 +13,7 @@ import {
   Mail, Eye, Sparkles,
 } from 'lucide-react';
 import { CONFIDENCE_STYLES } from '@/types/agent';
+import { labelFor, isMetaField } from '@/lib/labels/fieldLabels';
 
 // Safe accessors for Record<string, unknown>
 function str(v: unknown): string { return v != null ? String(v) : ''; }
@@ -371,9 +372,11 @@ function ExtratorResult({ r }: { r: Record<string, unknown> }) {
 
       {fields && Object.keys(fields).length > 0 && (
         <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3 space-y-0.5">
-          {Object.entries(fields).map(([key, value]) => (
-            <KeyValue key={key} label={key.replace(/_/g, ' ')} value={value != null ? String(value) : null} />
-          ))}
+          {Object.entries(fields)
+            .filter(([key]) => !isMetaField(key))
+            .map(([key, value]) => (
+              <KeyValue key={key} label={labelFor(key)} value={value != null ? String(value) : null} />
+            ))}
         </div>
       )}
     </div>
@@ -621,31 +624,26 @@ function MarketingResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
-// Campos meta/internos que não interessam ao consultor (nunca exibir como label).
-const GENERIC_HIDDEN_KEYS = new Set([
-  'confidence', 'requires_review', 'geom_present', 'method', 'issue_ids', 'metadata',
-]);
-
 function GenericResult({ r }: { r: Record<string, unknown> }) {
   // Rede de segurança para agentes sem renderer dedicado. NUNCA faz
   // JSON.stringify nem deixa vazar "[object Object]": escalares viram linha
   // label/valor, arrays de string viram bullets, arrays/objetos com campos
   // escalares viram cards rotulados, e qualquer aninhamento mais profundo é
-  // omitido em vez de despejado.
+  // omitido em vez de despejado. Campos meta/internos ocultados via isMetaField.
   const entries = Object.entries(r).filter(
-    ([k, v]) => v != null && v !== '' && !GENERIC_HIDDEN_KEYS.has(k) && !k.endsWith('_raw'),
+    ([k, v]) => v != null && v !== '' && !isMetaField(k),
   );
   if (entries.length === 0) {
     return <p className="text-sm text-gray-400 italic">Sem detalhes para exibir.</p>;
   }
   const scalarFields = (obj: Record<string, unknown>) =>
     Object.entries(obj).filter(
-      ([k, v]) => v != null && v !== '' && typeof v !== 'object' && !k.endsWith('_raw'),
+      ([k, v]) => v != null && v !== '' && typeof v !== 'object' && !isMetaField(k),
     );
   return (
     <div className="space-y-3">
       {entries.map(([key, value]) => {
-        const label = key.replace(/_/g, ' ');
+        const label = labelFor(key);
         if (typeof value !== 'object') {
           return <KeyValue key={key} label={label} value={String(value)} />;
         }
@@ -661,7 +659,7 @@ function GenericResult({ r }: { r: Record<string, unknown> }) {
                   {objArr(value).map((obj, i) => (
                     <div key={i} className="p-2 bg-white dark:bg-white/5 rounded border border-gray-100 dark:border-white/10">
                       {scalarFields(obj).map(([k, v]) => (
-                        <KeyValue key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
+                        <KeyValue key={k} label={labelFor(k)} value={String(v)} />
                       ))}
                     </div>
                   ))}
@@ -674,7 +672,7 @@ function GenericResult({ r }: { r: Record<string, unknown> }) {
           <Section key={key} icon={ListChecks} title={label} color="text-gray-500 dark:text-slate-400">
             <div className="bg-white dark:bg-white/5 rounded p-2">
               {scalarFields(value as Record<string, unknown>).map(([k, v]) => (
-                <KeyValue key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
+                <KeyValue key={k} label={labelFor(k)} value={String(v)} />
               ))}
             </div>
           </Section>

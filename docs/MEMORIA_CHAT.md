@@ -250,6 +250,23 @@ em `docs/agentes/` são a fonte de verdade verificada.
   `complete(model='gpt-4.1')`→`model_used=gpt-4.1`, `content='OK'` (modelo existe e a chave chama).
   Reversível por env. **Lição (reforço):** modelo de IA sempre por env — deprecation é troca de variável.
   Doc: `docs/trabalhos/diagnostico_modelo_gpt41.md`.
+- **2026-06-03 — UI: eliminar termos técnicos / rótulos PT-BR (`fix/ui-termos-tecnicos`).** Termos técnicos
+  vazavam pra tela do consultor: `snake_case` cru, **JSON cru**, `[object Object]`, `demand_type` em
+  maiúsculas (`.toUpperCase()`). **Causa (lendo o frontend):** dicionários de rótulo de campo
+  fragmentados/incompletos (dois `FIELD_LABELS` divergentes em PreviewPanel e DraftDocumentUploader,
+  sem os campos de matrícula/RG) **+** vários pontos sem dicionário, humanizando com `key.replace(/_/g,' ')`
+  (só troca `_` por espaço, segue técnico). **Fix:** módulo fonte única `frontend/src/lib/labels/fieldLabels.ts`
+  — `labelFor()` (PT-BR ou fallback humanizado, nunca underscore cru), `humanizeValue()` (objeto/array sem
+  JSON nem `[object Object]`), `isMetaField()` (oculta `confidence`/`*_raw`/`chain_trace_id`/…). Aplicado em
+  `AgentResultRenderer` (extrator+genérico), `DocumentsTab` (fim do `JSON.stringify`), `WorkflowTimeline`
+  (passa a usar `DEMAND_TYPE_LABELS` de quadro-types), e `PreviewPanel`/`DraftDocumentUploader` (importam o
+  módulo, `FIELD_LABELS` locais removidos). **Achado que corrige o briefing:** os 2 `CATEGORY_LABELS`
+  (PropertyHub × ProcessChecklist) **não** eram duplicados — taxonomias distintas (categorias de documento
+  do imóvel × categorias de checklist); mesclar seria errado, mantidos. **Provado por teste de render**
+  (`fieldLabels.test.tsx`, 8 casos: matrícula+RG+genérico renderizam PT-BR, meta oculto, sem termo
+  técnico/JSON/`[object Object]`) + suite 48/48 + `tsc`/`build` verdes. Lint pré-existente (5 arquivos
+  `react-hooks`) fora do escopo, confirmado na `main` limpa. **Follow-on anotado:** unificar os 3
+  dicionários de tipo de demanda. Doc: `docs/trabalhos/ui_termos_tecnicos.md`.
 - **2026-06-01 — PR #38 chain legislação (`fix/chain-legislacao-timeout`).** Fechou a dívida #38:
   `diagnostico_completo` não morre mais se `legislacao` falhar ou pedir revisão. Medido rodando:
   RAG local ~4,5s, contexto por metadados ~0,5s, timeout real na chamada Gemini
