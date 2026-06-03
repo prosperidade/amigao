@@ -72,6 +72,9 @@ jobs:
       - name: Run tests
         env:
           SECRET_KEY: "ci-test-secret-key-with-32-chars-minimum"
+          # Fernet key descartável só pro CI (ADR-014: CREDENTIAL_ENCRYPTION_KEY é
+          # obrigatória, sem fallback). Não protege nada real.
+          CREDENTIAL_ENCRYPTION_KEY: "Dy0Ny3uX57eV-TJv9ljrK0Vw0tzObWbI_aUekAHgMzQ="
         # TODO: Habilitar --cov-fail-under=70 quando cobertura atingir 70%
         # `python -m pytest` (não `pytest` cru): o -m insere o cwd (raiz do repo)
         # no sys.path, senão o conftest falha em `import app` (ModuleNotFoundError).
@@ -122,6 +125,7 @@ jobs:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: amigao_ci
           SECRET_KEY: "ci-migration-secret-key-32-chars-min"
+          CREDENTIAL_ENCRYPTION_KEY: "Dy0Ny3uX57eV-TJv9ljrK0Vw0tzObWbI_aUekAHgMzQ="
         run: |
           alembic upgrade head
           alembic downgrade base
