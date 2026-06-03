@@ -6,6 +6,7 @@ runs inside a transaction that is rolled back at the end, ensuring full
 isolation without the overhead of recreating the database.
 """
 
+import contextlib
 import os
 import sys
 
@@ -157,8 +158,7 @@ def _reset_slowapi_limiter():
     funcionando, pois fazem todas as chamadas dentro do mesmo teste.
     """
     from app.core.rate_limit import limiter
-    try:
+    # alguns backends não expõem reset — suprimir é intencional
+    with contextlib.suppress(Exception):
         limiter.reset()
-    except Exception:  # noqa: BLE001 — alguns backends não expõem reset
-        pass
     yield

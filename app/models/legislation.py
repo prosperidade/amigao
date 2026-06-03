@@ -14,10 +14,10 @@ import enum
 from sqlalchemy import (
     Column,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
-    ForeignKey,
 )
 from sqlalchemy.sql import func
 

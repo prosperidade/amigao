@@ -77,7 +77,7 @@ def emit_agent_event(
 
 def emit_ai_key_use_event(
     agent_name: str,
-    ctx: "AgentContext",
+    ctx: AgentContext,
     *,
     provider: str | None,
     model: str | None,

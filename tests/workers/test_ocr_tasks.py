@@ -27,7 +27,6 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.ocr_pdf import OcrResult
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

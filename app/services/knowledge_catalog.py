@@ -117,7 +117,7 @@ def _insert_chunks(
     inserted = 0
     import json as _json
 
-    for chunk, vector in zip(chunks, embeddings):
+    for chunk, vector in zip(chunks, embeddings, strict=False):
         params = {
             "tenant_id": base_metadata.get("tenant_id"),
             "source_type": source_type,
@@ -175,7 +175,7 @@ def index_text(
     ]
     existing = _existing_hashes(session, hashes)
     new_pairs = [
-        (chunk, h) for chunk, h in zip(chunks, hashes) if h not in existing
+        (chunk, h) for chunk, h in zip(chunks, hashes, strict=False) if h not in existing
     ]
     if not new_pairs:
         logger.info(

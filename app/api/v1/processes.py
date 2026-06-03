@@ -18,7 +18,8 @@ from app.models.macroetapa import (
     compute_macroetapa_state,
     list_macroetapa_blockers,
 )
-from app.models.process import Process as ProcessModel, ProcessStatus, is_valid_transition
+from app.models.process import Process as ProcessModel
+from app.models.process import ProcessStatus, is_valid_transition
 from app.models.user import User
 from app.repositories import ProcessRepository
 from app.schemas.audit_log import AuditLogRead
@@ -285,9 +286,9 @@ def get_process(
     `has_complementary_base`, `missing_docs_count`) com a mesma semântica do
     kanban, para o card de detalhe mostrar os mesmos indicadores.
     """
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
     from app.models.client import Client  # noqa: PLC0415
     from app.models.document import Document  # noqa: PLC0415
-    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
     from app.models.property import Property  # noqa: PLC0415
 
     repo = ProcessRepository(db, access_context.tenant_id)
@@ -971,7 +972,8 @@ def validate_process_artifact(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     """CAM3WS-005 + CAM3WS-006 — humano valida um artefato gerado por IA."""
-    from datetime import datetime, UTC  # noqa: PLC0415
+    from datetime import UTC, datetime  # noqa: PLC0415
+
     from app.models.stage_output import StageOutput  # noqa: PLC0415
 
     artifact = (

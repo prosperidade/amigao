@@ -64,9 +64,8 @@ def test_string_vazia_faz_round_trip():
 def test_chave_errada_levanta_invalid_token():
     with _use_keys(KEY_A):
         ciphertext = encrypt_str("segredo")
-    with _use_keys(KEY_B):
-        with pytest.raises(InvalidToken, match="chave errada ou dado corrompido"):
-            decrypt_str(ciphertext)
+    with _use_keys(KEY_B), pytest.raises(InvalidToken, match="chave errada ou dado corrompido"):
+        decrypt_str(ciphertext)
 
 
 def test_multifernet_aceita_chave_antiga_em_rotacao():

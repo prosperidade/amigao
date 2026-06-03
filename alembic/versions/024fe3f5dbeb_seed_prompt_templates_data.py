@@ -270,8 +270,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Remove seeded prompt_templates."""
+    # `op.execute` não aceita dict de parâmetros como 2º posicional (o 2º arg é
+    # execution_options) — passar params assim dá TypeError. Bind via `.bindparams()`.
     for slug in SEED_SLUGS:
         op.execute(
-            sa.text("DELETE FROM prompt_templates WHERE slug = :slug AND version = 1 AND tenant_id IS NULL"),
-            {"slug": slug},
+            sa.text(
+                "DELETE FROM prompt_templates WHERE slug = :slug AND version = 1 AND tenant_id IS NULL"
+            ).bindparams(slug=slug)
         )

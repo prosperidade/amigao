@@ -13,7 +13,7 @@ Características:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
@@ -89,7 +89,7 @@ def create_waitlist_lead(
         utm_campaign=payload.utm_campaign,
         utm_term=payload.utm_term,
         utm_content=payload.utm_content,
-        consentimento_dado_em=datetime.now(timezone.utc),
+        consentimento_dado_em=datetime.now(UTC),
     )
     db.add(lead)
     db.commit()

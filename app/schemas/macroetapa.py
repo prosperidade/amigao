@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.macroetapa import Macroetapa
 
-
 # ---------------------------------------------------------------------------
 # Requests
 # ---------------------------------------------------------------------------

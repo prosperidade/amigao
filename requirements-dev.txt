@@ -13,5 +13,7 @@ pytest-celery>=1.0          # Sprint B1 — execução eager de tasks em testes 
 testcontainers[postgres]    # Postgres ephemeral por sessão de teste
 
 # Linting / typing
-ruff
-mypy
+# Versões pinadas: o ruff é o gate do CI (Backend Lint) — upgrade silencioso pode
+# introduzir regras novas e quebrar o check sem mudança de código. Validado local.
+ruff==0.15.13
+mypy==2.1.0

@@ -31,17 +31,24 @@ def upgrade() -> None:
     ocr_status_enum.create(op.get_bind())
     process_priority_enum.create(op.get_bind())
 
-    # Update ProcessStatus Enum
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'lead';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'triagem';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'diagnostico';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'planejamento';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'execucao';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'protocolo';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'aguardando_orgao';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'pendencia_orgao';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'arquivado';")
-    op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'cancelado';")
+    # Update ProcessStatus Enum.
+    # `ALTER TYPE ... ADD VALUE` precisa commitar FORA da transação do Alembic: usar
+    # um valor de enum recém-adicionado na mesma transação dá
+    # `UnsafeNewEnumValueUsage` no PostgreSQL (quebra um `upgrade head` do zero —
+    # CI / deploy novo). `autocommit_block` isola os ADD VALUE numa transação própria
+    # com autocommit, garantindo que estejam disponíveis para o restante da migration.
+    # Mesmo padrão já usado em b3d5c7e9f1a2.
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'lead';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'triagem';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'diagnostico';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'planejamento';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'execucao';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'protocolo';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'aguardando_orgao';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'pendencia_orgao';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'arquivado';")
+        op.execute("ALTER TYPE processstatus ADD VALUE IF NOT EXISTS 'cancelado';")
 
     op.create_table('properties',
     sa.Column('id', sa.Integer(), nullable=False),

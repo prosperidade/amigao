@@ -25,8 +25,7 @@ Invariantes que este arquivo prova:
 
 from __future__ import annotations
 
-from contextlib import ExitStack
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from app.agents.base import AgentContext
 from app.agents.legislacao import LegislacaoAgent

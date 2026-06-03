@@ -11,7 +11,7 @@ import enum
 import json
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Literal, Optional, Union
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
@@ -22,11 +22,11 @@ from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
 from app.models.client import Client, ClientStatus
 from app.models.contract import Contract, ContractStatus
-from app.models.macroetapa import MACROETAPA_LABELS, Macroetapa
 from app.models.document import Document
+from app.models.macroetapa import MACROETAPA_LABELS, Macroetapa
 from app.models.process import Process, ProcessPriority, ProcessStatus
-from app.models.proposal import Proposal, ProposalStatus
 from app.models.property import Property
+from app.models.proposal import Proposal, ProposalStatus
 from app.models.task import TERMINAL_TASK_STATUSES, Task
 from app.models.user import User
 from app.services.notifications import _get_redis_client
@@ -509,7 +509,7 @@ def _operacional_data(db: Session, tenant_id: int, user_id: int, now: datetime) 
 # Endpoint
 # ---------------------------------------------------------------------------
 
-@router.get("/summary", response_model=Union[ExecutivoDashboard, OperacionalDashboard])
+@router.get("/summary", response_model=ExecutivoDashboard | OperacionalDashboard)
 def get_dashboard_summary(
     view: ViewMode = Query(ViewMode.executivo),
     db: Session = Depends(get_db),

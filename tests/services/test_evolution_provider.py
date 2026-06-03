@@ -104,12 +104,16 @@ def test_send_message_raises_on_http_error_status() -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 500
     mock_resp.json.return_value = {"error": "boom"}
-    with patch("app.services.messaging.evolution_provider.httpx.post", return_value=mock_resp):
-        with pytest.raises(EvolutionProviderError):
-            _provider().send_message("5511999998888", "oi")
+    with (
+        patch("app.services.messaging.evolution_provider.httpx.post", return_value=mock_resp),
+        pytest.raises(EvolutionProviderError),
+    ):
+        _provider().send_message("5511999998888", "oi")
 
 
 def test_send_message_wraps_network_error() -> None:
-    with patch("app.services.messaging.evolution_provider.httpx.post", side_effect=httpx.ConnectError("down")):
-        with pytest.raises(EvolutionProviderError):
-            _provider().send_message("5511999998888", "oi")
+    with (
+        patch("app.services.messaging.evolution_provider.httpx.post", side_effect=httpx.ConnectError("down")),
+        pytest.raises(EvolutionProviderError),
+    ):
+        _provider().send_message("5511999998888", "oi")

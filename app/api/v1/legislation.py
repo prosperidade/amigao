@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
@@ -20,7 +20,6 @@ from app.schemas.legislation import (
     LegislationSearchResponse,
 )
 from app.services.legislation_service import (
-    build_legislation_context,
     ingest_legislation_document,
     search_legislation,
 )

@@ -18,7 +18,6 @@ from app.schemas.stage_output import (
     validate_diagnostic_content,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -254,7 +253,7 @@ class TestCoexistenceWithLegacyDict:
         dumped = c.model_dump()
         assert isinstance(dumped, dict)
         # garante que o resultado é serializável (sem objetos exóticos)
-        assert all(isinstance(k, str) for k in dumped.keys())
+        assert all(isinstance(k, str) for k in dumped)
 
 
 # ---------------------------------------------------------------------------

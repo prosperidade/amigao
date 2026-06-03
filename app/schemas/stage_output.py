@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, computed_field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 # Templates suportados pelo RedatorAgent — ver app/agents/redator.py:VALID_TEMPLATES
 PecaTemplate = Literal[

@@ -6,9 +6,8 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy_utils import create_database, database_exists
-
 from sqlalchemy.engine.url import make_url
+from sqlalchemy_utils import create_database, database_exists
 
 from app.db.session import engine
 

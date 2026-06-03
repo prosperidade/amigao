@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,14 +7,16 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
-from app.models.client import Client as ClientModel, ClientStatus
+from app.models.client import Client as ClientModel
+from app.models.client import ClientStatus
 from app.models.macroetapa import (
     Macroetapa,
     MacroetapaChecklist,
     compute_macroetapa_state,
     list_macroetapa_blockers,
 )
-from app.models.process import Process as ProcessModel, ProcessStatus
+from app.models.process import Process as ProcessModel
+from app.models.process import ProcessStatus
 from app.models.property import Property as PropertyModel
 from app.models.user import User
 from app.repositories import ClientRepository

@@ -23,9 +23,6 @@ from app.agents.orchestrator import CHAINS
 from app.api.deps import get_current_internal_user, get_db
 from app.core.config import settings
 from app.models.user import User
-
-DbDep = Annotated[Session, Depends(get_db)]
-UserDep = Annotated[User, Depends(get_current_internal_user)]
 from app.schemas.agent import (
     AgentInfo,
     AgentRunRequest,
@@ -34,6 +31,9 @@ from app.schemas.agent import (
     ChainRunRequest,
     ChainRunResponse,
 )
+
+DbDep = Annotated[Session, Depends(get_db)]
+UserDep = Annotated[User, Depends(get_current_internal_user)]
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -229,7 +229,11 @@ def get_budget(db: DbDep, current_user: UserDep) -> dict[str, object]:
 
     limit=0 ⇒ ilimitado (pct=0, alert=false).
     """
-    from app.core.ai_gateway import _month_window_utc, get_tenant_monthly_budget, get_tenant_monthly_spend  # noqa: PLC0415
+    from app.core.ai_gateway import (  # noqa: PLC0415
+        _month_window_utc,
+        get_tenant_monthly_budget,
+        get_tenant_monthly_spend,
+    )
 
     limit = get_tenant_monthly_budget(current_user.tenant_id, db)
     used = get_tenant_monthly_spend(current_user.tenant_id, db)
