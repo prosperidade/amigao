@@ -19,7 +19,7 @@
  * e `fora_escopo`; o 422 do backend é rede de segurança.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { AxiosError } from 'axios';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
@@ -102,8 +102,16 @@ export default function AlertaCard({ issue, processId }: AlertaCardProps) {
   const [justificativa, setJustificativa] = useState('');
   const [decisaoTouched, setDecisaoTouched] = useState(false);
 
-  // Sincroniza com o estado servidor quando a query carrega/muda.
-  useEffect(() => {
+  // Sincroniza o form com o estado servidor (React Query) SEM useEffect: ajusta
+  // durante o render quando a referência de `data` muda — padrão recomendado do
+  // React para derivar/resetar estado a partir de dados externos (evita
+  // set-state-in-effect e o ciclo extra de commit). Sentinela inicia em
+  // `undefined`: enquanto carrega (data === undefined) nada sincroniza; quando
+  // chega objeto (inclusive cache no 1º render) popula; quando vem null limpa.
+  // Não há loop: após igualar `syncedData` a `data`, a condição fica falsa.
+  const [syncedData, setSyncedData] = useState<typeof decisionQuery.data>(undefined);
+  if (decisionQuery.data !== syncedData) {
+    setSyncedData(decisionQuery.data);
     if (decisionQuery.data) {
       setDecisaoSelecionada(decisionQuery.data.decisao);
       setJustificativa(decisionQuery.data.justificativa ?? '');
@@ -111,7 +119,7 @@ export default function AlertaCard({ issue, processId }: AlertaCardProps) {
       setDecisaoSelecionada(null);
       setJustificativa('');
     }
-  }, [decisionQuery.data]);
+  }
 
   // ── Validação client-side da justificativa (#19) ────────────────────────
   const exigeJustificativa =

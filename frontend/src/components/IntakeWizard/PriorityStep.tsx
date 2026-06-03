@@ -2,22 +2,11 @@
  * PriorityStep — dois eixos INDEPENDENTES de prioridade (decisão Isis 2026-05-28).
  *
  * Urgência (4 níveis) e Valor Estratégico (3 níveis) são eixos separados —
- * NÃO se combinam num único índice. O nível "baixo" de Valor Estratégico não
- * tem critério escrito (Isis não definiu — dívida #29); o consultor decide livre.
+ * NÃO se combinam num único índice. As opções vivem em ./priorityOptions
+ * (constantes fora do arquivo de componente — exigência do Fast Refresh).
  */
 
-export const URGENCIA_OPTIONS = [
-  { value: 'urgentissima', label: '🔴 Urgentíssima — prazo vencendo, embargo, auto de infração' },
-  { value: 'alta', label: '🟠 Alta — banco, prazo de crédito, exigência com data' },
-  { value: 'media', label: '🟡 Média — nas próximas semanas' },
-  { value: 'baixa', label: '🟢 Baixa — pode aguardar' },
-];
-
-export const VALOR_ESTRATEGICO_OPTIONS = [
-  { value: 'alto', label: '⭐ Alto — cliente/caso prioritário' },
-  { value: 'medio', label: '◐ Médio' },
-  { value: 'baixo', label: '○ Baixo — sem critério fixo (consultor decide)' },
-];
+import { URGENCIA_OPTIONS, VALOR_ESTRATEGICO_OPTIONS } from './priorityOptions';
 
 interface Props {
   urgencia: string;

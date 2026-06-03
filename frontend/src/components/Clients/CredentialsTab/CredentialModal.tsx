@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 
 import type { Credential, CredentialFormValues, PortalType } from './types';
@@ -39,24 +39,23 @@ export function CredentialModal({
   onClose,
   onSubmit,
 }: CredentialModalProps) {
-  const [form, setForm] = useState<CredentialFormValues>(INITIAL_FORM);
+  // Form inicializado a partir das props no mount (lazy init). O pai passa um
+  // `key` por credencial/modo, então o modal remonta ao abrir outra credencial
+  // — o initializer roda de novo e reseta o form. Sem useEffect de sincronização
+  // (evita set-state-in-effect).
+  const [form, setForm] = useState<CredentialFormValues>(() =>
+    mode === 'edit' && credential
+      ? {
+          portal: credential.portal as PortalType,
+          label: credential.label ?? '',
+          login: credential.login ?? '',
+          password: '',
+          url: credential.url ?? '',
+          notes: credential.notes ?? '',
+        }
+      : INITIAL_FORM,
+  );
   const [validationError, setValidationError] = useState('');
-
-  useEffect(() => {
-    if (mode === 'edit' && credential) {
-      setForm({
-        portal: credential.portal as PortalType,
-        label: credential.label ?? '',
-        login: credential.login ?? '',
-        password: '',
-        url: credential.url ?? '',
-        notes: credential.notes ?? '',
-      });
-      return;
-    }
-
-    setForm(INITIAL_FORM);
-  }, [credential, mode]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();

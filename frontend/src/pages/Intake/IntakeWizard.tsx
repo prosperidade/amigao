@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import DiagnosisPanel from './DiagnosisPanel';
 import DraftDocumentUploader from './DraftDocumentUploader';
-import PriorityStep, { URGENCIA_OPTIONS, VALOR_ESTRATEGICO_OPTIONS } from '@/components/IntakeWizard/PriorityStep';
+import PriorityStep from '@/components/IntakeWizard/PriorityStep';
+import { URGENCIA_OPTIONS, VALOR_ESTRATEGICO_OPTIONS } from '@/components/IntakeWizard/priorityOptions';
 import PreviewPanel from '@/components/IntakeWizard/PreviewPanel';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -1134,7 +1135,11 @@ function SummaryRow({ icon, label, children }: { icon: string; label: string; ch
  * Mostra um badge com dias restantes. Amarelo se <= 3 dias.
  */
 function DraftExpirationBadge({ expiresAt }: { expiresAt: string }) {
-  const diffMs = new Date(expiresAt).getTime() - Date.now();
+  // Captura "agora" uma vez no mount (lazy init) — o badge é estático, não
+  // precisa reagir à passagem do tempo, e ler Date.now() direto no corpo do
+  // render é impuro (regra react-hooks/purity).
+  const [now] = useState(() => Date.now());
+  const diffMs = new Date(expiresAt).getTime() - now;
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
   if (diffDays < 0) return null;
 
