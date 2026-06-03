@@ -67,6 +67,15 @@ registrava "523 mypy errors"), nunca enforçados.
   prod incremental e nos testes que usam `create_all`). Fix: ADD VALUE envoltos em
   `op.get_context().autocommit_block()` — mesmo padrão de `b3d5c7e9f1a2`. **Validado
   local:** `upgrade head` do zero contra a imagem custom roda sem o erro.
+- **2º bug de migration: `op.execute(text, dict)` no downgrade da seed
+  (`024fe3f5dbeb`).** O ciclo `downgrade base` do CI bateu em
+  `TypeError: execute() takes 2 positional arguments but 3 were given`: o downgrade
+  fazia `op.execute(sa.text("... :slug ..."), {"slug": slug})` — mas o 2º posicional
+  de `op.execute` é `execution_options`, não params. Fix: `.bindparams(slug=slug)` no
+  `text()` (1 argumento só; DELETE idêntico). Única ocorrência do padrão no projeto.
+  **Nota:** a validação local do ciclo completo ficou bloqueada por flakiness do
+  port-forward do Docker Desktop no Windows (container saudável, conexão host→container
+  caindo) — o ciclo upgrade→downgrade→upgrade é validado no runner Linux do CI.
 - Passo mypy → **`continue-on-error: true`** (advisory) com comentário + dívida
   **#46**. Decisão do André: ruff é o gate real; mypy roda e reporta, mas não
   derruba o check. Corrigir 495 erros de tipagem é refactor de assinaturas/lógica,
