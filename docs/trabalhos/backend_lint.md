@@ -36,9 +36,20 @@ registrava "523 mypy errors"), nunca enforçados.
 - **`backend-test` roda `python -m pytest` (não `pytest` cru).** Ao destravar, o
   job falhou em 41s com `ModuleNotFoundError: No module named 'app'` no import do
   `conftest`: `pytest` cru **não** insere o cwd no `sys.path`; o `-m` insere a raiz
-  do repo. (O `backend-migrations` já resolvia via `prepend_sys_path = .` no
-  `alembic.ini`.) Reproduzido local: bare `pytest` falha igual, `python -m pytest`
-  coleta 753.
+  do repo. Reproduzido local: bare `pytest` falha igual, `python -m pytest` coleta 753.
+- **Imagem PostGIS + pgvector buildada nos jobs `backend-test` e `backend-migrations`.**
+  A cascata expôs que esses dois jobs **nunca rodaram com sucesso no CI** (ficavam
+  *skipping* atrás do lint vermelho) e dependem da imagem custom do projeto
+  (`docker/db/Dockerfile` = postgis/postgis:15-3.3 + `postgresql-15-pgvector`):
+  - `backend-test`: o fixture do `conftest` sobe Postgres via Testcontainers e usa
+    `amigao_do_meio_ambiente-db:latest`; sem ela, o fallback `pgvector/pgvector:pg15`
+    **não tem PostGIS** → `CREATE EXTENSION postgis` quebra. Fix: passo
+    `docker build -t amigao_do_meio_ambiente-db:latest -f docker/db/Dockerfile .`
+    antes do pytest (a tag é a que o fixture procura).
+  - `backend-migrations`: as migrations criam `postgis` **E** `vector`; o `services:`
+    era `postgis/postgis:15-3.3` (sem pgvector) → `CREATE EXTENSION vector` quebraria.
+    Fix: trocado o `services:` por build da imagem custom + `docker run` (mesma imagem
+    com as duas extensões).
 - Passo mypy → **`continue-on-error: true`** (advisory) com comentário + dívida
   **#46**. Decisão do André: ruff é o gate real; mypy roda e reporta, mas não
   derruba o check. Corrigir 495 erros de tipagem é refactor de assinaturas/lógica,
