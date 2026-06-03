@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { labelFor } from '@/lib/labels/fieldLabels';
 import ReconcileModal from './ReconcileModal';
 
 interface ExtractedFieldView {
@@ -29,28 +30,6 @@ interface Props {
   draftId: number;
   /** Valores digitados pelo consultor, por nome de campo extraído (p/ o modal). */
   manualValues?: Record<string, unknown>;
-}
-
-const FIELD_LABELS: Record<string, string> = {
-  nirf: 'NIRF',
-  ccir_numero: 'CCIR',
-  ccir: 'CCIR',
-  sigef_numero: 'SIGEF',
-  car_numero: 'Número do CAR',
-  car_code: 'Número do CAR',
-  municipio: 'Município',
-  uf: 'UF',
-  coordenadas_centroide: 'Coordenadas (centroide)',
-  area_total_ha: 'Área total (ha)',
-  titular_matricula: 'Titular da matrícula',
-  area_app: 'Área de APP (ha)',
-  area_rl: 'Área de RL (ha)',
-  area_consolidada: 'Área consolidada (ha)',
-  cpf_cnpj: 'CPF / CNPJ',
-};
-
-function labelFor(field: string): string {
-  return FIELD_LABELS[field] ?? field;
 }
 
 // Semântica de confiança preservada (verde >0.9, amarelo 0.7–0.9, vermelho <0.7),

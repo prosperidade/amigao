@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { CheckCircle2, Circle, Clock, Play, Loader2, AlertCircle } from 'lucide-react';
+import { DEMAND_TYPE_LABELS } from './quadro-types';
 
 interface WorkflowStep {
   order: number;
@@ -75,6 +76,9 @@ export default function WorkflowTimeline({ processId }: WorkflowTimelineProps) {
   const allSteps: WorkflowStep[] = ws.all_steps ?? [];
   const hasTemplate = !!ws.template_name;
   const isApplied = ws.is_applied;
+  const demandLabel: string | null = ws.demand_type
+    ? DEMAND_TYPE_LABELS[ws.demand_type] ?? ws.demand_type
+    : null;
 
   return (
     <div className="space-y-5">
@@ -85,10 +89,10 @@ export default function WorkflowTimeline({ processId }: WorkflowTimelineProps) {
           <div>
             <p className="text-xs text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-1">Trilha Regulatória</p>
             <p className="text-base font-semibold text-gray-900 dark:text-white">
-              {ws.template_name ?? (ws.demand_type ? `Tipo: ${ws.demand_type}` : 'Sem trilha definida')}
+              {ws.template_name ?? (demandLabel ? demandLabel : 'Sem trilha definida')}
             </p>
-            {ws.demand_type && (
-              <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Tipo de demanda: {ws.demand_type}</p>
+            {demandLabel && (
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Tipo de demanda: {demandLabel}</p>
             )}
           </div>
 
@@ -129,7 +133,7 @@ export default function WorkflowTimeline({ processId }: WorkflowTimelineProps) {
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Play className="w-4 h-4" />
             }
-            Aplicar trilha {ws.demand_type?.toUpperCase()}
+            {demandLabel ? `Aplicar trilha ${demandLabel}` : 'Aplicar trilha'}
           </button>
         )}
 
