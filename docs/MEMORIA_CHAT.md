@@ -267,6 +267,24 @@ em `docs/agentes/` são a fonte de verdade verificada.
   técnico/JSON/`[object Object]`) + suite 48/48 + `tsc`/`build` verdes. Lint pré-existente (5 arquivos
   `react-hooks`) fora do escopo, confirmado na `main` limpa. **Follow-on anotado:** unificar os 3
   dicionários de tipo de demanda. Doc: `docs/trabalhos/ui_termos_tecnicos.md`.
+- **2026-06-03 — Zerar lint react-hooks / CI frontend verde (`fix/lint-react-hooks`).** O check
+  **Frontend Lint** estava cronicamente vermelho com 6 problemas pré-existentes (5 erros + 1 warning;
+  `--max-warnings=0` quebra com warning), escondendo erros novos. **Não tratei todos igual** — classifiquei
+  cada um e corrigi **na estrutura, zero `eslint-disable`**: (1) `IntakeWizard` `DraftExpirationBadge` lia
+  `Date.now()` no render (`react-hooks/purity`) → lazy `useState(() => Date.now())` (badge estático, "agora"
+  uma vez no mount); (2) `AlertaCard` sync server→form em `useEffect`+setState (`set-state-in-effect`) →
+  padrão React de ajustar estado **durante o render** com sentinela `syncedData` (sentinela inicia
+  `undefined`: cobre loading/cache-no-1º-render/null; sem loop pois iguala após sincronizar); (3) `QuadroAcoes`
+  `const columns = kanbanData?.columns ?? []` recriava array todo render e disparava useMemo dependente
+  (`exhaustive-deps`) → `useMemo(() => ..., [kanbanData])`; (4) `CredentialModal` init de form em effect →
+  lazy `useState` + `key` no pai (remonta ao trocar credencial — reset canônico); (5) `PriorityStep` exportava
+  constantes junto do componente (`react-refresh/only-export-components`) → movidas p/ `priorityOptions.ts`,
+  importadas em PriorityStep e IntakeWizard. **Validação:** eslint dos 7 arquivos = 0; `npm run lint` projeto
+  verde; tsc/build verdes; suite 48/48; **anti-loop** nas 2 telas de setState (AlertaCard + CredentialsTab,
+  11/11 testes sem `Maximum update depth`). **Lição:** `exhaustive-deps`/`set-state-in-effect` exigem
+  julgamento caso-a-caso — corrigir a estrutura (estabilizar ref, sync no render, key+lazy-init) é melhor que
+  adicionar dep cegamente (vira loop) ou `disable` atalho. **Backend Lint segue dívida separada** (fora deste
+  PR). Doc: `docs/trabalhos/lint_react_hooks.md`.
 - **2026-06-01 — PR #38 chain legislação (`fix/chain-legislacao-timeout`).** Fechou a dívida #38:
   `diagnostico_completo` não morre mais se `legislacao` falhar ou pedir revisão. Medido rodando:
   RAG local ~4,5s, contexto por metadados ~0,5s, timeout real na chamada Gemini

@@ -62,7 +62,9 @@ export default function QuadroAcoes() {
   // O gate formal acontece no Workspace do Caso (botão "Avançar etapa" com validação).
   // Quadro coordena, Workspace executa.
 
-  const columns = kanbanData?.columns ?? [];
+  // Estabiliza a referência: sem o useMemo, `?? []` cria um array novo a cada
+  // render e dispara recálculo do useMemo dependente (abaixo) toda vez.
+  const columns = useMemo(() => kanbanData?.columns ?? [], [kanbanData]);
   const totalActive = kanbanData?.total_active ?? 0;
 
   // Listas únicas para os filtros (derivadas dos cards carregados).

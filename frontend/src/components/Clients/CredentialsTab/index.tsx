@@ -191,6 +191,7 @@ export default function CredentialsTab({ clientId }: CredentialsTabProps) {
 
       {modal && (
         <CredentialModal
+          key={modal.mode === 'edit' ? `edit-${modal.credential?.id}` : 'create'}
           credential={modal.credential}
           error={formError}
           isSaving={isSaving}
