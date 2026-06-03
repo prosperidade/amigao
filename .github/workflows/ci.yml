@@ -75,6 +75,13 @@ jobs:
           # Fernet key descartável só pro CI (ADR-014: CREDENTIAL_ENCRYPTION_KEY é
           # obrigatória, sem fallback). Não protege nada real.
           CREDENTIAL_ENCRYPTION_KEY: "Dy0Ny3uX57eV-TJv9ljrK0Vw0tzObWbI_aUekAHgMzQ="
+          # Testes do caminho IA (TestPathIA, ai_on_*) mockam `app.agents.base.complete`,
+          # mas o agente só toma o caminho IA se `settings.ai_configured` for True —
+          # que exige AI_ENABLED + uma chave não-placeholder (len>10). A chave abaixo
+          # é FAKE: o `complete` é mockado, nenhuma chamada real é feita. Espelha o
+          # `.env` local (onde a suíte passa 753/753).
+          AI_ENABLED: "true"
+          OPENAI_API_KEY: "sk-ci-fake-key-mocked-tests-1234567890"
         # TODO: Habilitar --cov-fail-under=70 quando cobertura atingir 70%
         # `python -m pytest` (não `pytest` cru): o -m insere o cwd (raiz do repo)
         # no sys.path, senão o conftest falha em `import app` (ModuleNotFoundError).
