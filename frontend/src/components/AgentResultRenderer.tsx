@@ -394,6 +394,22 @@ function LegislaçãoResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
+/**
+ * Renderiza o valor de um campo extraído sem NUNCA produzir "[object Object]".
+ * Cobre dois shapes do extrator:
+ *   - flat:    `{ area: "412 ha" }`                  → "412 ha"
+ *   - aninhado:`{ area: { value: "412 ha", confidence: "high" } }` → "412 ha"
+ * Qualquer outro objeto cai em `humanizeValue` ("Rótulo: valor · ...").
+ */
+function extratorFieldValue(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const o = value as Record<string, unknown>;
+    if ('value' in o) return humanizeValue(o.value);
+  }
+  return humanizeValue(value);
+}
+
 function ExtratorResult({ r }: { r: Record<string, unknown> }) {
   const fields = r.extracted_fields as Record<string, unknown> | undefined;
   return (
@@ -410,7 +426,7 @@ function ExtratorResult({ r }: { r: Record<string, unknown> }) {
           {Object.entries(fields)
             .filter(([key]) => !isMetaField(key))
             .map(([key, value]) => (
-              <KeyValue key={key} label={labelFor(key)} value={value != null ? String(value) : null} />
+              <KeyValue key={key} label={labelFor(key)} value={extratorFieldValue(value)} />
             ))}
         </div>
       )}

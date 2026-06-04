@@ -484,3 +484,35 @@ class TestMapeamentos:
             "licenciamento": "atividade_produtiva",
             "validade_documental": "cadastral_sistemico",
         }
+
+
+class TestFallbackExtracaoDocTypeOutros:
+    """Item F (teste Isis rodada 1) — o fallback persistido do #57 deve puxar os
+    campos extraídos de QUALQUER doc_type, incluindo 'outros' (14 campos no caso
+    #10). Sem isso o diagnóstico roda às cegas (tokens_in≈636)."""
+
+    def test_fields_from_job_result_extrai_de_doc_type_outros(self):
+        agent = DiagnosticoAgent(_ctx(chain_data={}))
+        result = {
+            "doc_type": "outros",
+            "document_id": 50,
+            "fields_count": 3,
+            "extracted_fields": {
+                "area": "412,30 ha",
+                "matricula": "98.765 Jatai/GO",
+                "licenca_ambiental": "ok",
+                "confidence": {"area": "high", "matricula": "high"},
+            },
+        }
+        fields = agent._fields_from_job_result(result)
+        # campos do imóvel NÃO podem ser descartados por causa do doc_type
+        assert fields["area"] == "412,30 ha"
+        assert fields["matricula"] == "98.765 Jatai/GO"
+        assert fields["licenca_ambiental"] == "ok"
+
+    def test_has_extracted_fields_falso_dispara_fallback(self):
+        agent = DiagnosticoAgent(_ctx(chain_data={}))
+        # chain vazia / sem campos → precisa do fallback persistido
+        assert agent._has_extracted_fields({}) is False
+        assert agent._has_extracted_fields({"extracted_fields": {}, "skipped": True}) is False
+        assert agent._has_extracted_fields({"extracted_fields": {"area": "1 ha"}}) is True

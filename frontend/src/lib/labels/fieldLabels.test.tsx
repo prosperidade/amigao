@@ -142,3 +142,84 @@ describe('AgentResultRenderer — GenericResult (diagnóstico/auditor sem render
     assertNoTechnicalLeak(text);
   });
 });
+
+describe('AgentResultRenderer — extrator (shapes reais, teste Isis rodada 1)', () => {
+  // Item B: caso #10 trouxe 14 campos AGRUPADOS como {value, confidence} —
+  // String(value) gerava [object Object] em TODOS. Desempacota .value.
+  it('desempacota campos no shape {value, confidence} sem [object Object]', () => {
+    const { container } = render(
+      <AgentResultRenderer
+        agentName="extrator"
+        result={{
+          doc_type: 'outros',
+          fields_count: 3,
+          extracted_fields: {
+            area_hectares: { value: '412,30 ha', confidence: 'high' },
+            numero_matricula: { value: '98.765 Jatai/GO', confidence: 'high' },
+            denominacao_imovel: { value: 'Sitio Boa Esperanca', confidence: 'medium' },
+          },
+        }}
+      />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).toContain('412,30 ha');
+    expect(text).toContain('98.765 Jatai/GO');
+    expect(text).toContain('Sitio Boa Esperanca');
+    expect(text).not.toContain('[object Object]');
+    expect(text).not.toContain('high');
+  });
+
+  // Item B: shape FLAT com `confidence` como OBJETO (mapa por-campo) — o objeto
+  // meta nao pode vazar [object Object].
+  it('nao vaza [object Object] quando confidence e um objeto-mapa (doc_type outros)', () => {
+    const { container } = render(
+      <AgentResultRenderer
+        agentName="extrator"
+        result={{
+          doc_type: 'outros',
+          fields_count: 3,
+          extracted_fields: {
+            area: '412,30 ha',
+            matricula: '98.765 Jatai/GO',
+            licenca_ambiental: 'TESTE',
+            confidence: { area: 'high', matricula: 'high' },
+          },
+        }}
+      />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).toContain('412,30 ha');
+    expect(text).not.toContain('[object Object]');
+  });
+});
+
+describe('AgentResultRenderer — legislacao (shape real, teste Isis rodada 1)', () => {
+  // Item C: legislacao_aplicavel chega como [{identificador, titulo, relevancia}]
+  // — formatLegislacao monta "Lei no — Titulo" e NUNCA produz [object Object].
+  it('formata citacoes {identificador, titulo, relevancia} sem [object Object]', () => {
+    const { container } = render(
+      <AgentResultRenderer
+        agentName="legislacao"
+        result={{
+          legislacao_aplicavel: [
+            {
+              titulo: 'Novo Codigo Florestal',
+              relevancia: 'Base para o CAR, PRA, APP e Reserva Legal.',
+              identificador: 'Lei Federal no 12.651/2012',
+            },
+            {
+              titulo: 'Regulamenta o CAR e o PRA',
+              relevancia: 'Detalha inscricao no CAR.',
+              identificador: 'Decreto Federal no 7.830/2012',
+            },
+          ],
+        }}
+      />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).toContain('Lei Federal no 12.651/2012');
+    expect(text).toContain('Novo Codigo Florestal');
+    expect(text).toContain('Decreto Federal no 7.830/2012');
+    expect(text).not.toContain('[object Object]');
+  });
+});

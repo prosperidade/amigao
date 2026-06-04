@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.regulatory import (
     DecisaoConsultor,
@@ -35,6 +35,33 @@ from app.models.regulatory import (
 from app.services.regulatory_coherence import assert_status_coerente
 
 IssueStatusFilter = Literal["open", "resolved", "all"]
+
+
+def _coerce_documentos_cruzados(v: Any) -> Any:
+    """Normaliza ``documentos_cruzados`` para ``list[str]`` na leitura.
+
+    ``documentos_cruzados`` é JSONB alimentado pelo auditor — cujo conteúdo, em
+    paths guiados por LLM, pode chegar como lista de **objetos**
+    (ex.: ``[{"doc": "matricula"}]``) em vez de lista de **strings**. O schema
+    exige ``list[str]``; sem esta coerção o Pydantic levanta
+    ``ResponseValidationError`` e o endpoint de listagem retorna **500 para a
+    lista inteira** por causa de uma única linha malformada (causa raiz do 500
+    em ``GET /properties/{id}/issues``). Aqui cada item vira string legível,
+    preservando a informação em vez de derrubar a resposta (degradar com
+    elegância — o radar não cancela). Linhas já corretas passam intactas.
+    """
+    if not isinstance(v, list):
+        return v
+    out: list[str] = []
+    for item in v:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            parts = [str(x) for x in item.values() if x not in (None, "")]
+            out.append(" — ".join(parts) if parts else str(item))
+        elif item is not None:
+            out.append(str(item))
+    return out
 
 
 class RegulatoryDiagnosisCreate(BaseModel):
@@ -106,6 +133,11 @@ class RegulatoryIssueOut(BaseModel):
     detected_by: str | None
     detected_at: datetime
     resolved_at: datetime | None
+
+    @field_validator("documentos_cruzados", mode="before")
+    @classmethod
+    def _normalize_documentos_cruzados(cls, v: Any) -> Any:
+        return _coerce_documentos_cruzados(v)
 
 
 class RegulatoryIssueUpdate(BaseModel):
