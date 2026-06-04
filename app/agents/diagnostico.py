@@ -129,6 +129,29 @@ class DiagnosticoAgent(BaseAgent):
         extracted_data = self.ctx.chain_data.get("extrator", {})
         legal_data = self.ctx.chain_data.get("legislacao", {})
 
+        # 2.b Fallback persistido (PR fix/diagnostico-insumo) — diagnóstico avulso
+        # (aba Agentes) ou rodada com extrator/legislacao falhos chega aqui com
+        # chain_data vazio e sai CEGO (tokens_in≈358). Os campos extraídos e o
+        # enquadramento PERSISTEM nos AIJobs do extrator/legislacao do processo;
+        # quando a chain não os trouxe, buscamos o mais recente do banco. Na
+        # chain, chain_data continua prioritário (mais fresco).
+        if not self._has_extracted_fields(extracted_data):
+            persisted = self._load_persisted_extraction(process_data)
+            if persisted:
+                extracted_data = persisted
+        if not legal_data:
+            persisted_legal = self._load_persisted_legislacao()
+            if persisted_legal:
+                legal_data = persisted_legal
+
+        # Property: se não há Property persistida mas a extração trouxe
+        # municipio/uf/area, enriquece o CONTEXTO do prompt (sem gravar na
+        # Property — efeito colateral proibido).
+        if not process_data.get("property"):
+            enriched = self._property_from_extracted(extracted_data)
+            if enriched:
+                process_data["property"] = enriched
+
         # 3. Se IA nao configurada, retorna diagnostico baseado em regras
         if not settings.ai_configured:
             return self._rules_based_diagnosis(process_data)
@@ -254,6 +277,187 @@ class DiagnosticoAgent(BaseAgent):
         ]
 
         return data
+
+    # ------------------------------------------------------------------
+    # Fallback persistido (PR fix/diagnostico-insumo)
+    # ------------------------------------------------------------------
+    #
+    # Chaves do payload do extrator (wrapper do ExtratorAgent OU campos
+    # diretos do document_extractor) que NÃO são "campo do imóvel" e portanto
+    # não entram no contexto como dado extraído.
+    _EXTRACTION_META_KEYS: frozenset[str] = frozenset({
+        "doc_type", "document_id", "documents", "fields_count", "skipped",
+        "reason", "resolved_from_process", "confidence", "_raw", "_parse_error",
+        "_source", "documents_count",
+    })
+
+    @staticmethod
+    def _has_extracted_fields(extracted_data: Any) -> bool:
+        """True quando ``chain_data['extrator']`` traz campos extraídos reais.
+
+        ``{}`` (avulso) ou ``{'extracted_fields': {}, 'skipped': True}`` (extrator
+        sem documento) contam como vazio → dispara o fallback persistido.
+        """
+        if not isinstance(extracted_data, dict):
+            return False
+        fields = extracted_data.get("extracted_fields")
+        return isinstance(fields, dict) and bool(fields)
+
+    def _fields_from_job_result(self, result: Any) -> dict[str, Any]:
+        """Extrai os campos estruturados de um ``AIJob.result`` de extração.
+
+        Dois shapes coexistem (ver ``document_extractor`` vs ``ExtratorAgent``):
+        * ExtratorAgent: ``{"extracted_fields": {...}, "doc_type": ...}``.
+        * document_extractor (save_job): campos no topo do ``result``.
+        Em ambos retornamos só os campos pequenos — NUNCA ``extracted_text`` bruto
+        (que não vive no result do extrator de qualquer forma).
+        """
+        if not isinstance(result, dict):
+            return {}
+        inner = result.get("extracted_fields")
+        if isinstance(inner, dict):
+            return inner
+        return {k: v for k, v in result.items() if k not in self._EXTRACTION_META_KEYS}
+
+    def _load_persisted_extraction(self, process_data: dict[str, Any]) -> dict[str, Any] | None:
+        """Busca os campos extraídos persistidos nos ``AIJob`` do extrator quando
+        a chain não os trouxe. Mescla o job mais recente de CADA documento
+        (most-recent-wins) e devolve no mesmo shape de ``chain_data['extrator']``.
+
+        Cobre ambos os shapes de job: ``entity_type='process'`` (ExtratorAgent,
+        agent_name='extrator') e ``entity_type='document'`` (document_extractor,
+        agent_name=None). Por isso filtra por ``job_type`` + entidade, não por
+        agent_name. Ordena por ``id`` desc (monotônico → mais recente primeiro).
+        """
+        from sqlalchemy import and_, or_  # noqa: PLC0415
+
+        from app.models.ai_job import AIJob, AIJobStatus, AIJobType  # noqa: PLC0415
+
+        pid = self.ctx.process_id
+        doc_ids = [
+            d.get("id")
+            for d in process_data.get("documents", [])
+            if isinstance(d, dict) and d.get("id") is not None
+        ]
+
+        entity_conds = [and_(AIJob.entity_type == "process", AIJob.entity_id == pid)]
+        if doc_ids:
+            entity_conds.append(
+                and_(AIJob.entity_type == "document", AIJob.entity_id.in_(doc_ids))
+            )
+
+        jobs = (
+            self.ctx.session.query(AIJob)
+            .filter(
+                AIJob.tenant_id == self.ctx.tenant_id,
+                AIJob.job_type == AIJobType.extract_document,
+                AIJob.status == AIJobStatus.completed,
+            )
+            .filter(or_(*entity_conds))
+            .order_by(AIJob.id.desc())
+            .all()
+        )
+        if not jobs:
+            return None
+
+        aggregated: dict[str, Any] = {}
+        seen_docs: set[Any] = set()
+        for job in jobs:
+            result = job.result if isinstance(job.result, dict) else {}
+            # Identifica o documento dessa extração para dedupe "mais recente vence".
+            doc_key = result.get("document_id")
+            if doc_key is None and job.entity_type == "document":
+                doc_key = job.entity_id
+            if doc_key is not None:
+                if doc_key in seen_docs:
+                    continue
+                seen_docs.add(doc_key)
+            for key, value in self._fields_from_job_result(result).items():
+                if key not in aggregated and value not in (None, "", {}, []):
+                    aggregated[key] = value
+
+        if not aggregated:
+            return None
+
+        logger.info(
+            "diagnostico.extracted_fields_fallback process=%s docs=%d fields=%d "
+            "— chain_data vazio, campos recuperados de AIJob persistido",
+            pid, len(seen_docs), len(aggregated),
+        )
+        return {
+            "extracted_fields": aggregated,
+            "doc_type": "multiplos",
+            "_source": "persisted_aijob",
+            "documents_count": len(seen_docs),
+        }
+
+    def _load_persisted_legislacao(self) -> dict[str, Any] | None:
+        """Busca o ``result`` do AIJob mais recente da legislacao do MESMO
+        processo (status completed) quando a chain não trouxe ``legislacao``.
+        Filtra por ``agent_name='legislacao'`` (job_type é consulta_regulatoria)."""
+        from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+
+        job = (
+            self.ctx.session.query(AIJob)
+            .filter(
+                AIJob.tenant_id == self.ctx.tenant_id,
+                AIJob.entity_type == "process",
+                AIJob.entity_id == self.ctx.process_id,
+                AIJob.agent_name == "legislacao",
+                AIJob.status == AIJobStatus.completed,
+            )
+            .order_by(AIJob.id.desc())
+            .first()
+        )
+        if job is not None and isinstance(job.result, dict) and job.result:
+            logger.info(
+                "diagnostico.legal_context_fallback process=%s job=%s "
+                "— chain_data vazio, enquadramento recuperado de AIJob persistido",
+                self.ctx.process_id, job.id,
+            )
+            return job.result
+        return None
+
+    def _property_from_extracted(self, extracted_data: Any) -> dict[str, Any] | None:
+        """Monta um dict de propriedade mínimo a partir dos campos extraídos
+        (municipio/uf/area/CAR/denominação) quando NÃO há Property persistida.
+
+        Só enriquece o prompt — NÃO grava na Property (efeito colateral proibido).
+        Marca ``_source='extracted_fields'`` para deixar a origem rastreável.
+        """
+        fields = extracted_data.get("extracted_fields") if isinstance(extracted_data, dict) else None
+        if not isinstance(fields, dict) or not fields:
+            return None
+
+        def pick(*keys: str) -> Any:
+            for key in keys:
+                value = fields.get(key)
+                if value not in (None, "", {}, []):
+                    return value
+            return None
+
+        prop: dict[str, Any] = {}
+        name = pick("denominacao_imovel", "property_name", "proprietario_nome", "nome_proprietario")
+        municipality = pick("municipio", "municipality")
+        state = pick("uf", "state")
+        area = pick("area_total_ha", "area_hectares", "area_ha", "area")
+        car_code = pick("numero_car", "car_code", "car_numero")
+
+        if name:
+            prop["name"] = name
+        if municipality:
+            prop["municipality"] = municipality
+        if state:
+            prop["state"] = state
+        if area is not None:
+            prop["total_area_ha"] = area
+        if car_code:
+            prop["car_code"] = car_code
+
+        if not prop:
+            return None
+        prop["_source"] = "extracted_fields"
+        return prop
 
     def _rules_based_diagnosis(self, process_data: dict[str, Any]) -> dict[str, Any]:
         """Diagnostico basico sem LLM.
