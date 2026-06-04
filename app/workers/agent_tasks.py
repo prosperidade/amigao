@@ -57,6 +57,22 @@ def run_agent(
             "requires_review": result.requires_review,
             "error": result.error,
         }
+    except ValueError as exc:
+        # fix/teste-isis-rodada2 (item C): erro deterministico (pre-condicao /
+        # input invalido) NAO deve entrar em retry storm — retry nunca resolve e
+        # a UI fica presa em "agendada". Falha rapido e visivel. O job 'failed'
+        # ja foi persistido por BaseAgent.run() (job criado antes da validacao).
+        db.commit()
+        logger.warning("agent_task: %s falhou (deterministico, sem retry): %s", agent_name, exc)
+        return {
+            "status": "failed",
+            "agent": agent_name,
+            "data": {},
+            "ai_job_id": None,
+            "confidence": "low",
+            "requires_review": False,
+            "error": str(exc),
+        }
     except Exception as exc:
         db.rollback()
         logger.error("agent_task: %s failed: %s", agent_name, exc)
