@@ -336,3 +336,22 @@ em `docs/agentes/` são a fonte de verdade verificada.
   (~55 KB) entre `<!-- skills:start -->`/`<!-- skills:end -->`; controle negativo sem `uf` não injeta.
   26 testes de skills verdes. **Gap novo: dívida #44** (a chain não propaga `uf` ao diagnóstico —
   ligada à #38; não resolvida aqui). Docx Word duplicados movidos para `docs/_archive/skills-fontes-word/`.
+
+- **2026-06-03 — Diagnóstico enxerga o insumo persistido (`fix/diagnostico-insumo`).** O diagnóstico
+  rodava com `tokens_in≈358` e saía genérico quando chamado avulso (aba Agentes) ou com extrator falho
+  na rodada — `extracted_fields` vinha **só** de `chain_data["extrator"]` e `legal_context` **só** de
+  `chain_data["legislacao"]`, ambos efêmeros. Os dados persistem: campos no `AIJob.result` do extrator
+  (dois shapes — `ExtratorAgent.result.extracted_fields` e `document_extractor` save_job com campos no
+  topo) e o enquadramento no `AIJob.result` da legislação (`agent_name="legislacao"`). Fix em
+  `app/agents/diagnostico.py`: `_load_persisted_extraction` (mescla o job mais recente de cada doc),
+  `_load_persisted_legislacao` e `_property_from_extracted` (enriquece o `property` do prompt **sem
+  gravar na Property**). `chain_data` segue prioritário — fallback só dispara quando
+  `_has_extracted_fields(chain)` é falso. Só campos estruturados pequenos (**nunca** `extracted_text`
+  bruto). Modelo: nenhuma mudança de código — o agente já passa `model=gpt-4.1`; caso #8 saiu
+  `gpt-4o-mini` por ser **pré-deploy** do PR #53, confirmado agora rodando. UI
+  (`AgentResultRenderer.tsx`): `formatLegislacao` formata os itens objeto `{identificador, titulo, ...}`
+  (antes saíam `[object Object]`) tipo "Lei nº 12.651/2012 — Código Florestal, art. 17". **Provado
+  rodando** (processo 30, container real, gpt-4.1): `tokens_in` **359→3491**, `model_used=gpt-4.1`,
+  output cita "Fazenda Boa Vista"/Auto de Infração (não genérico); via chain o `FRESCO_CHAIN` prevalece
+  (sem regressão); `_property_from_extracted` monta município/UF/área sem gravar. 44 testes de
+  diagnóstico verdes, tsc+build verdes. Doc: `docs/trabalhos/diagnostico_insumo.md`.

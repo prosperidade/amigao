@@ -13,7 +13,7 @@ import {
   Mail, Eye, Sparkles,
 } from 'lucide-react';
 import { CONFIDENCE_STYLES } from '@/types/agent';
-import { labelFor, isMetaField } from '@/lib/labels/fieldLabels';
+import { labelFor, isMetaField, humanizeValue } from '@/lib/labels/fieldLabels';
 
 // Safe accessors for Record<string, unknown>
 function str(v: unknown): string { return v != null ? String(v) : ''; }
@@ -24,6 +24,38 @@ function arr(v: unknown): string[] {
 function objArr(v: unknown): Record<string, unknown>[] {
   if (!Array.isArray(v)) return [];
   return v.filter(item => typeof item === 'object' && item !== null) as Record<string, unknown>[];
+}
+function rawArr(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+
+/**
+ * Formata um item de `legislacao_aplicavel` — que chega como string OU objeto
+ * (`{identificador|norma|lei, numero, titulo, artigo, descricao, ...}`) — em
+ * texto legível tipo "Lei nº 12.651/2012 — Código Florestal, art. 17".
+ * NUNCA produz "[object Object]". Espelha a prioridade de
+ * `legislacao._citation_ref_from_raw` no backend e cai em `humanizeValue` como
+ * último recurso.
+ */
+function formatLegislacao(item: unknown): string {
+  if (item == null) return '';
+  if (typeof item !== 'object') return String(item);
+  const o = item as Record<string, unknown>;
+  const ident = str(o.identificador) || str(o.norma) || str(o.lei) || str(o.raw);
+  const numero = str(o.numero);
+  const titulo = str(o.titulo) || str(o.descricao);
+  const artigo = str(o.artigo);
+
+  let head = ident;
+  if (ident && numero && !ident.includes(numero)) head = `${ident} nº ${numero}`;
+
+  const parts: string[] = [];
+  if (head) parts.push(head);
+  if (titulo && titulo !== head) parts.push(titulo);
+  let label = parts.join(' — ');
+  if (artigo) label = label ? `${label}, art. ${artigo}` : `art. ${artigo}`;
+
+  return label || humanizeValue(o);
 }
 
 interface Props {
@@ -338,9 +370,12 @@ function LegislaçãoResult({ r }: { r: Record<string, unknown> }) {
         </Section>
       )}
 
-      {arr(r.legislacao_aplicavel).length > 0 && (
+      {rawArr(r.legislacao_aplicavel).length > 0 && (
         <Section icon={BookOpen} title="Legislação Aplicável" color="text-purple-600 dark:text-purple-400">
-          <BulletList items={arr(r.legislacao_aplicavel)} color="text-purple-400" />
+          <BulletList
+            items={rawArr(r.legislacao_aplicavel).map(formatLegislacao).filter(Boolean)}
+            color="text-purple-400"
+          />
         </Section>
       )}
 
