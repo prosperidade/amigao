@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import AccessContext, get_access_context, get_current_internal_user, get_db
+from app.models.extracted_field_staging import ExtractedFieldStatus
 from app.models.macroetapa import (
     MACROETAPA_LABELS,
     MACROETAPA_METADATA,
@@ -21,8 +22,9 @@ from app.models.macroetapa import (
 from app.models.process import Process as ProcessModel
 from app.models.process import ProcessStatus, is_valid_transition
 from app.models.user import User
-from app.repositories import ProcessRepository
+from app.repositories import ExtractedFieldStagingRepository, ProcessRepository
 from app.schemas.audit_log import AuditLogRead
+from app.schemas.extracted_field_staging import ExtractedFieldStagingOut
 from app.schemas.macroetapa import (
     ActionToggleRequest,
     ActionValidateRequest,
@@ -993,3 +995,28 @@ def validate_process_artifact(
     db.commit()
     db.refresh(artifact)
     return artifact
+
+
+# ---------------------------------------------------------------------------
+# Staging de campos extraídos (Ficha 01, FASE 1) — leitura
+# ---------------------------------------------------------------------------
+
+@router.get("/{process_id}/staging-fields", response_model=list[ExtractedFieldStagingOut])
+def list_process_staging_fields(
+    process_id: int,
+    status: Optional[ExtractedFieldStatus] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Lista os campos extraídos em staging de um processo (tenant-scoped).
+
+    Ficha 01: agentes propõem (staging), consultor decide (Alertas, fase 4). Nesta
+    fase nada escreve no staging ainda; o endpoint já existe para a UI consumir.
+    Filtro opcional por ``status``.
+    """
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+    return ExtractedFieldStagingRepository(db, current_user.tenant_id).list_by_process(
+        process_id, status=status
+    )

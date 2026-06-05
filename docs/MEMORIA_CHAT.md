@@ -400,3 +400,23 @@ em `docs/agentes/` são a fonte de verdade verificada.
   comprobatória"** + ações de confirmar o embargo (job 147). **D** confirmado resolvido pela rodada 1
   (kanban 200/20 cards; `/properties/11/issues` 200/5). Suites: `tests/agents/` 183, suite completa
   verde, tsc + build verdes. Doc: `docs/trabalhos/teste_isis_rodada2.md`.
+- **2026-06-04 — Ficha 01 / FASE 1: Matrícula + staging (`feat/ficha01-fase1-matricula-staging`).**
+  A Ficha 01 (Dicionário de Extração do Intake, espec **fechada** pela dupla fundadora) redefine a
+  fundação do intake. Esta FASE 1 instala **só o schema** — extrator/auditor/intake NÃO mudam (fases
+  2-4). Decisões de modelagem (já tomadas pela dupla, implementadas, não rediscutidas): (1) **1 Imóvel
+  (`Property`) : N Matrículas** contíguas sob o mesmo CAR — CAR/município/nome ficam no imóvel; nº
+  matrícula, cartório/registro, INCRA/SNCR, NIRF/CIB, geo (SIGEF), área e averbações ficam na
+  `Matricula`; **área do imóvel = SOMA das áreas das matrículas** (derivada, via
+  `Property.area_total_matriculas()`). (2) **Staging** (`ExtractedFieldStaging`): extrator/auditor
+  escrevem campos extraídos lá, NUNCA na base; a base só grava na confirmação do consultor (fase 4) —
+  "agentes propõem (staging), consultor decide (Alertas), sistema grava (base)". (3) Campo **extraído**
+  (carrega `confidence` + `status` de validação) ≠ **derivado** (carrega rastreabilidade
+  `created_by_agent`/`ai_job_id`). Entregue: 2 models + enum `extractedfieldstatus` (6 valores),
+  `Property.matriculas` (1:N) + `area_total_matriculas()` (`total_area_ha` legado mantido), migration
+  `a1f2c3d4e5f6` provada up→down→up limpa, repos tenant-scoped, endpoints `GET`/`POST
+  /properties/{id}/matriculas` + `GET /processes/{id}/staging-fields` (filtro status, 422/404/401),
+  10 testes (incl. caso real: matrículas 4.698=660,6561 + 6.776=349,9022 → **1.010,5583 ha**). ADR-015
+  (entidade Matrícula + staging, referenciando a Ficha 01 como espec) + MODELO_DE_DADOS atualizados.
+  Suite completa verde + ruff limpo. **NÃO neste PR:** fase 2 (extrator escreve no staging + migração
+  de dados `Property`→`Matricula`), fase 3 (reconciliação multi-fonte do auditor), fase 4 (tela de
+  Alertas/consolidação). Doc: `docs/trabalhos/ficha01_fase1.md`.
