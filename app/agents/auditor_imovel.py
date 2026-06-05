@@ -60,6 +60,11 @@ class AuditorImovelAgent(BaseAgent):
         # Persistir cada finding como RegulatoryIssue (quando há property_id real)
         issue_ids = self._persist_issues(property_data, findings)
 
+        # Ficha 02 / FASE 3 — Matriz de Inconsistências (saída canônica do auditor).
+        # Determinística: lê o staging da Fase 2, confronta as fontes e marca o
+        # status das linhas confrontadas. Campo NOVO no resultado (não quebra shape).
+        matriz = self._build_matriz_inconsistencias()
+
         # Payload (consumível pela chain — vide Divergencia em stage_output.py)
         divergencias = [
             {
@@ -103,7 +108,45 @@ class AuditorImovelAgent(BaseAgent):
             ],
             "geom_present": property_data.get("geom") is not None,
             "method": "deterministic_tools",  # sinaliza que não passou por LLM
+            # Ficha 02 / FASE 3 — matriz de inconsistências (campo novo).
+            "matriz_inconsistencias": matriz,
         }
+
+    def _build_matriz_inconsistencias(self) -> dict[str, Any]:
+        """Ficha 02 / FASE 3 — monta a matriz a partir do staging do processo e
+        marca o status das linhas confrontadas (consistente / divergente_*).
+
+        Determinístico, best-effort: falha não derruba o auditor (devolve matriz
+        vazia). A decisão aceito/rejeitado é do consultor (Fase 4) — não aqui.
+        """
+        from app.models.extracted_field_staging import (  # noqa: PLC0415
+            ExtractedFieldStaging,
+            ExtractedFieldStatus,
+        )
+        from app.services.inconsistency_matrix import build_matrix  # noqa: PLC0415
+
+        try:
+            rows = (
+                self.ctx.session.query(ExtractedFieldStaging)
+                .filter(
+                    ExtractedFieldStaging.tenant_id == self.ctx.tenant_id,
+                    ExtractedFieldStaging.process_id == self.ctx.process_id,
+                )
+                .order_by(ExtractedFieldStaging.id.asc())
+                .all()
+            )
+            result = build_matrix(rows)
+            for staging_row, novo_status in result.status_updates:
+                try:
+                    staging_row.status = ExtractedFieldStatus(novo_status)
+                except ValueError:
+                    continue
+            if result.status_updates:
+                self.ctx.session.flush()
+            return result.matriz
+        except Exception as exc:  # pragma: no cover - blindagem
+            logger.warning("auditor_imovel: matriz de inconsistências falhou (ignorada): %s", exc)
+            return {"fontes": [], "linhas": [], "resumo": {}}
 
     # ------------------------------------------------------------------
 

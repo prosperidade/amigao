@@ -165,6 +165,7 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("registro_livro_folha", "registro_livro_folha", "matricula", "registro_livro_folha_ficha"),
         _FieldSpec("cartorio", "cartorio", "matricula", "cartorio"),
         _FieldSpec("area_registrada_ha", "area_registrada_ha", "matricula", "area_ha", "ha"),
+        _FieldSpec("denominacao", "denominacao", "matricula", "denominacao_imovel"),
         _FieldSpec("averbacao_app", "averbacao_app", "matricula", "averbacao_app"),
         _FieldSpec("averbacao_rl", "averbacao_rl", "matricula", "averbacao_rl"),
         _FieldSpec("numero_geo", "numero_geo", "matricula", "geo_certificacao_codigo"),
@@ -177,6 +178,9 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("municipio", "municipio", "imovel", "municipality"),
         _FieldSpec("nome_imovel", "nome_imovel", "matricula", "denominacao_imovel"),
         _FieldSpec("codigo_incra", "codigo_incra", "matricula", "codigo_incra_sncr"),
+        # numero_car declarado no ITR — usado pela matriz (car_presenca: CAR
+        # existente mas ausente no ITR → inconsistente, "atualizar ITR/DIAC").
+        _FieldSpec("numero_car", "numero_car", "imovel", "car_code"),
     ],
     "sigef": [
         _FieldSpec("area_georreferenciada_ha", "area_georreferenciada_ha", "matricula", "area_ha", "ha"),
@@ -248,6 +252,7 @@ Campos ausentes = null; proprietarios = lista [{"nome","cpf"}].
   "registro_livro_folha": null,
   "cartorio": null,
   "area_registrada_ha": null,
+  "denominacao": null,
   "proprietarios": [{"nome": null, "cpf": null}],
   "averbacao_app": null,
   "averbacao_rl": null,
@@ -260,7 +265,8 @@ TEXTO:
     "itr": """Extraia os campos deste ITR (Imposto Territorial Rural / DIAT/DITR).
 Retorne APENAS JSON. Campos ausentes = null.
 {"nirf_cib": null, "area_declarada_ha": null, "vtn": null, "municipio": null,
- "nome_imovel": null, "codigo_incra": null, "numero_matricula": null, "confidence": {}}
+ "nome_imovel": null, "codigo_incra": null, "numero_car": null, "numero_matricula": null,
+ "confidence": {}}
 TEXTO:
 {text}""",
     "sigef": """Extraia os campos deste memorial/certidão SIGEF (georreferenciamento).

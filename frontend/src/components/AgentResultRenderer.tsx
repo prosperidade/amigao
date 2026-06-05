@@ -286,11 +286,28 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
+// Ficha 02 / FASE 3 — cores/rótulos por situação da matriz (taxonomia §4).
+const MATRIZ_SIT_CLS: Record<string, string> = {
+  critico: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30',
+  inconsistente: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-300 dark:border-orange-500/30',
+  divergente: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30',
+  atencao: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/30',
+  consistente: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30',
+};
+const MATRIZ_SIT_LABEL: Record<string, string> = {
+  critico: 'Crítico', inconsistente: 'Inconsistente', divergente: 'Divergente',
+  atencao: 'Atenção', consistente: 'Consistente',
+};
+
 function AuditorResult({ r }: { r: Record<string, unknown> }) {
   // auditor_imovel cruza documentos extraídos (matrícula × CAR × CCIR/etc.) e
   // produz `divergencias` ({tema, divergencia, impacto}). findings_raw, issue_ids,
   // method e geom_present são meta internos — não exibir ao consultor.
   const divergencias = objArr(r.divergencias);
+  const matriz = (r.matriz_inconsistencias && typeof r.matriz_inconsistencias === 'object')
+    ? (r.matriz_inconsistencias as Record<string, unknown>)
+    : null;
+  const linhas = matriz ? objArr(matriz.linhas) : [];
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -327,6 +344,46 @@ function AuditorResult({ r }: { r: Record<string, unknown> }) {
         <p className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
           <CheckCircle2 className="w-4 h-4" /> Nenhuma divergência documental encontrada.
         </p>
+      )}
+
+      {linhas.length > 0 && (
+        <Section icon={AlertTriangle} title="Matriz de Inconsistências" color="text-purple-600 dark:text-purple-400">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="text-left text-xs text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                  <th className="py-2 pr-3 font-medium">Item</th>
+                  <th className="py-2 pr-3 font-medium">Situação</th>
+                  <th className="py-2 font-medium">Ação recomendada</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linhas.map((l, i) => {
+                  const sit = str(l.situacao);
+                  return (
+                    <tr key={i} className="border-t border-gray-100 dark:border-white/10 align-top">
+                      <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">
+                        {str(l.label) || str(l.item)}
+                        {str(l.profundidade) === 'tecnica' && (
+                          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-slate-400">
+                            técnica — aguarda geo
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span className={`text-xs px-2 py-0.5 rounded border whitespace-nowrap ${MATRIZ_SIT_CLS[sit] ?? ''}`}>
+                          {MATRIZ_SIT_LABEL[sit] ?? sit}
+                          {str(l.subtipo) && ` · ${str(l.subtipo)}`}
+                        </span>
+                      </td>
+                      <td className="py-2 text-gray-600 dark:text-slate-300">{str(l.acao_recomendada)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Section>
       )}
     </div>
   );

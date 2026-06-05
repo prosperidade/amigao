@@ -161,6 +161,15 @@ class DiagnosticoAgent(BaseAgent):
         if atendimento_data:
             process_data["process"]["relato_demanda_consultor"] = atendimento_data
 
+        # Ficha 02 / FASE 3 — matriz de inconsistências do auditor no contexto.
+        # Sem tocar prompt-template: injeta no bloco `process` (placeholder
+        # {process_data}). Da chain quando disponível; senão do AIJob persistido
+        # (mesmo padrão do atendimento). Fonte adicional para o diagnóstico citar.
+        auditor_payload = self._resolve_auditor_payload()
+        matriz = auditor_payload.get("matriz_inconsistencias") if isinstance(auditor_payload, dict) else None
+        if isinstance(matriz, dict) and matriz.get("linhas"):
+            process_data["process"]["matriz_inconsistencias"] = matriz
+
         # 3. Se IA nao configurada, retorna diagnostico baseado em regras
         if not settings.ai_configured:
             return self._rules_based_diagnosis(process_data)
@@ -212,7 +221,7 @@ class DiagnosticoAgent(BaseAgent):
         citation_eval = self._evaluate_citations(citation_text, legal_data)
 
         # PROMPT_4 Onda A — consumir findings do auditor (primeiro movimento)
-        auditor_payload = self.ctx.chain_data.get("auditor_imovel", {}) if isinstance(self.ctx.chain_data, dict) else {}
+        auditor_payload = self._resolve_auditor_payload()
         divergencias_auditor, riscos_auditor = self._consume_auditor_findings(auditor_payload)
 
         return self._build_payload(
@@ -470,6 +479,41 @@ class DiagnosticoAgent(BaseAgent):
             return job.result
         return None
 
+    def _resolve_auditor_payload(self) -> dict[str, Any]:
+        """Payload do auditor: ``chain_data`` quando disponível; senão o AIJob
+        persistido (Ficha 02 / FASE 3, mesmo padrão do atendimento)."""
+        payload = self.ctx.chain_data.get("auditor_imovel", {}) if isinstance(self.ctx.chain_data, dict) else {}
+        if not payload:
+            payload = self._load_persisted_auditor() or {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _load_persisted_auditor(self) -> dict[str, Any] | None:
+        """Busca o ``result`` do AIJob mais recente do auditor_imovel do MESMO
+        processo (status completed) — traz a matriz de inconsistências e os
+        findings quando a chain não os trouxe. Fonte ADICIONAL."""
+        from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+
+        job = (
+            self.ctx.session.query(AIJob)
+            .filter(
+                AIJob.tenant_id == self.ctx.tenant_id,
+                AIJob.entity_type == "process",
+                AIJob.entity_id == self.ctx.process_id,
+                AIJob.agent_name == "auditor_imovel",
+                AIJob.status == AIJobStatus.completed,
+            )
+            .order_by(AIJob.id.desc())
+            .first()
+        )
+        if job is not None and isinstance(job.result, dict) and job.result:
+            logger.info(
+                "diagnostico.auditor_context process=%s job=%s "
+                "— matriz/findings do auditor recuperados de AIJob persistido",
+                self.ctx.process_id, job.id,
+            )
+            return job.result
+        return None
+
     def _property_from_extracted(self, extracted_data: Any) -> dict[str, Any] | None:
         """Monta um dict de propriedade mínimo a partir dos campos extraídos
         (municipio/uf/area/CAR/denominação) quando NÃO há Property persistida.
@@ -536,7 +580,7 @@ class DiagnosticoAgent(BaseAgent):
         # PROMPT_4 Onda A — mesmo no path sem LLM, se o auditor já rodou na chain
         # consumimos os findings. O Diagnóstico é a interpretação; a matriz de
         # cruzamento vem do auditor independentemente do path.
-        auditor_payload = self.ctx.chain_data.get("auditor_imovel", {}) if isinstance(self.ctx.chain_data, dict) else {}
+        auditor_payload = self._resolve_auditor_payload()
         divergencias_auditor, riscos_auditor = self._consume_auditor_findings(auditor_payload)
 
         return self._build_payload(
