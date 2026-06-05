@@ -24,7 +24,13 @@ from app.models.process import ProcessStatus, is_valid_transition
 from app.models.user import User
 from app.repositories import ExtractedFieldStagingRepository, ProcessRepository
 from app.schemas.audit_log import AuditLogRead
-from app.schemas.extracted_field_staging import ExtractedFieldStagingOut
+from app.schemas.extracted_field_staging import (
+    BulkAcceptResult,
+    ConsolidationResult,
+    ExtractedFieldStagingOut,
+    StagingDecisionRequest,
+    StagingDecisionResult,
+)
 from app.schemas.macroetapa import (
     ActionToggleRequest,
     ActionValidateRequest,
@@ -1020,3 +1026,76 @@ def list_process_staging_fields(
     return ExtractedFieldStagingRepository(db, current_user.tenant_id).list_by_process(
         process_id, status=status
     )
+
+
+# ---------------------------------------------------------------------------
+# FASE 4 — decisão do consultor + consolidação na base real
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{process_id}/staging-fields/aceitar-consistentes",
+    response_model=BulkAcceptResult,
+)
+def accept_consistent_staging_fields(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Aceita em lote TODOS os campos status=consistente do processo.
+
+    Divergentes NUNCA entram no lote — exigem escolha ativa (gate em /decidir)."""
+    from app.services.staging_consolidation import bulk_accept_consistentes  # noqa: PLC0415
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+    ids = bulk_accept_consistentes(
+        db, tenant_id=current_user.tenant_id, process_id=process_id, user_id=current_user.id
+    )
+    return BulkAcceptResult(aceitos=len(ids), field_ids=ids)
+
+
+@router.post(
+    "/{process_id}/staging-fields/{field_id}/decidir",
+    response_model=StagingDecisionResult,
+)
+def decide_staging_field(
+    process_id: int,
+    field_id: int,
+    body: StagingDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Decisão do consultor sobre um campo (aceitar/escolher_fonte/editar/rejeitar)."""
+    from app.services.staging_consolidation import decide_field  # noqa: PLC0415
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+    row = decide_field(
+        db, tenant_id=current_user.tenant_id, process_id=process_id, field_id=field_id,
+        acao=body.acao, valor=body.valor, fonte=body.fonte, user_id=current_user.id,
+    )
+    decided = row.decided_value.get("value") if isinstance(row.decided_value, dict) else None
+    return StagingDecisionResult(field_id=row.id, status=row.status, decided_value=decided)
+
+
+@router.post("/{process_id}/consolidar", response_model=ConsolidationResult)
+def consolidate_process_endpoint(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Consolida o staging aceito na base real (Client/Property/Matricula).
+
+    Determinístico, idempotente. NÃO grava nada que não esteja aceito; NÃO
+    sobrescreve Property.total_area_ha (área = derivada da soma das matrículas)."""
+    from app.services.staging_consolidation import consolidate_process  # noqa: PLC0415
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+    result = consolidate_process(
+        db, tenant_id=current_user.tenant_id, process_id=process_id, user_id=current_user.id
+    )
+    return ConsolidationResult(**result)
