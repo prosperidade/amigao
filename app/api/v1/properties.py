@@ -20,7 +20,8 @@ from app.models.process import ProcessStatus
 from app.models.property import Property as PropertyModel
 from app.models.stage_output import StageOutput
 from app.models.user import User
-from app.repositories import PropertyRepository
+from app.repositories import MatriculaRepository, PropertyRepository
+from app.schemas.matricula import Matricula, MatriculaCreate
 from app.schemas.property import Property, PropertyCreate, PropertyUpdate
 from app.schemas.property_hub import (
     PropertyAISummary,
@@ -94,6 +95,50 @@ def update_property(
     db.commit()
     db.refresh(property_obj)
     return property_obj
+
+
+# ---------------------------------------------------------------------------
+# Matrículas (Ficha 01, FASE 1) — 1 Imóvel : N Matrículas
+# ---------------------------------------------------------------------------
+
+@router.get("/{property_id}/matriculas", response_model=list[Matricula])
+def list_property_matriculas(
+    property_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_internal_user),
+):
+    """Lista as matrículas de um imóvel (tenant-scoped)."""
+    PropertyRepository(db, current_user.tenant_id).get_or_404(
+        property_id, detail="Property not found"
+    )
+    return MatriculaRepository(db, current_user.tenant_id).list_by_property(property_id)
+
+
+@router.post(
+    "/{property_id}/matriculas",
+    response_model=Matricula,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_property_matricula(
+    *,
+    property_id: int,
+    matricula_in: MatriculaCreate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_internal_user),
+):
+    """Cadastro manual de matrícula no imóvel.
+
+    A Isis precisa cadastrar as matrículas à mão até a fase 2 extrair. O vínculo
+    ``property_id`` vem do path; ``tenant_id`` vem do JWT (nunca do corpo).
+    """
+    PropertyRepository(db, current_user.tenant_id).get_or_404(
+        property_id, detail="Property not found"
+    )
+    repo = MatriculaRepository(db, current_user.tenant_id)
+    db_obj = repo.create({**matricula_in.model_dump(), "property_id": property_id})
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
 
 
 @router.get("/{property_id}/delete-preview")

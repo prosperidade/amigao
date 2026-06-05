@@ -51,3 +51,22 @@ class Property(Base):
 
     tenant = relationship("Tenant")
     client = relationship("Client")
+
+    # Ficha 01 (FASE 1) — 1 Imóvel : N Matrículas. A área do imóvel passa a ser
+    # a SOMA das áreas das matrículas (derivada). O campo `total_area_ha` acima
+    # NÃO é removido nesta fase (compatibilidade); a transição completa é depois.
+    matriculas = relationship(
+        "Matricula",
+        back_populates="property",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    def area_total_matriculas(self) -> float:
+        """Área total do imóvel = SOMA das áreas das matrículas (Ficha 01).
+
+        Matrícula sem área conta como 0. Arredonda a 4 casas (precisão cartorial
+        INCRA). Valor DERIVADO — não digitado.
+        """
+        total = sum((m.area_ha or 0.0) for m in self.matriculas)
+        return round(total, 4)

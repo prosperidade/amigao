@@ -2,8 +2,8 @@
 
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada migration que altere entidade-chave
-**Última revisão:** 2026-05-15
-**Verificado em:** 40 migrations aplicadas, 28 entidades ORM ativas
+**Última revisão:** 2026-06-04 (Ficha 01 / FASE 1 — Matrícula + staging)
+**Verificado em:** 41 migrations aplicadas, 30 entidades ORM ativas
 
 ---
 
@@ -57,7 +57,9 @@ Esquema completo do banco do Regente Ambiental. Toda mudança aqui passa por mig
 |---|---|---|
 | `Client` | `clients` | Cliente da consultoria (PF/PJ). Tem `field_sources` (JSONB) marcando origem de cada campo: manual / extraído / confirmado. |
 | `Credential` | `credentials` | Cofre de logins de portais externos por cliente (SEMA/IBAMA/SICAR/INCRA/banco). `password_encrypted` usa `EncryptedString` (ADR-014) — ciphertext em repouso, plaintext só no ORM. `login` plaintext (identificador). FK `client_id` (CASCADE) + `tenant_id` (RESTRICT). Soft delete. **Primeiro uso real do `EncryptedString` em coluna** (PR 2.3). |
-| `Property` | `properties` | Imóvel rural. `geom` (PostGIS polígono SIRGAS 2000). Hoje vazia em todas as 9 propriedades — pendência. |
+| `Property` | `properties` | Imóvel rural. `geom` (PostGIS polígono SIRGAS 2000). Hoje vazia em todas as 9 propriedades — pendência. Ficha 01 (FASE 1): ganhou `matriculas` (1:N) e `area_total_matriculas()` (soma derivada das matrículas); `total_area_ha` mantido por compatibilidade. |
+| `Matricula` | `matriculas` | **Ficha 01 / FASE 1 (ADR-015).** Matrícula imobiliária — 1 Imóvel : N Matrículas (contíguas sob o mesmo CAR). Guarda nº matrícula, cartório/registro, INCRA/SNCR, NIRF/CIB, geo (SIGEF), `area_ha`, averbações (APP/RL), ônus e `proprietarios` (JSON). FK `property_id` (CASCADE) + `tenant_id` (RESTRICT). Área do imóvel = SOMA das áreas das matrículas. |
+| `ExtractedFieldStaging` | `extracted_field_staging` | **Ficha 01 / FASE 1 (ADR-015).** Staging de campos extraídos: agentes propõem (extrator/auditor), consultor decide, sistema grava na base. Carrega `confidence`, `status` (enum `extractedfieldstatus`: pendente/consistente/divergente_transcricao/divergente_fundo/aceito/rejeitado), `target_entity`/`target_field`, `matricula_hint`, e rastreabilidade (`created_by_agent`, `ai_job_id`). FK `process_id` (CASCADE), `document_id`/`ai_job_id`/`decided_by_user_id` (SET NULL). Nada escreve aqui na FASE 1 (extrator passa a escrever na fase 2). |
 | `PreCadastro` | `pre_cadastros` | Lead da landing. **Sem `tenant_id`** (lead anônimo). |
 
 ### Processo (núcleo transacional)
