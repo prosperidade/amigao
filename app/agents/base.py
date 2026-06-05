@@ -114,6 +114,10 @@ class BaseAgent(ABC):
         self.ctx = ctx
         self._started_at: float = 0.0
         self._llm_response: AIResponse | None = None
+        # AIJob da execução corrente, exposto para subclasses que precisam do
+        # ai_job_id durante execute() (ex.: ExtratorAgent grava rastreabilidade
+        # no staging da Ficha 01). Setado em run() logo após a criação do job.
+        self._current_job: AIJob | None = None
         # Dívida #33: auditamos o uso da api_key do consultor no máximo uma vez
         # por execução de agente (call_llm pode ser chamado mais de uma vez).
         self._ai_key_audited: bool = False
@@ -149,6 +153,7 @@ class BaseAgent(ABC):
         #    criado primeiro e a validacao dentro do try, a falha vira job
         #    'failed' + AgentResult(success=False), sem propagar excecao.
         job = self._create_running_job()
+        self._current_job = job
 
         self._started_at = time.monotonic()
         try:

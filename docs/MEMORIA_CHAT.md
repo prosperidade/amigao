@@ -400,6 +400,32 @@ em `docs/agentes/` são a fonte de verdade verificada.
   comprobatória"** + ações de confirmar o embargo (job 147). **D** confirmado resolvido pela rodada 1
   (kanban 200/20 cards; `/properties/11/issues` 200/5). Suites: `tests/agents/` 183, suite completa
   verde, tsc + build verdes. Doc: `docs/trabalhos/teste_isis_rodada2.md`.
+- **2026-06-05 — Ficha 01 / FASE 2: extração estruturada → staging (`feat/ficha01-fase2-extracao-estruturada`).**
+  O Extrator passou a **preencher** `ExtractedFieldStaging` (a Fase 1 só criou a tabela). Extração
+  ESTRUTURADA por tipo de documento (Ficha 01 §5.1-5.7), **adicional** ao fluxo atual: 1 chamada LLM
+  dedicada por doc, reusando o texto do OCR; o `AIJob.extracted_fields` (que UI e diagnóstico leem)
+  **continua igual** — `extract_document_fields` intocado. Novo `app/services/ficha01_extraction.py`:
+  (1) `classify_doc_type(text, current)` rule-based por conteúdo reconhece os 8 canônicos
+  (`rg_cpf, endereco, car, ccir, matricula, itr, sigef, rat` + `outro`); respeita tipo específico já
+  atribuído, só `outro`/None dispara heurística; ordem importa (rat antes de car). (2) `_FIELD_SPECS` +
+  `_STAGING_PROMPTS` por tipo; `build_staging_fields` mapeia o JSON → linhas (escalares com
+  `{value[,unidade]}` + listas especiais: `car.matriculas[]` → `matricula_listada` por item com
+  `matricula_hint`; `rat.pendencias[]` → `pendencias_rat` JSON). (3) `extract_and_stage` persiste com
+  `status=pendente`, `created_by_agent="extrator"`, `ai_job_id`. `ExtratorAgent._stage_ficha01` chama
+  nos 2 caminhos (doc único + processo); `base.py` agora expõe `self._current_job` p/ o `ai_job_id`.
+  **Decisão de nomenclatura `rat` (Ficha 02 §8):** RELATÓRIO DE ANÁLISE TÉCNICA do CAR (emitido pelo
+  órgão); "Retificação" é ATO, não documento → sem doc_type. As pendências do RAT são o insumo central
+  do Diagnóstico/Matriz (Fase 3). **Validação real rodando** (equivalentes São Jorge, docs inseridos
+  como `outro` → classificados certo): Recibo CAR → `car`, 9 linhas (nº CAR, área 1010,5583, **2
+  `matricula_listada` hints 4.698/6.776**); RAT → `rat`, 7 linhas (protocolo GO-RAT-2025-000123,
+  situação Pendente, **`pendencias_rat` estruturado**); certidão → `matricula`, 6 linhas (hint 4.698).
+  22 linhas `pendente`/`extrator`/`ai_job_id`; `extracted_fields` (AIJob 148) dict plano intacto.
+  Test-safety: `test_extrator_cache` ganhou fixture autouse que stuba o staging (mesma disciplina do
+  mock de `extract_document_fields`) — o `.env` local tem `AI_ENABLED=true`+chave real, então sem o
+  stub o staging dispararia LLM real em teste. **Custo/dívida:** +1 chamada LLM por doc; unificar as
+  duas extrações fica como otimização futura. Suite verde + ruff limpo. **NÃO nesta fase:**
+  reconciliação multi-fonte do auditor (3), tela de Alertas/consolidação (4), gravar base real.
+  Doc: `docs/trabalhos/ficha01_fase2.md`.
 - **2026-06-04 — Ficha 01 / FASE 1: Matrícula + staging (`feat/ficha01-fase1-matricula-staging`).**
   A Ficha 01 (Dicionário de Extração do Intake, espec **fechada** pela dupla fundadora) redefine a
   fundação do intake. Esta FASE 1 instala **só o schema** — extrator/auditor/intake NÃO mudam (fases

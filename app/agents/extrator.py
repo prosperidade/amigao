@@ -69,6 +69,14 @@ class ExtratorAgent(BaseAgent):
                     per_doc.append(
                         {"document_id": d.id, "doc_type": d.document_type, "fields_count": len(f)}
                     )
+                    # Ficha 01 / FASE 2 — gravação ADICIONAL no staging (não toca
+                    # o extracted_fields acima nem a base real).
+                    self._stage_ficha01(
+                        text=d.extracted_text or "",
+                        doc_type=d.document_type or "outro",
+                        document_id=d.id,
+                        process_id=self.ctx.process_id,
+                    )
                     for k, v in (f or {}).items():
                         if k not in aggregated and v not in (None, "", {}, []):
                             aggregated[k] = v
@@ -141,12 +149,61 @@ class ExtratorAgent(BaseAgent):
             db_session=self.ctx.session,
         )
 
+        # Ficha 01 / FASE 2 — gravação ADICIONAL no staging.
+        self._stage_ficha01(
+            text=text,
+            doc_type=doc_type,
+            document_id=document_id,
+            process_id=(doc.process_id if doc is not None else self.ctx.process_id),
+        )
+
         return {
             "extracted_fields": fields,
             "doc_type": doc_type,
             "document_id": document_id,
             "fields_count": len(fields),
         }
+
+    def _stage_ficha01(
+        self,
+        *,
+        text: str,
+        doc_type: str,
+        document_id: int | None,
+        process_id: int | None,
+    ) -> None:
+        """Ficha 01 / FASE 2 — extração estruturada por tipo → ExtractedFieldStaging.
+
+        Best-effort e ADICIONAL: nunca derruba a extração principal
+        (``extracted_fields``) nem grava na base real. Classifica o doc_type por
+        conteúdo (quando o tipo do Document é genérico) e delega ao serviço.
+        """
+        from app.services.ficha01_extraction import (  # noqa: PLC0415
+            classify_doc_type,
+            extract_and_stage,
+        )
+
+        if not (text or "").strip():
+            return
+        try:
+            effective_type = classify_doc_type(text, doc_type)
+            ai_job_id = self._current_job.id if self._current_job is not None else None
+            extract_and_stage(
+                text=text,
+                doc_type=effective_type,
+                tenant_id=self.ctx.tenant_id,
+                db_session=self.ctx.session,
+                process_id=process_id,
+                document_id=document_id,
+                ai_job_id=ai_job_id,
+                created_by_agent="extrator",
+            )
+        except Exception as exc:  # pragma: no cover - blindagem; staging é adicional
+            import logging  # noqa: PLC0415
+
+            logging.getLogger(__name__).warning(
+                "extrator: staging Ficha 01 falhou (ignorado) doc=%s: %s", document_id, exc
+            )
 
     def _fallback_prompts(self) -> dict[str, str]:
         return {

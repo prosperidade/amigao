@@ -14,6 +14,16 @@ from app.models.tenant import Tenant
 from app.models.user import User
 
 
+@pytest.fixture(autouse=True)
+def _no_ficha01_staging():
+    """Ficha 01 / FASE 2: o ExtratorAgent passou a gravar staging com 1 chamada
+    LLM dedicada. Estes testes exercitam o CACHE de OCR, não o staging — stuba o
+    seam para não disparar LLM real (mesma disciplina do mock de
+    extract_document_fields)."""
+    with patch("app.services.ficha01_extraction.extract_and_stage", return_value=None):
+        yield
+
+
 @pytest.fixture
 def seeded(db_session):
     tenant = Tenant(name="Extrator Tenant")
