@@ -1,7 +1,7 @@
 ---
 name: auditor_imovel/analise_divergencias_documentais
 agent: auditor_imovel
-version: "1.1.0"
+version: "1.2.0"
 description: "Cruzamento documental de imóvel rural (matrícula × CAR × GEO/SIGEF × CCIR × ITR/CIB × restrições × realidade) — primeiro movimento do método, após o Extrator, antes do Diagnóstico"
 applies_to:
   doc_types: []
@@ -210,3 +210,19 @@ pergunta→base principal→base de conferência, e o mapa das 27 UFs (sistema d
 anexado em `bases_car_estaduais.md`. Para GO, base prioritária = SIGCAR (2025) + Portal Ambiental
 SEMAD. A maioria das bases de conferência (IBAMA, MapBiomas, FUNAI, CNUC, SIGEF, ANA) é consulta
 externa ainda não integrada — no MVP são "onde o consultor confirma", não cruzamento automático.
+
+**v1.2.0 — Matriz de Inconsistências (Ficha 02 / FASE 3):** a saída canônica do auditor passa a
+ser a MATRIZ (linhas = itens canônicos `area_total`, `denominacao_imovel`, `codigo_incra_sncr`,
+`sigef_georreferenciamento`, `car_presenca_consistencia`, `acesso_imovel`; colunas = uma por FONTE
+no staging — cada matrícula via `matricula_hint`, + ccir/itr/car/rat/sigef). A construção é
+DETERMINÍSTICA (`app/services/inconsistency_matrix.py`), âncora = SIGEF quando presente. A
+**taxonomia da situação da linha** segue a **Ficha 02 §4** — `critico` (→ diagnóstico+orçamento),
+`inconsistente` (→ correção documental; se exigir plataforma oficial CCIR/ITR/matrícula/SIGEF →
+também diagnóstico+orçamento), `divergente` (subtipo `transcricao` → alertas; `fundo` →
+diagnóstico), `atencao` (→ alertas) — eixo **distinto** do `grade` (informativo/atencao/alto/critico)
+da "Régua de área", que continua valendo para o `RegulatoryIssue`. Área: ≤0,5% entre fontes ⇒
+consistente; diferença não-nula ⇒ divergente (fundo se envolver geo ausente/0, senão transcrição).
+Linhas técnicas (APP/RL/hidrografia/cobertura, vindas das `pendencias_rat`) são REGISTRADAS como
+`critico` com `profundidade="tecnica"` — sem confronto espacial (gap D1). A matriz marca o status
+do staging (`consistente`/`divergente_transcricao`/`divergente_fundo`); a decisão
+`aceito`/`rejeitado` é do consultor (Fase 4).

@@ -376,6 +376,36 @@ em `docs/agentes/` são a fonte de verdade verificada.
   falha, então os `AlertaCard` (com `SEVERITY_CLS`, classes estáticas não-purgadas) nunca aparecem;
   fix A restaura o render colorido. Suites: **backend 760**, **frontend 51**, build/tsc/eslint/ruff
   verdes; mypy dos arquivos alterados limpo. Doc: `docs/trabalhos/teste_isis_rodada1.md`.
+- **2026-06-05 — Ficha 02 / FASE 3: Auditor → Matriz de Inconsistências (`feat/ficha02-fase3-matriz-inconsistencias`).**
+  A saída canônica do `auditor_imovel` virou a MATRIZ (Ficha 02): confronto multi-fonte
+  **DETERMINÍSTICO** (sem LLM — auditor segue determinístico) lendo o staging da Fase 2. Novo
+  `app/services/inconsistency_matrix.py`: colunas dinâmicas por fonte (cada matrícula via
+  `matricula_hint` + ccir/itr/car/rat/sigef), linhas canônicas (`area_total`, `denominacao_imovel`,
+  `codigo_incra_sncr`, `sigef_georreferenciamento`, `car_presenca_consistencia`, `acesso_imovel`) +
+  linhas técnicas das `pendencias_rat` (`profundidade="tecnica"`, gap D1 — só registram, sem
+  confronto espacial). Âncora = SIGEF; taxonomia Ficha 02 §4 (enum `MatrixSituacao`:
+  critico/inconsistente/divergente±subtipo transcricao|fundo/atencao) + destino. Área: ≤0,5% ⇒
+  consistente; não-nulo ⇒ divergente (fundo se geo ausente/0, senão transcrição). Efeitos: (1) marca
+  o staging das linhas confrontadas (`consistente`/`divergente_transcricao`/`divergente_fundo`;
+  aceito/rejeitado é do consultor, Fase 4); (2) `matriz_inconsistencias` persiste no `result` do AIJob
+  do auditor — **campo NOVO**, shape antigo intacto (`content`/`divergencias`/`issue_ids`/
+  `findings_raw`/`geom_present`/`method`); (3) diagnóstico ganhou `_load_persisted_auditor` (mesmo
+  padrão do atendimento) — sem chain, recupera o AIJob e injeta a matriz no contexto do prompt (sem
+  tocar prompt-template); (4) UI `AuditorResult` ganhou a tabela da matriz (item×situação×ação, cores
+  por situação, flag "técnica — aguarda geo"). Fase 2 ajustada (aditivo): matrícula `denominacao`, ITR
+  `numero_car` (alimentam denominação × confronto e car_presença). Skill
+  `auditor_imovel/analise_divergencias_documentais` → **v1.2.0** (nota da matriz; a `situacao` é eixo
+  distinto do `grade` da "Régua de área", que segue valendo p/ o `RegulatoryIssue`). **Validação real
+  rodando (matriz da Isis Ficha 02 §7, caso São Jorge, staging semeado no processo 30):** area_total
+  divergente/transcricao "ajustar/justificar **0,153 ha**" (soma matrículas 1.010,5583 vs CAR
+  1.010,7113); denominacao divergente (Fazenda São Jorge × Shangri-lá Parte 2 × São Jorge);
+  codigo_incra atencao; sigef **critico** (ausente); car_presenca **inconsistente** (ITR sem CAR);
+  acesso atencao; 3 técnicas **critico** (APA/supressões/hidrografia). Staging marcado (matrículas
+  consistente; CAR/ITR/denominação divergente_transcricao); diagnóstico re-rodado (job 152) citou a
+  matriz. Suite completa verde; ruff/tsc/build limpos. **Legislação/normas:** a matriz é cruzamento
+  documental puro — NÃO consulta o RAG de legislação (isso é do `legislacao`/diagnóstico); nada a subir
+  por conta desta fase. **NÃO nesta fase:** tela de decisão/consolidação (Fase 4), LLM no auditor,
+  confronto espacial real (gap D1). Doc: `docs/trabalhos/ficha02_fase3.md`.
 - **2026-06-04 — Teste Isis rodada 2 (`fix/teste-isis-rodada2`).** Segunda leva (orquestração +
   contexto entre agentes), 5 achados. Reprodução no análogo local **processo 30 / propriedade 11 /
   tenant 2** (a base prod-like com usuários Isis não roda local; o 30 é o único caso com pipeline
