@@ -376,6 +376,31 @@ em `docs/agentes/` são a fonte de verdade verificada.
   falha, então os `AlertaCard` (com `SEVERITY_CLS`, classes estáticas não-purgadas) nunca aparecem;
   fix A restaura o render colorido. Suites: **backend 760**, **frontend 51**, build/tsc/eslint/ruff
   verdes; mypy dos arquivos alterados limpo. Doc: `docs/trabalhos/teste_isis_rodada1.md`.
+- **2026-06-05 — Ficha 01 / FASE 4: Decisão + Consolidação, fecho do ciclo (`feat/ficha01-fase4-decisao-consolidacao`).**
+  Fecha a Ficha 01 §8: o CONSULTOR decide o staging e a consolidação **determinística (sem LLM)** grava
+  na base real. "Agentes propõem (staging), consultor decide (Alertas), sistema grava (base)". Backend:
+  `POST /processes/{id}/staging-fields/{fid}/decidir` (`aceitar`/`escolher_fonte`/`editar`/`rejeitar`)
+  — **gate**: aceitar um `divergente_transcricao` direto → **422** (exige escolha ativa);
+  `divergente_fundo` é aceito como ACHADO sem valor; `escolher_fonte` rejeita os irmãos (mesmo
+  target/matrícula); `editar` exige `valor`. `POST .../aceitar-consistentes` (lote dos consistente).
+  `POST /processes/{id}/consolidar` (`app/services/staging_consolidation.py`, idempotente): aceito →
+  `Client`/`Property`/`Matricula` com **upsert por `matricula_hint`** (cria/atualiza), allowlist de
+  colunas + alias (`document`→`cpf_cnpj`), `field_sources[col]="human_validated"`, auditoria por
+  gravação (`AuditLog`). **NÃO sobrescreve `Property.total_area_ha`** — área = derivada
+  (`area_total_matriculas()`). Frontend: `ConsolidacaoPanel` estende a aba **Alertas** (grupos por
+  entidade Cliente/Imóvel/Matrícula, valor por fonte, ações por campo, banner "aceitar consistentes",
+  botão "consolidar na base" + resumo) — o fluxo de `RegulatoryIssue` segue intacto. **Validação real
+  rodando (ciclo completo, caso São Jorge, processo 30/property 11/client 21):** auditor (Fase 3)
+  marcou áreas `consistente` + denominações/CAR `divergente_transcricao`; aceitar-consistentes (2) →
+  gate aceitar divergente **422** → escolher_fonte denominação 4.698 (rejeita irmã) → aceitar pendentes
+  → **consolidar: 7 campos, 2 matrículas criadas** (4.698: area 660,6561/cartório CRI Uirapuru/denom
+  "Fazenda São Jorge"/RL "132,00 ha"; 6.776: 349,9022), Client.full_name + Property.car_code gravados,
+  **`area_total_matriculas`=1.010,5583**, **`total_area_ha`=250 NÃO sobrescrito**; **idempotência**
+  (re-consolidar: 0 criadas, 2 atualizadas, contagem segue 2); audit `consolidar`×2/`staging_decidir`×5/
+  `aceitar_consistentes`×1. **Ciclo da Ficha 01 fechado (Fases 1→4).** Testes
+  `tests/api/test_fase4_consolidacao.py` (3: ciclo+gate+idempotência, editar, rejeitar). Suite verde;
+  ruff/tsc/build/eslint limpos. `FLUXOS_E2E.md` ganhou o Fluxo 8 (staging→decisão→consolidação); sem ADR
+  novo (desenho segue as Fichas). Doc: `docs/trabalhos/ficha01_fase4.md`.
 - **2026-06-05 — Ficha 02 / FASE 3: Auditor → Matriz de Inconsistências (`feat/ficha02-fase3-matriz-inconsistencias`).**
   A saída canônica do `auditor_imovel` virou a MATRIZ (Ficha 02): confronto multi-fonte
   **DETERMINÍSTICO** (sem LLM — auditor segue determinístico) lendo o staging da Fase 2. Novo

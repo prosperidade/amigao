@@ -1,0 +1,156 @@
+"""Ficha 01 / FASE 4 — decisão do consultor + consolidação (ciclo completo)."""
+
+from fastapi.testclient import TestClient
+
+from app.core.security import get_password_hash
+from app.models.client import Client, ClientStatus, ClientType
+from app.models.extracted_field_staging import (
+    ExtractedFieldStaging,
+    ExtractedFieldStatus,
+)
+from app.models.matricula import Matricula
+from app.models.process import Process, ProcessStatus
+from app.models.property import Property
+from app.models.tenant import Tenant
+from app.models.user import User
+
+
+def _login(client: TestClient, email: str, password: str = "x12345") -> dict[str, str]:
+    r = client.post("/api/v1/auth/login", data={"username": email, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def _st(tenant_id, process_id, source, fname, value, status, *, entity, target, hint=None):
+    return ExtractedFieldStaging(
+        tenant_id=tenant_id, process_id=process_id, source_doc_type=source,
+        field_name=fname, field_value={"value": value}, status=status,
+        target_entity=entity, target_field=target, matricula_hint=hint,
+        created_by_agent="extrator",
+    )
+
+
+def _setup(db_session, email="f4@example.com"):
+    tenant = Tenant(name="Fase4 Tenant")
+    db_session.add(tenant)
+    db_session.flush()
+    user = User(email=email, full_name="Consultor", hashed_password=get_password_hash("x12345"),
+                tenant_id=tenant.id, is_active=True, is_superuser=True)
+    cli = Client(tenant_id=tenant.id, full_name="Cliente Antigo", email=f"c.{email}",
+                 client_type=ClientType.pf, status=ClientStatus.active)
+    db_session.add_all([user, cli])
+    db_session.flush()
+    prop = Property(tenant_id=tenant.id, client_id=cli.id, name="Fazenda São Jorge")
+    db_session.add(prop)
+    db_session.flush()
+    proc = Process(tenant_id=tenant.id, client_id=cli.id, property_id=prop.id,
+                   title="Caso", process_type="prad", status=ProcessStatus.triagem)
+    db_session.add(proc)
+    db_session.flush()
+    C = ExtractedFieldStatus
+    rows = [
+        # matrícula 4.698 (consistentes)
+        _st(tenant.id, proc.id, "matricula", "area_registrada_ha", "660,6561", C.consistente, entity="matricula", target="area_ha", hint="4.698"),
+        _st(tenant.id, proc.id, "matricula", "cartorio", "CRI Uirapuru", C.consistente, entity="matricula", target="cartorio", hint="4.698"),
+        _st(tenant.id, proc.id, "matricula", "averbacao_rl", "132,00 ha averbada", C.consistente, entity="matricula", target="averbacao_rl", hint="4.698"),
+        # matrícula 6.776 (consistente)
+        _st(tenant.id, proc.id, "matricula", "area_registrada_ha", "349,9022", C.consistente, entity="matricula", target="area_ha", hint="6.776"),
+        # cliente + imóvel (consistentes)
+        _st(tenant.id, proc.id, "matricula", "nome", "Luiz Augusto da Silva", C.consistente, entity="cliente", target="full_name"),
+        _st(tenant.id, proc.id, "car", "numero_car", "GO-5221080-A1B2C3", C.consistente, entity="imovel", target="car_code"),
+        # CAR área total — DIVERGENTE (gate + escolher_fonte); total_area_ha não é gravado
+        _st(tenant.id, proc.id, "car", "area_declarada_ha", "1.010,7113", C.divergente_transcricao, entity="imovel", target="total_area_ha"),
+    ]
+    db_session.add_all(rows)
+    db_session.flush()
+    return tenant, proc, cli, prop, {r.field_name + ":" + (r.matricula_hint or r.target_field): r.id for r in rows}
+
+
+def test_ciclo_completo_decisao_e_consolidacao(client: TestClient, db_session):
+    tenant, proc, cli, prop, ids = _setup(db_session)
+    db_session.commit()
+    h = _login(client, "f4@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    # 1) aceita consistentes em lote (6 consistentes; o divergente fica de fora)
+    r = client.post(f"{base}/staging-fields/aceitar-consistentes", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["aceitos"] == 6
+
+    # 2) gate: aceitar um divergente_transcricao → 422
+    car_div = ids["area_declarada_ha:total_area_ha"]
+    r = client.post(f"{base}/staging-fields/{car_div}/decidir", headers=h, json={"acao": "aceitar"})
+    assert r.status_code == 422
+
+    # 3) escolher_fonte no divergente → aceito (total_area_ha não será gravado)
+    r = client.post(f"{base}/staging-fields/{car_div}/decidir", headers=h, json={"acao": "escolher_fonte"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "aceito"
+
+    # 4) consolidar → cria as 2 matrículas + atualiza cliente/imóvel
+    r = client.post(f"{base}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    res = r.json()
+    assert res["matriculas_criadas"] == 2
+    assert res["cliente_atualizado"] is True
+    assert res["imovel_atualizado"] is True
+    assert res["area_total_matriculas"] == 1010.5583
+
+    # base real gravada
+    mats = db_session.query(Matricula).filter(Matricula.property_id == prop.id).order_by(Matricula.numero_matricula).all()
+    assert [m.numero_matricula for m in mats] == ["4.698", "6.776"]
+    m4698 = next(m for m in mats if m.numero_matricula == "4.698")
+    assert m4698.area_ha == 660.6561
+    assert m4698.cartorio == "CRI Uirapuru"
+    assert "132" in (m4698.averbacao_rl or "")
+    db_session.refresh(cli)
+    assert cli.full_name == "Luiz Augusto da Silva"
+    db_session.refresh(prop)
+    assert prop.car_code == "GO-5221080-A1B2C3"
+    # total_area_ha NÃO sobrescrito (Ficha: área = derivada)
+    assert prop.total_area_ha is None
+    assert prop.area_total_matriculas() == 1010.5583
+
+    # 5) idempotência — re-consolidar não duplica
+    r2 = client.post(f"{base}/consolidar", headers=h)
+    assert r2.status_code == 200
+    assert r2.json()["matriculas_criadas"] == 0
+    assert db_session.query(Matricula).filter(Matricula.property_id == prop.id).count() == 2
+
+
+def test_editar_grava_decided_value_e_consolida(client: TestClient, db_session):
+    tenant, proc, cli, prop, ids = _setup(db_session, email="f4b@example.com")
+    db_session.commit()
+    h = _login(client, "f4b@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    # editar a área da matrícula 4.698 (override manual) — exige valor
+    fid = ids["area_registrada_ha:4.698"]
+    r = client.post(f"{base}/staging-fields/{fid}/decidir", headers=h, json={"acao": "editar"})
+    assert r.status_code == 422  # valor obrigatório
+    r = client.post(f"{base}/staging-fields/{fid}/decidir", headers=h, json={"acao": "editar", "valor": "661,0000"})
+    assert r.status_code == 200
+    assert r.json()["decided_value"] == "661,0000"
+
+    client.post(f"{base}/consolidar", headers=h)
+    mat = db_session.query(Matricula).filter(Matricula.numero_matricula == "4.698").first()
+    assert mat is not None and mat.area_ha == 661.0
+
+
+def test_rejeitar_nao_grava(client: TestClient, db_session):
+    tenant, proc, cli, prop, ids = _setup(db_session, email="f4c@example.com")
+    db_session.commit()
+    h = _login(client, "f4c@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    client.post(f"{base}/staging-fields/aceitar-consistentes", headers=h)
+    # rejeita o cartório da 4.698
+    fid = ids["cartorio:4.698"]
+    r = client.post(f"{base}/staging-fields/{fid}/decidir", headers=h, json={"acao": "rejeitar"})
+    assert r.status_code == 200 and r.json()["status"] == "rejeitado"
+
+    client.post(f"{base}/consolidar", headers=h)
+    mat = db_session.query(Matricula).filter(Matricula.numero_matricula == "4.698").first()
+    # matrícula criada (área aceita), mas cartório rejeitado não gravou
+    assert mat is not None
+    assert mat.cartorio is None

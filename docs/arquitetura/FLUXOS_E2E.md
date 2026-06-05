@@ -424,6 +424,39 @@ CommunicationThread do caso             ▼
 > Detalhe da superfície em [`API_v1.md`](./API_v1.md); contexto de integração em
 > [`INTEGRACOES_GOVTECH.md`](./INTEGRACOES_GOVTECH.md).
 
+## Fluxo 8 — Staging → Decisão → Consolidação (Ficha 01, Fases 1-4)
+
+A entrada estruturada do imóvel (Ficha 01) é um pipeline de 4 fases:
+"agentes propõem (staging), consultor decide (Alertas), sistema grava (base)".
+
+1. **Extração → staging (Fase 2).** O `extrator` lê o OCR e, por tipo de
+   documento, grava cada campo extraído em `ExtractedFieldStaging`
+   (`status=pendente`, `source_doc_type`, `target_entity`/`target_field`,
+   `matricula_hint`, `confidence`, rastreabilidade `created_by_agent`/`ai_job_id`).
+   O `AIJob.extracted_fields` legado continua intacto (staging é adicional).
+2. **Confronto → matriz (Fase 3).** O `auditor_imovel` (determinístico) lê o
+   staging, monta a **Matriz de Inconsistências** (colunas por fonte, âncora =
+   SIGEF), classifica pela Ficha 02 §4 e **marca o status** das linhas
+   confrontadas (`consistente` / `divergente_transcricao` / `divergente_fundo`).
+   A matriz vai para `AIJob.result.matriz_inconsistencias` e alimenta o
+   diagnóstico.
+3. **Decisão do consultor (Fase 4).** Na aba **Alertas**
+   (`ConsolidacaoPanel`): `aceitar` / `escolher_fonte` / `editar` / `rejeitar`
+   por campo, ou `aceitar-consistentes` em lote. Endpoints:
+   `POST /processes/{id}/staging-fields/{field_id}/decidir`,
+   `POST /processes/{id}/staging-fields/aceitar-consistentes`. **Gate:** aceitar
+   um `divergente_transcricao` direto → 422 (exige escolha ativa). Marca
+   `status=aceito|rejeitado` + `decided_value`/`decided_by`/`decided_at`.
+4. **Consolidação na base (Fase 4).** `POST /processes/{id}/consolidar`
+   (`staging_consolidation.py`, determinístico, idempotente): grava o
+   `status=aceito` em `Client`/`Property`/`Matricula` (upsert por
+   `matricula_hint`). **Não** sobrescreve `Property.total_area_ha` — a área do
+   imóvel é derivada (`area_total_matriculas()`). Cada gravação é auditada
+   (`AuditLog`: staging_id, ai_job_id, decided_by).
+
+Gap D1: linhas técnicas da matriz (APP/RL/hidrografia/cobertura) ficam
+registradas, sem confronto espacial, até `Property.geom` chegar.
+
 ## Pendências e dívidas
 
 1. **Inbox connector para Acompanhamento** — fluxo 4 hoje é manual. (WhatsApp inbound — fluxo 7 — já cobre o canal de mensagem; e-mail inbound via Resend segue não construído.)
