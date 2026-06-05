@@ -78,8 +78,22 @@ Esquema completo do banco do Regente Ambiental. Toda mudança aqui passa por mig
 
 | Entidade | Tabela | Função |
 |---|---|---|
-| `Document` | `documents` | Metadado + referência MinIO. Tem `extracted_text` (cache de OCR) e `doc_type` (matricula, car, ccir, oficio, etc.). |
+| `Document` | `documents` | Metadado + referência MinIO. Tem `extracted_text` (cache de OCR) e `document_type` (ver doc_types canônicos abaixo). |
 | `DocumentCategory` | `document_categories` | Taxonomia de categorias documentais. |
+
+#### doc_types canônicos do intake (Ficha 01 / FASE 2)
+
+`Document.document_type` (e `ExtractedFieldStaging.source_doc_type`) usam a lista
+canônica: **`rg_cpf`, `endereco`, `car`, `ccir`, `matricula`, `itr`, `sigef`,
+`rat`** (+ `outro` = fallback). Definida em
+`app/services/ficha01_extraction.py:CANONICAL_DOC_TYPES`, com classificação por
+conteúdo (`classify_doc_type`) quando o tipo vem genérico/`outro`.
+
+**Decisão de nomenclatura — `rat` (Ficha 02 §8):** `rat` = **RELATÓRIO DE ANÁLISE
+TÉCNICA** do CAR (emitido pelo órgão ao analisar o CAR). "Retificação" é um **ATO**,
+não um documento — **não** existe doc_type para ela. O RAT é o insumo central do
+Diagnóstico e da Matriz: suas pendências são extraídas como
+`field_name="pendencias_rat"` (JSON estruturado) no staging.
 
 ### Diagnóstico (inteligência — Princípio 3)
 
