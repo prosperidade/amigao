@@ -358,17 +358,35 @@ export default function AgentsPage() {
                         {processIdInput ? `Rodar no processo #${processIdInput}` : 'Rodar no processo'}
                       </button>
                     ) : (
+                      // fix/teste-isis-rodada2 (item A): antes só o card do extrator
+                      // reagia ao "ID do Processo" — os demais traziam um "Executar"
+                      // sempre habilitado, sem refletir o caso. Agora todo agente
+                      // executável habilita com um processo válido selecionado e
+                      // dispara no contexto dele ("Rodar no processo #X"). Sem
+                      // processo, o botão fica desabilitado com dica (rodar avulso
+                      // continua possível pelo seletor "Executar agente" abaixo).
                       <button
                         type="button"
-                        onClick={() => runAgentMutation.mutate(a.name)}
-                        disabled={runAgentMutation.isPending && runAgentMutation.variables === a.name}
-                        title={processIdInput ? `Executar para o processo #${processIdInput}` : 'Executar (sem contexto de processo)'}
+                        onClick={() => {
+                          const pid = parseInt(processIdInput);
+                          if (!Number.isFinite(pid)) return;
+                          runAgentMutation.mutate(a.name);
+                        }}
+                        disabled={
+                          !processIdInput ||
+                          (runAgentMutation.isPending && runAgentMutation.variables === a.name)
+                        }
+                        title={
+                          processIdInput
+                            ? `Rodar ${AGENT_LABELS[a.name] ?? a.name} no processo #${processIdInput}`
+                            : 'Informe o ID do processo no campo acima para rodar este agente no caso.'
+                        }
                         className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
                       >
                         {runAgentMutation.isPending && runAgentMutation.variables === a.name
                           ? <Loader2 className="w-3 h-3 animate-spin" />
                           : <Zap className="w-3 h-3" />}
-                        Executar
+                        {processIdInput ? `Rodar no processo #${processIdInput}` : 'Rodar no processo'}
                       </button>
                     )}
                   </div>

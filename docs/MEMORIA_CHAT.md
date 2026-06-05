@@ -376,3 +376,27 @@ em `docs/agentes/` são a fonte de verdade verificada.
   falha, então os `AlertaCard` (com `SEVERITY_CLS`, classes estáticas não-purgadas) nunca aparecem;
   fix A restaura o render colorido. Suites: **backend 760**, **frontend 51**, build/tsc/eslint/ruff
   verdes; mypy dos arquivos alterados limpo. Doc: `docs/trabalhos/teste_isis_rodada1.md`.
+- **2026-06-04 — Teste Isis rodada 2 (`fix/teste-isis-rodada2`).** Segunda leva (orquestração +
+  contexto entre agentes), 5 achados. Reprodução no análogo local **processo 30 / propriedade 11 /
+  tenant 2** (a base prod-like com usuários Isis não roda local; o 30 é o único caso com pipeline
+  completo). **Causa-raiz única de B+C:** `validate_preconditions()` levanta `ValueError` **antes** de
+  `_create_running_job()` em `BaseAgent.run()` → nenhum AIJob é criado (execução some do histórico = B)
+  e `run_agent` faz `self.retry()` de um erro **determinístico** (retry storm + UI presa em "Execução
+  agendada" sobre um histórico que nunca ganha linha = C). Fix: job criado **antes** das pré-condições,
+  validação movida pra **dentro do `try`** (falha → job `failed` + `AgentResult(success=False)`, sem
+  propagar); cost-cap segue antes do job (hard limit intacto); `run_agent` ganhou `except ValueError`
+  que **não** faz retry (commit do job `failed` + retorno `status=failed`). Provado: auditor sem
+  processo → job 146 `failed` em **0.79s sem retry** (antes: `retry in 30s` em loop). **A** (`AgentsPage.tsx`):
+  só o card do Extrator reagia ao "ID do Processo" (botão process-aware); os demais traziam "Executar"
+  sempre habilitado, solto do caso. Fix: todo agente executável habilita/rotula com processo válido
+  ("Rodar no processo #X"); rodar avulso segue pelo seletor abaixo. **E** (atendimento não chega ao
+  diagnóstico): o `atendimento` **não** roda na chain `diagnostico_completo` (é create-case), então o
+  relato inicial do consultor — inclusive o que só existe na fala e não em doc (ex.: **embargo sem
+  documento**) — nunca chegava. Fix em `diagnostico.py` **sem tocar prompt-template** (proibido): inclui
+  narrativa do processo (`description`/`initial_summary`/`intake_notes`) no placeholder `{process_data}`
+  + novo `_load_persisted_atendimento()` injeta o AIJob do atendimento como `relato_demanda_consultor`,
+  **SEMPRE** (fonte adicional; extrator/legislação seguem prioritários). Provado no processo 30: diag
+  passou de **"Não há embargo vigente"** (job 145) para **"relato verbal de embargo… sem documentação
+  comprobatória"** + ações de confirmar o embargo (job 147). **D** confirmado resolvido pela rodada 1
+  (kanban 200/20 cards; `/properties/11/issues` 200/5). Suites: `tests/agents/` 183, suite completa
+  verde, tsc + build verdes. Doc: `docs/trabalhos/teste_isis_rodada2.md`.

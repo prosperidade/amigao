@@ -152,6 +152,15 @@ class DiagnosticoAgent(BaseAgent):
             if enriched:
                 process_data["property"] = enriched
 
+        # Item E (fix/teste-isis-rodada2) — relato/demanda do consultor.
+        # SEMPRE carregado do AIJob do atendimento (nunca veio na chain): leva ao
+        # diagnostico o que so existe na abertura do caso e nao em documento
+        # (ex.: embargo relatado sem doc). Fonte ADICIONAL — entra no contexto do
+        # processo sem competir com extrator/legislacao (que seguem prioritarios).
+        atendimento_data = self._load_persisted_atendimento()
+        if atendimento_data:
+            process_data["process"]["relato_demanda_consultor"] = atendimento_data
+
         # 3. Se IA nao configurada, retorna diagnostico baseado em regras
         if not settings.ai_configured:
             return self._rules_based_diagnosis(process_data)
@@ -241,6 +250,14 @@ class DiagnosticoAgent(BaseAgent):
                 "status": process.status.value if process.status else None,
                 "demand_type": process.demand_type.value if process.demand_type else None,
                 "initial_diagnosis": process.initial_diagnosis,
+                # Item E (fix/teste-isis-rodada2): a narrativa da abertura do caso
+                # — relato do consultor (description), resumo e notas de intake —
+                # carrega informacoes que so existem na entrada e nao em documento
+                # (ex.: embargo relatado sem doc). Antes ficavam de fora do contexto
+                # e o diagnostico ficava cego pra elas.
+                "description": process.description,
+                "initial_summary": process.initial_summary,
+                "intake_notes": process.intake_notes,
                 "destination_agency": process.destination_agency,
                 "risk_score": process.risk_score,
             },
@@ -413,6 +430,41 @@ class DiagnosticoAgent(BaseAgent):
             logger.info(
                 "diagnostico.legal_context_fallback process=%s job=%s "
                 "— chain_data vazio, enquadramento recuperado de AIJob persistido",
+                self.ctx.process_id, job.id,
+            )
+            return job.result
+        return None
+
+    def _load_persisted_atendimento(self) -> dict[str, Any] | None:
+        """Busca o ``result`` do AIJob mais recente do atendimento (classificacao
+        da demanda) do MESMO processo (status completed).
+
+        Item E (fix/teste-isis-rodada2): o atendimento NAO participa da chain
+        ``diagnostico_completo`` (roda no create-case), entao o relato/demanda do
+        consultor — inclusive o que so existe na abertura do caso e nao em
+        documento (ex.: embargo relatado sem doc) — nunca chegava ao diagnostico.
+        Diferente de extrator/legislacao (que preferem ``chain_data``), o
+        atendimento e SEMPRE recuperado do AIJob persistido e entra como fonte
+        ADICIONAL — nao concorre com extrator/legislacao.
+        """
+        from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+
+        job = (
+            self.ctx.session.query(AIJob)
+            .filter(
+                AIJob.tenant_id == self.ctx.tenant_id,
+                AIJob.entity_type == "process",
+                AIJob.entity_id == self.ctx.process_id,
+                AIJob.agent_name == "atendimento",
+                AIJob.status == AIJobStatus.completed,
+            )
+            .order_by(AIJob.id.desc())
+            .first()
+        )
+        if job is not None and isinstance(job.result, dict) and job.result:
+            logger.info(
+                "diagnostico.atendimento_context process=%s job=%s "
+                "— relato/demanda do consultor injetado como fonte adicional",
                 self.ctx.process_id, job.id,
             )
             return job.result

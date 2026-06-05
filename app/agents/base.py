@@ -138,14 +138,23 @@ class BaseAgent(ABC):
         check_tenant_cost_limit(self.ctx.tenant_id, self.ctx.session)
         check_tenant_monthly_budget(self.ctx.tenant_id, self.ctx.session)
 
-        # 2. Preconditions
-        self.validate_preconditions()
-
-        # 3. Create running job
+        # 2. Cria o AIJob ANTES de validar pre-condicoes.
+        #    fix/teste-isis-rodada2 (itens B e C): toda execucao disparada precisa
+        #    virar registro visivel no historico, mesmo quando falha cedo por
+        #    pre-condicao (ex.: process_id ausente, processo sem matricula).
+        #    Antes, validate_preconditions() rodava ANTES da criacao do job e, ao
+        #    levantar ValueError, nenhum AIJob era criado: a execucao sumia do
+        #    historico (a UI seguia "agendada") e o run_agent entrava em retry
+        #    storm (ValueError e deterministico — retry nunca resolve). Com o job
+        #    criado primeiro e a validacao dentro do try, a falha vira job
+        #    'failed' + AgentResult(success=False), sem propagar excecao.
         job = self._create_running_job()
 
         self._started_at = time.monotonic()
         try:
+            # 3. Pre-condicoes (dentro do try → falha registra job 'failed')
+            self.validate_preconditions()
+
             # 4. Execute
             raw_result = self.execute()
 
