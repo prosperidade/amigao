@@ -355,3 +355,24 @@ em `docs/agentes/` são a fonte de verdade verificada.
   output cita "Fazenda Boa Vista"/Auto de Infração (não genérico); via chain o `FRESCO_CHAIN` prevalece
   (sem regressão); `_property_from_extracted` monta município/UF/área sem gravar. 44 testes de
   diagnóstico verdes, tsc+build verdes. Doc: `docs/trabalhos/diagnostico_insumo.md`.
+- **2026-06-04 — Teste Isis rodada 1 (`fix/teste-isis-rodada1`).** Primeiro teste de caso real (caso
+  #10 "Fazenda São Jorge"), 6 defeitos. Contexto-chave: a Isis testou em produção **sem o PR #57**
+  (mergeado no início desta sessão) — por isso metade some com o merge. **A** (500 repetido em
+  `GET /properties/{id}/issues`): reproduzido inserindo issue com `documentos_cruzados` = lista de
+  **objetos** → `ResponseValidationError` (`list[str]` no schema) derruba a lista inteira. Fix em duas
+  pontas: `field_validator` em `RegulatoryIssueOut` (conserta linhas legadas na leitura, **sem
+  migration**) + `@validates` em `RegulatoryIssue` (normaliza na escrita). **B** (`[object Object]` no
+  extrator): `ExtratorResult` fazia `String(value)` em campo-objeto (`confidence`-mapa no shape flat;
+  `{value,confidence}` no shape aninhado do caso #10); fix `extratorFieldValue` desempacota `.value` e
+  usa `humanizeValue`. **D** (`litellm.Timeout ... None seconds` na legislação): a legislação passa
+  `model=` explícito → `complete()` monta 1 só modelo, **sem fallback nem retry**; fix retry só para
+  erros **transitórios** (`AI_MAX_RETRIES=2` + backoff exponencial curto) e timeout defensivo
+  (`AI_TIMEOUT_SECONDS or 30.0`). Settings com default → compose intacto. **C** (legislação
+  `[object Object]`) e **F** (diagnóstico `tokens_in=636`): confirmados **resolvidos pelo #57** —
+  `formatLegislacao` cobre o shape real `{identificador,titulo,relevancia}` e o fallback
+  `_load_persisted_extraction` não filtra por `doc_type` (cobre `"outros"`); ambos travados com testes
+  de regressão (histórico de tokens do processo 30: id 135=637 pré-#57 → id 142=3491 pós). **E**
+  (alertas sem cor): sintoma **downstream de A** — `AlertasTab` em `error` renderiza só a caixa de
+  falha, então os `AlertaCard` (com `SEVERITY_CLS`, classes estáticas não-purgadas) nunca aparecem;
+  fix A restaura o render colorido. Suites: **backend 760**, **frontend 51**, build/tsc/eslint/ruff
+  verdes; mypy dos arquivos alterados limpo. Doc: `docs/trabalhos/teste_isis_rodada1.md`.

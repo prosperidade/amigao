@@ -230,6 +230,21 @@ def complete(
 
     from app.core.config import settings
 
+    # Erros TRANSITÓRIOS que justificam retry (vs. erro permanente que cai pro
+    # próximo provider). Coletados via getattr para tolerar variação de versão
+    # do litellm — só entram os que são classes de exceção de fato.
+    _transient: tuple[type[BaseException], ...] = tuple(
+        e
+        for e in (
+            getattr(litellm, "Timeout", None),
+            getattr(litellm, "APIConnectionError", None),
+            getattr(litellm, "ServiceUnavailableError", None),
+            getattr(litellm, "InternalServerError", None),
+            getattr(litellm, "RateLimitError", None),
+        )
+        if isinstance(e, type) and issubclass(e, BaseException)
+    )
+
     # White label: se o consultor configurou provider+model+chave, usa SÓ a
     # combinação dele (sem fallback global — não gastar crédito do sistema na
     # conta do consultor). Senão, comportamento atual (override por `model` ou
@@ -244,7 +259,12 @@ def complete(
     user_scoped = user_resolved is not None
     _max_tokens = max_tokens or settings.AI_MAX_TOKENS
     _temperature = temperature if temperature is not None else settings.AI_TEMPERATURE
-    _timeout = settings.AI_TIMEOUT_SECONDS
+    # `or 30.0`: blindagem contra timeout None/0 chegando ao litellm — a
+    # mensagem "Connection timed out after None seconds" prova que sem timeout
+    # explícito o provider pendura indefinidamente.
+    _timeout = settings.AI_TIMEOUT_SECONDS or 30.0
+    _max_retries = max(0, settings.AI_MAX_RETRIES)
+    _backoff_base = settings.AI_RETRY_BACKOFF_SECONDS
 
     messages = []
     if system:
@@ -255,14 +275,34 @@ def complete(
     for attempt_model, api_key in models:
         try:
             t0 = time.monotonic()
-            response = litellm.completion(
-                model=attempt_model,
-                messages=messages,
-                max_tokens=_max_tokens,
-                temperature=_temperature,
-                timeout=_timeout,
-                api_key=api_key or None,
-            )
+            # Retry por modelo SÓ para erros transitórios. Crítico para a
+            # legislação, que passa `model=` explícito (1 modelo, sem cadeia de
+            # fallback): sem isto um único Timeout/503 derruba a consulta. Erro
+            # permanente (auth, schema) propaga na hora pro fallback de provider.
+            response = None
+            for _attempt in range(_max_retries + 1):
+                try:
+                    response = litellm.completion(
+                        model=attempt_model,
+                        messages=messages,
+                        max_tokens=_max_tokens,
+                        temperature=_temperature,
+                        timeout=_timeout,
+                        api_key=api_key or None,
+                    )
+                    break
+                except _transient as transient_exc:
+                    if _attempt >= _max_retries:
+                        raise
+                    backoff = _backoff_base * (2 ** _attempt)
+                    logger.warning(
+                        "ai_gateway.complete transient error model=%s attempt=%d/%d "
+                        "err=%s; retry em %.1fs",
+                        attempt_model, _attempt + 1, _max_retries + 1,
+                        transient_exc, backoff,
+                    )
+                    time.sleep(backoff)
+            assert response is not None  # loop sai por break (sucesso) ou raise
             elapsed_ms = int((time.monotonic() - t0) * 1000)
 
             content = response.choices[0].message.content or ""

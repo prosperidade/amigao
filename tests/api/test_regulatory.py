@@ -230,6 +230,28 @@ class TestListPropertyIssues:
         assert len(body) == 1
         assert body[0]["resolved_at"] is None
 
+    def test_documentos_cruzados_objeto_nao_quebra_serializacao(self, client: TestClient, db_session):
+        """Item A (teste Isis rodada 1): ``documentos_cruzados`` gravado como
+        lista de OBJETOS (path guiado por LLM) NÃO pode derrubar a lista inteira
+        com 500. Write-side coage na origem; o endpoint responde 200 com strings."""
+        tenant, _ = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.add(RegulatoryIssue(
+            tenant_id=tenant.id,
+            property_id=prop.id,
+            familia=RegulatoryFamilia.area,
+            severity=RegulatoryIssueSeverity.atencao,
+            documentos_cruzados=[{"doc": "matricula"}, {"doc": "CAR"}],
+        ))
+        db_session.commit()
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.get(f"/api/v1/properties/{prop.id}/issues", headers=headers)
+        assert r.status_code == 200
+        body = r.json()
+        assert len(body) == 1
+        assert body[0]["documentos_cruzados"] == ["matricula", "CAR"]
+
     def test_status_resolved_only(self, client: TestClient, db_session):
         tenant, _ = _seed_internal_user(db_session)
         _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
@@ -2055,3 +2077,30 @@ class TestDecisaoBloqueadaSeAchadoSuspeita:
             .all()
         )
         assert logs == []
+
+
+def test_regulatory_issue_out_coerces_object_documentos_cruzados():
+    """Read-side (Item A teste Isis): linha LEGADA já gravada com
+    ``documentos_cruzados`` como lista de objetos/mistos serializa sem
+    ResponseValidationError — coage para list[str] na leitura, sem migration."""
+    from app.schemas.regulatory import RegulatoryIssueOut
+
+    out = RegulatoryIssueOut.model_validate({
+        "id": 1,
+        "property_id": 1,
+        "document_id": None,
+        "codigo_alerta": None,
+        "familia": None,
+        "muda_rota_regulatoria": None,
+        "muda_escopo_preco_prazo": None,
+        "documentos_cruzados": [{"doc": "matricula"}, "CAR", 123],
+        "severity": "atencao",
+        "status_achado": "suspeita",
+        "status_saneamento": "pendente",
+        "type": None,
+        "payload": None,
+        "detected_by": "manual",
+        "detected_at": datetime.now(UTC),
+        "resolved_at": None,
+    })
+    assert out.documentos_cruzados == ["matricula", "CAR", "123"]

@@ -98,6 +98,8 @@ def _build_settings_for_complete(**overrides) -> SimpleNamespace:
     s.AI_MAX_TOKENS = overrides.get("AI_MAX_TOKENS", 2048)
     s.AI_TEMPERATURE = overrides.get("AI_TEMPERATURE", 0.2)
     s.AI_TIMEOUT_SECONDS = overrides.get("AI_TIMEOUT_SECONDS", 30.0)
+    s.AI_MAX_RETRIES = overrides.get("AI_MAX_RETRIES", 2)
+    s.AI_RETRY_BACKOFF_SECONDS = overrides.get("AI_RETRY_BACKOFF_SECONDS", 0.0)
     s.AI_MAX_COST_PER_JOB_USD = overrides.get("AI_MAX_COST_PER_JOB_USD", 0.10)
     return s
 
@@ -235,3 +237,69 @@ def test_complete_user_auth_error_does_not_fallback_global(fake_litellm):
     # mensagem clara + só UMA tentativa (não tentou os providers globais)
     assert "Credenciais de IA do consultor inválidas" in exc_info.value.message
     assert fake_litellm.completion.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Item D (teste Isis rodada 1) — retry para erros transitórios + timeout são
+# ---------------------------------------------------------------------------
+
+def test_transient_error_retries_then_succeeds(fake_litellm):
+    """Timeout transitório (ex.: legislação) NÃO derruba a chamada: retry com
+    backoff e na 3ª tentativa retorna. Cobre o caso `model=` explícito (1 só
+    modelo, sem cadeia de fallback)."""
+    timeout_err = type("Timeout", (Exception,), {})
+    fake_litellm.Timeout = timeout_err
+    fake_litellm.completion.side_effect = [
+        timeout_err("Connection timed out"),
+        timeout_err("Connection timed out"),
+        _litellm_response_stub("base legal ok", 100, 20),
+    ]
+    fake_litellm.completion_cost.return_value = 0.001
+
+    with (
+        patch("app.core.config.settings", _build_settings_for_complete()),
+        patch("app.core.ai_gateway.time.sleep") as sleep_mock,
+    ):
+        result = complete("consulta legislacao", model="gpt-4o-mini")
+
+    assert result.content == "base legal ok"
+    # 1 inicial + 2 retries: a 3ª venceu
+    assert fake_litellm.completion.call_count == 3
+    assert sleep_mock.call_count == 2
+    # timeout explícito (NUNCA None) chega ao litellm — prova contra
+    # "Connection timed out after None seconds"
+    _, kwargs = fake_litellm.completion.call_args
+    assert kwargs["timeout"] == 30.0
+
+
+def test_transient_error_exhausts_retries_then_raises(fake_litellm):
+    """Se o erro transitório persiste além do teto de retries, propaga como
+    AIGatewayError (não fica em loop infinito)."""
+    timeout_err = type("Timeout", (Exception,), {})
+    fake_litellm.Timeout = timeout_err
+    fake_litellm.completion.side_effect = timeout_err("sempre indisponível")
+
+    with (
+        patch("app.core.config.settings", _build_settings_for_complete(AI_MAX_RETRIES=2)),
+        patch("app.core.ai_gateway.time.sleep"),
+        pytest.raises(AIGatewayError),
+    ):
+        complete("consulta", model="gpt-4o-mini")
+
+    # 1 inicial + 2 retries = 3 tentativas no único modelo
+    assert fake_litellm.completion.call_count == 3
+
+
+def test_timeout_falsy_setting_defaults_to_30(fake_litellm):
+    """Blindagem: AI_TIMEOUT_SECONDS None/0 não vira `timeout=None` no litellm."""
+    fake_litellm.completion.return_value = _litellm_response_stub("ok", 10, 2)
+    fake_litellm.completion_cost.return_value = 0.0
+
+    with patch(
+        "app.core.config.settings",
+        _build_settings_for_complete(AI_TIMEOUT_SECONDS=0),
+    ):
+        complete("prompt", model="gpt-4o-mini")
+
+    _, kwargs = fake_litellm.completion.call_args
+    assert kwargs["timeout"] == 30.0

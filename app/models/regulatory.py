@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import enum
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -33,7 +34,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 
 from app.models.base import Base
@@ -397,6 +398,27 @@ class RegulatoryIssue(Base):
         nullable=False,
     )
     resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    @validates("documentos_cruzados")
+    def _normalize_documentos_cruzados(self, _key: str, value: Any) -> Any:
+        """Guard write-side: garante ``list[str]`` na origem (causa raiz do 500
+        em ``GET /properties/{id}/issues``). Paths guiados por LLM podem produzir
+        lista de objetos (ex.: ``[{"doc": "matricula"}]``); aqui cada item é
+        achatado para string antes de persistir, espelhando a coerção de leitura
+        em ``schemas/regulatory.py``. Linhas legadas já gravadas são tratadas no
+        read-side."""
+        if not isinstance(value, list):
+            return value
+        out: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                out.append(item)
+            elif isinstance(item, dict):
+                parts = [str(x) for x in item.values() if x not in (None, "")]
+                out.append(" — ".join(parts) if parts else str(item))
+            elif item is not None:
+                out.append(str(item))
+        return out
 
     property = relationship("Property", foreign_keys=[property_id])
     document = relationship("Document", foreign_keys=[document_id])

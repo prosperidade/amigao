@@ -223,6 +223,13 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS: int = 2048
     AI_TEMPERATURE: float = 0.2
     AI_TIMEOUT_SECONDS: float = 30.0
+    # Retries por modelo para erros TRANSITÓRIOS (Timeout, 503, RateLimit) no
+    # ai_gateway. Resolve a legislação caindo por instabilidade pontual: ela usa
+    # `model=` explícito (1 só modelo, sem cadeia de fallback) — sem este retry,
+    # um único Timeout derruba a consulta inteira ("não existe diagnóstico sem
+    # base legal"). Backoff curto exponencial entre tentativas.
+    AI_MAX_RETRIES: int = 2
+    AI_RETRY_BACKOFF_SECONDS: float = 1.0
     # Janela de texto enviada ao extrator de campos (document_extractor).
     # 2026-06-02: era 3000 hardcoded — truncava escrituras/matrículas reais
     # (15-25k chars): a capa (certidão CNIB) trazia só nome+CPF e os campos do
