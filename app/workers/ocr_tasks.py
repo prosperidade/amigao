@@ -68,6 +68,28 @@ def ocr_then_extract(
             )
             return {"status": "not_found", "doc_id": doc_id}
 
+        # 0) Guard geoespacial — KML/KMZ/SHP/GeoJSON/GPX são GEOMETRIA, não
+        # documento. Falha LIMPA aqui (sem cascata pypdf→Gemini→OpenAI, que antes
+        # estourava "Unsupported MIME type: application/octet-stream"). O arquivo
+        # fica armazenado; o consumo real é o gap D1. O roteamento já barra isso
+        # no /import, mas o guard protege qualquer dispatch direto da task.
+        from app.services.geo_files import GEOSPATIAL_DOCUMENT_TYPE, is_geospatial  # noqa: PLC0415
+        if is_geospatial(doc.filename, doc.mime_type):
+            doc.ocr_status = OcrStatus.not_required
+            doc.document_type = doc.document_type or GEOSPATIAL_DOCUMENT_TYPE
+            db.add(doc)
+            db.commit()
+            logger.info(
+                "ocr_then_extract: doc=%s é geoespacial (%s) — OCR dispensado (gap D1)",
+                doc_id, doc.filename,
+            )
+            _emit_ocr_event(
+                publish_realtime_event, tenant_id, doc,
+                status_label="not_required", method="geoespacial",
+                chars=0, cost_usd=0.0,
+            )
+            return {"status": "skipped_geoespacial", "doc_id": doc_id}
+
         # 1) Cache self — texto já existe (force=True bypassa pra re-OCR)
         if (doc.extracted_text or "").strip() and not force:
             logger.info(
@@ -135,6 +157,31 @@ def ocr_then_extract(
             doc.checksum_sha256 = checksum
             db.add(doc)
             db.commit()
+
+        # 2.5) Guard geoespacial via conteúdo — .zip contendo shapefile. A extensão
+        # .zip é ambígua (pode ser qualquer coisa), então só dá pra saber inspecionando
+        # os nomes internos. Tendo os bytes em mãos, barramos aqui antes do OCR.
+        from app.services.geo_files import (  # noqa: PLC0415
+            GEOSPATIAL_DOCUMENT_TYPE as _GEO_TYPE,
+        )
+        from app.services.geo_files import (  # noqa: PLC0415
+            zip_contains_shapefile,
+        )
+        if (doc.extension or "").lower() == "zip" and zip_contains_shapefile(pdf_bytes):
+            doc.ocr_status = OcrStatus.not_required
+            doc.document_type = doc.document_type or _GEO_TYPE
+            db.add(doc)
+            db.commit()
+            logger.info(
+                "ocr_then_extract: doc=%s é shapefile zipado (%s) — OCR dispensado (gap D1)",
+                doc_id, doc.filename,
+            )
+            _emit_ocr_event(
+                publish_realtime_event, tenant_id, doc,
+                status_label="not_required", method="geoespacial",
+                chars=0, cost_usd=0.0,
+            )
+            return {"status": "skipped_geoespacial_zip", "doc_id": doc_id}
 
         # 3) Cache twin — mesmo arquivo já foi OCR'd antes.
         # Pulado quando force=True: reprocessar forçado tem que re-extrair de fato,

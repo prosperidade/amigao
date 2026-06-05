@@ -249,6 +249,10 @@ class IntakeImportResponse(BaseModel):
     draft_id: int
     docs_queued: int
     task_ids: list[str] = []
+    # fix/intake-geo-routing — docs geoespaciais (.kml/.kmz/.shp/.geojson/...) são
+    # geometria, não documento: ficam armazenados (ocr_status=not_required) e NÃO
+    # entram no pipeline de OCR. Contabilizados aqui para a UI comunicar honesto.
+    docs_skipped_geo: int = 0
 
 
 # CAM1-005 Parte A (Sprint L) — resultados de extração prontos para revisão.

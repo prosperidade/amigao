@@ -409,6 +409,18 @@ def extract_text_from_pdf(pdf_bytes: bytes, mime_type: str = "application/pdf") 
             error=f"oversized:{len(pdf_bytes)}>{MAX_PDF_BYTES}",
         )
 
+    # Guard "não é PDF": falha LIMPA antes da cascata de providers. Sem isso, um
+    # arquivo não-PDF (ex.: KML mandado como application/octet-stream) passava por
+    # pypdf (0 chars) → Gemini (400 "Unsupported MIME type") → OpenAI (rasterização
+    # falha), entregando uma cascata de erros técnicos. Todo PDF começa com a
+    # assinatura "%PDF" nos primeiros bytes (pode haver lixo/BOM antes; checamos a
+    # janela inicial). Não sendo PDF, não há o que transcrever aqui.
+    if b"%PDF" not in pdf_bytes[:1024]:
+        return OcrResult(
+            "", "none", 0, 0.0, 0, 0, 0, "", "",
+            error=f"not_a_pdf:mime={mime_type}",
+        )
+
     # 1) pypdf — grátis, rápido, funciona em PDFs digitais
     t0 = time.monotonic()
     text = extract_text_with_pypdf(pdf_bytes)

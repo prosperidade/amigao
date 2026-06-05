@@ -238,6 +238,26 @@ def confirm_upload(
             exc,
         )
 
+    # Guard geoespacial: KML/KMZ/SHP/GeoJSON/GPX são GEOMETRIA, não documento.
+    # Ficam armazenados (not_required) vinculados ao processo/imóvel, sem entrar
+    # no OCR. Consumo real (parser → Property.geom) é o gap D1 (próxima frente geo).
+    from app.services.geo_files import GEOSPATIAL_DOCUMENT_TYPE, is_geospatial  # noqa: PLC0415
+    if is_geospatial(body.filename, body.content_type):
+        from app.models.document import OcrStatus  # noqa: PLC0415
+        db_doc.ocr_status = OcrStatus.not_required
+        db_doc.document_type = db_doc.document_type or GEOSPATIAL_DOCUMENT_TYPE
+        db.add(db_doc)
+        db.commit()
+        db.refresh(db_doc)
+        record_document_upload(
+            "client_portal" if access_context.is_client_portal else "internal", "success"
+        )
+        logger.info(
+            "Documento #%s é geoespacial — armazenado sem OCR (gap D1) | '%s'",
+            db_doc.id, body.filename,
+        )
+        return db_doc
+
     # Pipeline de extração textual. PDFs passam pelo OCR cascata (pypdf → Gemini →
     # OpenAI Vision) que persiste `Document.extracted_text` antes de despachar o
     # agente extrator. Outros formatos extraíveis (imagens) caem direto no extrator

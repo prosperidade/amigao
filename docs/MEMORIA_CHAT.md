@@ -501,3 +501,24 @@ em `docs/agentes/` são a fonte de verdade verificada.
   Suite completa verde + ruff limpo. **NÃO neste PR:** fase 2 (extrator escreve no staging + migração
   de dados `Property`→`Matricula`), fase 3 (reconciliação multi-fonte do auditor), fase 4 (tela de
   Alertas/consolidação). Doc: `docs/trabalhos/ficha01_fase1.md`.
+- **2026-06-05 — Intake: roteamento geoespacial + card lateral (`fix/intake-geo-routing`).** Dois
+  sintomas de produção, ambos com causa-raiz medida e fix provado. (1) **`.kml` caía no OCR de PDF**:
+  `import_draft_documents` enfileirava `ocr_then_extract` para TODOS os docs do draft sem guard, então
+  geometria (KML/KMZ/SHP/GeoJSON/GPX) batia na cascata `pypdf`(0 chars)→Gemini(`400 Unsupported MIME
+  type: application/octet-stream`)→`rasterization_failed`. Fix **só ROTEIA** (geometria real é o gap
+  D1): novo `app/services/geo_files.py` (`is_geospatial` por extensão **ou** MIME + `zip_contains_shapefile`
+  pra `.zip`); no `/import` e `/confirm-upload` o geo entra `ocr_status=not_required` +
+  `document_type=geoespacial` SEM dispatch (resposta agrega `docs_skipped_geo`); guard no worker
+  (extensão/MIME antes do download; `.zip`-com-shapefile depois) com falha LIMPA; guard no orquestrador
+  (`ocr_pdf` sem assinatura `%PDF` → `not_a_pdf`, sem cascata de providers). (2) **Card do intake não
+  atualizava** ao job concluir (preso em "Aguardando" → consultor achava que falhou): o polling de
+  `DraftDocumentUploader` só ligava com doc em `processing`, mas o `/import` marca `pending` → o
+  intervalo nunca iniciava. Fix: flag `awaitingOcr` + polling enquanto houver doc não-terminal
+  (`pending`/`processing`), parando em `done`/`failed`/`not_required`; pill "Armazenado" + mensagem
+  honesta pro geo. **Aprendizado de ferramenta:** rodar vitest via `npm test` (não `npx vitest`) — o
+  flag Node de `require(esm)` p/ jsdom vive no script npm; com `npx` direto todos os testes jsdom
+  abortam com `ERR_REQUIRE_ESM`. **Validação:** backend venv+Testcontainers (30 testes novos; regressão
+  workers/services/intake 190 passed; ruff limpo); frontend `tsc`/`build` limpos, `npm test` 53 passed,
+  eslint limpo. NÃO validado ao vivo: E2E browser→MinIO→Celery (prova por integração+unit). Doc:
+  `docs/trabalhos/intake_geo_routing.md`. **NÃO neste PR:** parser KML/SHP, `Property.geom`, PostGIS
+  (gap D1 — dívidas #14/#15).
