@@ -416,9 +416,14 @@ def extract_text_from_pdf(pdf_bytes: bytes, mime_type: str = "application/pdf") 
     # assinatura "%PDF" nos primeiros bytes (pode haver lixo/BOM antes; checamos a
     # janela inicial). Não sendo PDF, não há o que transcrever aqui.
     if b"%PDF" not in pdf_bytes[:1024]:
+        mt = (mime_type or "").lower()
+        if "word" in mt or mt.endswith("document") or "msword" in mt:
+            msg = "arquivo Word (.doc/.docx) não é lido por OCR — converta para PDF e reenvie"
+        else:
+            msg = f"arquivo não é um PDF (tipo {mime_type or 'desconhecido'}) — converta para PDF e reenvie"
         return OcrResult(
             "", "none", 0, 0.0, 0, 0, 0, "", "",
-            error=f"not_a_pdf:mime={mime_type}",
+            error=msg,
         )
 
     # 1) pypdf — grátis, rápido, funciona em PDFs digitais

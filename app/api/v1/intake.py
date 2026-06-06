@@ -830,6 +830,7 @@ def list_draft_documents(
             document_type=d.document_type,
             document_category=d.document_category,
             ocr_status=d.ocr_status.value if d.ocr_status else None,
+            ocr_error=d.ocr_error,
             file_size_bytes=d.file_size_bytes or 0,
             created_at=d.created_at.isoformat() if d.created_at else None,
         )

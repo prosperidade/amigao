@@ -18,7 +18,8 @@ def test_bytes_nao_pdf_falha_limpo_sem_cascata():
     assert res.method == "none"
     assert res.provider == ""
     assert res.error is not None
-    assert res.error.startswith("not_a_pdf:")
+    # Mensagem honesta (sem código técnico): orienta converter para PDF.
+    assert "converta para pdf" in res.error.lower()
     # Custo zero e nenhum provider acionado.
     assert res.cost_usd == 0.0
 
@@ -35,4 +36,4 @@ def test_zip_shapefile_tambem_falha_limpo_no_guard():
     res = extract_text_from_pdf(zip_magic, mime_type="application/zip")
     assert res.method == "none"
     assert res.error is not None
-    assert res.error.startswith("not_a_pdf:")
+    assert "converta para pdf" in res.error.lower()

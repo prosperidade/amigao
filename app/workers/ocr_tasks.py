@@ -21,10 +21,38 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, Optional
 
+from celery.exceptions import MaxRetriesExceededError
+
 from app.core.celery_app import celery_app
 from app.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
+
+
+def _mark_ocr_failed(doc_id: int, tenant_id: int, reason: str) -> None:
+    """Marca o documento como failed com motivo legível, em sessão LIMPA.
+
+    Usado quando os retries se esgotam (o doc não pode ficar preso em
+    'processing'). Best-effort: nunca levanta."""
+    from app.models.document import Document, OcrStatus  # noqa: PLC0415
+
+    db = SessionLocal()
+    try:
+        doc = (
+            db.query(Document)
+            .filter(Document.id == doc_id, Document.tenant_id == tenant_id)
+            .first()
+        )
+        if doc is not None:
+            doc.ocr_status = OcrStatus.failed
+            doc.ocr_error = reason[:500]
+            db.add(doc)
+            db.commit()
+    except Exception as exc:  # noqa: BLE001 — best-effort
+        db.rollback()
+        logger.warning("ocr_then_extract: falha ao marcar doc=%s como failed: %s", doc_id, exc)
+    finally:
+        db.close()
 
 
 @celery_app.task(
@@ -123,6 +151,7 @@ def ocr_then_extract(
             # no R2). Registra a causa — não mascara como 'no_bytes' nem entra em
             # retry-storm (config não se cura sozinha; a causa fica visível).
             doc.ocr_status = OcrStatus.failed
+            doc.ocr_error = f"Falha ao baixar do storage ({exc.code}). Tente reprocessar."
             db.add(doc)
             db.commit()
             logger.error(
@@ -138,6 +167,7 @@ def ocr_then_extract(
 
         if not pdf_bytes:
             doc.ocr_status = OcrStatus.failed
+            doc.ocr_error = "Arquivo não encontrado no storage (pode ter falhado no upload). Reenvie o documento."
             db.add(doc)
             db.commit()
             logger.warning(
@@ -299,11 +329,16 @@ def ocr_then_extract(
             doc.extracted_text = result.text
             doc.extracted_at = finished_at
             doc.ocr_status = OcrStatus.done
+            doc.ocr_error = None  # sucesso limpa erro anterior (ex.: reprocesso)
             # pypdf é determinístico; Gemini Vision pode alucinar — confidence
             # menor sinaliza "review_required" pra UI futura.
             doc.confidence_score = 0.95 if result.method == "pypdf" else 0.70
         else:
             doc.ocr_status = OcrStatus.failed
+            doc.ocr_error = (
+                f"Não foi possível ler o documento: "
+                f"{result.error or 'todas as tentativas de OCR falharam'}."
+            )
 
         db.add(doc)
         db.commit()
@@ -339,8 +374,13 @@ def ocr_then_extract(
         db.rollback()
         logger.exception("ocr_then_extract: doc=%s falhou: %s", doc_id, exc)
         try:
+            # Erro transitório → Celery reexecuta. self.retry() levanta Retry, que
+            # DEVE propagar (antes era engolido por um `except Exception`, então a
+            # task nunca reexecutava e o doc ficava preso em 'processing').
             raise self.retry(exc=exc, countdown=30)
-        except Exception:
+        except MaxRetriesExceededError:
+            # Retries esgotados → marca failed com motivo (nunca deixa 'processing').
+            _mark_ocr_failed(doc_id, tenant_id, f"OCR falhou após retries: {exc}")
             return {"status": "error", "doc_id": doc_id, "error": str(exc)}
     finally:
         db.close()

@@ -40,6 +40,7 @@ interface DraftDoc {
   document_type: string | null;
   document_category: string | null;
   ocr_status: string | null;
+  ocr_error: string | null;
   file_size_bytes: number;
   created_at: string | null;
 }
@@ -425,6 +426,25 @@ export default function DraftDocumentUploader({
     [refresh],
   );
 
+  // OCR failed (2026-06-06) — reprocessa um doc que falhou (ex.: erro transitório
+  // de storage). POST /documents/{id}/reprocess-ocr re-baixa e re-OCRa.
+  const [reprocessingId, setReprocessingId] = useState<number | null>(null);
+  const reprocessDoc = useCallback(
+    async (docId: number) => {
+      setReprocessingId(docId);
+      setError(null);
+      try {
+        await api.post(`/documents/${docId}/reprocess-ocr`);
+        await refresh();
+      } catch (err: unknown) {
+        setError(errorMessage(err) || 'Erro ao reprocessar o documento.');
+      } finally {
+        setReprocessingId(null);
+      }
+    },
+    [refresh],
+  );
+
   return (
     <div className="space-y-4">
       {error && (
@@ -529,7 +549,23 @@ export default function DraftDocumentUploader({
                       🗺️ Geometria armazenada — processamento em breve (sem leitura de texto).
                     </div>
                   )}
+                  {d.ocr_status === 'failed' && (
+                    <div className="mt-0.5 text-[11px] text-red-700">
+                      ⚠️ {d.ocr_error || 'Não foi possível ler o documento.'}
+                    </div>
+                  )}
                 </div>
+                {d.ocr_status === 'failed' && (
+                  <button
+                    type="button"
+                    onClick={() => void reprocessDoc(d.id)}
+                    disabled={reprocessingId === d.id}
+                    title="Tentar OCR novamente"
+                    className="shrink-0 rounded-md px-2 py-1 text-xs text-sky-700 hover:bg-sky-50 disabled:opacity-40"
+                  >
+                    {reprocessingId === d.id ? '…' : '↻ tentar de novo'}
+                  </button>
+                )}
                 <StatusPill status={d.ocr_status} />
                 {/* Botão remover SEMPRE visível, qualquer ocr_status */}
                 {confirmDeleteId === d.id ? (
