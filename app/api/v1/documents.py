@@ -312,6 +312,59 @@ def get_download_url(
     return {"download_url": url, "expires_in": 300}
 
 
+@router.post("/{document_id}/reprocess-ocr")
+def reprocess_ocr(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Re-dispara o OCR de um documento (failed ou preso). Funciona para docs de
+    PROCESSO e de RASCUNHO (intake_draft) — o consultor não fica preso a um
+    `failed` permanente após falha transitória (ex.: storage/region). force=True
+    ignora cache e re-baixa do storage."""
+    from app.models.document import OcrStatus  # noqa: PLC0415
+
+    doc_repo = DocumentRepository(db, current_user.tenant_id)
+    doc = doc_repo.get_scoped(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+    if (doc.content_type or "") != "application/pdf":
+        raise HTTPException(
+            status_code=422,
+            detail="Reprocesso de OCR disponível apenas para PDFs.",
+        )
+
+    doc.ocr_status = OcrStatus.processing
+    doc.ocr_error = None
+    db.add(doc)
+    db.commit()
+
+    task = None
+    try:
+        from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
+        task = ocr_then_extract.delay(
+            doc_id=doc.id,
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            draft_id=doc.intake_draft_id,
+            force=True,
+        )
+        logger.info(
+            "Reprocesso OCR enfileirado para document_id=%s task=%s",
+            doc.id, getattr(task, "id", None),
+        )
+    except Exception as exc:
+        logger.warning("Falha ao enfileirar reprocesso OCR doc=%s: %s", doc.id, exc)
+        raise HTTPException(status_code=503, detail="Não foi possível enfileirar o reprocesso.") from exc
+
+    return {
+        "status": "reprocessing",
+        "document_id": doc.id,
+        "task_id": getattr(task, "id", None),
+        "ocr_status": "processing",
+    }
+
+
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
     document_id: int,

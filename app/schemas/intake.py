@@ -232,6 +232,7 @@ class IntakeDraftDocumentResponse(BaseModel):
     document_type: Optional[str]
     document_category: Optional[str]
     ocr_status: Optional[str]
+    ocr_error: Optional[str] = None
     file_size_bytes: int
     created_at: Optional[str] = None
 

@@ -483,6 +483,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Matriz calibração (caso real #11) | Área 2 níveis + RAT, pendências por tema (categoria+detalhamento), SIGEF código/status real, dedup; medido no dump de produção do São Jorge | ✅ `fix/matriz-calibracao-caso-real` — ver `docs/trabalhos/matriz_calibracao.md` |
 | Hardening pós-deploy | Migration automática no deploy (`preDeployCommand` na API); erro de disparo visível na UI (rota `/extract` existe); retry só p/ transitório (determinístico falha sem retry) | ✅ `fix/hardening-deploy-rotas` — ver `docs/trabalhos/hardening_deploy.md` |
 | Fase 2 robusta (docs reais) | Classificação por identidade (certidão 6776 não cai mais em sigef); validadores de formato por campo (4b); dedup de re-extração (4c); chain reutiliza staging (fim do "0 campos"). Follow-on: OCR falho em CCIR/ITR/recibo CAR | ✅ `feat/fase2-robusta-docs-reais` — ver `docs/trabalhos/fase2_robusta.md` |
+| OCR failed (docs reais) | Causa medida: falha de download do storage (05-31, pré-fix R2), nunca reprocessada. Fixes: reprocesso `/documents/{id}/reprocess-ocr` (draft+processo) + botão; coluna `ocr_error` (fim do failed silencioso); fim do "preso em processing"; docx honesto. Validação real do failed→done é pós-deploy (consultor reprocessa) | ✅ `fix/ocr-failed-docs-reais` — ver `docs/trabalhos/ocr_failed.md` |
 
 ## Sprints em curso
 
@@ -495,7 +496,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 
 | Item | Bloqueio | Janela |
 |---|---|---|
-| OCR falhando em PDFs do caso #11 | CCIR/ITR/recibo CAR do São Jorge com `ocr_status=failed/pending` em prod → sem texto, sem staging. Upstream da Fase 2; bloqueia "todas as fontes" no staging. Ver `docs/trabalhos/fase2_robusta.md` §follow-on | Curto |
+| Reprocessar OCR dos failed do São Jorge (prod) | Fix shipado (`fix/ocr-failed-docs-reais`): há botão "↻ tentar de novo" + endpoint. **Falta o consultor reprocessar em prod** os CCIR/ITR/recibo CAR e confirmar failed→done → então a matriz multi-fonte fica completa. Ver `docs/trabalhos/ocr_failed.md` | Curto (pós-deploy) |
 | Remodelagem `RegulatoryIssue` (dívida #3) | PROMPT_5 — aguarda sócia validar skill `auditor_imovel/analise_divergencias_documentais` | Próxima rodada |
 | Camada 2 do Princípio 1 (5 botões P4) | Depende da remodelagem do `RegulatoryIssue` + reconciliação de status (dívida #5) | Pós-PROMPT_5 |
 | UI consultor-assina (frontend do `PATCH /validate`) | Endpoint pronto desde PROMPT_4; frontend precisa consumir e renderizar | Curto |

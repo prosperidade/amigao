@@ -61,6 +61,9 @@ class Document(Base):
 
     # Pipeline OCR / Extração
     ocr_status = Column(Enum(OcrStatus), default=OcrStatus.pending)
+    # Motivo legível do último OCR falho (fim do "failed silencioso"): storage,
+    # formato não suportado, todas as cascatas falharam, etc. Limpo no sucesso.
+    ocr_error = Column(String, nullable=True)
     extraction_status = Column(String, nullable=True)
     confidence_score = Column(Float, nullable=True)
     review_required = Column(Boolean, default=False)
