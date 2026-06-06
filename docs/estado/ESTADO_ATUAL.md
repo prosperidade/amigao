@@ -480,6 +480,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Pós-Fase 2 (Ondas A/B/C — PROMPT_3) | 4 fixes pré-existentes + `auditor_imovel` na chain + `POST /diagnoses` + régua 4 faixas | ✅ commits `357993c` + `5e64db4` (mergeado em main) |
 | PROMPT_4 — fechar pipeline | Diagnóstico consome auditor + `PATCH /validate` (camada 1 do Princípio 1) | ✅ commits `f93b4b4` + `c74ff2e` (PR aberto, pendente de merge) |
 | Upstash polling redução | `polling_interval=5.0`, `vigia 6h→12h`, `acompanhamento 30min→2h` (-85% de comandos Redis) | ✅ commit `a746eb0` (PR #2 mergeado, `bc98c93`) |
+| Matriz calibração (caso real #11) | Área 2 níveis + RAT, pendências por tema (categoria+detalhamento), SIGEF código/status real, dedup; medido no dump de produção do São Jorge | ✅ `fix/matriz-calibracao-caso-real` — ver `docs/trabalhos/matriz_calibracao.md` |
 
 ## Sprints em curso
 
@@ -495,6 +496,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Remodelagem `RegulatoryIssue` (dívida #3) | PROMPT_5 — aguarda sócia validar skill `auditor_imovel/analise_divergencias_documentais` | Próxima rodada |
 | Camada 2 do Princípio 1 (5 botões P4) | Depende da remodelagem do `RegulatoryIssue` + reconciliação de status (dívida #5) | Pós-PROMPT_5 |
 | UI consultor-assina (frontend do `PATCH /validate`) | Endpoint pronto desde PROMPT_4; frontend precisa consumir e renderizar | Curto |
+| Extração Fase 2 incompleta (caso #11) | Certidão/CCIR/ITR/CAR não viraram `extracted_field_staging` (OCR `pending`/classificação `document_type`); staging triplicado sem dedup; `area_vetorizada_ha` mal-parseada. Upstream da matriz — destrava denominação 3-variações e área por matrícula. Ver `docs/trabalhos/matriz_calibracao.md` §5 | Curto |
 | Property.geom populado | Falta parser shapefile + ingestão de KML/SHP — destrava alertas geoespaciais (dívidas #14/#15) | Médio |
 | Crawlers DOU/DOE ativados em prod | Apenas esqueleto pronto | Médio |
 | Connector e-mail inbound (acompanhamento) | Sem integração de inbound hoje | Médio |
