@@ -188,3 +188,59 @@ def test_extracted_fields_empty_without_docs(client: TestClient, db_session):
     assert data["draft_id"] == draft_id
     assert data["fields"] == []
     assert data["has_divergence"] is False
+
+
+def test_extracted_fields_excludes_confidence_map_and_maps_score(client: TestClient, db_session):
+    """Regressão: o mapa `confidence` do extrator virava um campo
+    'Confidence: [object Object]' e os campos ficavam 's/ score'. Agora o mapa é
+    metadado — pontua cada campo e NÃO aparece como linha."""
+    from app.models.ai_job import AIJob, AIJobStatus, AIJobType
+    from app.models.document import Document
+
+    _make_user(db_session, tenant_name="T Conf Preview", email="conf.preview@example.com")
+    headers = _login(client, "conf.preview@example.com", "Consultor1")
+    user = db_session.query(User).filter(User.email == "conf.preview@example.com").first()
+
+    create = client.post(
+        "/api/v1/intake/drafts",
+        json={"entry_type": "novo_cliente_novo_imovel", "form_data": {}},
+        headers=headers,
+    )
+    draft_id = create.json()["id"]
+
+    doc = Document(
+        tenant_id=user.tenant_id,
+        intake_draft_id=draft_id,
+        filename="cert.pdf",
+        content_type="application/pdf",
+        original_file_name="Certidao 4698.pdf",
+        document_type="matricula",
+        storage_key="drafts/cert.pdf",
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    db_session.add(AIJob(
+        tenant_id=user.tenant_id,
+        job_type=AIJobType.extract_document,
+        agent_name="extrator",
+        status=AIJobStatus.completed,
+        result={
+            "document_id": doc.id,
+            "extracted_fields": {
+                "denominacao_imovel": "FAZENDA SÃO JORGE – GLEBA 01 B",
+                "area_ha": 660.6561,
+                "confidence": {"denominacao_imovel": "high", "area_ha": "medium"},
+            },
+        },
+    ))
+    db_session.commit()
+
+    resp = client.get(f"/api/v1/intake/drafts/{draft_id}/extracted-fields", headers=headers)
+    assert resp.status_code == 200
+    by_field = {f["field"]: f for f in resp.json()["fields"]}
+
+    assert "confidence" not in by_field  # mapa de scores não é campo
+    assert by_field["denominacao_imovel"]["value"] == "FAZENDA SÃO JORGE – GLEBA 01 B"
+    assert by_field["denominacao_imovel"]["confidence"] == 0.95  # high
+    assert by_field["area_ha"]["confidence"] == 0.8  # medium
