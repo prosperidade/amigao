@@ -33,8 +33,15 @@ services:
     region: virginia
     branch: main
     autoDeploy: true
-    # Render injeta $PORT. Bind explícito; init_db/seed.py NÃO rodam aqui
-    # (migrations são manuais via Render Shell — runbook passo f).
+    # Migrations AUTOMÁTICAS no deploy (hardening 2026-06-06): preDeployCommand
+    # roda na imagem recém-buildada, ANTES da nova versão entrar no ar — então
+    # o schema está migrado quando API e worker sobem (sem corrida entre serviços).
+    # SÓ a API roda migration (o worker não — evita corrida). Idempotente: no-op
+    # quando já está em head. Usa MIGRATE_DATABASE_URL (conexão direta) via env.py.
+    # Incidente que originou: deploy de código ≠ migration aplicada — a Fase 1-4
+    # subiu sem extracted_field_staging e o extrator explodia em prod.
+    preDeployCommand: alembic upgrade head
+    # Render injeta $PORT. Bind explícito; seed.py NÃO roda aqui.
     dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:

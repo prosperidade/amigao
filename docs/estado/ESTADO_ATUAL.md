@@ -481,6 +481,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | PROMPT_4 — fechar pipeline | Diagnóstico consome auditor + `PATCH /validate` (camada 1 do Princípio 1) | ✅ commits `f93b4b4` + `c74ff2e` (PR aberto, pendente de merge) |
 | Upstash polling redução | `polling_interval=5.0`, `vigia 6h→12h`, `acompanhamento 30min→2h` (-85% de comandos Redis) | ✅ commit `a746eb0` (PR #2 mergeado, `bc98c93`) |
 | Matriz calibração (caso real #11) | Área 2 níveis + RAT, pendências por tema (categoria+detalhamento), SIGEF código/status real, dedup; medido no dump de produção do São Jorge | ✅ `fix/matriz-calibracao-caso-real` — ver `docs/trabalhos/matriz_calibracao.md` |
+| Hardening pós-deploy | Migration automática no deploy (`preDeployCommand` na API); erro de disparo visível na UI (rota `/extract` existe); retry só p/ transitório (determinístico falha sem retry) | ✅ `fix/hardening-deploy-rotas` — ver `docs/trabalhos/hardening_deploy.md` |
 
 ## Sprints em curso
 
