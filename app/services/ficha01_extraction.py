@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -50,20 +51,38 @@ _SPECIFIC_DOC_TYPES = {t for t in CANONICAL_DOC_TYPES if t != "outro"}
 # ---------------------------------------------------------------------------
 # Classificação por conteúdo (rule-based, sem LLM)
 # ---------------------------------------------------------------------------
-# Ordem importa: o mais específico vem primeiro (rat antes de car; o recibo do
-# CAR e o RAT compartilham termos, mas o RAT tem "relatório de análise técnica").
+# ORDEM DE DECISÃO DETERMINÍSTICA — "o tipo é do DOCUMENTO, não de uma menção
+# interna". Cada documento é identificado pelo seu CABEÇALHO/identidade própria,
+# que vence menções a outros sistemas no corpo:
+#   1. rat       — "relatório de análise técnica" (parecer do órgão)
+#   2. matricula — certidão de registro: "inteiro teor", "oficial registrador",
+#                  "registro de imóveis". Vem ANTES de sigef/ccir/itr porque a
+#                  certidão CITA georref/CCIR/CAR no corpo (cadeia/averbações) e
+#                  não pode ser sequestrada por esses termos.
+#   3. car       — "recibo de inscrição ... CAR"
+#   4. ccir / 5. itr / 6. sigef — identidades próprias (memorial/certificação)
+#   7. rg_cpf / 8. endereco
+# Caso real #11: a "Certidão de Inteiro Teor da Matrícula 6776" caía em `sigef`
+# porque continha "memorial descritivo" (seção de georref embutida) e `sigef`
+# vinha antes de `matricula`. Corrigido com a precedência + marcadores fortes.
+# NÃO usar "matrícula nº" como gatilho de `matricula`: um memorial SIGEF cita o
+# número da matrícula — gatilho fraco roubaria a classificação.
 _CLASSIFY_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("rat", (
         "relatorio de analise tecnica", "relatório de análise técnica",
         "analise tecnica do car", "análise técnica do car", "go-rat", "rat-",
     )),
+    ("matricula", (
+        # Marcadores ÚNICOS da certidão de registro. NÃO incluir "registro de
+        # imóveis"/"cartório de registro": um recibo CAR lista matrículas com
+        # "Cartório de Registro de Imóveis de X" no corpo e seria roubado.
+        "inteiro teor", "oficial registrador", "oficial substituta",
+        "certidao de matricula", "certidão de matrícula",
+        "livro no 2", "livro nº 2",
+    )),
     ("car", (
         "recibo de inscricao", "recibo de inscrição", "cadastro ambiental rural",
         "registro no car", "sicar",
-    )),
-    ("sigef", (
-        "sigef", "memorial descritivo", "georreferenciamento", "georreferenciado",
-        "vertices", "vértices", "certificacao do imovel", "certificação do imóvel",
     )),
     ("ccir", (
         "ccir", "certificado de cadastro de imovel rural",
@@ -73,10 +92,9 @@ _CLASSIFY_RULES: list[tuple[str, tuple[str, ...]]] = [
         "imposto sobre a propriedade territorial rural", "nirf", " vtn",
         "valor da terra nua", "documento de informacao e apuracao do itr",
     )),
-    ("matricula", (
-        "certidao de matricula", "certidão de matrícula", "registro de imoveis",
-        "registro de imóveis", "livro no 2", "livro nº 2", "matricula no",
-        "matrícula nº", "cartorio de registro", "cartório de registro",
+    ("sigef", (
+        "sigef", "memorial descritivo", "georreferenciamento", "georreferenciado",
+        "vertices", "vértices", "certificacao do imovel", "certificação do imóvel",
     )),
     ("rg_cpf", (
         "registro geral", "carteira de identidade", "cedula de identidade",
@@ -166,9 +184,11 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("cartorio", "cartorio", "matricula", "cartorio"),
         _FieldSpec("area_registrada_ha", "area_registrada_ha", "matricula", "area_ha", "ha"),
         _FieldSpec("denominacao", "denominacao", "matricula", "denominacao_imovel"),
+        _FieldSpec("denominacao_anterior", "denominacao_anterior", "matricula", "denominacao_imovel"),
         _FieldSpec("averbacao_app", "averbacao_app", "matricula", "averbacao_app"),
         _FieldSpec("averbacao_rl", "averbacao_rl", "matricula", "averbacao_rl"),
         _FieldSpec("numero_geo", "numero_geo", "matricula", "geo_certificacao_codigo"),
+        _FieldSpec("codigo_certificacao", "codigo_certificacao", "matricula", "geo_certificacao_codigo"),
         _FieldSpec("onus", "onus", "matricula", "onus_gravames"),
     ],
     "itr": [
@@ -245,18 +265,31 @@ Retorne APENAS JSON. Campos ausentes = null.
 TEXTO:
 {text}""",
     "matricula": """Esta é uma CERTIDÃO DE MATRÍCULA / Registro de Imóveis. Extraia.
-Procure em TODO o texto (a matrícula costuma ter várias seções). Retorne APENAS JSON.
-Campos ausentes = null; proprietarios = lista [{"nome","cpf"}].
+Procure em TODO o texto (a matrícula tem várias seções: abertura, registros R-,
+averbações AV-). Retorne APENAS JSON. Campos ausentes = null.
+Instruções de completude:
+- "denominacao": o nome ATUAL do imóvel. Se a matrícula menciona nome ANTERIOR/
+  histórico (ex.: "anteriormente denominada X", outra denominação na cadeia),
+  inclua-o em "denominacao_anterior".
+- "proprietarios": cadeia de titulares (lista [{"nome","cpf"}]).
+- "onus": descreva CADA gravame (hipoteca/penhor/alienação) com TIPO, CREDOR e
+  VALOR quando constarem (ex.: "Hipoteca (R.05) - credor Banco X - R$ 1.000.000").
+- "averbacao_rl"/"averbacao_app": área e referência da averbação (ex.: matrícula
+  de origem da RL).
+- "codigo_certificacao": código do georreferenciamento (SIGEF/INCRA), se houver,
+  SEM texto de vértice grudado.
 {
   "numero_matricula": null,
   "registro_livro_folha": null,
   "cartorio": null,
   "area_registrada_ha": null,
   "denominacao": null,
+  "denominacao_anterior": null,
   "proprietarios": [{"nome": null, "cpf": null}],
   "averbacao_app": null,
   "averbacao_rl": null,
   "numero_geo": null,
+  "codigo_certificacao": null,
   "onus": null,
   "confidence": {}
 }
@@ -310,6 +343,16 @@ def _is_empty(value: Any) -> bool:
     return value in (None, "", [], {}) or (isinstance(value, str) and not value.strip())
 
 
+def _value_key(value: Any) -> str:
+    """Chave normalizada de um valor extraído, para deduplicação (4c).
+
+    Escalares: string normalizada (trim + minúsculas). Listas/dicts: JSON
+    ordenado e estável."""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    return re.sub(r"\s+", " ", str(value).strip().lower())
+
+
 def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingField]:
     """Mapeia o JSON extraído → linhas de staging (sem persistir).
 
@@ -319,7 +362,10 @@ def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingF
     if not isinstance(parsed, dict):
         return []
 
+    from app.services.field_validators import check_format  # noqa: PLC0415
+
     rows: list[StagingField] = []
+    seen_keys: set[tuple[Any, ...]] = set()  # dedup intra-doc (campo+hint+valor)
     hint_key = _HINT_FROM_KEY.get(doc_type)
     doc_hint = parsed.get(hint_key) if hint_key else None
     doc_hint = str(doc_hint) if not _is_empty(doc_hint) else None
@@ -328,13 +374,26 @@ def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingF
         value = parsed.get(spec.json_key)
         if _is_empty(value):
             continue
+        # 4c — dedup no MESMO doc: campo+hint+valor repetido vira 1 linha.
+        dedup_key = (spec.field_name, doc_hint, _value_key(value))
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
         fv: dict[str, Any] = {"value": value}
         if spec.unidade:
             fv["unidade"] = spec.unidade
+        confidence = _conf_for(parsed, spec.json_key)
+        # 4b — validação de formato: fora do esperado → rebaixa + marca p/ revisão,
+        # SEM tocar no valor bruto (preservado em fv["value"]).
+        fmt_ok = check_format(spec.field_name, value)
+        if fmt_ok is False:
+            fv["format_ok"] = False
+            confidence = "low"
         rows.append(StagingField(
             field_name=spec.field_name,
             field_value=fv,
-            confidence=_conf_for(parsed, spec.json_key),
+            confidence=confidence,
             target_entity=spec.target_entity,
             target_field=spec.target_field,
             matricula_hint=doc_hint,
@@ -442,7 +501,29 @@ def extract_and_stage(
         return StagingResult(doc_type=dt, rows_written=0, skipped_reason="extração vazia/falha")
 
     fields = build_staging_fields(dt, parsed)
+
+    # 4c — dedup na persistência: não recriar linha já existente (mesma fonte +
+    # campo + hint + valor). Resolve a triplicação de re-extrações. Valores
+    # DIFERENTES da mesma fonte são mantidos (divergência interna → insumo matriz).
+    scope = db_session.query(ExtractedFieldStaging).filter(
+        ExtractedFieldStaging.tenant_id == tenant_id,
+        ExtractedFieldStaging.source_doc_type == dt,
+    )
+    if process_id is not None:
+        scope = scope.filter(ExtractedFieldStaging.process_id == process_id)
+    elif document_id is not None:
+        scope = scope.filter(ExtractedFieldStaging.document_id == document_id)
+    seen: set[tuple[Any, ...]] = set()
+    for existing in scope.all():
+        ev = existing.field_value.get("value") if isinstance(existing.field_value, dict) else existing.field_value
+        seen.add((existing.field_name, existing.matricula_hint, _value_key(ev)))
+
+    written = 0
     for f in fields:
+        key = (f.field_name, f.matricula_hint, _value_key(f.field_value.get("value")))
+        if key in seen:
+            continue
+        seen.add(key)
         db_session.add(ExtractedFieldStaging(
             tenant_id=tenant_id,
             process_id=process_id,
@@ -458,13 +539,14 @@ def extract_and_stage(
             created_by_agent=created_by_agent,
             ai_job_id=ai_job_id,
         ))
+        written += 1
     db_session.flush()
 
     logger.info(
-        "ficha01_extraction: staging doc_type=%s document_id=%s process_id=%s rows=%d",
-        dt, document_id, process_id, len(fields),
+        "ficha01_extraction: staging doc_type=%s document_id=%s process_id=%s rows=%d (dedup: %d→%d)",
+        dt, document_id, process_id, written, len(fields), written,
     )
-    return StagingResult(doc_type=dt, rows_written=len(fields), fields=fields)
+    return StagingResult(doc_type=dt, rows_written=written, fields=fields)
 
 
 # ---------------------------------------------------------------------------

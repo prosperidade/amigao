@@ -88,7 +88,13 @@ class ExtratorAgent(BaseAgent):
                     "fields_count": len(aggregated),
                     "resolved_from_process": self.ctx.process_id,
                 }
-            # Processo sem documentos com OCR ainda → cai no skip orientativo abaixo.
+            # Sem documento NOVO com OCR: em vez de devolver "0 campos, tipo outro"
+            # (enganoso — a UI ficava como se nada tivesse sido extraído), REUTILIZA
+            # a extração já gravada no staging do processo e a repassa à chain.
+            reused = self._reuse_staging_fields(self.ctx.process_id)
+            if reused is not None:
+                return reused
+            # Genuinamente sem nada extraído ainda → skip orientativo abaixo.
 
         # Se nao tem document_id nem text, retorna vazio (permite chain continuar)
         # e dá orientação acionável — antes a mensagem "Nenhum documento fornecido"
@@ -204,6 +210,49 @@ class ExtratorAgent(BaseAgent):
             logging.getLogger(__name__).warning(
                 "extrator: staging Ficha 01 falhou (ignorado) doc=%s: %s", document_id, exc
             )
+
+    def _reuse_staging_fields(self, process_id: int | None) -> dict[str, Any] | None:
+        """Reúsa a extração já gravada no staging do processo (chain sem doc novo).
+
+        Evita o "0 campos, tipo outro" enganoso: se há staging do processo, devolve
+        um resultado EXPLÍCITO ("extração reutilizada, N campos") carregando os
+        campos para os próximos agentes da chain. None se não há nada a reutilizar.
+        """
+        if not process_id:
+            return None
+        from app.models.extracted_field_staging import ExtractedFieldStaging  # noqa: PLC0415
+
+        rows = (
+            self.ctx.session.query(ExtractedFieldStaging)
+            .filter(
+                ExtractedFieldStaging.tenant_id == self.ctx.tenant_id,
+                ExtractedFieldStaging.process_id == process_id,
+            )
+            .order_by(ExtractedFieldStaging.id)
+            .all()
+        )
+        if not rows:
+            return None
+        aggregated: dict[str, Any] = {}
+        for r in rows:
+            val = r.field_value.get("value") if isinstance(r.field_value, dict) else r.field_value
+            fname = str(r.field_name)
+            if fname not in aggregated and val not in (None, "", {}, []):
+                aggregated[fname] = val
+        fontes = sorted({str(r.source_doc_type) for r in rows if r.source_doc_type})
+        return {
+            "extracted_fields": aggregated,
+            "doc_type": "reutilizado",
+            "document_id": None,
+            "fields_count": len(aggregated),
+            "reused": True,
+            "staging_rows": len(rows),
+            "reason": (
+                f"Extração reutilizada: {len(rows)} linha(s) de staging já existentes "
+                f"no processo {process_id} (fontes: {', '.join(fontes) or '—'}); nenhum "
+                f"documento novo com OCR. Campos repassados à chain."
+            ),
+        }
 
     def _fallback_prompts(self) -> dict[str, str]:
         return {
