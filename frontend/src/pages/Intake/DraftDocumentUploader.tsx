@@ -25,6 +25,9 @@ const PUT_TIMEOUT_MS = 45_000;
 // para cobrir cold start do Render e travamento em head_bucket.
 const BACKEND_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 5_000;
+// Estados de OCR terminais — não há mais o que aguardar. 'not_required' cobre
+// arquivos geoespaciais (geometria), que ficam armazenados sem leitura de texto.
+const TERMINAL_OCR_STATUS = new Set(['done', 'failed', 'not_required']);
 // Pool de uploads simultâneos — substitui o for-await sequencial do original.
 const UPLOAD_CONCURRENCY = 4;
 // 3 tentativas no total; backoff de 1s, 2s e 4s entre elas.
@@ -139,6 +142,10 @@ export default function DraftDocumentUploader({
   const [appliedFields, setAppliedFields] = useState<Set<string>>(new Set());
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  // Liga o polling após disparar a leitura IA: o /import marca os docs como
+  // 'pending' (fila), não 'processing', então sem essa flag o polling nunca
+  // começava e o card congelava em "Aguardando" mesmo com o job concluído.
+  const [awaitingOcr, setAwaitingOcr] = useState(false);
   // Espelho síncrono de `pending` — o handler de retry precisa ler o item atual
   // sem depender do timing do updater de setState.
   const pendingRef = useRef<PendingItem[]>([]);
@@ -170,18 +177,28 @@ export default function DraftDocumentUploader({
     if (draftId) refresh();
   }, [draftId, refresh]);
 
-  // Polling leve enquanto houver doc em 'processing' — refetch a cada 5s.
+  // Polling leve a cada 5s enquanto houver doc ATIVO. "Ativo" = 'processing'
+  // (worker lendo agora) OU, após a leitura IA ter sido disparada nesta sessão,
+  // qualquer status não-terminal ('pending' na fila). Antes a condição era só
+  // 'processing' — mas o /import marca os docs como 'pending', então o polling
+  // nunca iniciava e o card ficava preso em "Aguardando" mesmo o job concluindo.
   useEffect(() => {
     if (!draftId) return;
     refreshExtraction();
-    const hasProcessing = docs.some((d) => d.ocr_status === 'processing');
-    if (!hasProcessing) return;
+    const active =
+      docs.some((d) => d.ocr_status === 'processing') ||
+      (awaitingOcr && docs.some((d) => !TERMINAL_OCR_STATUS.has(d.ocr_status ?? 'pending')));
+    if (!active) {
+      // Tudo terminal — desliga a flag para não reabrir polling à toa.
+      if (awaitingOcr) setAwaitingOcr(false);
+      return;
+    }
     const timer = window.setInterval(() => {
       refresh();
       refreshExtraction();
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [draftId, docs, refresh, refreshExtraction]);
+  }, [draftId, docs, awaitingOcr, refresh, refreshExtraction]);
 
   const setItem = useCallback((localId: string, patch: Partial<PendingItem>) => {
     setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, ...patch } : p)));
@@ -372,8 +389,14 @@ export default function DraftDocumentUploader({
     setImporting(true);
     setError(null);
     try {
-      await api.post(`/intake/drafts/${draftId}/import`, {});
+      const { data } = await api.post<{ docs_queued: number; docs_skipped_geo?: number }>(
+        `/intake/drafts/${draftId}/import`,
+        {},
+      );
       await refresh();
+      // Liga o polling só se algo foi de fato enfileirado pro OCR. Arquivos
+      // geoespaciais entram como docs_skipped_geo (armazenados, sem leitura).
+      if (data.docs_queued > 0) setAwaitingOcr(true);
       onImportTriggered?.();
     } catch (err: unknown) {
       setError(errorMessage(err) || 'Erro ao disparar leitura IA');
@@ -499,6 +522,13 @@ export default function DraftDocumentUploader({
                     {d.document_type ?? 'sem tipo'}
                     {d.file_size_bytes > 0 && ` · ${Math.round(d.file_size_bytes / 1024)} KB`}
                   </div>
+                  {/* Mensagem honesta para arquivos geoespaciais (geometria):
+                      armazenados sem leitura de texto; processamento geo é o gap D1. */}
+                  {d.ocr_status === 'not_required' && (
+                    <div className="mt-0.5 text-[11px] text-cyan-700">
+                      🗺️ Geometria armazenada — processamento em breve (sem leitura de texto).
+                    </div>
+                  )}
                 </div>
                 <StatusPill status={d.ocr_status} />
                 {/* Botão remover SEMPRE visível, qualquer ocr_status */}
@@ -612,6 +642,7 @@ function StatusPill({ status }: { status: string | null }) {
     processing: { label: 'Em leitura', cls: 'bg-yellow-50 text-yellow-700' },
     done: { label: 'Lido', cls: 'bg-emerald-50 text-emerald-700' },
     failed: { label: 'Falhou', cls: 'bg-red-50 text-red-700' },
+    not_required: { label: 'Armazenado', cls: 'bg-cyan-50 text-cyan-700' },
   };
   const item = map[status ?? 'pending'] ?? map.pending;
   return (

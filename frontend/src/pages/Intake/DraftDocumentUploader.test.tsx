@@ -208,6 +208,85 @@ describe('DraftDocumentUploader — tentar novamente individual', () => {
   });
 });
 
+describe('DraftDocumentUploader — polling pós-import (fix/intake-geo-routing)', () => {
+  it('inicia polling após import mesmo com docs em "pending" e reflete "done"', async () => {
+    // Timers REAIS (como os testes de retry): o /import marca os docs como
+    // 'pending' (não 'processing'). Antes do fix o polling só ligava em
+    // 'processing', então nunca refazia o fetch e o card travava em "Aguardando".
+    let docStatus = 'pending';
+    let docGets = 0;
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.endsWith('/documents')) {
+        docGets += 1;
+        return Promise.resolve({
+          data: [
+            {
+              id: 5,
+              filename: 'matricula.pdf',
+              document_type: 'car',
+              document_category: null,
+              ocr_status: docStatus,
+              file_size_bytes: 10,
+              created_at: '2026-06-05T00:00:00Z',
+            },
+          ],
+        });
+      }
+      // extraction-results — irrelevante para este teste.
+      return Promise.resolve({
+        data: { draft_id: DRAFT_ID, docs_total: 1, docs_with_results: 0, by_document: [], suggestions: {} },
+      });
+    });
+    mockedApi.post.mockImplementation((url: string) => {
+      if (url.endsWith('/import')) {
+        return Promise.resolve({
+          data: { draft_id: DRAFT_ID, docs_queued: 1, task_ids: ['t'], docs_skipped_geo: 0 },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<DraftDocumentUploader draftId={DRAFT_ID} />);
+    await screen.findByText('Aguardando'); // carga inicial: doc pending
+
+    // Dispara a leitura IA — backend deixa o doc 'pending' (na fila do worker).
+    fireEvent.click(screen.getByText(/Ler documentos com IA/));
+    // O refresh imediato do import roda, mas o doc segue 'pending'.
+    await waitFor(() => expect(docGets).toBeGreaterThanOrEqual(2));
+    expect(screen.getByText('Aguardando')).toBeInTheDocument();
+
+    // O worker conclui no backend. Só o POLLING pode entregar isso ao card —
+    // não há mais nenhum evento de UI. Um tick do intervalo (5s) deve refletir.
+    const getsBeforeTick = docGets;
+    docStatus = 'done';
+    await waitFor(() => expect(screen.getByText('Lido')).toBeInTheDocument(), { timeout: 8000 });
+    // Prova que houve refetch por polling (não só o refresh do import).
+    expect(docGets).toBeGreaterThan(getsBeforeTick);
+  }, 15000);
+});
+
+describe('DraftDocumentUploader — arquivo geoespacial (fix/intake-geo-routing)', () => {
+  it('mostra "Armazenado" + mensagem honesta para doc not_required', async () => {
+    mockedApi.get.mockResolvedValue({
+      data: [
+        {
+          id: 8,
+          filename: 'imovel.kml',
+          document_type: 'geoespacial',
+          document_category: 'espaciais',
+          ocr_status: 'not_required',
+          file_size_bytes: 12,
+          created_at: '2026-06-05T00:00:00Z',
+        },
+      ],
+    });
+    render(<DraftDocumentUploader draftId={DRAFT_ID} />);
+    await waitFor(() => expect(screen.getByText('imovel.kml')).toBeInTheDocument());
+    expect(screen.getByText('Armazenado')).toBeInTheDocument();
+    expect(screen.getByText(/Geometria armazenada/)).toBeInTheDocument();
+  });
+});
+
 describe('DraftDocumentUploader — render base', () => {
   it('renderiza documento existente com badge', async () => {
     mockedApi.get.mockResolvedValue({
