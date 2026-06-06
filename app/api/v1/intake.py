@@ -987,17 +987,19 @@ def get_draft_extraction_results(
     for doc_id, j in latest_by_doc.items():
         d = doc_by_id[doc_id]
         fields = (j.result or {}).get("extracted_fields") or {}
+        # `confidence` (mapa de scores) é metadado, não campo — fora do display/contagem.
+        display_fields = {k: v for k, v in fields.items() if k not in _RESERVED_EXTRACTION_KEYS}
         by_document.append(IntakeExtractedDocument(
             document_id=doc_id,
             filename=d.original_file_name,
             document_type=d.document_type,
             ocr_status=d.ocr_status.value if d.ocr_status else None,
-            extracted_fields=fields,
-            fields_count=len(fields),
+            extracted_fields=display_fields,
+            fields_count=len(display_fields),
             extracted_at=j.finished_at.isoformat() if j.finished_at else None,
         ))
         # Agrega sugestões: primeiro valor não-vazio por chave vence.
-        for k, v in fields.items():
+        for k, v in display_fields.items():
             if v and k not in suggestions:
                 suggestions[k] = v
 
@@ -1138,6 +1140,24 @@ def _load_draft_or_404(db, draft_id, tenant_id) -> IntakeDraft:
     return draft
 
 
+# Chaves do JSON do extrator que NÃO são campos extraídos (metadado) — não devem
+# virar linha no preview. `confidence` é um mapa campo→high|medium|low.
+_RESERVED_EXTRACTION_KEYS = {"confidence"}
+_CONFIDENCE_SCORE = {"high": 0.95, "medium": 0.8, "low": 0.5}
+
+
+def _confidence_to_score(value: Any) -> Optional[float]:
+    """Normaliza a confiança do extrator (string high|medium|low, ou número) para
+    o score 0–1 que o badge do PreviewPanel espera. Desconhecido → None (s/ score)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return _CONFIDENCE_SCORE.get(value.strip().lower())
+    return None
+
+
 @router.get(
     "/drafts/{draft_id}/extracted-fields",
     response_model=IntakeExtractedFieldsResponse,
@@ -1195,16 +1215,20 @@ def get_draft_extracted_fields(
     for doc_id, j in latest_by_doc.items():
         d = doc_by_id[doc_id]
         fields = (j.result or {}).get("extracted_fields") or {}
+        # O extrator inclui um mapa `confidence` (campo → high|medium|low) no JSON;
+        # é metadado, não um campo — usado para pontuar cada campo, nunca exibido.
+        conf_map = fields.get("confidence")
+        conf_map = conf_map if isinstance(conf_map, dict) else {}
         for k, raw in fields.items():
-            if k in seen:
+            if k in seen or k in _RESERVED_EXTRACTION_KEYS:
                 continue
             # value pode ser escalar ou {"value":..., "confidence":...}
             if isinstance(raw, dict) and "value" in raw:
                 value = raw.get("value")
-                confidence = raw.get("confidence")
+                confidence = _confidence_to_score(raw.get("confidence"))
             else:
                 value = raw
-                confidence = None
+                confidence = _confidence_to_score(conf_map.get(k))
             if value in (None, "", []):
                 continue
             manual = _manual_value_for(form_data, k)
