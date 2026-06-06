@@ -7,9 +7,76 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from sqlalchemy.exc import (
+    DataError,
+    IntegrityError,
+    PendingRollbackError,
+    ProgrammingError,
+)
+
 from app.core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+# Erros DETERMINÍSTICOS: retry NUNCA resolve (schema ausente/errado, violação de
+# constraint, input inválido) — só esconde o problema por horas em retry storm.
+# Incidente 2026-06-06: `extracted_field_staging` não migrada em prod →
+# UndefinedTable (ProgrammingError) → sessão abortada → `db.commit()` levantava
+# PendingRollbackError → retry de 60s sem fim. Estes erros marcam o job `failed`
+# com erro legível e PARAM. `OperationalError` NÃO entra aqui de propósito: é a
+# classe transitória (conexão caída, deadlock) — essa continua com retry.
+_DETERMINISTIC_ERRORS: tuple[type[Exception], ...] = (
+    ValueError,            # pré-condição / input inválido (já tratado na rodada2)
+    ProgrammingError,      # UndefinedTable, UndefinedColumn, erro de sintaxe SQL
+    IntegrityError,        # FK / unique / not-null
+    DataError,             # valor fora de range/tipo
+    PendingRollbackError,  # sessão já abortada por erro determinístico anterior
+)
+
+
+def _persist_failed_job(
+    *,
+    tenant_id: int,
+    user_id: Optional[int],
+    process_id: Optional[int],
+    agent_name: str,
+    job_type: Any,
+    error: str,
+) -> None:
+    """Best-effort: registra um AIJob `failed` numa sessão LIMPA.
+
+    Quando o erro determinístico envenena a transação, o job `running` criado
+    pelo agente é descartado no rollback (some do histórico). Aqui recriamos um
+    registro `failed` com o erro legível, em sessão nova, para a execução não
+    desaparecer da UI. Nunca levanta (best-effort)."""
+    if job_type is None:
+        return
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from app.db.session import SessionLocal  # noqa: PLC0415
+    from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(UTC)
+        db.add(AIJob(
+            tenant_id=tenant_id,
+            created_by_user_id=user_id,
+            entity_type="process" if process_id else "agent",
+            entity_id=process_id,
+            job_type=job_type,
+            status=AIJobStatus.failed,
+            agent_name=agent_name,
+            error=str(error)[:2000],
+            started_at=now,
+            finished_at=now,
+        ))
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 — best-effort, não pode derrubar a task
+        db.rollback()
+        logger.warning("agent_task: falha ao persistir job failed de %s: %s", agent_name, exc)
+    finally:
+        db.close()
 
 
 @celery_app.task(
@@ -32,6 +99,7 @@ def run_agent(
     from app.db.session import SessionLocal  # noqa: PLC0415
 
     db = SessionLocal()
+    job_type = None
     try:
         ctx = AgentContext(
             tenant_id=tenant_id,
@@ -41,6 +109,7 @@ def run_agent(
             metadata=metadata or {},
         )
         agent = AgentRegistry.create(agent_name, ctx)
+        job_type = getattr(agent, "job_type", None)
         result = agent.run()
         db.commit()
 
@@ -57,13 +126,18 @@ def run_agent(
             "requires_review": result.requires_review,
             "error": result.error,
         }
-    except ValueError as exc:
-        # fix/teste-isis-rodada2 (item C): erro deterministico (pre-condicao /
-        # input invalido) NAO deve entrar em retry storm — retry nunca resolve e
-        # a UI fica presa em "agendada". Falha rapido e visivel. O job 'failed'
-        # ja foi persistido por BaseAgent.run() (job criado antes da validacao).
-        db.commit()
-        logger.warning("agent_task: %s falhou (deterministico, sem retry): %s", agent_name, exc)
+    except _DETERMINISTIC_ERRORS as exc:
+        # fix/teste-isis-rodada2 + hardening 2026-06-06: erro determinístico
+        # (pré-condição, schema ausente, constraint) NÃO entra em retry storm —
+        # retry nunca resolve e a UI fica presa. Falha rápido e visível. Rollback
+        # limpa a sessão (pode estar abortada) e recriamos o job `failed` numa
+        # sessão nova (o `running` foi descartado no rollback).
+        db.rollback()
+        logger.warning("agent_task: %s falhou (determinístico, sem retry): %s", agent_name, exc)
+        _persist_failed_job(
+            tenant_id=tenant_id, user_id=user_id, process_id=process_id,
+            agent_name=agent_name, job_type=job_type, error=str(exc),
+        )
         return {
             "status": "failed",
             "agent": agent_name,
@@ -74,8 +148,9 @@ def run_agent(
             "error": str(exc),
         }
     except Exception as exc:
+        # Transitório (rede, timeout, deadlock/OperationalError) — retry resolve.
         db.rollback()
-        logger.error("agent_task: %s failed: %s", agent_name, exc)
+        logger.error("agent_task: %s failed (transitório, retry): %s", agent_name, exc)
         raise self.retry(exc=exc, countdown=30)
     finally:
         db.close()
@@ -129,9 +204,21 @@ def run_agent_chain(
                 for r in results
             ],
         }
-    except Exception as exc:
+    except _DETERMINISTIC_ERRORS as exc:
+        # Erro determinístico em qualquer passo da chain (schema ausente,
+        # constraint, input inválido) — retry nunca resolve. Para e reporta.
         db.rollback()
-        logger.error("agent_chain_task: %s failed: %s", chain_name, exc)
+        logger.warning("agent_chain_task: %s falhou (determinístico, sem retry): %s", chain_name, exc)
+        return {
+            "status": "failed",
+            "chain": chain_name,
+            "steps": [],
+            "error": str(exc),
+        }
+    except Exception as exc:
+        # Transitório (rede, timeout, deadlock) — retry resolve.
+        db.rollback()
+        logger.error("agent_chain_task: %s failed (transitório, retry): %s", chain_name, exc)
         raise self.retry(exc=exc, countdown=60)
     finally:
         db.close()

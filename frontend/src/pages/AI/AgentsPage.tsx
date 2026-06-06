@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import {
   Bot, Zap, Clock, CheckCircle2, XCircle, AlertCircle,
@@ -109,6 +110,10 @@ export default function AgentsPage() {
     onSuccess: () => {
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs-global'] }), 2000);
     },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg ?? 'Falha ao executar o agente.');
+    },
   });
 
   const runChainMutation = useMutation({
@@ -121,6 +126,10 @@ export default function AgentsPage() {
       }).then(r => r.data),
     onSuccess: () => {
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs-global'] }), 2000);
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg ?? 'Falha ao executar a chain.');
     },
   });
 
@@ -144,6 +153,11 @@ export default function AgentsPage() {
     },
     onSuccess: () => {
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs-global'] }), 2000);
+    },
+    onError: (err: unknown) => {
+      // A UI nunca pode ficar "aguardando" sobre um disparo que falhou (404/500).
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg ?? 'Falha ao disparar a extração do processo.');
     },
   });
 

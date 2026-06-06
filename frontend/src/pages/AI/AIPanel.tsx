@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import {
   Zap, Clock, CheckCircle2, XCircle, AlertCircle,
@@ -96,6 +97,10 @@ export default function AIPanel({ processId, processDemandType, processDescripti
     onSuccess: () => {
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs', processId] }), 2000);
     },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg ?? 'Falha ao executar o agente.');
+    },
   });
 
   const runChainMutation = useMutation<ChainRunResponse>({
@@ -108,6 +113,10 @@ export default function AIPanel({ processId, processDemandType, processDescripti
       }).then(r => r.data),
     onSuccess: () => {
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['ai-jobs', processId] }), 2000);
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg ?? 'Falha ao executar a chain.');
     },
   });
 

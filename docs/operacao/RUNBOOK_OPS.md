@@ -120,6 +120,39 @@ docker compose up -d --build
 
 > **Cuidado com migrations:** se a versão anterior usa schema antigo, rodar `alembic downgrade` antes de subir. Migration sem reversa é dívida operacional — evitar.
 
+## Migrations em produção
+
+> **Lição (incidente 2026-06-06):** *deploy de código ≠ migration aplicada.* As Fases 1-4 subiram em prod mas a migration do `extracted_field_staging` não foi aplicada (o Render só deploya código). O extrator explodia ao gravar (`UndefinedTable`) e a chain entrava em retry storm — a sócia validou sobre um sistema quebrado. **Validação de fase inclui o banco de prod.**
+
+### O que acontece no deploy (automático desde 2026-06-06)
+
+- **Render (prod):** o serviço **`regente-api`** tem `preDeployCommand: alembic upgrade head` (em `render.yaml`). Roda na imagem recém-buildada, **antes** da nova versão entrar no ar — então o schema já está migrado quando API e worker sobem. **Só a API** roda migration (o worker não — evita corrida entre serviços). Idempotente (no-op quando já está em `head`). Usa `MIGRATE_DATABASE_URL` (conexão direta, porta 5432) via `alembic/env.py`.
+- **Dev (docker-compose):** o serviço `api` roda `python -m app.db.init_db` no boot, que aplica `alembic upgrade head`. Paridade com prod garantida.
+
+### Como verificar (pós-deploy)
+
+```bash
+# No Render Shell do serviço regente-api:
+alembic current        # deve mostrar a revisão = head
+alembic heads          # exatamente 1 head (sem branches divergentes)
+```
+
+Ou pela aplicação: `GET /health` deve responder 200 com os componentes verdes (uma tabela ausente derruba endpoints que a usam).
+
+### Aplicar manualmente em emergência
+
+Se um deploy falhou no `preDeployCommand` (a release não entra no ar — o deploy aborta) ou se for preciso aplicar fora de um deploy:
+
+```bash
+# Render Shell do regente-api (a imagem tem alembic + app + MIGRATE_DATABASE_URL):
+alembic current        # ver onde está
+alembic upgrade head   # aplicar pendentes (idempotente)
+# Em rollback de schema (raro, com migration reversível):
+alembic downgrade -1
+```
+
+> Se o `preDeployCommand` falhar, o Render **aborta o deploy** e mantém a versão anterior no ar — o sintoma vira "deploy não promove", não "sistema quebrado silenciosamente". É o comportamento desejado.
+
 ## Operação diária
 
 ### Verificar saúde geral
