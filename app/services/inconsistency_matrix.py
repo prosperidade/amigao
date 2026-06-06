@@ -13,6 +13,18 @@ aceito/rejeitado é do consultor (Fase 4) — não é marcada aqui.
 Gap D1 (sem `Property.geom`): linhas técnicas (APP/hidrografia/supressões/
 cobertura, vindas das `pendencias_rat`) são REGISTRADAS como `critico` com
 `profundidade="tecnica"` — sem confronto espacial real.
+
+Calibração caso #11 (Fazenda São Jorge — dump real de produção, 2026-06-06):
+- ÁREA em DOIS NÍVEIS: por matrícula (certidão×CCIR×ITR×SIGEF, mesmo
+  `matricula_hint`) e do imóvel (CAR/RAT × soma das matrículas). Imóvel muito
+  maior que a soma conhecida ⇒ ATENÇÃO de vínculo (matrícula faltante), não
+  falsa divergência. Inclui a área do RAT (`area_vetorizada_ha`).
+- PENDÊNCIAS do RAT: o tema é casado por categoria+detalhamento+recomendação
+  (as categorias do órgão são genéricas — "Unidades de Conservação",
+  "Inconsistência Adicional"; o conteúdo vive no detalhamento).
+- SIGEF: valida presença REAL de código + status (não só área).
+- DICIONÁRIO DE SINÔNIMOS por item canônico (constantes abaixo), construído a
+  partir da medição do staging real + `_FIELD_SPECS` da Fase 2.
 """
 
 from __future__ import annotations
@@ -27,6 +39,62 @@ from typing import Any, Optional
 # Tolerância de área: ≤ 0,5% entre fontes ⇒ divergência de transcrição (pequena,
 # justificável); acima ⇒ de fundo. Diferença exatamente 0 ⇒ consistente.
 AREA_TOLERANCE_PCT = Decimal("0.005")
+
+# Imóvel (CAR/RAT) ≥ 1,5× a soma das matrículas conhecidas ⇒ provável matrícula
+# faltante / vínculo incompleto — vira ATENÇÃO (pedir vínculo), não divergência.
+MISSING_MATRICULA_FACTOR = Decimal("1.5")
+
+
+# ---------------------------------------------------------------------------
+# Dicionário de sinônimos por item canônico
+# ---------------------------------------------------------------------------
+# Origem dos nomes: MEDIÇÃO do staging real (caso #11) + `_FIELD_SPECS` da Fase 2
+# (`app/services/ficha01_extraction.py`). NÃO inventar nomes — adicionar aqui
+# quando a medição revelar uma variação nova.
+#
+# Área é resolvida por (doc_type → field_names) porque o MESMO nome muda de nível
+# conforme o documento: `area_declarada_ha` é do imóvel no CAR e da matrícula no
+# ITR. `_AREA_LEVEL` diz o nível de cada fonte.
+_AREA_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "matricula": ("area_registrada_ha", "area_ha", "area_total", "area_total_imovel"),
+    "sigef": ("area_georreferenciada_ha",),
+    "ccir": ("area_ha", "area_declarada_ha"),
+    "itr": ("area_declarada_ha", "area_ha"),
+    "car": ("area_declarada_ha", "area_total", "area_total_imovel"),
+    "rat": ("area_vetorizada_ha", "area_grafica_ha"),
+}
+_AREA_LEVEL: dict[str, str] = {
+    "matricula": "matricula", "sigef": "matricula", "ccir": "matricula",
+    "itr": "matricula", "car": "imovel", "rat": "imovel",
+}
+_DENOM_SYNONYMS: tuple[str, ...] = (
+    "denominacao", "denominacao_imovel", "nome_imovel", "nome_imovel_rural",
+    "averbacao_denominacao",
+)
+_INCRA_SYNONYMS: tuple[str, ...] = (
+    "codigo_sncr_incra", "codigo_incra", "codigo_incra_sncr",
+)
+
+# Pendências do RAT → tema técnico. Prioridade importa (acesso/UC/supressão antes
+# de cobertura; documentos por último). Casado contra categoria+detalhamento+
+# recomendação normalizados.
+_TEMA_LABEL: dict[str, str] = {
+    "uc": "Sobreposição com Unidade(s) de Conservação",
+    "supressao": "Supressão de vegetação / antropização pós-2008",
+    "hidrografia": "Hidrografia / APP / nascentes não declaradas",
+    "cobertura": "Cobertura do solo",
+}
+_TEMA_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("acesso", ("acesso", "via de acesso", "servidao")),
+    ("uc", ("unidade de conservacao", "unidades de conservacao", "conservacao",
+            "sobreposic", "area de protecao ambiental")),
+    ("supressao", ("supress", "antropizada apos", "pos-2008", "apos 22 de julho",
+                   "22 de julho de 2008", "desmat")),
+    ("hidrografia", ("hidrograf", "nascente", "curso d", "drenagem")),
+    ("cobertura", ("cobertura do solo", "vetorizac", "uso do solo", "remanescente", "vegetac")),
+    ("documentos", ("apresentar", "documento", "certidao", "cpf", "rg do",
+                    "licenca", "georreferenciamento", "inteiro teor")),
+)
 
 
 class MatrixSituacao(str, enum.Enum):
@@ -154,7 +222,9 @@ def _group_sources(rows: list[Any]) -> dict[str, _Source]:
             continue
         if dt == "rat" and fname == "pendencias_rat":
             if isinstance(val, list):
-                src.pendencias = val
+                # acumula: o staging real pode ter N linhas pendencias_rat (3× no
+                # caso #11). A dedup por TEMA depois colapsa as repetições.
+                src.pendencias.extend(val)
             continue
         if fname:
             src.fields[fname] = (val, row)
@@ -177,6 +247,92 @@ def _row_of(src: Optional[_Source], *fnames: str) -> Any:
         if fn in src.fields:
             return src.fields[fn][1]
     return None
+
+
+def _rat_has(rat: Optional[_Source], termos: tuple[str, ...]) -> bool:
+    if rat is None:
+        return False
+    for pend in rat.pendencias:
+        cat = _norm_text(pend.get("categoria") if isinstance(pend, dict) else pend)
+        det = _norm_text(pend.get("detalhamento") if isinstance(pend, dict) else "")
+        if any(t in cat or t in det for t in termos):
+            return True
+    return False
+
+
+def _classificar_pendencia(pend: dict[str, Any]) -> Optional[str]:
+    """Tema de uma pendência do RAT, casando categoria+detalhamento+recomendação.
+
+    As categorias reais do órgão são genéricas ("Unidades de Conservação",
+    "Inconsistência Adicional", "Documentos") — o conteúdo discriminante mora no
+    detalhamento. Por isso o casamento NÃO pode ser só na categoria.
+
+    Casa em categoria+detalhamento, NÃO na recomendação: o texto-padrão do órgão
+    repete "área antropizada após 22 de julho de 2008" na recomendação de
+    cobertura, o que falsearia o tema como supressão.
+    """
+    texto = " ".join(
+        _norm_text(pend.get(k)) for k in ("categoria", "detalhamento")
+    )
+    texto = f" {texto} "
+    for tema, termos in _TEMA_KEYWORDS:
+        if any(t in texto for t in termos):
+            return tema
+    return None
+
+
+def _extrai_uc(pend: dict[str, Any]) -> Optional[str]:
+    """Tenta nomear a Unidade de Conservação no texto da pendência (best-effort).
+
+    O RAT do caso #11 só diz "uma ou mais Unidades de Conservação" (sem nome) →
+    devolve None e a linha fica genérica. Se um parecer nomear ("APA Pouso Alto"),
+    o nome é capturado. Degrada com elegância — nunca quebra.
+    """
+    blob = " ".join(str(pend.get(k) or "") for k in ("detalhamento", "recomendacao", "categoria"))
+    m = re.search(
+        r"\b(APA|ARIE|FLONA|REBIO|PARNA|Parque|Reserva|Esta[çc][ãa]o Ecol[óo]gica)\s+"
+        r"[A-ZÀ-Ý][\wÀ-ÿ'’\- ]{2,40}",
+        blob,
+    )
+    return m.group(0).strip() if m else None
+
+
+def _collect_areas(
+    rows: list[Any],
+) -> tuple[dict[str, dict[str, tuple[float, Any]]], dict[str, tuple[float, Any]]]:
+    """Observações de área separadas por NÍVEL (caso #11, item 3).
+
+    Retorna ``(por_matricula, por_imovel)``:
+    - ``por_matricula[hint][doc_type] = (valor, row)`` — certidão/sigef/ccir/itr.
+    - ``por_imovel[doc_type] = (valor, row)`` — car/rat (imóvel inteiro).
+
+    Em duplicatas da MESMA fonte mantém o MAIOR valor: o staging real teve a área
+    do RAT às vezes mal-parseada (separador de milhar → '1.0107113' ≈ 1 ha em vez
+    de 1010,7113). Como a mesma fonte tem UMA área verdadeira, o maior recupera o
+    valor correto. (Qualidade da Fase 2 é achado à parte.)
+    """
+    por_matricula: dict[str, dict[str, tuple[float, Any]]] = {}
+    por_imovel: dict[str, tuple[float, Any]] = {}
+    for row in rows:
+        dt = (getattr(row, "source_doc_type", None) or "outro").lower()
+        fn = getattr(row, "field_name", None)
+        syns = _AREA_SYNONYMS.get(dt)
+        if not syns or fn not in syns:
+            continue
+        val = _to_float_br(_row_value(row))
+        if not val or val <= 0:
+            continue
+        if _AREA_LEVEL.get(dt) == "matricula":
+            hint = getattr(row, "matricula_hint", None) or "?"
+            bucket = por_matricula.setdefault(hint, {})
+            prev = bucket.get(dt)
+            if prev is None or val > prev[0]:
+                bucket[dt] = (val, row)
+        else:
+            prev = por_imovel.get(dt)
+            if prev is None or val > prev[0]:
+                por_imovel[dt] = (val, row)
+    return por_matricula, por_imovel
 
 
 # ---------------------------------------------------------------------------
@@ -203,84 +359,106 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
     linhas: list[MatrixRow] = []
     status_updates: list[tuple[Any, str]] = []
 
-    # --- area_total ------------------------------------------------------
+    # --- área — DOIS NÍVEIS (matrícula × imóvel) — Ficha 02 item 3 -------
+    por_matricula, por_imovel = _collect_areas(rows)
+
+    # nível matrícula: confronto entre fontes da MESMA matrícula
+    for hint in sorted(por_matricula):
+        fontes_mat = {lbl: v for lbl, (v, _) in por_matricula[hint].items()}
+        if len(fontes_mat) < 2:
+            continue  # 1 fonte só não confronta nada
+        vals = list(fontes_mat.values())
+        diff = max(vals) - min(vals)
+        pct = Decimal(str(diff)) / Decimal(str(max(vals))) if max(vals) else Decimal(0)
+        mat_rows = [r for (_v, r) in por_matricula[hint].values() if r is not None]
+        if diff == 0:
+            linhas.append(MatrixRow(
+                f"area_matricula:{hint}", f"Área — matrícula {hint} (ha)", fontes_mat,
+                MatrixSituacao.consistente.value,
+                "Áreas conferem entre as fontes da matrícula.", _destino("consistente")))
+            for r in mat_rows:
+                status_updates.append((r, "consistente"))
+        else:
+            subtipo = "transcricao" if pct <= AREA_TOLERANCE_PCT else "fundo"
+            linhas.append(MatrixRow(
+                f"area_matricula:{hint}", f"Área — matrícula {hint} (ha)", fontes_mat,
+                MatrixSituacao.divergente.value,
+                f"conciliar área da matrícula {hint}: diferença de {_fmt_ha(diff)} ha entre as fontes",
+                _destino("divergente", subtipo=subtipo), subtipo=subtipo))
+            for r in mat_rows:
+                status_updates.append((r, f"divergente_{subtipo}"))
+
+    # soma das matrículas conhecidas (preferindo certidão/matrícula → sigef → …)
     area_by_matricula: dict[str, float] = {}
-    area_rows: list[Any] = []
-    for mk in matricula_keys:
-        a = _to_float_br(_get(sources[mk], "area_registrada_ha", "area_ha"))
-        if a:
-            area_by_matricula[mk] = a
-            r = _row_of(sources[mk], "area_registrada_ha", "area_ha")
-            if r is not None:
-                area_rows.append(r)
+    soma_rows: list[Any] = []
+    for hint, bucket in por_matricula.items():
+        chosen = None
+        for lbl in ("matricula", "sigef", "ccir", "itr"):
+            if lbl in bucket:
+                chosen = bucket[lbl]
+                break
+        if chosen is None:
+            chosen = next(iter(bucket.values()))
+        area_by_matricula[hint] = chosen[0]
+        if chosen[1] is not None:
+            soma_rows.append(chosen[1])
     soma_matriculas = round(sum(area_by_matricula.values()), 4) if area_by_matricula else None
 
-    other_areas: dict[str, tuple[float, Any]] = {}
-    for key, fnames in (("car", ("area_declarada_ha",)), ("ccir", ("area_ha",)),
-                        ("itr", ("area_declarada_ha",)), ("sigef", ("area_georreferenciada_ha",))):
-        src = sources.get(key)
-        a = _to_float_br(_get(src, *fnames))
-        if a:
-            other_areas[key] = (a, _row_of(src, *fnames))
-
-    fontes_area: dict[str, Any] = dict(area_by_matricula)
-    if soma_matriculas is not None:
+    # nível imóvel: CAR/RAT × soma das matrículas
+    imovel_areas = {lbl: v for lbl, (v, _) in por_imovel.items()}
+    if soma_matriculas is not None and imovel_areas:
+        fontes_area: dict[str, Any] = dict(area_by_matricula)
         fontes_area["soma_matriculas"] = soma_matriculas
-    for k, (a, _) in other_areas.items():
-        fontes_area[k] = a
+        fontes_area.update(imovel_areas)
+        imovel_rows = [r for (_v, r) in por_imovel.values() if r is not None]
+        imovel_max = max(imovel_areas.values())
+        maxlbl = max(imovel_areas, key=lambda k: imovel_areas[k])
+        diff = abs(imovel_max - soma_matriculas)
+        base = max(imovel_max, soma_matriculas)
+        pct = Decimal(str(diff)) / Decimal(str(base)) if base else Decimal(0)
 
-    if soma_matriculas or other_areas:
-        anchor = None
-        if sigef and other_areas.get("sigef"):
-            anchor = other_areas["sigef"][0]
-        elif soma_matriculas:
-            anchor = soma_matriculas
-        elif other_areas:
-            anchor = next(iter(other_areas.values()))[0]
-
-        compare_vals = ([soma_matriculas] if soma_matriculas else []) + [a for a, _ in other_areas.values()]
-        present = [v for v in compare_vals if v and v > 0]
-        if anchor and len(present) >= 2:
-            max_v, min_v = max(present), min(present)
-            diff = max_v - min_v
-            pct = Decimal(str(diff)) / Decimal(str(max_v)) if max_v else Decimal(0)
-            if diff == 0:
-                row = MatrixRow("area_total", "Área total (ha)", fontes_area,
-                                MatrixSituacao.consistente.value,
-                                "Áreas conferem entre as fontes.", _destino("consistente"))
-                for r in area_rows + [v[1] for v in other_areas.values() if v[1] is not None]:
-                    status_updates.append((r, "consistente"))
-            else:
-                has_zero = any((_to_float_br(_get(sources.get(k), "area_declarada_ha", "area_ha",
-                                                  "area_georreferenciada_ha")) == 0)
-                               for k in ("sigef",) if sources.get(k))
-                subtipo = "fundo" if (has_zero or pct > AREA_TOLERANCE_PCT) else "transcricao"
-                maxsrc = max(other_areas, key=lambda k: other_areas[k][0]) if other_areas else "—"
-                acao = (
-                    f"ajustar/justificar diferença de {_fmt_ha(diff)} ha "
-                    f"(soma matrículas {_fmt_ha(soma_matriculas)} vs {maxsrc.upper()} "
-                    f"{_fmt_ha(other_areas[maxsrc][0])})"
-                ) if soma_matriculas and other_areas else f"ajustar/justificar diferença de {_fmt_ha(diff)} ha"
-                row = MatrixRow("area_total", "Área total (ha)", fontes_area,
-                                MatrixSituacao.divergente.value, acao,
-                                _destino("divergente", subtipo=subtipo), subtipo=subtipo)
-                novo = f"divergente_{subtipo}"
-                # matrículas formam a âncora → consistentes; fontes que divergem → divergentes.
-                for r in area_rows:
-                    status_updates.append((r, "consistente"))
-                for _k, (a, r) in other_areas.items():
-                    if r is not None:
-                        status_updates.append((r, "consistente" if anchor and a == anchor else novo))
-            linhas.append(row)
+        if diff == 0:
+            linhas.append(MatrixRow(
+                "area_total", "Área total (ha)", fontes_area,
+                MatrixSituacao.consistente.value, "Áreas conferem entre as fontes.",
+                _destino("consistente")))
+            for r in soma_rows + imovel_rows:
+                status_updates.append((r, "consistente"))
+        elif Decimal(str(imovel_max)) >= Decimal(str(soma_matriculas)) * MISSING_MATRICULA_FACTOR:
+            # imóvel muito maior que a soma conhecida ⇒ matrícula faltante / vínculo
+            # incompleto: ATENÇÃO pedindo vínculo, NÃO falsa divergência de fundo.
+            linhas.append(MatrixRow(
+                "area_total", "Área total (ha)", fontes_area,
+                MatrixSituacao.atencao.value,
+                (f"vincular matrículas: soma conhecida {_fmt_ha(soma_matriculas)} ha "
+                 f"« {_fmt_ha(imovel_max)} ha do imóvel ({maxlbl.upper()}) — "
+                 f"verificar matrícula(s) faltante(s)"),
+                _destino("atencao")))
+            for r in soma_rows:
+                status_updates.append((r, "consistente"))
+        else:
+            subtipo = "transcricao" if pct <= AREA_TOLERANCE_PCT else "fundo"
+            linhas.append(MatrixRow(
+                "area_total", "Área total (ha)", fontes_area,
+                MatrixSituacao.divergente.value,
+                (f"ajustar/justificar diferença de {_fmt_ha(diff)} ha "
+                 f"(soma matrículas {_fmt_ha(soma_matriculas)} vs {maxlbl.upper()} "
+                 f"{_fmt_ha(imovel_max)})"),
+                _destino("divergente", subtipo=subtipo), subtipo=subtipo))
+            novo = f"divergente_{subtipo}"
+            for r in soma_rows:
+                status_updates.append((r, "consistente"))
+            for r in imovel_rows:
+                status_updates.append((r, novo))
 
     # --- denominacao_imovel ---------------------------------------------
     denom_rows: list[Any] = []
     denom_fontes: dict[str, Any] = {}
     for key, src in sources.items():
-        val = _get(src, "denominacao", "nome_imovel")
+        val = _get(src, *_DENOM_SYNONYMS)
         if val not in (None, ""):
             denom_fontes[key] = val
-            r = _row_of(src, "denominacao", "nome_imovel")
+            r = _row_of(src, *_DENOM_SYNONYMS)
             if r is not None:
                 denom_rows.append(r)
     if denom_fontes:
@@ -302,7 +480,7 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
     # --- codigo_incra_sncr ----------------------------------------------
     incra_fontes: dict[str, Any] = {}
     for key, src in sources.items():
-        val = _get(src, "codigo_sncr_incra", "codigo_incra")
+        val = _get(src, *_INCRA_SYNONYMS)
         if val not in (None, ""):
             incra_fontes[key] = val
     if incra_fontes:
@@ -317,24 +495,38 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
                 "codigo_incra_sncr", "Código INCRA/SNCR", incra_fontes,
                 MatrixSituacao.consistente.value, "Código confere.", _destino("consistente")))
 
-    # --- sigef_georreferenciamento --------------------------------------
-    # Só faz sentido cobrar SIGEF quando há algum contexto fundiário do imóvel.
-    tem_contexto_imovel = bool(matricula_keys or car or ccir or itr or sigef)
+    # --- sigef_georreferenciamento (valida presença REAL de código+status) ---
+    tem_contexto_imovel = bool(matricula_keys or car or ccir or itr or sigef or por_matricula)
+    sigef_codigo = _get(sigef, "codigo_certificacao") if sigef else None
+    sigef_status = _norm_text(_get(sigef, "status_certificacao")) if sigef else ""
     sigef_area = _to_float_br(_get(sigef, "area_georreferenciada_ha")) if sigef else None
+    cert_real = bool(
+        sigef and sigef_codigo
+        and sigef_status in ("ativo", "ativa", "certificado", "certificada")
+    )
     rat_geo_pendencia = _rat_has(rat, ("geo", "georref", "sigef", "vetoriz", "perimetro", "vertice"))
     if not tem_contexto_imovel:
         pass
-    elif sigef is None or not sigef_area or rat_geo_pendencia:
-        fontes_sig = {"sigef": (sigef_area if sigef_area else "ausente"),
+    elif not cert_real:
+        fontes_sig = {"sigef": (sigef_codigo or (sigef_area if sigef_area else "ausente")),
                       "rat": "pendência geo" if rat_geo_pendencia else "—"}
         linhas.append(MatrixRow(
             "sigef_georreferenciamento", "Georreferenciamento (SIGEF)", fontes_sig,
             MatrixSituacao.critico.value, "verificar DCR/SIGEF/SNCR (certificação ausente/pendente)",
             _destino("critico")))
+    elif rat_geo_pendencia:
+        # certificação existe (código+status reais) mas o órgão pede apresentação
+        linhas.append(MatrixRow(
+            "sigef_georreferenciamento", "Georreferenciamento (SIGEF)",
+            {"sigef": sigef_codigo, "rat": "órgão solicita apresentação do SIGEF"},
+            MatrixSituacao.atencao.value,
+            "certificação existe (código presente); o órgão solicita sua apresentação no CAR",
+            _destino("atencao")))
     else:
         linhas.append(MatrixRow(
-            "sigef_georreferenciamento", "Georreferenciamento (SIGEF)", {"sigef": sigef_area},
-            MatrixSituacao.consistente.value, "Certificação presente.", _destino("consistente")))
+            "sigef_georreferenciamento", "Georreferenciamento (SIGEF)",
+            {"sigef": sigef_codigo, "status": sigef_status},
+            MatrixSituacao.consistente.value, "Certificação presente e ativa.", _destino("consistente")))
 
     # --- car_presenca_consistencia --------------------------------------
     if car is not None:
@@ -364,37 +556,57 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
                 {"car": car_code or "presente"},
                 MatrixSituacao.consistente.value, "CAR presente e coerente.", _destino("consistente")))
 
-    # --- acesso_imovel ---------------------------------------------------
-    if _rat_has(rat, ("acesso", "via de acesso", "servidao")):
-        linhas.append(MatrixRow(
-            "acesso_imovel", "Acesso ao imóvel", {"rat": "descrição insuficiente"},
-            MatrixSituacao.atencao.value, "padronizar acesso com coordenadas",
-            _destino("atencao")))
-
-    # --- linhas técnicas (pendências do RAT — aguardam geo/Etapa 4) ------
-    if rat is not None:
+    # --- pendências do RAT → linhas técnicas + acesso + documentos -------
+    # Ficha 02 item 4 (caso #11): TEMA casado por categoria+detalhamento+
+    # recomendação; dedup por tema (colapsa as repetições do staging 3×).
+    if rat is not None and rat.pendencias:
+        temas_vistos: set[str] = set()
+        docs_solicitados: list[str] = []
+        acesso_visto = False
         for pend in rat.pendencias:
             if not isinstance(pend, dict):
                 continue
-            cat = pend.get("categoria") or ""
-            ncat = _norm_text(cat)
-            if any(t in ncat for t in ("acesso", "via de acesso", "servidao")):
-                continue  # já tratado em acesso_imovel
-            if not any(t in ncat for t in (
-                "app", "preservacao", "hidrograf", "curso d", "supress", "vegetac",
-                "cobertura", "uso do solo", "reserva legal", "sobreposic", "apa",
-            )):
+            tema = _classificar_pendencia(pend)
+            if tema is None:
                 continue
+            if tema == "acesso":
+                acesso_visto = True
+                continue
+            if tema == "documentos":
+                det = (pend.get("detalhamento") or pend.get("categoria") or "").strip()
+                if det and det not in docs_solicitados:
+                    docs_solicitados.append(det)
+                continue
+            if tema in temas_vistos:
+                continue  # 1 linha por tema
+            temas_vistos.add(tema)
+            label = _TEMA_LABEL[tema]
+            if tema == "uc":
+                uc_nome = _extrai_uc(pend)
+                if uc_nome:
+                    label = f"{label}: {uc_nome}"
             acao = pend.get("recomendacao") or "confronto espacial pendente (geo/Etapa 4)"
             linhas.append(MatrixRow(
-                item=f"tecnica:{ncat[:40]}",
-                label=f"[técnica] {cat}",
-                fontes={"rat": pend.get("detalhamento") or cat},
+                item=f"tecnica:{tema}",
+                label=f"[técnica] {label}",
+                fontes={"rat": pend.get("detalhamento") or pend.get("categoria") or label},
                 situacao=MatrixSituacao.critico.value,
                 acao_recomendada=str(acao),
                 destino=_destino("critico"),
                 profundidade="tecnica",
             ))
+        if acesso_visto:
+            linhas.append(MatrixRow(
+                "acesso_imovel", "Acesso ao imóvel", {"rat": "descrição insuficiente"},
+                MatrixSituacao.atencao.value, "padronizar acesso com coordenadas",
+                _destino("atencao")))
+        if docs_solicitados:
+            linhas.append(MatrixRow(
+                "documentos_solicitados", "Documentos solicitados pelo órgão",
+                {"rat": docs_solicitados},
+                MatrixSituacao.atencao.value,
+                "providenciar os documentos exigidos no parecer (RAT)",
+                _destino("atencao")))
 
     resumo: dict[str, int] = {}
     for r in linhas:
@@ -407,14 +619,3 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
         "gap_d1": "linhas técnicas registradas sem confronto espacial (sem Property.geom)",
     }
     return MatrixResult(matriz=matriz, status_updates=status_updates)
-
-
-def _rat_has(rat: Optional[_Source], termos: tuple[str, ...]) -> bool:
-    if rat is None:
-        return False
-    for pend in rat.pendencias:
-        cat = _norm_text(pend.get("categoria") if isinstance(pend, dict) else pend)
-        det = _norm_text(pend.get("detalhamento") if isinstance(pend, dict) else "")
-        if any(t in cat or t in det for t in termos):
-            return True
-    return False
