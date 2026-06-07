@@ -1,0 +1,52 @@
+{
+  "situacao_geral": "Imóvel rural Fazenda São Jorge (município de Jataí/GO, bioma Cerrado, área total 1.247,33 ha) apresenta sobreposição entre o perímetro declarado no CAR (GO-5212208-A1B2) e a área de Reserva Legal averbada na matrícula 12.776, além de Área de Preservação Permanente (APP) de curso d'água com supressão não autorizada identificada em imagem de satélite. Há embargo ambiental ativo relatado pelo consultor (auto de infração estadual SEMAD) ainda sem regularização. O CCIR está vigente, mas o ITR do último exercício consta como não declarado.",
+  "passivos_identificados": [
+    "Sobreposição de 38,4 ha entre o perímetro do CAR e a Reserva Legal averbada na matrícula 12.776",
+    "Supressão de vegetação nativa em APP de curso d'água (faixa de 30 m) sem autorização",
+    "Déficit de Reserva Legal de 12,7 ha em relação ao mínimo legal de 20% para o bioma Cerrado",
+    "Embargo ambiental ativo (auto de infração SEMAD) sem termo de regularização",
+    "ITR do exercício corrente não declarado",
+    "Divergência entre a área do CCIR (1.247,33 ha) e a área da matrícula (1.251,00 ha)"
+  ],
+  "acoes_remediacao": [
+    "Retificar o perímetro do CAR para eliminar a sobreposição com a Reserva Legal averbada",
+    "Protocolar Projeto de Recomposição de Área Degradada (PRAD) para a APP suprimida",
+    "Aderir ao Programa de Regularização Ambiental (PRA) para compensar o déficit de Reserva Legal",
+    "Apresentar defesa/recurso ao auto de infração e negociar termo de compromisso para suspender o embargo",
+    "Regularizar a declaração do ITR junto à Receita Federal",
+    "Promover ação de retificação de área para alinhar CCIR e matrícula"
+  ],
+  "prioridade_acoes": [
+    "Apresentar defesa ao auto de infração antes do prazo de 20 dias (suspende o embargo)",
+    "Retificar o CAR (pré-requisito para adesão ao PRA)",
+    "Protocolar PRAD da APP"
+  ],
+  "risco_estimado": "alto",
+  "observacoes": "O embargo ativo é o fator de maior urgência: enquanto vigente, inviabiliza crédito rural e licenciamento. A retificação do CAR deve preceder a adesão ao PRA para evitar indeferimento por inconsistência de perímetro.",
+  "afirmacoes": [
+    {
+      "afirmacao": "Há sobreposição de 38,4 ha entre o perímetro do CAR e a Reserva Legal averbada",
+      "categoria": "passivo",
+      "fonte": {"tipo": "matriz", "ref": "matriz_inconsistencias.linha_3", "descricao": "Matriz de inconsistências — cruzamento CAR x matrícula"},
+      "confianca": "alta"
+    },
+    {
+      "afirmacao": "Supressão de vegetação nativa em APP de curso d'água sem autorização",
+      "categoria": "passivo",
+      "fonte": {"tipo": "documento", "ref": "12", "descricao": "Laudo de imagem de satélite anexado ao processo"},
+      "confianca": "media"
+    },
+    {
+      "afirmacao": "Embargo ambiental ativo (auto de infração SEMAD) sem termo de regularização",
+      "categoria": "passivo",
+      "fonte": {"tipo": "atendimento", "descricao": "Relato do consultor na abertura do caso"},
+      "confianca": "alta"
+    },
+    {
+      "afirmacao": "Adesão ao PRA é o caminho para compensar o déficit de Reserva Legal",
+      "categoria": "acao",
+      "fonte": {"tipo": "legislacao", "ref": "Lei 12.651/2012 art. 66", "descricao": "Código Florestal — regularização de Reserva Legal"},
+      "confianca": "alta"
+    }
+  ]
+}

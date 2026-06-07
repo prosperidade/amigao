@@ -206,7 +206,12 @@ class BaseAgent(ABC):
 
         except Exception as exc:
             elapsed_ms = int((time.monotonic() - self._started_at) * 1000)
-            error_message = str(exc) or exc.__class__.__name__
+            # fix/llm-consistencia: erros do gateway (truncamento, cost_exceeded)
+            # carregam a mensagem LEGÍVEL em `.message`. Num dataclass-exception
+            # str(exc) devolve só o nome da classe — preferimos `.message` para que
+            # o motivo real ("resposta truncada (limite de tokens)") chegue ao
+            # AgentResult.error e à UI, não "AITruncationError".
+            error_message = str(getattr(exc, "message", "") or exc) or exc.__class__.__name__
             self._fail_job(job, exc)
             emit_agent_event(self.name, "failed", self.ctx, error=error_message)
 

@@ -32,6 +32,10 @@ class AIResponse:
     cost_usd: float
     duration_ms: int
     provider: str
+    # fix/llm-consistencia (2026-06-07): motivo de parada do provider, normalizado.
+    # "stop" = resposta completa; "length" = TRUNCADA (estourou max_tokens de saída).
+    # Sempre preenchido quando o provider informa; "" quando desconhecido.
+    finish_reason: str = ""
 
 
 @dataclass
@@ -43,6 +47,30 @@ class AIGatewayError(Exception):
     tokens_in: int = 0
     tokens_out: int = 0
     model_used: str = ""
+
+
+@dataclass
+class AITruncationError(AIGatewayError):
+    """Resposta do LLM truncada por estouro de max_tokens de saída.
+
+    fix/llm-consistencia (2026-06-07): erro ESPECÍFICO e legível, distinto do
+    erro genérico de parse de JSON. O gateway já tentou 1× com max_tokens maior
+    antes de levantar isto. Subclasse de AIGatewayError para fail-fast: trocar de
+    provider não ajuda (o teto é o mesmo), então não cascateia pra próximo modelo.
+    """
+
+
+def _normalize_finish_reason(raw: object) -> str:
+    """Normaliza o finish_reason do provider para vocabulário comum.
+
+    OpenAI/LiteLLM: "stop" | "length" | "content_filter" | "tool_calls".
+    Anthropic (via claude_client): "end_turn" | "max_tokens" | "stop_sequence".
+    Mapeia qualquer variante de "estourou tokens" para "length".
+    """
+    s = str(raw or "").strip().lower()
+    if s in ("length", "max_tokens", "max_output_tokens", "model_length"):
+        return "length"
+    return s
 
 
 AI_HOURLY_COST_LIMIT_USD = 5.0  # limite padrão por tenant por hora
@@ -213,6 +241,7 @@ def complete(
     temperature: Optional[float] = None,
     max_cost_override_usd: Optional[float] = None,
     user_preferences: Optional[dict] = None,
+    agent_name: Optional[str] = None,
 ) -> AIResponse:
     """
     Envia um prompt para o LLM e retorna AIResponse.
@@ -252,12 +281,21 @@ def complete(
     user_resolved = _resolve_user_model(user_preferences)
     if user_resolved:
         models = [user_resolved]
+    elif agent_name:
+        # fix/llm-consistencia: matriz de equivalência agente×provider. O
+        # primário (model=) é preservado em 1º; equivalentes em OUTROS providers
+        # DISPONÍVEIS entram como fallback de resiliência (503/timeout). Resolve
+        # "legislação refém do Gemini" e o BYOK de provider único.
+        from app.core.model_matrix import resolve_agent_models  # noqa: PLC0415
+        models = resolve_agent_models(agent_name, settings, primary_model=model)
     elif model:
         models = [(model, "")]
     else:
         models = _build_model_list(settings)
     user_scoped = user_resolved is not None
     _max_tokens = max_tokens or settings.AI_MAX_TOKENS
+    # Teto absoluto para o retry de truncamento (nunca abaixo do pedido).
+    _ceiling = max(_max_tokens, getattr(settings, "AI_MAX_TOKENS_CEILING", 32_768))
     _temperature = temperature if temperature is not None else settings.AI_TEMPERATURE
     # `or 30.0`: blindagem contra timeout None/0 chegando ao litellm — a
     # mensagem "Connection timed out after None seconds" prova que sem timeout
@@ -275,34 +313,84 @@ def complete(
     for attempt_model, api_key in models:
         try:
             t0 = time.monotonic()
-            # Retry por modelo SÓ para erros transitórios. Crítico para a
-            # legislação, que passa `model=` explícito (1 modelo, sem cadeia de
-            # fallback): sem isto um único Timeout/503 derruba a consulta. Erro
-            # permanente (auth, schema) propaga na hora pro fallback de provider.
+
+            def _attempt_completion(mt: int, _model: str, _api_key: str):
+                """1 chamada ao provider com retry SÓ para erros transitórios.
+
+                Crítico para a legislação/diagnóstico (model= explícito): sem isto
+                um único Timeout/503 derruba a consulta. Erro permanente (auth,
+                schema) propaga na hora pro fallback de provider.
+                """
+                resp = None
+                for _attempt in range(_max_retries + 1):
+                    try:
+                        resp = litellm.completion(
+                            model=_model,
+                            messages=messages,
+                            max_tokens=mt,
+                            temperature=_temperature,
+                            timeout=_timeout,
+                            api_key=_api_key or None,
+                        )
+                        break
+                    except _transient as transient_exc:
+                        if _attempt >= _max_retries:
+                            raise
+                        backoff = _backoff_base * (2 ** _attempt)
+                        logger.warning(
+                            "ai_gateway.complete transient error model=%s attempt=%d/%d "
+                            "err=%s; retry em %.1fs",
+                            _model, _attempt + 1, _max_retries + 1,
+                            transient_exc, backoff,
+                        )
+                        time.sleep(backoff)
+                assert resp is not None  # loop sai por break (sucesso) ou raise
+                return resp
+
+            # fix/llm-consistencia: trata TRUNCAMENTO (finish_reason=length).
+            # 1 retry automático com max_tokens dobrado (até o teto). Se ainda
+            # truncar, levanta erro ESPECÍFICO e legível — NÃO tenta parse parcial
+            # nem cascateia pra outro provider (o teto seria o mesmo).
+            _mt = _max_tokens
             response = None
-            for _attempt in range(_max_retries + 1):
-                try:
-                    response = litellm.completion(
-                        model=attempt_model,
-                        messages=messages,
-                        max_tokens=_max_tokens,
-                        temperature=_temperature,
-                        timeout=_timeout,
-                        api_key=api_key or None,
-                    )
+            finish_reason = ""
+            while True:
+                response = _attempt_completion(_mt, attempt_model, api_key)
+                finish_reason = _normalize_finish_reason(
+                    getattr(response.choices[0], "finish_reason", None)
+                )
+                if finish_reason != "length":
                     break
-                except _transient as transient_exc:
-                    if _attempt >= _max_retries:
-                        raise
-                    backoff = _backoff_base * (2 ** _attempt)
+                _u = response.usage or {}
+                bumped = min(_mt * 2, _ceiling)
+                if bumped > _mt:
                     logger.warning(
-                        "ai_gateway.complete transient error model=%s attempt=%d/%d "
-                        "err=%s; retry em %.1fs",
-                        attempt_model, _attempt + 1, _max_retries + 1,
-                        transient_exc, backoff,
+                        "ai_gateway.complete TRUNCADO model=%s max_tokens=%d "
+                        "tokens_out=%s; retry com max_tokens=%d",
+                        attempt_model, _mt,
+                        getattr(_u, "completion_tokens", "?"), bumped,
                     )
-                    time.sleep(backoff)
-            assert response is not None  # loop sai por break (sucesso) ou raise
+                    _mt = bumped
+                    continue
+                _t_in = getattr(_u, "prompt_tokens", 0) or 0
+                _t_out = getattr(_u, "completion_tokens", 0) or 0
+                logger.error(
+                    "ai_gateway.complete resposta truncada (limite de tokens) "
+                    "model=%s max_tokens=%d tokens_in=%d tokens_out=%d",
+                    attempt_model, _mt, _t_in, _t_out,
+                )
+                raise AITruncationError(
+                    message=(
+                        "resposta truncada (limite de tokens): o modelo atingiu "
+                        f"max_tokens={_mt} sem fechar a resposta. Aumente o teto "
+                        "de saída do agente."
+                    ),
+                    last_error=f"finish_reason=length model={attempt_model}",
+                    tokens_in=_t_in,
+                    tokens_out=_t_out,
+                    model_used=attempt_model,
+                )
+
             elapsed_ms = int((time.monotonic() - t0) * 1000)
 
             content = response.choices[0].message.content or ""
@@ -357,6 +445,7 @@ def complete(
                 cost_usd=cost,
                 duration_ms=elapsed_ms,
                 provider=provider,
+                finish_reason=finish_reason,
             )
 
         except AIGatewayError:
