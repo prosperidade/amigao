@@ -86,6 +86,29 @@ Frontend frouxo é dívida que se paga em produção, com bug de cliente reclama
 
 Schema é contrato. Contrato muda por escrito.
 
+## Princípio 11 — Nenhuma afirmação sem fonte
+
+Todo agente que afirma algo diz **de onde veio**. O contrato de saída de cada
+afirmação é `{afirmação, fonte (documento/dado + onde encontrar), confiança}`.
+"Houve supressão" cita o RAT (protocolo + pendência); "denominação confere"
+mostra os valores conferidos e de quais documentos vieram; um prazo legal aponta
+o trecho da norma que o sustenta.
+
+Corolário inegociável: **fonte é específica ou o item é marcado "sem fonte
+identificada"** — nunca se inventa fonte nem se usa genérico ("conforme
+documentos"). Preferir omitir a inventar. No determinístico (auditor/matriz) a
+fonte é exposta direto; no LLM (diagnóstico/legislação) ela vem do contexto
+estruturado (insumos com identificadores, trechos do RAG com IDs), e o que não
+tem base vira honestidade explícita ("estimativa profissional — sem fonte
+normativa nos autos").
+
+Reforça o Princípio 2 (tudo é auditável): rastreabilidade não é só do sistema —
+é de cada frase que o consultor lê e assina.
+
+> Origem: validação da especialista em 2026-06-06 (prioridade 1). Implementado em
+> `docs/trabalhos/rastreabilidade.md` (matriz `fontes_detalhe`, diagnóstico
+> `afirmacoes`, legislação `prazo_fonte`/trechos do RAG; schema comum `SourceRef`).
+
 ---
 
 ## Quando um princípio precisa mudar

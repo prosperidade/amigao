@@ -484,6 +484,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 | Hardening pós-deploy | Migration automática no deploy (`preDeployCommand` na API); erro de disparo visível na UI (rota `/extract` existe); retry só p/ transitório (determinístico falha sem retry) | ✅ `fix/hardening-deploy-rotas` — ver `docs/trabalhos/hardening_deploy.md` |
 | Fase 2 robusta (docs reais) | Classificação por identidade (certidão 6776 não cai mais em sigef); validadores de formato por campo (4b); dedup de re-extração (4c); chain reutiliza staging (fim do "0 campos"). Follow-on: OCR falho em CCIR/ITR/recibo CAR | ✅ `feat/fase2-robusta-docs-reais` — ver `docs/trabalhos/fase2_robusta.md` |
 | OCR failed (docs reais) | Causa medida: falha de download do storage (05-31, pré-fix R2), nunca reprocessada. Fixes: reprocesso `/documents/{id}/reprocess-ocr` (draft+processo) + botão; coluna `ocr_error` (fim do failed silencioso); fim do "preso em processing"; docx honesto. Validação real do failed→done é pós-deploy (consultor reprocessa) | ✅ `fix/ocr-failed-docs-reais` — ver `docs/trabalhos/ocr_failed.md` |
+| Rastreabilidade (P1 — nenhuma afirmação sem fonte) | Princípio 11 no manifesto; `SourceRef`/`Afirmacao` comuns; matriz `fontes_detalhe` (doc+valor por linha) + UI; diagnóstico `afirmacoes` com fonte/"sem fonte"; legislação `prazo_fonte` (estimativa marcada) + trechos RAG. Aditivo. Validação LLM pós-deploy | ✅ `feat/rastreabilidade-fontes` — ver `docs/trabalhos/rastreabilidade.md` |
 
 ## Sprints em curso
 

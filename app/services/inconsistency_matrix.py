@@ -117,12 +117,18 @@ class MatrixRow:
     destino: list[str]
     profundidade: str = "intake"  # "intake" | "tecnica"
     subtipo: Optional[str] = None  # divergente → "transcricao" | "fundo"
+    # Rastreabilidade (validação 06/06): por linha, QUAIS fontes participaram —
+    # {fonte, tipo (documento/rat), source_doc_type, document_id, campo, valor}.
+    # ADITIVO: `fontes` (dict fonte→valor) permanece para os renderers/testes
+    # antigos; a UI nova lê `fontes_detalhe`.
+    fontes_detalhe: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d = {
             "item": self.item,
             "label": self.label,
             "fontes": self.fontes,
+            "fontes_detalhe": self.fontes_detalhe,
             "situacao": self.situacao,
             "acao_recomendada": self.acao_recomendada,
             "destino": self.destino,
@@ -204,6 +210,7 @@ class _Source:
     fields: dict[str, tuple[Any, Any]] = field(default_factory=dict)
     matricula_listadas: list[Any] = field(default_factory=list)  # itens car
     pendencias: list[dict[str, Any]] = field(default_factory=list)  # rat
+    document_id: Optional[int] = None  # 1º document_id visto (rastreabilidade)
 
 
 def _group_sources(rows: list[Any]) -> dict[str, _Source]:
@@ -216,6 +223,8 @@ def _group_sources(rows: list[Any]) -> dict[str, _Source]:
 
         key = (f"matricula:{hint}" if hint else "matricula") if dt == "matricula" else dt
         src = sources.setdefault(key, _Source(key=key, doc_type=dt))
+        if src.document_id is None:
+            src.document_id = getattr(row, "document_id", None)
 
         if dt == "car" and fname == "matricula_listada":
             src.matricula_listadas.append(val)
@@ -608,6 +617,11 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
                 "providenciar os documentos exigidos no parecer (RAT)",
                 _destino("atencao")))
 
+    # Rastreabilidade (06/06): por linha, QUAIS fontes participaram (doc + valor).
+    rat_protocolo = _get(rat, "protocolo") if rat else None
+    for r in linhas:
+        r.fontes_detalhe = _fontes_detalhe(r, sources, rat_protocolo)
+
     resumo: dict[str, int] = {}
     for r in linhas:
         resumo[r.situacao] = resumo.get(r.situacao, 0) + 1
@@ -619,3 +633,43 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
         "gap_d1": "linhas técnicas registradas sem confronto espacial (sem Property.geom)",
     }
     return MatrixResult(matriz=matriz, status_updates=status_updates)
+
+
+def _fontes_detalhe(
+    row: MatrixRow, sources: dict[str, _Source], rat_protocolo: Any,
+) -> list[dict[str, Any]]:
+    """Expõe, por linha, as fontes que participaram do confronto (determinístico).
+
+    Para cada chave em ``row.fontes`` que é uma fonte real (matricula:xxxx, car,
+    ccir, itr, sigef, rat), devolve {fonte, tipo, source_doc_type, document_id,
+    valor}. Chaves derivadas (soma_matriculas) saem como tipo 'matriz'. Linhas
+    técnicas (item 'tecnica:') referenciam o protocolo do RAT.
+    """
+    out: list[dict[str, Any]] = []
+    for fonte_key, valor in (row.fontes or {}).items():
+        src = sources.get(fonte_key)
+        if src is not None:
+            entry: dict[str, Any] = {
+                "fonte": fonte_key,
+                "tipo": "rat" if src.doc_type == "rat" else "documento",
+                "source_doc_type": src.doc_type,
+                "valor": valor,
+            }
+            if src.document_id is not None:
+                entry["document_id"] = src.document_id
+            if src.doc_type == "rat" and rat_protocolo:
+                entry["protocolo"] = rat_protocolo
+            out.append(entry)
+        else:
+            # chave derivada (soma_matriculas) ou rótulo — sem doc específico
+            out.append({"fonte": fonte_key, "tipo": "matriz", "valor": valor})
+    # Linha técnica sem fontes-doc explícitas → referencia o RAT de origem.
+    if row.item.startswith("tecnica:") and not any(e.get("source_doc_type") == "rat" for e in out):
+        rat_entry: dict[str, Any] = {"fonte": "rat", "tipo": "rat", "source_doc_type": "rat"}
+        if rat_protocolo:
+            rat_entry["protocolo"] = rat_protocolo
+        rat_src = sources.get("rat")
+        if rat_src is not None and rat_src.document_id is not None:
+            rat_entry["document_id"] = rat_src.document_id
+        out.append(rat_entry)
+    return out

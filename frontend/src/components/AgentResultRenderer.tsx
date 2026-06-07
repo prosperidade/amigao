@@ -216,6 +216,8 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
     r.prioridade_acoes ?? (r.metadata as Record<string, unknown> | undefined)?.prioridade_acoes,
   );
   const divergencias = objArr(r.divergencias);
+  // Rastreabilidade (06/06): afirmações com fonte por item.
+  const afirmacoes = objArr(r.afirmacoes);
 
   return (
     <div className="space-y-3">
@@ -242,6 +244,39 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
       {hipoteses.length > 0 && (
         <Section icon={AlertTriangle} title="Hipóteses / Passivos" color="text-red-600 dark:text-red-400">
           <BulletList items={hipoteses} color="text-red-400" />
+        </Section>
+      )}
+
+      {afirmacoes.length > 0 && (
+        <Section icon={Search} title="Afirmações com fonte" color="text-sky-600 dark:text-sky-400">
+          <div className="space-y-2">
+            {afirmacoes.map((a, i) => {
+              const fontes = Array.isArray(a.fontes) ? (a.fontes as Record<string, unknown>[]) : [];
+              return (
+                <div key={i} className="p-2.5 bg-sky-50/50 dark:bg-sky-500/5 rounded-lg border border-sky-100 dark:border-sky-500/20">
+                  <p className="text-sm text-gray-800 dark:text-slate-200">{str(a.texto)}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {fontes.map((f, fi) => {
+                      const semFonte = f.sem_fonte === true || f.tipo === 'sem_fonte';
+                      const label = str(f.descricao) || str(f.ref) || str(f.tipo);
+                      return (
+                        <span
+                          key={fi}
+                          className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                            semFonte
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30'
+                              : 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20'
+                          }`}
+                        >
+                          {semFonte ? '⚠️ sem fonte identificada' : `${str(f.tipo)}: ${label}`}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </Section>
       )}
 
@@ -376,7 +411,23 @@ function AuditorResult({ r }: { r: Record<string, unknown> }) {
                           {str(l.subtipo) && ` · ${str(l.subtipo)}`}
                         </span>
                       </td>
-                      <td className="py-2 text-gray-600 dark:text-slate-300">{str(l.acao_recomendada)}</td>
+                      <td className="py-2 text-gray-600 dark:text-slate-300">
+                        {str(l.acao_recomendada)}
+                        {Array.isArray(l.fontes_detalhe) && (l.fontes_detalhe as unknown[]).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(l.fontes_detalhe as Record<string, unknown>[]).map((f, fi) => (
+                              <span
+                                key={fi}
+                                title="fonte do confronto"
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/20"
+                              >
+                                {str(f.protocolo) || str(f.source_doc_type) || str(f.fonte)}
+                                {str(f.valor) ? `: ${str(f.valor)}` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -419,7 +470,16 @@ function LegislaçãoResult({ r }: { r: Record<string, unknown> }) {
                 <div>
                   <p className="text-sm font-medium text-gray-800 dark:text-white">{String(etapa.titulo ?? etapa.title ?? '')}</p>
                   {str(etapa.descricao) && <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{str(etapa.descricao)}</p>}
-                  {str(etapa.prazo_estimado_dias) && <p className="text-xs text-blue-500 mt-0.5">Prazo: ~{str(etapa.prazo_estimado_dias)} dias</p>}
+                  {str(etapa.prazo_estimado_dias) && (
+                    <p className="text-xs text-blue-500 mt-0.5">
+                      Prazo: ~{str(etapa.prazo_estimado_dias)} dias
+                      {etapa.prazo_fonte === 'estimativa_profissional' && (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30">
+                          ⚠️ estimativa profissional — sem fonte normativa
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}

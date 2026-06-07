@@ -224,6 +224,9 @@ class DiagnosticoAgent(BaseAgent):
         auditor_payload = self._resolve_auditor_payload()
         divergencias_auditor, riscos_auditor = self._consume_auditor_findings(auditor_payload)
 
+        # Rastreabilidade (06/06): cada passivo/ação com fonte; sem fonte → marcado.
+        afirmacoes = self._build_afirmacoes(parsed, passivos, acoes)
+
         return self._build_payload(
             situacao_geral=situacao_geral,
             passivos=passivos,
@@ -235,6 +238,7 @@ class DiagnosticoAgent(BaseAgent):
             citation_eval=citation_eval,
             divergencias_auditor=divergencias_auditor,
             riscos_auditor=riscos_auditor,
+            afirmacoes=afirmacoes,
         )
 
     def _load_process_data(self) -> dict[str, Any]:
@@ -658,6 +662,84 @@ class DiagnosticoAgent(BaseAgent):
             ))
         return sources
 
+    # --- Rastreabilidade (validação 06/06) ---------------------------------
+
+    @staticmethod
+    def _infer_fonte_tipo(s: str) -> str:
+        low = s.lower()
+        if "rat" in low or "go-rat" in low or "parecer" in low:
+            return "rat"
+        if "matriz" in low or "linha" in low:
+            return "matriz"
+        if any(t in low for t in ("lei", "art", "norma", "decreto", "resolu", "instru")):
+            return "legislacao"
+        if any(t in low for t in ("atendimento", "relato", "demanda")):
+            return "atendimento"
+        if any(t in low for t in ("matric", "certid", "ccir", "itr", "car", "sigef", "documento", "escritura")):
+            return "documento"
+        return "documento"
+
+    def _parse_item_fontes(self, raw: Any) -> list[Any]:
+        """Converte a 'fonte' que o LLM atribuiu a um item → list[SourceRef].
+        String vazia / 'sem fonte' → marca sem_fonte (NUNCA inventa)."""
+        from app.schemas.stage_output import SourceRef  # noqa: PLC0415
+
+        def _sem_fonte() -> Any:
+            return SourceRef(tipo="sem_fonte", sem_fonte=True, descricao="sem fonte identificada")
+
+        out: list[Any] = []
+        items = raw if isinstance(raw, list) else [raw]
+        for it in items:
+            if isinstance(it, str):
+                s = it.strip()
+                if not s or "sem fonte" in s.lower():
+                    out.append(_sem_fonte())
+                else:
+                    out.append(SourceRef(tipo=self._infer_fonte_tipo(s), descricao=s))
+            elif isinstance(it, dict):
+                desc = (it.get("descricao") or it.get("ref") or it.get("fonte") or "").strip()
+                if not desc or "sem fonte" in desc.lower():
+                    out.append(_sem_fonte())
+                else:
+                    out.append(SourceRef(
+                        tipo=(it.get("tipo") if it.get("tipo") in {
+                            "documento", "matriz", "rat", "legislacao", "atendimento", "auditor"
+                        } else self._infer_fonte_tipo(desc)),
+                        ref=it.get("ref"), descricao=desc, valor=it.get("valor"),
+                    ))
+        return out or [_sem_fonte()]
+
+    def _build_afirmacoes(self, parsed: dict[str, Any], passivos: list, acoes: list) -> list[Any]:
+        """Cada passivo/ação vira Afirmacao(texto, fontes). Prefere o que o LLM
+        atribuiu (campo `afirmacoes`); senão, piso honesto = item SEM fonte
+        identificada (jamais inventa)."""
+        from app.schemas.stage_output import Afirmacao, SourceRef  # noqa: PLC0415
+
+        raw = parsed.get("afirmacoes")
+        afirmacoes: list[Any] = []
+        if isinstance(raw, list) and raw:
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                texto = (item.get("texto") or item.get("afirmacao") or "").strip()
+                if not texto:
+                    continue
+                fontes = self._parse_item_fontes(item.get("fonte") or item.get("fontes"))
+                afirmacoes.append(Afirmacao(
+                    texto=texto, categoria=item.get("categoria"), fontes=fontes,
+                ))
+            if afirmacoes:
+                return afirmacoes
+
+        sem = SourceRef(tipo="sem_fonte", sem_fonte=True, descricao="sem fonte identificada")
+        for p in passivos:
+            if isinstance(p, str) and p.strip():
+                afirmacoes.append(Afirmacao(texto=p.strip(), categoria="passivo", fontes=[sem]))
+        for a in acoes:
+            if isinstance(a, str) and a.strip():
+                afirmacoes.append(Afirmacao(texto=a.strip(), categoria="acao", fontes=[sem]))
+        return afirmacoes
+
     def _build_payload(
         self,
         *,
@@ -671,6 +753,7 @@ class DiagnosticoAgent(BaseAgent):
         citation_eval: Any | None = None,
         divergencias_auditor: list[Divergencia] | None = None,
         riscos_auditor: list[Risco] | None = None,
+        afirmacoes: list[Any] | None = None,
     ) -> dict[str, Any]:
         """Monta DiagnosticoPreliminarContent + dual-emit das chaves antigas.
 
@@ -739,6 +822,7 @@ class DiagnosticoAgent(BaseAgent):
                 checklist_documental=acoes,
                 divergencias=divergencias_auditor,
                 nivel_risco_geral=nivel_risco_geral,  # type: ignore[arg-type]
+                afirmacoes=afirmacoes or [],
             )
         except ValidationError as exc:
             raise DiagnosticoOutputValidationError(
@@ -940,17 +1024,26 @@ class DiagnosticoAgent(BaseAgent):
             "diagnostico_system": (
                 "Voce e um consultor ambiental senior especializado em propriedades rurais brasileiras. "
                 "Analise a situacao do imovel e forneca um diagnostico completo com sugestoes de remediacao. "
+                "REGRA INVIOLAVEL — NENHUMA AFIRMACAO SEM FONTE: toda afirmacao (passivo, acao) deve citar "
+                "DE ONDE veio, referenciando um insumo concreto fornecido (matriz de inconsistencias, RAT por "
+                "protocolo, certidao/CCIR/ITR/CAR, relato do atendimento). Se NAO houver fonte identificavel "
+                "nos insumos, escreva a fonte como \"sem fonte identificada\" — NUNCA invente fonte nem use "
+                "generico (\"conforme documentos\"). Preferir OMITIR a inventar. "
                 "Retorne APENAS JSON valido com: situacao_geral (str), passivos_identificados (list[str]), "
                 "acoes_remediacao (list[str]), prioridade_acoes (list[str]), risco_estimado (baixo|medio|alto), "
-                "observacoes (str)."
+                "observacoes (str), e afirmacoes (list de objetos {texto, categoria (passivo|acao), "
+                "fonte}) — uma entrada por passivo e por acao, cada uma com sua fonte especifica ou "
+                "\"sem fonte identificada\"."
             ),
             "diagnostico_user": (
-                "Analise este imovel rural:\n\n"
+                "Analise este imovel rural. Os INSUMOS abaixo sao as UNICAS fontes validas para citar.\n\n"
                 "PROPRIEDADE: {property_data}\n\n"
-                "PROCESSO: {process_data}\n\n"
+                "PROCESSO (inclui matriz_inconsistencias e relato_demanda_consultor quando houver): {process_data}\n\n"
                 "DOCUMENTOS: {documents}\n\n"
-                "DADOS EXTRAIDOS: {extracted_fields}\n\n"
+                "DADOS EXTRAIDOS (campos por documento): {extracted_fields}\n\n"
                 "CONTEXTO LEGAL: {legal_context}\n\n"
-                "Retorne o JSON de diagnostico."
+                "Retorne o JSON de diagnostico. Em 'afirmacoes', CADA passivo e CADA acao deve apontar a fonte "
+                "especifica (ex.: \"RAT GO-RAT-2024-002207 — pendencia de cobertura\", \"matriz: linha area\", "
+                "\"certidao matricula 6.776\", \"relato do atendimento\") ou \"sem fonte identificada\"."
             ),
         }
