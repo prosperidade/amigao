@@ -190,7 +190,19 @@ class DiagnosticoAgent(BaseAgent):
         # global. White-label do consultor (user_preferences) ainda tem precedência
         # no gateway. Mesma convenção do agente legislacao.
         diag_model = settings.AI_DIAGNOSTICO_MODEL or settings.AI_DEFAULT_MODEL
-        response = self.call_llm(user_prompt, system=system_prompt, model=diag_model)
+        # fix/llm-consistencia (2026-06-07): o diagnóstico é a peça fundamental e
+        # a maior saída do funil (pós-#70 cada passivo/ação carrega afirmacao+fonte
+        # +confianca). Teto de saída dedicado (AI_DIAGNOSTICO_MAX_TOKENS = máx. do
+        # gpt-4.1) + cost cap próprio, e agent_name liga a matriz de equivalência:
+        # se o provider primário cair (503/timeout), assume o equivalente disponível.
+        response = self.call_llm(
+            user_prompt,
+            system=system_prompt,
+            model=diag_model,
+            agent_name="diagnostico",
+            max_tokens=settings.AI_DIAGNOSTICO_MAX_TOKENS,
+            max_cost_override_usd=settings.AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO,
+        )
         parsed = OutputValidationPipeline.parse_llm_json(response.content)
 
         # Sprint A2-diagnostico-A.1 (path IA) — extrai chaves brutas do JSON do LLM

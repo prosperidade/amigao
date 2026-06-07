@@ -1,0 +1,5 @@
+{
+  "situacao_geral": "Imóvel rural Fazenda São Jorge apresenta sobreposição com a Reserva Legal averbada na matrícula e supressão de vegetação em APP de curso d'água, além de embargo ambiental ativo relatado pelo consultor que",
+  "passivos_identificados": [
+    "Sobreposição de 38,4 ha entre o perímetro do CAR e a Reserva Legal",
+    "Supressão de vegetação nativa em APP de curso d'água sem autoriza

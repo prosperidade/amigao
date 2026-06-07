@@ -88,6 +88,12 @@ class ClaudeClient:
             model, tokens_in, tokens_out, cost_usd, duration_ms,
         )
 
+        # fix/llm-consistencia: normaliza stop_reason da Anthropic para o
+        # vocabulário comum. "max_tokens" → "length" (resposta truncada).
+        from app.core.ai_gateway import _normalize_finish_reason  # noqa: PLC0415
+
+        finish_reason = _normalize_finish_reason(getattr(response, "stop_reason", None))
+
         return AIResponse(
             content=content,
             model_used=model,
@@ -96,4 +102,5 @@ class ClaudeClient:
             cost_usd=round(cost_usd, 6),
             duration_ms=duration_ms,
             provider="anthropic",
+            finish_reason=finish_reason,
         )

@@ -1,0 +1,26 @@
+{
+  "situacao_geral": "Imóvel com pendências; parte das afirmações sem lastro documental claro.",
+  "passivos_identificados": [
+    "Possível déficit de Reserva Legal",
+    "CAR possivelmente desatualizado"
+  ],
+  "acoes_remediacao": [
+    "Verificar averbação de Reserva Legal"
+  ],
+  "risco_estimado": "medio",
+  "observacoes": "Afirmações abaixo precisam de verificação de fonte.",
+  "afirmacoes": [
+    {
+      "afirmacao": "Possível déficit de Reserva Legal",
+      "categoria": "passivo",
+      "fonte": "",
+      "confianca": "baixa"
+    },
+    {
+      "afirmacao": "CAR possivelmente desatualizado",
+      "categoria": "passivo",
+      "fonte": "sem fonte",
+      "confianca": "baixa"
+    }
+  ]
+}

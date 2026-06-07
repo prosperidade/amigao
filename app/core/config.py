@@ -217,10 +217,36 @@ class Settings(BaseSettings):
     # agente — deprecation futura é troca de variável, não de código. Vazio = cai
     # no AI_DEFAULT_MODEL. Mesma convenção do GEMINI_LEGAL_MODEL (legislacao).
     AI_DIAGNOSTICO_MODEL: str = "gpt-4.1"
+    # Teto de tokens de SAÍDA do diagnóstico (fix/llm-consistencia 2026-06-07).
+    # O diagnóstico é a peça mais fundamental do funil; pós-#70 o formato
+    # {afirmacao, fonte, confianca} ficou 2-3× maior e o caso #12 (228 campos)
+    # estourava o teto global de 2048 → JSON truncado → parser falhava. Subimos
+    # para o MÁXIMO de saída do gpt-4.1 (32.768). Os fallbacks do diagnóstico
+    # (gemini-2.5-pro 65k, claude-sonnet 64k) comportam esse teto. Por env, nunca
+    # hardcoded no agente — próximo redimensionamento é troca de variável.
+    AI_DIAGNOSTICO_MAX_TOKENS: int = 32_768
+    # Cost cap dedicado do diagnóstico: com saída longa o teto global de $0.10
+    # dispararia cost_exceeded antes da conclusão. $0.50 cobre o pior caso
+    # (input grande + 32k de saída no gpt-4.1) com folga. Roda 1×/caso.
+    AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO: float = 0.50
+    # Modelo OpenAI equivalente do agente legislação (matriz de equivalência
+    # agente×provider — fix/llm-consistencia). Usado APENAS como fallback de
+    # resiliência quando o Gemini (primário) está indisponível. Por env.
+    AI_LEGAL_MODEL_OPENAI: str = "gpt-4.1-mini"
+    # Modelo Anthropic econômico (equivalente Haiku) usado na matriz para
+    # extrator/atendimento/vigia quando só a chave Anthropic está disponível.
+    AI_HAIKU_MODEL: str = "claude-haiku-4-5-20251001"
     # White label (André 2026-05-28): provider chinês selecionável pelo consultor.
     # DeepSeek é o mais maduro para LiteLLM; trocar aqui se mudar.
     LLM_CHINESE_PROVIDER: str = "deepseek"
-    AI_MAX_TOKENS: int = 2048
+    # Teto global de tokens de saída (default de todos os agentes sem setting
+    # dedicado). fix/llm-consistencia: subido de 2048 → 4096; o formato pós-#70
+    # cresceu a saída de TODOS os agentes JSON (extrator, atendimento, vigia).
+    AI_MAX_TOKENS: int = 4096
+    # Teto absoluto para o retry automático de truncamento (gateway). Quando
+    # finish_reason="length", o gateway tenta 1× com max_tokens dobrado, limitado
+    # a este teto. 32.768 = máximo de saída do gpt-4.1 (modelo do diagnóstico).
+    AI_MAX_TOKENS_CEILING: int = 32_768
     AI_TEMPERATURE: float = 0.2
     AI_TIMEOUT_SECONDS: float = 30.0
     # Retries por modelo para erros TRANSITÓRIOS (Timeout, 503, RateLimit) no

@@ -1,0 +1,34 @@
+{
+  "caminho_regulatorio": "Regularização ambiental do imóvel rural via retificação do CAR, adesão ao Programa de Regularização Ambiental (PRA) para o déficit de Reserva Legal e PRAD para a APP suprimida, com tratamento do auto de infração estadual em paralelo.",
+  "orgao_competente": "SEMAD/GO (Secretaria de Estado de Meio Ambiente e Desenvolvimento Sustentável de Goiás)",
+  "etapas": [
+    {"ordem": 1, "descricao": "Retificar o perímetro do CAR no SICAR/GO"},
+    {"ordem": 2, "descricao": "Aderir ao PRA e firmar Termo de Compromisso"},
+    {"ordem": 3, "descricao": "Protocolar e executar o PRAD da APP"}
+  ],
+  "legislacao_aplicavel": [
+    "Lei 12.651/2012 (Código Florestal)",
+    "Lei 9.605/1998 (Lei de Crimes Ambientais)",
+    "Decreto estadual GO de regulamentação do PRA"
+  ],
+  "normas_estaduais": [
+    "Instrução Normativa SEMAD sobre PRAD"
+  ],
+  "riscos": [
+    "Indeferimento da adesão ao PRA por inconsistência de perímetro no CAR",
+    "Conversão do embargo em multa diária se não houver defesa tempestiva"
+  ],
+  "documentos_necessarios": [
+    "Matrícula atualizada",
+    "CCIR vigente",
+    "Planta georreferenciada"
+  ],
+  "prazos_estimados": {"defesa_auto_infracao": "20 dias", "adesao_pra": "60 dias"},
+  "prazos_legais": ["Defesa do auto de infração: 20 dias do ciente"],
+  "recomendacoes": [
+    "Apresentar defesa ao auto de infração antes de qualquer outro passo"
+  ],
+  "confianca": "alta",
+  "risco_legal": "alto",
+  "justificativa": "O embargo ativo e o déficit de Reserva Legal exigem ação coordenada; a retificação do CAR é pré-requisito técnico para a adesão ao PRA."
+}

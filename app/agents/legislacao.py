@@ -191,6 +191,10 @@ class LegislacaoAgent(BaseAgent):
                 model=chosen_model,
                 max_tokens=settings.CLAUDE_LEGAL_MAX_TOKENS,
                 max_cost_override_usd=cost_limit,
+                # fix/llm-consistencia: liga a matriz. Gemini (primário) continua
+                # 1º; em 503/timeout cai pro equivalente OpenAI/Anthropic
+                # disponível — antes ficava refém do `model=` único.
+                agent_name="legislacao",
             )
         elif settings.ANTHROPIC_API_KEY:
             # Fallback: Claude via SDK quando Gemini não tiver API key.
@@ -201,6 +205,7 @@ class LegislacaoAgent(BaseAgent):
                 user_prompt,
                 system=system_prompt,
                 max_cost_override_usd=settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO,
+                agent_name="legislacao",
             )
 
         parsed = OutputValidationPipeline.parse_llm_json(response.content)
