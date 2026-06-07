@@ -506,16 +506,41 @@ class LegislacaoAgent(BaseAgent):
             try:
                 prazo = raw.get("prazo_estimado_dias")
                 prazo_int = int(prazo) if prazo is not None and str(prazo).strip() != "" else None
+                # Rastreabilidade (06/06): a fonte do prazo. Se o LLM apontou um
+                # trecho do RAG (fonte_trecho), é "norma" + SourceRef; senão, e
+                # havendo prazo, marca "estimativa_profissional" (sem fonte
+                # normativa nos autos) — honestidade explícita, nunca prazo "da cabeça".
+                fonte_ref = raw.get("fonte_trecho") or raw.get("fonte") or raw.get("fonte_prazo")
+                sources_et, prazo_fonte = self._etapa_fonte(fonte_ref, prazo_int)
                 out.append(Etapa(
                     ordem=int(raw.get("ordem", i)),
                     titulo=titulo,
                     descricao=(raw.get("descricao") or None),
                     prazo_estimado_dias=prazo_int,
                     orgao=(raw.get("orgao") or None),
+                    sources=sources_et,
+                    prazo_fonte=prazo_fonte,
                 ))
             except (ValueError, TypeError, ValidationError) as exc:
                 logger.warning("legislacao.etapa_skipped raw=%r err=%s", raw, exc)
         return out
+
+    @staticmethod
+    def _etapa_fonte(fonte_ref: Any, prazo_int: int | None) -> tuple[list, str | None]:
+        """Fonte do prazo de uma etapa. fonte_ref preenchida e plausível → 'norma'
+        + SourceRef(legislacao); sem fonte e com prazo → 'estimativa_profissional'."""
+        from app.schemas.stage_output import SourceRef  # noqa: PLC0415
+
+        ref_str = str(fonte_ref).strip() if fonte_ref not in (None, "") else ""
+        if ref_str and "sem fonte" not in ref_str.lower() and "estimativa" not in ref_str.lower():
+            return [SourceRef(tipo="legislacao", descricao=ref_str)], "norma"
+        if prazo_int is not None:
+            return (
+                [SourceRef(tipo="sem_fonte", sem_fonte=True,
+                           descricao="estimativa profissional — sem fonte normativa nos autos")],
+                "estimativa_profissional",
+            )
+        return [], None
 
     def _normalize_riscos(self, riscos_raw: list) -> list[Risco]:
         """Mapeia list[dict] do LLM (campos `descricao`, `severidade`, `mitigacao`)
@@ -693,10 +718,15 @@ class LegislacaoAgent(BaseAgent):
                 "7. Estimativa de prazos\n\n"
                 "Quando BASE LEGISLATIVA for fornecida abaixo, use-a como fonte primaria.\n"
                 "Cite artigos, paragrafos e incisos especificos.\n\n"
+                "REGRA INVIOLAVEL — NENHUMA AFIRMACAO SEM FONTE: cada norma citada e cada PRAZO deve "
+                "apontar o TRECHO de origem entre os TRECHOS HIPER-RELEVANTES (referencie pelo numero [N] "
+                "do trecho). Se um prazo NAO tem base nos trechos fornecidos, marque-o como "
+                "\"estimativa profissional — sem fonte normativa nos autos\" no campo fonte_trecho da etapa. "
+                "NUNCA invente numero de norma, artigo ou prazo \"de cabeca\".\n\n"
                 "Retorne APENAS JSON valido com os campos:\n"
                 "caminho_regulatorio (str), orgao_competente (str), "
-                "etapas (list[{ordem, titulo, descricao, prazo_estimado_dias, orgao}]), "
-                "legislacao_aplicavel (list[{identificador, titulo, relevancia}]), "
+                "etapas (list[{ordem, titulo, descricao, prazo_estimado_dias, orgao, fonte_trecho}]), "
+                "legislacao_aplicavel (list[{identificador, titulo, relevancia, fonte_trecho}]), "
                 "riscos (list[{descricao, severidade, mitigacao}]), "
                 "documentos_necessarios (list[str]), "
                 "prazos_estimados ({total_dias, fase_documental_dias, fase_protocolo_dias, fase_analise_orgao_dias}), "

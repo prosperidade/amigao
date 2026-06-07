@@ -123,6 +123,45 @@ class Source(_StrictModel):
     excerpt: str | None = Field(default=None)
 
 
+# Tipos de fonte aceitos no contrato de rastreabilidade (validação especialista 06/06).
+SourceRefTipo = Literal[
+    "documento",     # certidão/CCIR/ITR/recibo (nome/tipo/id do Document)
+    "matriz",        # linha da matriz de inconsistências
+    "rat",           # parecer do órgão (protocolo + pendência)
+    "legislacao",    # trecho do RAG (chunk do knowledge_catalog)
+    "atendimento",   # relato/demanda do consultor
+    "auditor",       # finding determinístico do auditor
+    "sem_fonte",     # marcação honesta: afirmação sem fonte identificável
+]
+
+
+class SourceRef(_StrictModel):
+    """Rastreabilidade genérica — "nenhuma afirmação sem fonte" (validação 06/06).
+
+    Contrato comum a TODOS os agentes (matriz/diagnóstico/legislação e, depois,
+    atendimento/orçamento/redator). Cada afirmação/linha/item carrega uma lista
+    destas. NUNCA inventar fonte: se não há fonte identificável, usar
+    ``tipo="sem_fonte"`` (ou ``sem_fonte=True``) — honestidade explícita.
+    """
+
+    tipo: SourceRefTipo
+    ref: str | None = Field(default=None, description="ID/identificador específico (doc id, chunk id, protocolo RAT, chave da linha)")
+    descricao: str | None = Field(default=None, description="Rótulo legível: nome do doc, norma+artigo, protocolo do RAT")
+    valor: str | None = Field(default=None, description="O dado conferido/citado, quando aplicável (ex.: área, denominação)")
+    confianca: str | None = Field(default=None, description="alta | media | baixa")
+    sem_fonte: bool = Field(default=False, description="True = sem fonte identificável (não inventar)")
+
+
+class Afirmacao(_StrictModel):
+    """Uma afirmação com rastreabilidade — texto + fonte(s). 'Nenhuma afirmação
+    sem fonte': se ``fontes`` vier vazio, o parser injeta uma ``SourceRef``
+    ``sem_fonte`` para a UI sinalizar (nunca silenciar)."""
+
+    texto: str = Field(..., min_length=1)
+    categoria: str | None = Field(default=None, description="passivo | acao | hipotese | lacuna")
+    fontes: list[SourceRef] = Field(default_factory=list)
+
+
 class CitationRef(_StrictModel):
     """Referência canônica a uma norma legal.
 
@@ -187,6 +226,9 @@ class Risco(_StrictModel):
     descricao: str | None = Field(default=None, min_length=1)
     severidade: RiscoSeveridade | None = None
     mitigacao_sugerida: str | None = None
+
+    # Rastreabilidade (06/06): fonte(s) que sustentam o risco.
+    sources: list[SourceRef] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _reconcile_dual_emit(self) -> Risco:
@@ -260,6 +302,8 @@ class Divergencia(_StrictModel):
     tema: str = Field(..., min_length=1, description="Ex.: 'área', 'titularidade', 'GEO INCRA'")
     divergencia: str = Field(..., min_length=1, description="Descrição da divergência observada")
     impacto: str = Field(..., min_length=1, description="Consequência prática")
+    # Rastreabilidade (06/06): docs/valores que sustentam a divergência.
+    sources: list[SourceRef] = Field(default_factory=list)
 
 
 class NotificacaoItem(_StrictModel):
@@ -299,6 +343,11 @@ class DiagnosticoPreliminarContent(StageOutputContent):
     recomendacoes_externas: list[str] = Field(default_factory=list)
     etapa_funil_sugerida: str | None = None
     matriz_notificacao: list[NotificacaoItem] | None = None
+
+    # ── Rastreabilidade (validação 06/06): cada passivo/ação com fonte ──
+    # Aditivo: convive com hipoteses/checklist_documental (strings) para os
+    # renderers antigos; a UI nova lê `afirmacoes` (texto + fontes).
+    afirmacoes: list[Afirmacao] = Field(default_factory=list)
 
 
 class PecaJuridicaContent(StageOutputContent):
@@ -351,6 +400,14 @@ class Etapa(_StrictModel):
     descricao: str | None = None
     prazo_estimado_dias: int | None = Field(default=None, ge=0)
     orgao: str | None = None
+    # Rastreabilidade (06/06): trecho(s) do RAG que sustentam prazo/etapa.
+    # Vazio + prazo presente → o agente marca "estimativa profissional" em
+    # `prazo_fonte` (sem fonte normativa nos autos).
+    sources: list[SourceRef] = Field(default_factory=list)
+    prazo_fonte: str | None = Field(
+        default=None,
+        description="'norma' (com source) | 'estimativa_profissional' (sem fonte normativa)",
+    )
 
 
 class EnquadramentoRegulatorioContent(StageOutputContent):
