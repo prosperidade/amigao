@@ -92,7 +92,57 @@ inclusive quando o fallback assume um provider diferente do primário.
 `AI_MAX_TOKENS_CEILING=32768` · `AI_LEGAL_MODEL_OPENAI=gpt-4.1-mini` ·
 `AI_HAIKU_MODEL=claude-haiku-4-5-20251001` · `AI_MAX_TOKENS` 2048→4096.
 
+## Item 4 — RAG da legislação entregando ZERO trechos (medido em prod)
+
+**Medição (Supabase prod `diquycxxkfrjhxtrcmzb`, 2026-06-07):**
+```
+SELECT count(*) FROM knowledge_catalog;      -- 0
+SELECT count(*) FROM legislation_documents;  -- 0
+```
+**Causa raiz — ESTRUTURAL (dado ausente), não bug de busca:** o corpus (~23k
+chunks GO+Federal) **nunca foi ingerido no banco de produção**. O Supabase prod
+foi criado em 2026-05-19; as ingestões (Sprint W 14/05, SEMAD 20/05) rodaram em
+dev/local e não foram replicadas para prod. A coluna `embedding` existe (schema
+via migration), mas a tabela está vazia.
+
+**Evidência cruzada (ai_jobs reais do #12):** legislação `completed` com
+`tokens_in=572` (job 334) e `694` (job 404) — só query+system, **zero trechos** —
+e output declarando "ausência de trechos legislativos hiper-relevantes". Bate
+exatamente com a denúncia.
+
+Não é threshold/filtro/query (o código de `knowledge_catalog.search` está
+correto: `1 - (embedding <=> vector)` como similaridade, filtros UF/source_type/
+demand_type, fallback global sem UF). **Conforme diretriz: diagnóstico reportado +
+follow-on; NÃO refazer o RAG aqui.** Adicionado apenas log de observabilidade
+quando o RAG volta 0 trechos (`legislacao.rag 0 trechos …`).
+
+**Follow-on (ops, fora deste PR):** ingerir o corpus em prod rodando
+`scripts/ingest_federais_canonicos.py`, `ingest_legislacao_estadual.py`,
+`ingest_corpus_semad.py` (e afins) contra o `DATABASE_URL` de prod com
+`OPENAI_API_KEY` (embeddings text-embedding-3-small 768d). ⚠️ A maioria dos PDFs
+foi removida do git (deploy Render) — recuperar a fonte antes de re-ingerir.
+
+## Evidência de produção (ai_jobs reais do caso #12, 2026-06-07)
+| Sintoma | Jobs `failed` | Mensagem |
+|---|---|---|
+| Truncamento (Item 1) | 399, 405, 398 | `[json_parse] … {"situacao_geral": "O imóve` (cortado) |
+| Legislação 503 (Item 2) | 373, 397, 365 | `Todos os providers falharam … ServiceUnavailableError: GeminiException` |
+| RAG zero trechos (Item 4) | 334/404 `completed` | `tokens_in` 572/694 (sem trechos) |
+
+Diagnósticos `completed` tinham `tokens_out` 777–1146 (< 2048) → quando a saída
+passava de 2048 truncava: a intermitência do *"uma hora vai, outra não"*.
+
 ## Validação
-- Caso #12 real: diagnóstico conclui N× seguidas (rodar 3×). *(ver REPORT no PR)*
-- 503 do primário → fallback assume (`test_agent_name_falls_back_to_equivalent_provider_on_503`).
-- Golden + gateway + matriz verdes; truncamento simulado → erro específico.
+- **Bug provado em prod** (tabela acima): falhas reais de truncamento e de 503.
+- **Fix provado deterministicamente**: golden + gateway + matriz verdes
+  (`test_truncation_retries_with_bigger_max_tokens_then_succeeds`,
+  `test_persistent_truncation_raises_specific_error`,
+  `test_agent_name_falls_back_to_equivalent_provider_on_503`). Suíte
+  `tests/agents`+`tests/core`: **223 verdes**.
+- **Caso #12 real 3× sem falha**: validação pós-deploy (padrão do projeto —
+  precisa do código novo rodando contra o prod). Verificação:
+  ```sql
+  SELECT id, status, tokens_out, model_used FROM ai_jobs
+  WHERE agent_name='diagnostico' AND entity_id=12
+  ORDER BY created_at DESC LIMIT 3;  -- esperado: 3× completed
+  ```

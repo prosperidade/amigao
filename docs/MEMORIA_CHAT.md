@@ -522,3 +522,14 @@ em `docs/agentes/` são a fonte de verdade verificada.
   eslint limpo. NÃO validado ao vivo: E2E browser→MinIO→Celery (prova por integração+unit). Doc:
   `docs/trabalhos/intake_geo_routing.md`. **NÃO neste PR:** parser KML/SHP, `Property.geom`, PostGIS
   (gap D1 — dívidas #14/#15).
+- **2026-06-07 — Consistência dos agentes LLM (`fix/llm-consistencia`).** Três causas do "uma hora vai,
+  outra não" no caso real #12 (São Jorge), medidas nos `ai_jobs` de prod. **(1) Truncamento:** diagnóstico
+  (gpt-4.1) usava o teto global `AI_MAX_TOKENS=2048`; o formato pós-#70 estourava → JSON cortado →
+  `[json_parse]` intermitente. Fix: gateway captura `finish_reason`, retry com `max_tokens` dobrado e
+  `AITruncationError` legível; diagnóstico com teto dedicado 32.768 + cost cap próprio; global 2048→4096.
+  **(2) Legislação refém do 503:** `model=` explícito sem fallback → nova matriz de equivalência
+  agente×provider (`app/core/model_matrix.py`), resolve por providers disponíveis e adiciona equivalentes
+  só como fallback (BYOK-ready, 1 provider não quebra). **(3) RAG zero trechos (estrutural):**
+  `knowledge_catalog`/`legislation_documents` VAZIOS em prod (corpus só em dev/local) → dívida #47 +
+  log de observabilidade. Golden tests no CI (`tests/agents/golden/`). 223 testes verdes; caso #12 real
+  3× = validação pós-deploy. Embeddings seguem com chave da casa. Doc: `docs/trabalhos/llm_consistencia.md`.

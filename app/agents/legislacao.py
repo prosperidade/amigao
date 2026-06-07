@@ -297,6 +297,17 @@ class LegislacaoAgent(BaseAgent):
                     demand_type=demand_type if demand_type else None,
                     min_similarity=0.0,
                 )
+            # Observabilidade (fix/llm-consistencia): RAG vazio é a diferença entre
+            # citar trecho [N] real e "ausência de trechos hiper-relevantes". Em
+            # prod o corpus pode estar AUSENTE (knowledge_catalog vazio) — sinaliza
+            # alto para não passar despercebido. Ver docs/trabalhos/llm_consistencia.md.
+            if not results:
+                import logging  # noqa: PLC0415
+                logging.getLogger(__name__).warning(
+                    "legislacao.rag 0 trechos uf=%s demand_type=%s query_len=%d — "
+                    "corpus ausente/sem match? verifique ingestão do knowledge_catalog",
+                    uf, demand_type, len(composed),
+                )
             return results
         except Exception as exc:
             import logging  # noqa: PLC0415

@@ -276,6 +276,26 @@ best-effort (falha de auditoria não derruba o agente). Helper `emit_ai_key_use_
 uso real hoje, por isso adiado): auditar a senha de portal (`Credential`) — só quando ganhar
 consumidor (login automatizado / endpoint de revelação). Conexão com **#30**/**#18** mantida.
 
+## Reveladas em fix/llm-consistencia (07/06)
+
+**47. Corpus de legislação (RAG) AUSENTE no banco de produção.**
+Medido no Supabase prod (`diquycxxkfrjhxtrcmzb`, 07/06): `knowledge_catalog` e
+`legislation_documents` têm **0 linhas**. O agente legislação roda, mas com
+`tokens_in≈572/694` (só query+system, zero trechos) e declara "ausência de
+trechos legislativos hiper-relevantes" — exatamente o sintoma reportado. **Causa
+estrutural (dado ausente), não bug de busca:** o corpus (~23k chunks GO+Federal)
+foi ingerido em dev/local (Sprint W 14/05, SEMAD 20/05) mas o Supabase prod foi
+criado em 19/05 e nunca recebeu os dados. O código de `knowledge_catalog.search`
+está correto. **Resolver (ops, PR/runbook próprio):** rodar
+`scripts/ingest_federais_canonicos.py`, `ingest_legislacao_estadual.py`,
+`ingest_corpus_semad.py` (e afins) contra o `DATABASE_URL` de prod com
+`OPENAI_API_KEY` (text-embedding-3-small 768d). ⚠️ A maioria dos PDFs-fonte foi
+removida do git (deploy Render) — recuperar a fonte antes. **Marco:** alta
+prioridade — sem o corpus, o diferencial regulatório/RAG está morto em prod.
+**Observabilidade já adicionada** em `fix/llm-consistencia`: log `legislacao.rag
+0 trechos …` quando a busca volta vazia. **Origem:** Item 4 da PR
+`fix/llm-consistencia` (07/06). Doc: `docs/trabalhos/llm_consistencia.md`.
+
 ## Backlog de produto (já versionado em ADR)
 
 **16. Loop de aprendizado com material dos consultores** — ADR-010.
