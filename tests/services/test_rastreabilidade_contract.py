@@ -8,16 +8,13 @@ from types import SimpleNamespace
 
 from app.schemas.stage_output import (
     Afirmacao,
-    Divergencia,
     DiagnosticoPreliminarContent,
-    EnquadramentoRegulatorioContent,
+    Divergencia,
     Etapa,
-    Risco,
     Source,
     SourceRef,
 )
 from app.services.inconsistency_matrix import build_matrix
-
 
 # --- contrato do SourceRef / Afirmacao -------------------------------------
 
