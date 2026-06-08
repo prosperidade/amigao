@@ -343,6 +343,26 @@ def _is_empty(value: Any) -> bool:
     return value in (None, "", [], {}) or (isinstance(value, str) and not value.strip())
 
 
+def _unwrap_llm_value(value: Any) -> tuple[Any, Optional[str]]:
+    """Desembrulha campos que o LLM às vezes devolve como objeto, não escalar.
+
+    Caso #12 (vazamento do dict): em vez de ``"area_ha": 349.9022`` o modelo
+    devolveu ``"area_ha": {"value": 349.9022, "confidence": "high"}``. Sem
+    desembrulhar, o dict era persistido cru em ``field_value.value`` e em
+    ``matricula_hint`` (via ``str(dict)``) — e a vírgula do repr do dict virava
+    a "fazenda de 3,5 milhões de ha" no parse de área. Aqui devolvemos o escalar
+    interno + a confiança embutida (quando houver).
+
+    Só desembrulha o "envelope" ``{value, confidence?}``; dicts estruturais
+    legítimos (item de matrícula, pendência) passam intactos.
+    """
+    if isinstance(value, dict) and "value" in value:
+        inner_keys = set(value.keys())
+        if inner_keys <= {"value", "confidence"}:
+            return value.get("value"), value.get("confidence")
+    return value, None
+
+
 def _value_key(value: Any) -> str:
     """Chave normalizada de um valor extraído, para deduplicação (4c).
 
@@ -363,15 +383,22 @@ def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingF
         return []
 
     from app.services.field_validators import check_format  # noqa: PLC0415
+    from app.services.inconsistency_matrix import _clean_matricula_hint  # noqa: PLC0415
 
     rows: list[StagingField] = []
     seen_keys: set[tuple[Any, ...]] = set()  # dedup intra-doc (campo+hint+valor)
     hint_key = _HINT_FROM_KEY.get(doc_type)
-    doc_hint = parsed.get(hint_key) if hint_key else None
-    doc_hint = str(doc_hint) if not _is_empty(doc_hint) else None
+    raw_hint = parsed.get(hint_key) if hint_key else None
+    raw_hint, _ = _unwrap_llm_value(raw_hint)
+    # Caso #12 item B: extrai só o número da matrícula (regex) — sem dict, sem
+    # anotação ("R-01", "(2 de 3)"), sem prefixo ("MATR. 2.923" → "2923").
+    doc_hint = _clean_matricula_hint(raw_hint)
 
     for spec in _FIELD_SPECS.get(doc_type, []):
         value = parsed.get(spec.json_key)
+        # Caso #12: desembrulha envelope {value, confidence} que o LLM às vezes
+        # devolve — senão o dict é persistido cru (vira "3,5 milhões de ha").
+        value, embedded_conf = _unwrap_llm_value(value)
         if _is_empty(value):
             continue
         # 4c — dedup no MESMO doc: campo+hint+valor repetido vira 1 linha.
@@ -383,7 +410,7 @@ def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingF
         fv: dict[str, Any] = {"value": value}
         if spec.unidade:
             fv["unidade"] = spec.unidade
-        confidence = _conf_for(parsed, spec.json_key)
+        confidence = _conf_for(parsed, spec.json_key) or embedded_conf
         # 4b — validação de formato: fora do esperado → rebaixa + marca p/ revisão,
         # SEM tocar no valor bruto (preservado em fv["value"]).
         fmt_ok = check_format(spec.field_name, value)
@@ -404,14 +431,14 @@ def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingF
         for item in parsed.get("matriculas") or []:
             if not isinstance(item, dict) or _is_empty(item):
                 continue
-            numero = item.get("numero")
+            numero, _ = _unwrap_llm_value(item.get("numero"))
             rows.append(StagingField(
                 field_name="matricula_listada",
                 field_value={"value": item},
                 confidence=_conf_for(parsed, "matriculas"),
                 target_entity="matricula",
                 target_field="numero_matricula",
-                matricula_hint=str(numero) if not _is_empty(numero) else None,
+                matricula_hint=_clean_matricula_hint(numero),
             ))
 
     # RAT: pendências estruturadas → insumo central do diagnóstico (Fase 3).

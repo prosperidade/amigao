@@ -44,6 +44,12 @@ AREA_TOLERANCE_PCT = Decimal("0.005")
 # faltante / vínculo incompleto — vira ATENÇÃO (pedir vínculo), não divergência.
 MISSING_MATRICULA_FACTOR = Decimal("1.5")
 
+# Sanidade de área (caso #12, item A): nenhuma fazenda do domínio passa de 100k ha.
+# Área de matrícula acima disso é quase certamente erro de parse (vírgula decimal
+# perdida → 349,9022 vira 3499022) — não entra no confronto/soma; vira linha de
+# revisão. Metade de Goiás (~3,5M ha) era o sintoma.
+AREA_SANITY_MAX_HA = Decimal("100000")
+
 
 # ---------------------------------------------------------------------------
 # Dicionário de sinônimos por item canônico
@@ -166,22 +172,134 @@ def _row_value(row: Any) -> Any:
     return fv
 
 
+def _normalize_number_str(s: str) -> str:
+    """Resolve separadores decimal/milhar pelo ÚLTIMO separador presente.
+
+    Regra robusta (caso #12, item A): quando '.' e ',' coexistem, o separador
+    mais à direita é o decimal e o outro é milhar:
+      '1.010,7113' → '1010.7113'   (vírgula decimal, ponto milhar)
+      '3.502.445,851' → '3502445.851'
+      '1,234.56' → '1234.56'       (ponto decimal, vírgula milhar)
+    Só vírgula → decimal ('349,9022' → '349.9022'). Só ponto (ou nenhum) →
+    mantém ('660.6561' fica 660.6561; NÃO inventamos milhar onde não há vírgula).
+    """
+    last_comma = s.rfind(",")
+    last_dot = s.rfind(".")
+    if last_comma != -1 and last_dot != -1:
+        if last_comma > last_dot:  # vírgula decimal, ponto milhar
+            return s.replace(".", "").replace(",", ".")
+        return s.replace(",", "")  # ponto decimal, vírgula milhar
+    if last_comma != -1:  # só vírgula = decimal
+        return s.replace(",", ".")
+    return s  # só ponto, ou inteiro puro
+
+
 def _to_float_br(value: Any) -> Optional[float]:
-    """Converte número PT-BR ('1.010,7113', '660,6561') ou float para float."""
-    if value is None:
+    """Converte número PT-BR ('1.010,7113', '660,6561') ou float para float.
+
+    Defesa do caso #12 (item A): NUNCA aceitar dict/lista cru. Um dict de extração
+    `{'value': 349.9022, 'confidence': 'high'}` que vazasse como string viraria
+    '349.9022,' após limpeza, e a vírgula (separador do dict!) disparava o ramo
+    PT-BR → '3499022' (a "fazenda de 3,5 milhões de ha"). Aqui desembrulhamos o
+    dict para o escalar e rejeitamos coleções.
+    """
+    if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
         return float(value)
-    s = str(value).strip().lower().replace("ha", "").replace("hectares", "").strip()
-    s = re.sub(r"[^0-9.,-]", "", s)
-    if not s:
+    if isinstance(value, dict):
+        return _to_float_br(value.get("value")) if "value" in value else None
+    if isinstance(value, (list, tuple, set)):
         return None
-    if "," in s:  # vírgula = decimal; ponto = milhar
-        s = s.replace(".", "").replace(",", ".")
+    s = str(value).strip().lower().replace("hectares", "").replace("ha", "").strip()
+    s = re.sub(r"[^0-9.,-]", "", s)
+    if not s or s in ("-", ".", ","):
+        return None
+    s = _normalize_number_str(s)
     try:
         return float(s)
     except ValueError:
         return None
+
+
+def _is_m2(value: Any, unidade: Any) -> bool:
+    """True se a área está em m² (unidade marcada ou sufixo no valor cru)."""
+    u = _norm_text(unidade)
+    if u in ("m2", "m²", "metros quadrados", "metro quadrado"):
+        return True
+    raw = _norm_text(value)
+    return bool(re.search(r"\bm2\b|m²", raw))
+
+
+def parse_area_ha(value: Any, unidade: Any = None) -> Optional[float]:
+    """Função ÚNICA de parse de área → float em hectares (caso #12, item A).
+
+    Aceita as variações REAIS do staging: vírgula decimal ('349,9022'), ponto de
+    milhar ('1.010,7113'), ponto decimal ('660.6561') e sufixo de unidade
+    ('3.502.445,851 m²' → 350,2445851 ha quando m² está marcado). Não-numérico,
+    dict ou lista → None (não polui confronto/soma).
+    """
+    val = _to_float_br(value)
+    if val is None:
+        return None
+    if _is_m2(value, unidade):
+        val = val / 10000.0
+    return val
+
+
+# Anotações que grudam no número da matrícula e NÃO fazem parte dele.
+#   '4655 (2 de 3)'  '(parte 2 de 3)'  → fatia de georreferenciamento
+#   'R-01' 'AV-3' 'R.05'              → ato registral (registro/averbação)
+_HINT_ANNOT_RE = re.compile(
+    r"\(\s*\d+\s*de\s*\d+\s*\)|\bav[-.\s]?\d+\b|\br[-.\s]?\d+\b",
+    re.IGNORECASE,
+)
+# Hints que não identificam matrícula nenhuma — não viram coluna de confronto.
+_HINT_JUNK = {"", "?", "-", "--", "none", "null", "n/a", "na", "s/n", "sn"}
+
+
+def _clean_matricula_hint(raw: Any) -> Optional[str]:
+    """Extrai o número da matrícula de um `matricula_hint` sujo (caso #12, item B).
+
+    Trata os shapes REAIS do staging do #12:
+      "4.655" → "4655"            (ponto de milhar)
+      "MATR. 2.923 R-01" → "2923" (prefixo + ato registral)
+      "4655 (2 de 3)" → "4655"    (fatia de georref)
+      "{'value': '4655', ...}" → "4655"  (dict serializado que vazou)
+      "?" / "" / None → None      (sem vínculo — NÃO cria confronto)
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return _clean_matricula_hint(raw.get("value"))
+    if isinstance(raw, (list, tuple, set)):
+        return None
+    s = str(raw).strip()
+    if s.lower() in _HINT_JUNK:
+        return None
+    s = _HINT_ANNOT_RE.sub(" ", s)
+    # número com pontos de milhar OU sequência de ≥2 dígitos (matrículas não têm 1 dígito)
+    m = re.search(r"\d{1,3}(?:\.\d{3})+|\d{2,}", s)
+    if not m:
+        return None
+    num = m.group(0).replace(".", "")
+    return num or None
+
+
+# Prefixos de TÍTULO DE DOCUMENTO que vazam como "denominação" (caso #12, item C).
+# Ex.: a "Certidão de Embargo" (um doc, não o nome do imóvel) caía na denominação
+# do SIGEF. Denominação real começa com "Fazenda/Sítio/Gleba/Lote/Chácara…".
+_DOC_TITLE_PREFIXES: tuple[str, ...] = (
+    "certidao", "recibo", "relatorio", "parecer", "laudo", "requerimento",
+    "auto de", "notificacao", "embargo", "protocolo", "memorial", "anexo",
+    "declaracao", "comprovante",
+)
+
+
+def _is_doc_title(value: Any) -> bool:
+    """True se o valor parece um título de documento, não uma denominação."""
+    s = _norm_text(value)
+    return any(s.startswith(p) for p in _DOC_TITLE_PREFIXES)
 
 
 def _norm_text(value: Any) -> str:
@@ -217,7 +335,7 @@ def _group_sources(rows: list[Any]) -> dict[str, _Source]:
     sources: dict[str, _Source] = {}
     for row in rows:
         dt = (getattr(row, "source_doc_type", None) or "outro").lower()
-        hint = getattr(row, "matricula_hint", None)
+        hint = _clean_matricula_hint(getattr(row, "matricula_hint", None))
         fname = getattr(row, "field_name", None)
         val = _row_value(row)
 
@@ -279,7 +397,23 @@ def _classificar_pendencia(pend: dict[str, Any]) -> Optional[str]:
     Casa em categoria+detalhamento, NÃO na recomendação: o texto-padrão do órgão
     repete "área antropizada após 22 de julho de 2008" na recomendação de
     cobertura, o que falsearia o tema como supressão.
+
+    Caso #12 item D: a CATEGORIA "Documentos" tem precedência. O detalhamento de
+    um pedido de documentos lista "Licença Ambiental e Autorização de Desmatamento"
+    — o termo "desmat" casava `supressao` (que vem antes na ordem), criando uma
+    falsa linha "Supressão pós-2008" com a recomendação de acesso da própria
+    pendência. Respeitar a categoria impede o cruzamento de conteúdos.
     """
+    categoria = _norm_text(pend.get("categoria"))
+    if categoria.startswith("documento"):
+        # Acesso pode vir rotulado como "Documentos" (caso #11): se o DETALHAMENTO
+        # fala de acesso, é acesso. Caso contrário é pedido de documentos — e o
+        # detalhamento (lista com "Autorização de Desmatamento") NÃO pode virar
+        # `supressao` (caso #12 item D).
+        det = _norm_text(pend.get("detalhamento"))
+        if any(t in det for t in ("acesso", "via de acesso", "servidao")):
+            return "acesso"
+        return "documentos"
     texto = " ".join(
         _norm_text(pend.get(k)) for k in ("categoria", "detalhamento")
     )
@@ -306,33 +440,58 @@ def _extrai_uc(pend: dict[str, Any]) -> Optional[str]:
     return m.group(0).strip() if m else None
 
 
-def _collect_areas(
-    rows: list[Any],
-) -> tuple[dict[str, dict[str, tuple[float, Any]]], dict[str, tuple[float, Any]]]:
-    """Observações de área separadas por NÍVEL (caso #11, item 3).
+@dataclass
+class _AreaObservations:
+    por_matricula: dict[str, dict[str, tuple[float, Any]]]  # [hint][doc_type]=(val,row)
+    por_imovel: dict[str, tuple[float, Any]]                # [doc_type]=(val,row)
+    sem_vinculo: list[tuple[str, float, Any]]              # (doc_type, val, row) sem hint
+    implausiveis: list[tuple[str, str, float, Any]]        # (hint|'-', doc_type, val, row)
 
-    Retorna ``(por_matricula, por_imovel)``:
-    - ``por_matricula[hint][doc_type] = (valor, row)`` — certidão/sigef/ccir/itr.
+
+def _row_unidade(row: Any) -> Any:
+    fv = getattr(row, "field_value", None)
+    return fv.get("unidade") if isinstance(fv, dict) else None
+
+
+def _collect_areas(rows: list[Any]) -> _AreaObservations:
+    """Observações de área separadas por NÍVEL (caso #11/#12, item 3 + A/B).
+
+    - ``por_matricula[hint][doc_type] = (valor, row)`` — certidão/sigef/ccir/itr
+      COM `matricula_hint` limpo (vínculo conhecido).
     - ``por_imovel[doc_type] = (valor, row)`` — car/rat (imóvel inteiro).
+    - ``sem_vinculo`` — área de nível matrícula SEM hint utilizável (caso #12 item
+      B: ITR vinha sem `numero_matricula`). NÃO confronta — vira linha de atenção.
+    - ``implausiveis`` — área > 100.000 ha (caso #12 item A): erro de parse provável,
+      fora do confronto/soma, marcada para revisão.
 
-    Em duplicatas da MESMA fonte mantém o MAIOR valor: o staging real teve a área
-    do RAT às vezes mal-parseada (separador de milhar → '1.0107113' ≈ 1 ha em vez
-    de 1010,7113). Como a mesma fonte tem UMA área verdadeira, o maior recupera o
-    valor correto. (Qualidade da Fase 2 é achado à parte.)
+    Em duplicatas da MESMA fonte/hint mantém o MAIOR valor: o staging real teve a
+    área do RAT às vezes mal-parseada (separador de milhar → '1.0107113' ≈ 1 ha em
+    vez de 1010,7113). Como a mesma fonte tem UMA área verdadeira, o maior recupera
+    o valor correto. (Qualidade da Fase 2 é achado à parte.)
     """
     por_matricula: dict[str, dict[str, tuple[float, Any]]] = {}
     por_imovel: dict[str, tuple[float, Any]] = {}
+    sem_vinculo: list[tuple[str, float, Any]] = []
+    implausiveis: list[tuple[str, str, float, Any]] = []
+    sanity_max = float(AREA_SANITY_MAX_HA)
     for row in rows:
         dt = (getattr(row, "source_doc_type", None) or "outro").lower()
         fn = getattr(row, "field_name", None)
         syns = _AREA_SYNONYMS.get(dt)
         if not syns or fn not in syns:
             continue
-        val = _to_float_br(_row_value(row))
+        val = parse_area_ha(_row_value(row), _row_unidade(row))
         if not val or val <= 0:
             continue
+        if val > sanity_max:
+            hint = _clean_matricula_hint(getattr(row, "matricula_hint", None)) or "-"
+            implausiveis.append((hint, dt, val, row))
+            continue
         if _AREA_LEVEL.get(dt) == "matricula":
-            hint = getattr(row, "matricula_hint", None) or "?"
+            hint = _clean_matricula_hint(getattr(row, "matricula_hint", None))
+            if hint is None:
+                sem_vinculo.append((dt, val, row))
+                continue
             bucket = por_matricula.setdefault(hint, {})
             prev = bucket.get(dt)
             if prev is None or val > prev[0]:
@@ -341,7 +500,7 @@ def _collect_areas(
             prev = por_imovel.get(dt)
             if prev is None or val > prev[0]:
                 por_imovel[dt] = (val, row)
-    return por_matricula, por_imovel
+    return _AreaObservations(por_matricula, por_imovel, sem_vinculo, implausiveis)
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +528,8 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
     status_updates: list[tuple[Any, str]] = []
 
     # --- área — DOIS NÍVEIS (matrícula × imóvel) — Ficha 02 item 3 -------
-    por_matricula, por_imovel = _collect_areas(rows)
+    areas = _collect_areas(rows)
+    por_matricula, por_imovel = areas.por_matricula, areas.por_imovel
 
     # nível matrícula: confronto entre fontes da MESMA matrícula
     for hint in sorted(por_matricula):
@@ -460,16 +620,49 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
             for r in imovel_rows:
                 status_updates.append((r, novo))
 
+    # --- área SEM vínculo de matrícula (caso #12 item B) ----------------
+    # Campos de nível matrícula sem `matricula_hint` (ITR vinha sem nº): NÃO
+    # confrontar entre si (escalas diferentes não são divergência). Uma linha de
+    # atenção lista os valores órfãos pedindo o vínculo — sem comparar valores.
+    if areas.sem_vinculo:
+        fontes_orf: dict[str, Any] = {}
+        for dt, val, _r in areas.sem_vinculo:
+            fontes_orf.setdefault(dt, []).append(val)
+        linhas.append(MatrixRow(
+            "area_sem_vinculo", "Áreas sem vínculo de matrícula (ha)", fontes_orf,
+            MatrixSituacao.atencao.value,
+            "vincular cada área à sua matrícula (campos sem nº de matrícula — "
+            "não confrontados entre si)",
+            _destino("atencao")))
+
+    # --- área IMPLAUSÍVEL > 100.000 ha (caso #12 item A) ----------------
+    # Provável vírgula decimal perdida no parse (349,9022 → 3499022). Fora do
+    # confronto/soma; vira revisão para não voltar a "fazenda de 3,5 milhões de ha".
+    if areas.implausiveis:
+        fontes_imp = {
+            f"{dt}{(':' + hint) if hint != '-' else ''}": val
+            for (hint, dt, val, _r) in areas.implausiveis
+        }
+        linhas.append(MatrixRow(
+            "area_revisao", "Área implausível — revisar extração (ha)", fontes_imp,
+            MatrixSituacao.atencao.value,
+            "revisar área extraída (> 100.000 ha — provável erro de vírgula/parse "
+            "no documento de origem)",
+            _destino("atencao")))
+
     # --- denominacao_imovel ---------------------------------------------
     denom_rows: list[Any] = []
     denom_fontes: dict[str, Any] = {}
     for key, src in sources.items():
         val = _get(src, *_DENOM_SYNONYMS)
-        if val not in (None, ""):
-            denom_fontes[key] = val
-            r = _row_of(src, *_DENOM_SYNONYMS)
-            if r is not None:
-                denom_rows.append(r)
+        # Caso #12 item C: descartar título de documento ("Certidão de Embargo")
+        # que vazou como denominação — não é o nome do imóvel.
+        if val in (None, "") or _is_doc_title(val):
+            continue
+        denom_fontes[key] = val
+        r = _row_of(src, *_DENOM_SYNONYMS)
+        if r is not None:
+            denom_rows.append(r)
     if denom_fontes:
         distintas = {_norm_text(v) for v in denom_fontes.values()}
         if len(distintas) > 1:
@@ -541,9 +734,12 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
     if car is not None:
         car_code = _get(car, "numero_car")
         itr_car = _get(itr, "numero_car") if itr else None
-        car_mats = {_norm_text(m.get("numero") if isinstance(m, dict) else m) for m in car.matricula_listadas}
+        # Caso #12 item B: normalizar o nº da matrícula nos DOIS lados ("4.698" ↔
+        # "4698") para o confronto CAR×staging não acusar falsa divergência.
+        car_mats = {_clean_matricula_hint(m.get("numero") if isinstance(m, dict) else m)
+                    for m in car.matricula_listadas}
         car_mats = {m for m in car_mats if m}
-        staging_mats = {_norm_text(k.split(":", 1)[1]) for k in matricula_keys if ":" in k}
+        staging_mats = {k.split(":", 1)[1] for k in matricula_keys if ":" in k}
 
         if itr is not None and not itr_car:
             linhas.append(MatrixRow(

@@ -282,7 +282,10 @@ def search(
         where.append("kc.jurisdiction = :jurisdiction")
         params["jurisdiction"] = jurisdiction
     if uf:
-        where.append("kc.uf = :uf")
+        # Federal (uf IS NULL) é aplicável a qualquer UF — filtrar por UF não pode
+        # excluir a legislação federal (caso #12: 761 chunks federais ficavam de
+        # fora, restando só os 4.280 de GO). Inclui ambos.
+        where.append("(kc.uf = :uf OR kc.uf IS NULL)")
         params["uf"] = uf
     if identifier:
         where.append("kc.identifier = :identifier")

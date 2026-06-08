@@ -90,7 +90,8 @@ def test_build_car_lista_matriculas_com_hint():
     # 2 matrículas listadas com hint
     listadas = [r for r in rows if r.field_name == "matricula_listada"]
     assert len(listadas) == 2
-    assert {r.matricula_hint for r in listadas} == {"4.698", "6.776"}
+    # caso #12 item B: hint normalizado (ponto de milhar removido) "4.698" → "4698".
+    assert {r.matricula_hint for r in listadas} == {"4698", "6776"}
     assert all(r.target_entity == "matricula" for r in listadas)
 
 
@@ -122,7 +123,8 @@ def test_build_matricula_hint_proprio_numero():
     }
     rows = build_staging_fields("matricula", parsed)
     assert rows  # não vazio
-    assert all(r.matricula_hint == "4.698" for r in rows)
+    # caso #12 item B: "4.698" normalizado para "4698" (sem ponto de milhar).
+    assert all(r.matricula_hint == "4698" for r in rows)
     area = next(r for r in rows if r.field_name == "area_registrada_ha")
     assert area.field_value == {"value": 660.6561, "unidade": "ha"}
 
@@ -180,7 +182,7 @@ def test_extract_and_stage_persiste_linhas(db_session):
     assert all(r.status == ExtractedFieldStatus.pendente for r in rows)
     assert all(r.created_by_agent == "extrator" for r in rows)
     hints = {r.matricula_hint for r in rows if r.field_name == "matricula_listada"}
-    assert hints == {"4.698", "6.776"}
+    assert hints == {"4698", "6776"}  # caso #12 item B: hint normalizado
 
 
 def test_extract_and_stage_falha_extracao_nao_grava(db_session):

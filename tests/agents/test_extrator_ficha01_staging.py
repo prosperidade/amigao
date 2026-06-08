@@ -108,4 +108,5 @@ def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session):
     # ai_job_id rastreável (job da execução corrente).
     assert all(r.ai_job_id is not None for r in rows)
     listadas = [r for r in rows if r.field_name == "matricula_listada"]
-    assert {r.matricula_hint for r in listadas} == {"4.698", "6.776"}
+    # caso #12 item B: hint normalizado (ponto de milhar removido).
+    assert {r.matricula_hint for r in listadas} == {"4698", "6776"}
