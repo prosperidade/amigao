@@ -42,6 +42,11 @@ logger = logging.getLogger(__name__)
 _CONFIANCA_TO_CONFIDENCE = {"baixa": 0.3, "media": 0.6, "alta": 0.9}
 _VALID_SEVERIDADES = {"baixo", "medio", "alto"}
 
+# Valores de `demand_type` que NÃO são tags reais do corpus (caso #12, item E):
+# usá-los no filtro `demand_types @> [...]` garante 0 trechos. Tratados como
+# "sem filtro de demanda".
+_DEMAND_SENTINELS = {"nao_identificado", "não_identificado", "nao identificado", "desconhecido", "indefinido", "n/a", "na", "none", ""}
+
 # Captura "Lei 12.651/2012", "LC 140/2011", "Decreto 7.830/2012", "Resolução CONAMA 237/1997",
 # "IN IBAMA 02/2014", "Portaria 123/2020", "MP 2.166/2001"
 _CITATION_REGEX = re.compile(
@@ -275,28 +280,39 @@ class LegislacaoAgent(BaseAgent):
         if not composed:
             return []
 
-        try:
-            results = search(
+        # Caso #12 item E: `demand_type` pode chegar como SENTINELA ("nao_identificado")
+        # — não é uma tag real do corpus, então o JOIN `demand_types @> [...]`
+        # devolvia ZERO linhas (medido em prod: 0 mesmo com 24k chunks). Sentinela
+        # vira None (sem filtro de demanda), não um valor impossível.
+        dt_norm = (demand_type or "").strip().lower()
+        demand_filter = demand_type if dt_norm and dt_norm not in _DEMAND_SENTINELS else None
+        uf_filter = uf.strip() if uf and uf.strip() else None
+        top_k = getattr(settings, "LEGISLATION_RAG_TOP_K", 8)
+
+        def _do_search(*, uf_arg: str | None, demand_arg: str | None) -> list:
+            return search(
                 self.ctx.session,
                 composed,
-                limit=getattr(settings, "LEGISLATION_RAG_TOP_K", 8),
+                limit=top_k,
                 source_type="legislation",
-                uf=uf if uf else None,
+                uf=uf_arg,
                 tenant_id=self.ctx.tenant_id,
-                demand_type=demand_type if demand_type else None,
+                demand_type=demand_arg,
                 min_similarity=0.0,
             )
-            # Sem resultados com filtro de UF? tenta uma busca global (legislacao federal).
-            if not results and uf:
-                results = search(
-                    self.ctx.session,
-                    composed,
-                    limit=getattr(settings, "LEGISLATION_RAG_TOP_K", 8),
-                    source_type="legislation",
-                    tenant_id=self.ctx.tenant_id,
-                    demand_type=demand_type if demand_type else None,
-                    min_similarity=0.0,
-                )
+
+        try:
+            results = _do_search(uf_arg=uf_filter, demand_arg=demand_filter)
+            # Fallback 1 — solta a UF (mantém federal; tenta outras UFs também).
+            if not results and uf_filter:
+                results = _do_search(uf_arg=None, demand_arg=demand_filter)
+            # Fallback 2 — solta o demand_type: o JOIN estrito zera quando a norma
+            # relevante não está tagueada pra essa demanda. Similaridade pura ainda
+            # recupera trecho real (caso #12: 0 → milhares de candidatos).
+            if not results and demand_filter:
+                results = _do_search(uf_arg=uf_filter, demand_arg=None)
+            if not results and (demand_filter and uf_filter):
+                results = _do_search(uf_arg=None, demand_arg=None)
             # Observabilidade (fix/llm-consistencia): RAG vazio é a diferença entre
             # citar trecho [N] real e "ausência de trechos hiper-relevantes". Em
             # prod o corpus pode estar AUSENTE (knowledge_catalog vazio) — sinaliza

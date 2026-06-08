@@ -533,3 +533,29 @@ em `docs/agentes/` são a fonte de verdade verificada.
   `knowledge_catalog`/`legislation_documents` VAZIOS em prod (corpus só em dev/local) → dívida #47 +
   log de observabilidade. Golden tests no CI (`tests/agents/golden/`). 223 testes verdes; caso #12 real
   3× = validação pós-deploy. Embeddings seguem com chave da casa. Doc: `docs/trabalhos/llm_consistencia.md`.
+- **2026-06-07 — Calibração v2 da matriz + recuperação do RAG (`fix/matriz-v2-rag-recuperacao`).**
+  5 defeitos do caso real #12 (Fazenda São Jorge/GO), todos medidos no dump de prod (Supabase) ANTES de
+  corrigir. **A (parse decimal):** a matrícula 4655 tinha a área como **dict** serializado
+  (`{"value":349.9022,...}`); `_to_float_br` recebia `str(dict)` e a vírgula do repr disparava o ramo
+  PT-BR → `3499022` → soma das matrículas = 3.502.448 ha (metade de Goiás). Fix: parser rejeita
+  dict/lista, desembrulha `{value}`, separador decimal = o último entre `.`/`,`; `parse_area_ha` única
+  (m²→ha); sanidade >100k ha → linha de revisão; e na origem (`ficha01_extraction`) `_unwrap_llm_value`
+  desembrulha o envelope `{value,confidence}`. **B (hint poluído):** `{'value':'4655'}`, `MATR. 2.923 R-01`,
+  `4655 (2 de 3)`, `6.776`, TAD `492262` viravam colunas → `_clean_matricula_hint` (regex)
+  normaliza/colapsa; ITR sem hint não confronta (linha `area_sem_vinculo`). **C (denominação):**
+  `"Certidão de Embargo"` (título de doc) saía como denominação → `_is_doc_title` filtra prefixos
+  (`certidao/recibo/relatorio/embargo/...`). `LOTE 02AA` era REAL (intake multi-lote — não é lixo).
+  **D (recomendação cruzada):** a pendência de categoria "Documentos" cujo detalhamento lista
+  "Autorização de **Desmat**amento" casava o tema `supressao` (keyword "desmat", antes de documentos)
+  e nascia uma falsa linha "Supressão pós-2008" com a recomendação de ACESSO → `_classificar_pendencia`
+  respeita a categoria "Documentos" (salvo quando o detalhamento é de acesso, p/ não regredir o #11).
+  **E (RAG zero c/ corpus POPULADO):** medido em prod — corpus presente (24.233 chunks,
+  text-embedding-3-small:768), mas `demand_type="nao_identificado"` (sentinela do processo) virava o
+  filtro `demand_types @> ["nao_identificado"]` → JOIN impossível → **0 linhas** (stage1 e fallback); e
+  `kc.uf=:uf` excluía os 761 chunks federais (uf NULL). Fix: sentinela→None + fallback que solta o
+  demand_type; `search` inclui federal (`uf=:uf OR uf IS NULL`). **Provado ao vivo** no corpus local com
+  embeddings reais: a mesma consulta do #12 retorna 8 trechos (sim ~0,69, normas GO reais — IN SEMAD
+  3/2025, Lei GO 18.104/2013) onde antes dava 0. **Aprendizado:** o defeito A e o E compartilham a mesma
+  natureza — um VALOR sentinela/estrutural (dict serializado; "nao_identificado") tratado como dado real.
+  Suite 895 verde (+11 testes: `test_matriz_caso12_real`, `test_knowledge_catalog_search`). NÃO tocou no
+  contrato de fontes do #70 nem no chunking (só recuperação). Doc: `docs/trabalhos/matriz_v2_rag.md`.
