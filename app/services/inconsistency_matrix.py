@@ -50,6 +50,15 @@ MISSING_MATRICULA_FACTOR = Decimal("1.5")
 # revisão. Metade de Goiás (~3,5M ha) era o sintoma.
 AREA_SANITY_MAX_HA = Decimal("100000")
 
+# Artefato de parse por separador de MILHAR perdido (validação Isis 16/06): o RAT
+# "1.010,7113 ha" foi emitido pelo extrator (LLM) como o float 1.0107113 — ~1000×
+# menor (o ponto de milhar virou decimal). Quando a área do IMÓVEL (CAR/RAT) é
+# ordens de grandeza MENOR que a soma das matrículas conhecidas, é quase certo
+# erro de parse, não divergência real: a área do imóvel jamais seria 1000× menor
+# que a soma das suas próprias matrículas. Vai para revisão, NÃO vira passivo.
+# Fator conservador (≥100×) para não pegar sobreposição/duplicação legítima.
+AREA_PARSE_ARTIFACT_RATIO = Decimal("100")
+
 
 # ---------------------------------------------------------------------------
 # Dicionário de sinônimos por item canônico
@@ -245,6 +254,20 @@ def parse_area_ha(value: Any, unidade: Any = None) -> Optional[float]:
     if _is_m2(value, unidade):
         val = val / 10000.0
     return val
+
+
+# Faixa de ordem de grandeza plausível para área de imóvel/matrícula do domínio
+# (validação Isis 16/06): de 0,1 ha (sítio pequeno) a 100.000 ha. Fora disso é
+# quase certo erro de parse — o chamador deve REBAIXAR confiança e NÃO gravar
+# como fato (vai pra revisão). O confronto relativo (área « soma das matrículas)
+# pega o caso do separador de milhar perdido que cai DENTRO desta faixa.
+AREA_PLAUSIBLE_MIN_HA = 0.1
+AREA_PLAUSIBLE_MAX_HA = float(AREA_SANITY_MAX_HA)
+
+
+def is_area_plausible(ha: Optional[float]) -> bool:
+    """True se a área (ha) está na ordem de grandeza plausível do domínio."""
+    return ha is not None and AREA_PLAUSIBLE_MIN_HA <= ha <= AREA_PLAUSIBLE_MAX_HA
 
 
 # Anotações que grudam no número da matrícula e NÃO fazem parte dele.
@@ -575,11 +598,21 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
 
     # nível imóvel: CAR/RAT × soma das matrículas
     imovel_areas = {lbl: v for lbl, (v, _) in por_imovel.items()}
+    # Artefato de parse (Isis 16/06): área de imóvel ordens de grandeza MENOR que a
+    # soma das matrículas = separador de milhar perdido no extrator (1.010,7113 →
+    # 1.0107113). Tira do confronto e manda pra revisão — não vira falso passivo.
+    artefato_parse_imovel: dict[str, float] = {}
+    if soma_matriculas and soma_matriculas > 0:
+        for lbl, v in list(imovel_areas.items()):
+            if v > 0 and Decimal(str(soma_matriculas)) / Decimal(str(v)) >= AREA_PARSE_ARTIFACT_RATIO:
+                artefato_parse_imovel[lbl] = v
+                del imovel_areas[lbl]
     if soma_matriculas is not None and imovel_areas:
         fontes_area: dict[str, Any] = dict(area_by_matricula)
         fontes_area["soma_matriculas"] = soma_matriculas
         fontes_area.update(imovel_areas)
-        imovel_rows = [r for (_v, r) in por_imovel.values() if r is not None]
+        imovel_rows = [r for lbl, (_v, r) in por_imovel.items()
+                       if r is not None and lbl in imovel_areas]
         imovel_max = max(imovel_areas.values())
         maxlbl = max(imovel_areas, key=lambda k: imovel_areas[k])
         diff = abs(imovel_max - soma_matriculas)
@@ -635,19 +668,23 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
             "não confrontados entre si)",
             _destino("atencao")))
 
-    # --- área IMPLAUSÍVEL > 100.000 ha (caso #12 item A) ----------------
-    # Provável vírgula decimal perdida no parse (349,9022 → 3499022). Fora do
-    # confronto/soma; vira revisão para não voltar a "fazenda de 3,5 milhões de ha".
-    if areas.implausiveis:
+    # --- área IMPLAUSÍVEL — revisar extração (caso #12 item A + Isis 16/06) ----
+    # Dois sintomas do MESMO problema (separador mal lido na origem):
+    #  - > 100.000 ha: vírgula decimal perdida (349,9022 → 3499022).
+    #  - imóvel « soma das matrículas (≥100×): ponto de milhar virou decimal
+    #    (1.010,7113 → 1.0107113). Fora do confronto/soma; vira revisão, não passivo.
+    if areas.implausiveis or artefato_parse_imovel:
         fontes_imp = {
             f"{dt}{(':' + hint) if hint != '-' else ''}": val
             for (hint, dt, val, _r) in areas.implausiveis
         }
+        for lbl, val in artefato_parse_imovel.items():
+            fontes_imp[lbl] = val
         linhas.append(MatrixRow(
             "area_revisao", "Área implausível — revisar extração (ha)", fontes_imp,
             MatrixSituacao.atencao.value,
-            "revisar área extraída (> 100.000 ha — provável erro de vírgula/parse "
-            "no documento de origem)",
+            "revisar área extraída (fora de escala — provável erro de separador "
+            "decimal/milhar na origem; ex.: '1.010,7113' lido como 1,0107113)",
             _destino("atencao")))
 
     # --- denominacao_imovel ---------------------------------------------

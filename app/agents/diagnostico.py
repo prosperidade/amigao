@@ -721,15 +721,37 @@ class DiagnosticoAgent(BaseAgent):
                     ))
         return out or [_sem_fonte()]
 
+    # Stopwords PT-BR para casar texto de passivo/ação com a afirmação do LLM
+    # (a redação do LLM raramente é idêntica à do passivo — casa pelo conteúdo).
+    _AFIRMACAO_STOPWORDS = frozenset({
+        "a", "o", "as", "os", "de", "da", "do", "das", "dos", "e", "em", "no", "na",
+        "nos", "nas", "ao", "aos", "um", "uma", "para", "por", "com", "sem", "que",
+        "ha", "ou", "the", "ja", "se", "entre",
+    })
+
+    @classmethod
+    def _afirmacao_tokens(cls, texto: str) -> set:
+        import re as _re  # noqa: PLC0415
+        toks = _re.findall(r"[0-9a-zà-ÿ]+", str(texto).lower())
+        return {t for t in toks if t not in cls._AFIRMACAO_STOPWORDS and len(t) > 1}
+
     def _build_afirmacoes(self, parsed: dict[str, Any], passivos: list, acoes: list) -> list[Any]:
-        """Cada passivo/ação vira Afirmacao(texto, fontes). Prefere o que o LLM
-        atribuiu (campo `afirmacoes`); senão, piso honesto = item SEM fonte
-        identificada (jamais inventa)."""
+        """Cada passivo e cada ação vira UMA Afirmacao(texto, fontes), com
+        COBERTURA 100% (Ficha 04, regra de ouro — validação Isis 16/06).
+
+        A lista canônica exibida é passivos/ações. Para cada item, casa (por
+        sobreposição de conteúdo, dentro da categoria) a fonte que o LLM atribuiu
+        no campo `afirmacoes`; sem casamento → piso honesto "sem fonte
+        identificada" (jamais inventa). Antes, se o LLM citasse só alguns, os
+        demais passivos ficavam SEM fonte — agora nenhum fica órfão."""
         from app.schemas.stage_output import Afirmacao, SourceRef  # noqa: PLC0415
 
+        sem = SourceRef(tipo="sem_fonte", sem_fonte=True, descricao="sem fonte identificada")
+
+        # Índice do que o LLM atribuiu: (tokens, fontes, categoria).
+        llm_items: list[tuple[set, list[Any], str]] = []
         raw = parsed.get("afirmacoes")
-        afirmacoes: list[Any] = []
-        if isinstance(raw, list) and raw:
+        if isinstance(raw, list):
             for item in raw:
                 if not isinstance(item, dict):
                     continue
@@ -737,19 +759,46 @@ class DiagnosticoAgent(BaseAgent):
                 if not texto:
                     continue
                 fontes = self._parse_item_fontes(item.get("fonte") or item.get("fontes"))
-                afirmacoes.append(Afirmacao(
-                    texto=texto, categoria=item.get("categoria"), fontes=fontes,
-                ))
-            if afirmacoes:
-                return afirmacoes
+                cat = str(item.get("categoria") or "").strip().lower()
+                llm_items.append((self._afirmacao_tokens(texto), fontes, cat))
 
-        sem = SourceRef(tipo="sem_fonte", sem_fonte=True, descricao="sem fonte identificada")
+        def _fonte_for(text: str, categoria: str) -> list[Any]:
+            toks = self._afirmacao_tokens(text)
+            if not toks:
+                return [sem]
+            best_fontes, best_score = None, 0.0
+            for ltoks, fontes, lcat in llm_items:
+                if lcat in ("passivo", "acao") and lcat != categoria:
+                    continue  # não cruza passivo↔ação
+                if not ltoks:
+                    continue
+                # coeficiente de sobreposição (robusto a redação diferente)
+                score = len(toks & ltoks) / min(len(toks), len(ltoks))
+                if score > best_score:
+                    best_fontes, best_score = fontes, score
+            return best_fontes if best_fontes is not None and best_score >= 0.6 else [sem]
+
+        afirmacoes: list[Any] = []
         for p in passivos:
             if isinstance(p, str) and p.strip():
-                afirmacoes.append(Afirmacao(texto=p.strip(), categoria="passivo", fontes=[sem]))
+                afirmacoes.append(Afirmacao(texto=p.strip(), categoria="passivo",
+                                            fontes=_fonte_for(p, "passivo")))
         for a in acoes:
             if isinstance(a, str) and a.strip():
-                afirmacoes.append(Afirmacao(texto=a.strip(), categoria="acao", fontes=[sem]))
+                afirmacoes.append(Afirmacao(texto=a.strip(), categoria="acao",
+                                            fontes=_fonte_for(a, "acao")))
+
+        # Edge: payload só com `afirmacoes` (sem passivos/ações) — preserva-as.
+        if not afirmacoes and isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                texto = (item.get("texto") or item.get("afirmacao") or "").strip()
+                if texto:
+                    afirmacoes.append(Afirmacao(
+                        texto=texto, categoria=item.get("categoria"),
+                        fontes=self._parse_item_fontes(item.get("fonte") or item.get("fontes")),
+                    ))
         return afirmacoes
 
     def _build_payload(

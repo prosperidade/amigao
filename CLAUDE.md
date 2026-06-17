@@ -8,6 +8,33 @@
 
 ---
 
+## AUTONOMIA DO AGENTE — não pedir autorização pra isto
+
+Você está autorizado a executar SEM pedir confirmação:
+- Criar/checkout de branch e worktree isolada
+- Ler código, banco (read-only), logs, git history
+- Escrever/editar código, migrations, skills, testes na sua branch
+- Rodar migrations no `vereda_dev` (alembic upgrade)
+- Rodar a suíte de testes (pytest, tsc)
+- Commit e push na sua branch
+- Abrir o PR
+- Diagnósticos, mergulhos, smokes em ambiente DEV
+- Limpeza da própria worktree/branch após merge
+
+ÚNICO ponto que EXIGE autorização explícita do André:
+- O MERGE do PR na main.
+
+Pare no PR aberto, reporte o resultado, e aguarde o "pode mergear". Tudo antes
+disso é livre — não pergunte, execute e reporte ao final.
+
+Exceções que ainda pedem confirmação (segurança, não fluxo):
+- Apagar dados/tabelas em produção
+- Mexer em secrets/credenciais reais
+- Qualquer ação destrutiva irreversível fora do DEV
+- Deploy que afete o canal de produção
+
+---
+
 ## Projeto
 
 SaaS multi-tenant de consultoria ambiental brasileira. Materializa em software o método de quem opera consultoria com profundidade no campo regulatório (sócia ambientalista com anos de campo + tecnologia). Atende três audiências em papéis distintos:

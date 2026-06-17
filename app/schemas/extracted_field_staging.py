@@ -72,9 +72,22 @@ class ConsolidationWrite(BaseModel):
     entity: str             # cliente | imovel | matricula
     entity_id: Optional[int] = None
     field: str
-    value: Any
+    anterior: Any = None     # valor antes da gravação (versão anterior)
+    novo: Any = None         # valor gravado
+    fonte: Optional[str] = None  # sigef | ccir | matricula | consultor | …
     staging_id: int
-    created: bool = False    # True quando criou a Matrícula
+
+
+class ConsolidationReconciliation(BaseModel):
+    """Campo já consolidado cujo doc novo trouxe valor divergente — NÃO sobrescrito;
+    volta como alerta para o consultor decidir (Ficha 05)."""
+    entity: str
+    entity_id: Optional[int] = None
+    field: str
+    anterior: Any = None
+    novo: Any = None
+    fonte: Optional[str] = None
+    staging_id: int
 
 
 class ConsolidationResult(BaseModel):
@@ -87,3 +100,4 @@ class ConsolidationResult(BaseModel):
     area_total_matriculas: Optional[float] = None
     writes: list[ConsolidationWrite] = []
     ignorados: list[str] = []   # campos aceitos sem coluna correspondente
+    reconciliacoes: list[ConsolidationReconciliation] = []

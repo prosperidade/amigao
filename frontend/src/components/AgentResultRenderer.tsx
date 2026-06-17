@@ -241,7 +241,11 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
         </p>
       )}
 
-      {hipoteses.length > 0 && (
+      {/* Passivos sem fonte (regra de ouro, Ficha 04): quando há afirmações com
+          fonte, elas cobrem 100% dos passivos (com fonte ou "sem fonte
+          identificada"). A lista crua só aparece em payloads antigos sem
+          afirmações — senão um passivo apareceria como fato sem fonte. */}
+      {hipoteses.length > 0 && afirmacoes.length === 0 && (
         <Section icon={AlertTriangle} title="Hipóteses / Passivos" color="text-red-600 dark:text-red-400">
           <BulletList items={hipoteses} color="text-red-400" />
         </Section>

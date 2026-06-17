@@ -483,7 +483,13 @@ def _extract_structured(text: str, doc_type: str) -> Optional[dict[str, Any]]:
         "Voce e um especialista em documentos fundiarios e ambientais brasileiros. "
         "Extraia os campos solicitados e retorne APENAS JSON valido. "
         "Para cada campo extraido inclua a confianca em \"confidence\": "
-        "\"high\" | \"medium\" | \"low\"."
+        "\"high\" | \"medium\" | \"low\". "
+        # Item 1 (Isis 16/06): preservar o numero verbatim — quem converte e o sistema.
+        "Numeros e areas: copie como STRING literal, EXATAMENTE como aparece no "
+        "documento, preservando os separadores brasileiros (ex.: a area \"1.010,7113\" "
+        "deve sair como \"1.010,7113\", nunca 1.0107113 nem 1010.7113). NUNCA converta "
+        "o numero voce mesmo (a virgula e decimal, o ponto e milhar). Vale para "
+        "area_*_ha, vtn e modulos_fiscais."
     )
     prompt = prompt_template.replace("{text}", text[: settings.EXTRACTOR_MAX_CHARS])
     try:

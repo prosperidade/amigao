@@ -22,9 +22,14 @@ def _login(client: TestClient, email: str, password: str = "x12345") -> dict[str
 
 
 def _st(tenant_id, process_id, source, fname, value, status, *, entity, target, hint=None):
+    # Em produção todo campo 'aceito' carrega decided_value (decide_field/
+    # bulk_accept o gravam); só o ACHADO (divergente_fundo aceito) fica None. O
+    # fixture espelha esse contrato para refletir o staging real.
+    decided = {"value": value} if status == ExtractedFieldStatus.aceito else None
     return ExtractedFieldStaging(
         tenant_id=tenant_id, process_id=process_id, source_doc_type=source,
         field_name=fname, field_value={"value": value}, status=status,
+        decided_value=decided,
         target_entity=entity, target_field=target, matricula_hint=hint,
         created_by_agent="extrator",
     )
@@ -154,3 +159,104 @@ def test_rejeitar_nao_grava(client: TestClient, db_session):
     # matrícula criada (área aceita), mas cartório rejeitado não gravou
     assert mat is not None
     assert mat.cartorio is None
+
+
+# ── Item 2 (Ficha 05) — âncora SIGEF, reconciliação, achado não grava ──────
+
+def _setup_min(db_session, email):
+    """Tenant/user/cliente/imóvel/processo mínimos, sem staging."""
+    tenant = Tenant(name=f"T {email}")
+    db_session.add(tenant)
+    db_session.flush()
+    user = User(email=email, full_name="C", hashed_password=get_password_hash("x12345"),
+                tenant_id=tenant.id, is_active=True, is_superuser=True)
+    cli = Client(tenant_id=tenant.id, full_name="Cli", email=f"c.{email}",
+                 client_type=ClientType.pf, status=ClientStatus.active)
+    db_session.add_all([user, cli])
+    db_session.flush()
+    prop = Property(tenant_id=tenant.id, client_id=cli.id, name="Fazenda X")
+    db_session.add(prop)
+    db_session.flush()
+    proc = Process(tenant_id=tenant.id, client_id=cli.id, property_id=prop.id,
+                   title="Caso", process_type="prad", status=ProcessStatus.triagem)
+    db_session.add(proc)
+    db_session.flush()
+    return tenant, proc, cli, prop
+
+
+def test_ancora_sigef_define_fonte_multiplas_consistentes(client: TestClient, db_session):
+    """Mesmo destino (matrícula 4655 area_ha) por CCIR e SIGEF, mesmo valor: sem
+    escolha do consultor, a âncora é o SIGEF (Ficha 05) — vence a proveniência."""
+    tenant, proc, cli, prop = _setup_min(db_session, "f4sigef@example.com")
+    C = ExtractedFieldStatus
+    db_session.add_all([
+        _st(tenant.id, proc.id, "ccir", "area_ha", "349,9022", C.aceito,
+            entity="matricula", target="area_ha", hint="4655"),
+        _st(tenant.id, proc.id, "sigef", "area_georreferenciada_ha", "349,9022", C.aceito,
+            entity="matricula", target="area_ha", hint="4655"),
+    ])
+    db_session.commit()
+    h = _login(client, "f4sigef@example.com")
+    r = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    res = r.json()
+    assert res["campos_gravados"] == 1  # 1 destino, não 2
+    area_writes = [w for w in res["writes"] if w["field"] == "area_ha"]
+    assert len(area_writes) == 1
+    assert area_writes[0]["fonte"] == "sigef"
+    mat = db_session.query(Matricula).filter(Matricula.numero_matricula == "4655").first()
+    assert mat is not None and mat.area_ha == 349.9022
+
+
+def test_reconciliacao_nao_sobrescreve_valor_ja_consolidado(client: TestClient, db_session):
+    """Campo já consolidado + doc novo com valor diferente → NÃO sobrescreve,
+    volta como reconciliação (alerta) — Ficha 05."""
+    tenant, proc, cli, prop = _setup_min(db_session, "f4rec@example.com")
+    C = ExtractedFieldStatus
+    row1 = _st(tenant.id, proc.id, "matricula", "area_registrada_ha", "349,9022", C.aceito,
+               entity="matricula", target="area_ha", hint="4655")
+    db_session.add(row1)
+    db_session.commit()
+    h = _login(client, "f4rec@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    r1 = client.post(f"{base}/consolidar", headers=h)
+    assert r1.json()["campos_gravados"] == 1
+    mat = db_session.query(Matricula).filter(Matricula.numero_matricula == "4655").first()
+    assert mat.area_ha == 349.9022
+
+    # doc novo: valor divergente para o MESMO campo já consolidado
+    db_session.add(_st(tenant.id, proc.id, "sigef", "area_georreferenciada_ha", "400,0000",
+                       C.aceito, entity="matricula", target="area_ha", hint="4655"))
+    db_session.commit()
+    r2 = client.post(f"{base}/consolidar", headers=h)
+    res2 = r2.json()
+    assert res2["campos_gravados"] == 0           # não regravou
+    assert len(res2["reconciliacoes"]) == 1       # voltou como alerta
+    rec = res2["reconciliacoes"][0]
+    assert rec["field"] == "area_ha"
+    assert rec["anterior"] == 349.9022 and rec["novo"] == 400.0
+    db_session.refresh(mat)
+    assert mat.area_ha == 349.9022                # NÃO sobrescrito
+
+
+def test_divergente_fundo_aceito_como_achado_nao_grava(client: TestClient, db_session):
+    """divergente_fundo 'aceito' é achado (decided_value None) — NÃO grava valor."""
+    tenant, proc, cli, prop = _setup_min(db_session, "f4fundo@example.com")
+    C = ExtractedFieldStatus
+    db_session.add(_st(tenant.id, proc.id, "matricula", "area_registrada_ha", "349,9022",
+                       C.divergente_fundo, entity="matricula", target="area_ha", hint="4655"))
+    db_session.commit()
+    h = _login(client, "f4fundo@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    fid = db_session.query(ExtractedFieldStaging).filter(
+        ExtractedFieldStaging.process_id == proc.id).first().id
+    r = client.post(f"{base}/staging-fields/{fid}/decidir", headers=h, json={"acao": "aceitar"})
+    assert r.status_code == 200 and r.json()["status"] == "aceito"
+
+    r = client.post(f"{base}/consolidar", headers=h)
+    assert r.json()["campos_gravados"] == 0
+    mat = db_session.query(Matricula).filter(Matricula.numero_matricula == "4655").first()
+    # achado não grava valor; matrícula pode existir sem área
+    assert mat is None or mat.area_ha is None

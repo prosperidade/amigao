@@ -111,13 +111,21 @@ class TestGoldenFormatoNovo:
         assert data["content"].startswith("Imóvel rural Fazenda São Jorge")
         assert len(data["hipoteses"]) == len(payload["passivos_identificados"])
         assert len(data["checklist_documental"]) == len(payload["acoes_remediacao"])
-        # afirmacoes do #70: as 4 do LLM, todas COM fonte identificada (não sem_fonte)
+        # Cobertura 100% (Ficha 04, Isis 16/06): UMA afirmação por passivo e por
+        # ação (6+6=12), cada uma com fontes. O LLM citou 4 → essas 4 carregam
+        # fonte real; as demais ficam marcadas "sem fonte identificada" (nunca
+        # órfãs, nunca inventadas).
         afirmacoes = data["afirmacoes"]
-        assert len(afirmacoes) == 4
+        assert len(afirmacoes) == len(payload["passivos_identificados"]) + len(payload["acoes_remediacao"])
         for af in afirmacoes:
             assert af["texto"]
-            assert af["fontes"]
-            assert all(not f.get("sem_fonte") for f in af["fontes"])
+            assert af["fontes"]  # sempre ≥1 fonte (real ou sem_fonte)
+        com_fonte = [af for af in afirmacoes if all(not f.get("sem_fonte") for f in af["fontes"])]
+        assert len(com_fonte) == 4  # exatamente as 4 que o LLM atribuiu
+        # todo passivo aparece como afirmação
+        textos = {af["texto"] for af in afirmacoes}
+        for p in payload["passivos_identificados"]:
+            assert p in textos
 
     def test_parser_processa_legislacao_sao_jorge_sem_erro(self):
         parsed = OutputValidationPipeline.parse_llm_json(_load_text("legislacao_sao_jorge.json"))
@@ -179,7 +187,9 @@ class TestGoldenFonteInexistente:
 
         assert result.success is True
         afirmacoes = result.data["afirmacoes"]
-        assert len(afirmacoes) == 2
+        # Cobertura 100%: 2 passivos + 1 ação = 3 afirmações (a ação não tinha
+        # afirmação no payload → entra com piso sem_fonte).
+        assert len(afirmacoes) == 3
         # TODAS as fontes vieram vazias/"sem fonte" → marcadas sem_fonte (não inventadas)
         for af in afirmacoes:
             assert af["fontes"], "afirmação deve ter ao menos a marca de sem_fonte"
