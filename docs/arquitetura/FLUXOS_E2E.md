@@ -447,12 +447,23 @@ A entrada estruturada do imóvel (Ficha 01) é um pipeline de 4 fases:
    `POST /processes/{id}/staging-fields/aceitar-consistentes`. **Gate:** aceitar
    um `divergente_transcricao` direto → 422 (exige escolha ativa). Marca
    `status=aceito|rejeitado` + `decided_value`/`decided_by`/`decided_at`.
-4. **Consolidação na base (Fase 4).** `POST /processes/{id}/consolidar`
+4. **Consolidação na base (Fase 4 — Ficha 05).** `POST /processes/{id}/consolidar`
    (`staging_consolidation.py`, determinístico, idempotente): grava o
    `status=aceito` em `Client`/`Property`/`Matricula` (upsert por
-   `matricula_hint`). **Não** sobrescreve `Property.total_area_ha` — a área do
-   imóvel é derivada (`area_total_matriculas()`). Cada gravação é auditada
-   (`AuditLog`: staging_id, ai_job_id, decided_by).
+   `matricula_hint`). Detalhes Ficha 05:
+   - **Multi-fonte → vencedora por destino** `(entidade,[hint],campo)`: ordem
+     edição-consultor > **âncora SIGEF** (`area_ha`/`denominacao_imovel`) >
+     confiança > id.
+   - **UPSERT versionado + audit por campo** (`anterior→novo+fonte`); **reconciliação**:
+     doc novo divergente de campo já consolidado NÃO sobrescreve — volta como alerta.
+   - **Idempotente**: re-gravar o mesmo valor é no-op. **Achado** (`divergente_fundo`
+     aceito, `decided_value=None`) não grava valor. Área implausível não grava.
+   - **Não** sobrescreve `Property.total_area_ha` — a área do imóvel é derivada
+     (`area_total_matriculas()`).
+5. **Imóvel Hub (resultado visível).** `GET /properties/{id}/summary` **deriva**
+   Matrícula (`"; ".join` dos números) e Área (soma das matrículas) das `Matricula`
+   consolidadas quando as colunas cruas de `Property` estão vazias — fim dos "—"
+   após "Confirmar e gravar".
 
 Gap D1: linhas técnicas da matriz (APP/RL/hidrografia/cobertura) ficam
 registradas, sem confronto espacial, até `Property.geom` chegar.

@@ -1,7 +1,7 @@
 # LIÇÕES APRENDIDAS — protocolo de trabalho Regente (amigao)
 > Documento que viaja entre chats. Subir junto com `BRIEFING_SESSAO.md` no início de cada sessão.
 > Vive em `docs/estado/LICOES_APRENDIDAS.md`. Cada lição nasceu de um desgaste real — não repetir.
-> Última atualização: 2026-06-01
+> Última atualização: 2026-06-17
 
 ---
 
@@ -63,4 +63,26 @@ Quando o formato de saída de um agente cresce (ex.: #70 fez cada passivo/ação
 Schema via migration ≠ dado presente. O corpus de legislação (RAG, ~23k chunks) foi ingerido em dev/local e **nunca em prod** — `knowledge_catalog` ficou com 0 linhas no Supabase prod, o RAG voltava zero trechos (`tokens_in≈600`) e a legislação declarava "ausência de trechos" sem ninguém perceber. Tabela vazia não dá erro: degrada em silêncio. Ao validar uma fase que depende de corpus/seed, **conte as linhas em prod** (`SELECT count(*)`), não confie em "a migration rodou".
 > Origem: Item 4 de `fix/llm-consistencia` (07/06). Observabilidade adicionada (log quando RAG=0); ingestão em prod virou dívida #47.
 
-> Atualizado: 2026-06-07.
+## Golden test só protege o que está no fixture — incluir os formatos REAIS, não os sintéticos
+Um golden test trava exatamente os casos que estão no fixture; tudo fora dele continua exposto. O #72
+adicionou golden de parse de área mas só com o **dict serializado** (`{value:...}`) — a MESMA falha
+reentrou pela **string crua do OCR** em formato BR (`"1.010,7113"` lido como `1,0107113`: ponto de
+milhar virou decimal) e nenhum teste pegou, porque essa string não estava no fixture. Ao escrever golden
+de parse/normalização, inclua **todas as formas de entrada que o mundo real produz** (BR, US, com
+unidade, com envelope dict, lixo) e a regressão exata que motivou o fix — não só o caso que você acabou
+de corrigir. Mesma natureza do "valor sentinela tratado como dado" (caso #12, A e E): a porta de
+conversão tem que ser ÚNICA e os goldens cobrirem suas bordas.
+> Origem: validação Isis 16/06 (`fix/parse-br-consolidacao-rastreabilidade`). `parse_area_ha` consolidada
+> como porta única; golden com todos os formatos em `tests/services/test_parse_area_br.py`.
+
+## "Confirmar e gravar" tem que terminar no que a tela LÊ — não só no que o endpoint ESCREVE
+A consolidação (#63) gravava corretamente em `Matricula`, mas o Imóvel Hub seguia "—": ele lia as colunas
+cruas de `Property` (`registry_number`/`total_area_ha`) que a consolidação **nunca grava** (matrícula
+vive em `Matricula`; área do imóvel é derivada da soma). O ciclo só fecha de verdade quando o caminho
+**staging→confirmar→base→tela** é validado ponta a ponta no que a UI realmente consome — não basta o
+endpoint retornar 200 e gravar "em algum lugar". Ao fechar um fluxo de escrita, confirme qual entidade/
+coluna a tela de resultado lê e prove que ela aparece populada.
+> Origem: validação Isis 16/06. Fix: `get_property_hub_summary` deriva Matrícula/Área das matrículas;
+> Fluxo 8 em `docs/arquitetura/FLUXOS_E2E.md` agora inclui o passo "Imóvel Hub (resultado visível)".
+
+> Atualizado: 2026-06-17.

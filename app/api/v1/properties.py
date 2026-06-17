@@ -386,17 +386,28 @@ def get_property_hub_summary(
         cases_count=len(procs),
     )
 
+    # Ficha 01/05: Matrícula e Área do imóvel são DERIVADAS das matrículas
+    # consolidadas (1 imóvel : N matrículas). O Hub lia as colunas crus de
+    # Property (registry_number/total_area_ha) — que a consolidação nunca grava
+    # (área é derivada; matrícula vive em Matricula). Sem derivar aqui, o Hub
+    # mostrava "—" mesmo após consolidar (furo apontado pela Isis 16/06).
+    mats = list(prop.matriculas or [])
+    nums = [m.numero_matricula for m in mats if m.numero_matricula]
+    registry_number = prop.registry_number or ("; ".join(nums) if nums else None)
+    area_matriculas = prop.area_total_matriculas() if mats else 0.0
+    total_area_ha = prop.total_area_ha if prop.total_area_ha else (area_matriculas or None)
+
     header = PropertyHubHeader(
         id=prop.id,
         name=prop.name,
         client_id=prop.client_id,
         client_name=client.full_name if client else None,
-        registry_number=prop.registry_number,
+        registry_number=registry_number,
         ccir=prop.ccir,
         nirf=prop.nirf,
         car_code=prop.car_code,
         car_status=prop.car_status,
-        total_area_ha=prop.total_area_ha,
+        total_area_ha=total_area_ha,
         municipality=prop.municipality,
         state=prop.state,
         biome=prop.biome,

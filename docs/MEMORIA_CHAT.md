@@ -559,3 +559,21 @@ em `docs/agentes/` são a fonte de verdade verificada.
   natureza — um VALOR sentinela/estrutural (dict serializado; "nao_identificado") tratado como dado real.
   Suite 895 verde (+11 testes: `test_matriz_caso12_real`, `test_knowledge_catalog_search`). NÃO tocou no
   contrato de fontes do #70 nem no chunking (só recuperação). Doc: `docs/trabalhos/matriz_v2_rag.md`.
+- **2026-06-17 — Parse BR + Consolidação Ficha 05 + rastreabilidade total
+  (`fix/parse-br-consolidacao-rastreabilidade`).** Validação da Isis 16/06 (ciclo completo no caso
+  real). **Item 1 (parse):** REGRESSÃO do #72 por outro caminho — o RAT `1.010,7113 ha` (string crua
+  do OCR) era lido como `1,0107113` (ponto de milhar virou decimal americano) → falso passivo de área
+  ~1010 ha. `parse_area_ha` virou a porta ÚNICA de área cobrindo BR/US/m²/dict (regra: o ÚLTIMO
+  separador é o decimal); `is_area_plausible` (0,1–100.000 ha) + defesa relativa na matriz (imóvel
+  ≥100× menor que soma das matrículas = artefato de parse → revisão, não passivo); extrator manda
+  copiar número verbatim como string. Golden test com TODOS os formatos reais. **Item 2 (consolidação):**
+  o #63 já gravava, mas o Imóvel Hub seguia "—" por DOIS furos — o Hub lia colunas cruas de `Property`
+  que a consolidação nunca grava (matrícula vive em `Matricula`, área é derivada) → agora **deriva**
+  Matrícula/Área das matrículas; e a consolidação ganhou Ficha 05 (multi-fonte → âncora SIGEF, upsert
+  versionado + audit por campo anterior→novo, reconciliação que não sobrescreve campo já consolidado,
+  idempotência, achado `divergente_fundo` não grava). Bug corrigido: `decide_field` checava
+  `divergente_fundo` DEPOIS de setar `status=aceito` (condição sempre falsa) → achado gravava valor.
+  **Item 3 (rastreabilidade):** `_build_afirmacoes` agora gera UMA afirmação por passivo/ação (cobertura
+  100%, Ficha 04), casando a fonte do LLM por sobreposição de conteúdo (≥0,6, sem cruzar passivo↔ação)
+  ou piso `sem_fonte`. UI esconde a lista crua de passivos quando há afirmações. Aditivo, sem quebra de
+  shape. Validação LLM E2E é pós-deploy. Doc: `docs/trabalhos/parse_consolidacao.md`.

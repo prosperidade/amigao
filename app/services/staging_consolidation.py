@@ -28,9 +28,16 @@ from app.models.extracted_field_staging import (
     ExtractedFieldStaging,
     ExtractedFieldStatus,
 )
-from app.services.inconsistency_matrix import _to_float_br
+from app.services.inconsistency_matrix import (
+    _to_float_br,
+    is_area_plausible,
+    parse_area_ha,
+)
 
 logger = logging.getLogger(__name__)
+
+# Colunas de área: convertidas pela porta ÚNICA parse_area_ha (BR/US/m² + dict).
+_AREA_COLUMNS = {"area_ha", "app_area_ha", "area_grafica_ha", "area_documental_ha", "total_area_ha"}
 
 _DIVERGENTES = {
     ExtractedFieldStatus.divergente_transcricao,
@@ -65,10 +72,19 @@ def _raw_value(row: ExtractedFieldStaging) -> Any:
     return src
 
 
-def _coerce(value: Any, column_type: Any) -> Any:
-    """Coage o valor para o tipo da coluna (área PT-BR → float, data → date)."""
+def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = None) -> Any:
+    """Coage o valor para o tipo da coluna (área PT-BR → float, data → date).
+
+    Área (``_AREA_COLUMNS``) passa pela porta ÚNICA ``parse_area_ha`` (lida BR,
+    US, m² e dict) e por validação de ordem de grandeza: área implausível NÃO é
+    gravada como fato (devolve None → vai para ``ignorados``)."""
     if value is None:
         return None
+    if column_name in _AREA_COLUMNS:
+        ha = parse_area_ha(value, unidade)
+        if ha is not None and not is_area_plausible(ha):
+            return None  # fora de escala — não grava como fato (Item 1)
+        return ha
     if isinstance(column_type, (Float, Numeric)):
         return _to_float_br(value)
     if isinstance(column_type, Date):
@@ -81,6 +97,63 @@ def _coerce(value: Any, column_type: Any) -> Any:
                 continue
         return None
     return value
+
+
+# ---------------------------------------------------------------------------
+# Seleção de fonte vencedora (multi-fonte → âncora SIGEF; Ficha 05)
+# ---------------------------------------------------------------------------
+_CONF_RANK = {"high": 3, "medium": 2, "low": 1}
+# Campos cuja âncora, sem escolha explícita do consultor, é o SIGEF (Ficha 05).
+_SIGEF_ANCHORED = {"area_ha", "denominacao_imovel"}
+
+
+def _field_value_scalar(row: ExtractedFieldStaging) -> Any:
+    fv = row.field_value
+    return fv.get("value") if isinstance(fv, dict) and "value" in fv else fv
+
+
+def _is_consultor_edit(row: ExtractedFieldStaging) -> bool:
+    """Edição manual: decided_value diverge do field_value extraído (fonte=consultor)."""
+    if not isinstance(row.decided_value, dict) or "value" not in row.decided_value:
+        return False
+    return _norm_cmp(row.decided_value.get("value")) != _norm_cmp(_field_value_scalar(row))
+
+
+def _fonte_of(row: ExtractedFieldStaging) -> str:
+    """Origem efetiva do valor: 'consultor' se editado, senão o doc de origem."""
+    if _is_consultor_edit(row):
+        return "consultor"
+    return (row.source_doc_type or "—").lower()
+
+
+def _pick_winner(rows: list[ExtractedFieldStaging], *, prefer_sigef: bool) -> ExtractedFieldStaging:
+    """Vencedor do grupo (mesmo destino): edição do consultor > âncora SIGEF >
+    confiança > menor id. ``escolher_fonte`` já rejeita irmãos, então grupos com
+    >1 sobrevivente são campos consistentes (mesmo valor) — a âncora só fixa a
+    proveniência."""
+    def score(r: ExtractedFieldStaging) -> tuple:
+        edited = _is_consultor_edit(r)
+        sigef = (r.source_doc_type or "").lower() == "sigef"
+        conf = _CONF_RANK.get((r.confidence or "").lower(), 0)
+        return (1 if edited else 0, 1 if (prefer_sigef and sigef) else 0, conf, -(r.id or 0))
+    return max(rows, key=score)
+
+
+def _norm_cmp(value: Any) -> Any:
+    """Normaliza p/ comparação de igualdade (string trim/lower; número como float)."""
+    if isinstance(value, str):
+        return value.strip().lower()
+    return value
+
+
+def _values_differ(old: Any, new: Any) -> bool:
+    """True se old≠new além de tolerância (float: ~0,01%; idempotência protegida)."""
+    if old is None or new is None:
+        return old is not new
+    if isinstance(old, float) and isinstance(new, (int, float)):
+        base = max(abs(old), abs(new), 1e-9)
+        return abs(old - float(new)) / base > 1e-4
+    return _norm_cmp(old) != _norm_cmp(new)
 
 
 # ---------------------------------------------------------------------------
@@ -119,10 +192,12 @@ def decide_field(
                 status_code=422,
                 detail="Campo divergente (transcrição) exige 'escolher_fonte' ou 'editar', não 'aceitar'.",
             )
+        # Captura ANTES de sobrescrever o status: divergente_fundo é aceito como
+        # ACHADO (issue/escopo já roteado pela matriz) — sem gravação automática
+        # de valor. (Bug: checar após `= aceito` tornava a condição sempre falsa.)
+        era_divergente_fundo = row.status == ExtractedFieldStatus.divergente_fundo
         row.status = ExtractedFieldStatus.aceito
-        # divergente_fundo é aceito como ACHADO (issue/escopo já roteado pela
-        # matriz) — sem gravação automática de valor.
-        row.decided_value = None if row.status == ExtractedFieldStatus.divergente_fundo else {"value": _raw_value(row)}
+        row.decided_value = None if era_divergente_fundo else {"value": _raw_value(row)}
     elif acao == "escolher_fonte":
         row.status = ExtractedFieldStatus.aceito
         row.decided_value = {"value": _raw_value(row)}
@@ -230,6 +305,7 @@ def consolidate_process(
 
     writes: list[dict[str, Any]] = []
     ignorados: list[str] = []
+    reconciliacoes: list[dict[str, Any]] = []
     cliente_tocado = False
     imovel_tocado = False
     mat_criadas = 0
@@ -238,49 +314,80 @@ def consolidate_process(
     client = _load_client(db, tenant_id, process.client_id) if process.client_id else None
     prop = _load_property(db, tenant_id, process.property_id) if process.property_id else None
 
+    # Agrupa por DESTINO (entidade, [hint], campo). Múltiplas fontes para o mesmo
+    # destino → uma vencedora por âncora (Ficha 05). Achados (decided_value None =
+    # divergente_fundo aceito como achado) NÃO gravam valor — só roteados na matriz.
+    grupos: dict[tuple, list[ExtractedFieldStaging]] = {}
+    matricula_estabelecida: set[str] = set()
+    for row in accepted:
+        entity = (row.target_entity or "").lower()
+        if entity == "matricula" and row.field_name == "matricula_listada":
+            if row.matricula_hint:
+                matricula_estabelecida.add(row.matricula_hint)
+            continue
+        if row.decided_value is None:  # achado (divergente_fundo) — não grava valor
+            continue
+        if _raw_value(row) is None:
+            continue
+        key = ((entity, row.matricula_hint, row.target_field)
+               if entity == "matricula" else (entity, row.target_field))
+        grupos.setdefault(key, []).append(row)
+
     # cache de matrículas por hint (upsert idempotente)
     mat_cache: dict[str, tuple[Any, bool]] = {}
 
-    for row in accepted:
-        value = _raw_value(row)
-        if value is None:
-            continue
-        entity = (row.target_entity or "").lower()
+    def _ensure_matricula(hint: str):
+        nonlocal mat_criadas, mat_atualizadas
+        if hint not in mat_cache:
+            mat, created = _upsert_matricula(db, tenant_id, prop.id, hint)
+            mat_cache[hint] = (mat, created)
+            if created:
+                mat_criadas += 1
+            else:
+                mat_atualizadas += 1
+        return mat_cache[hint][0]
+
+    # matrícula citada no CAR mas sem campo próprio aceito ainda existe na base.
+    for hint in matricula_estabelecida:
+        if prop is not None:
+            _ensure_matricula(hint)
+
+    for key, rows in grupos.items():
+        target_field = key[-1]
+        winner = _pick_winner(rows, prefer_sigef=(target_field in _SIGEF_ANCHORED))
+        value = _raw_value(winner)
+        fonte = _fonte_of(winner)
+        unidade = winner.field_value.get("unidade") if isinstance(winner.field_value, dict) else None
+        entity = key[0]
 
         if entity == "cliente" and client is not None:
-            if _write_entity(client, row, value, _CLIENTE_FIELDS, _CLIENTE_ALIAS, writes, ignorados):
+            if _write_entity(client, winner, value, fonte, unidade,
+                             _CLIENTE_FIELDS, _CLIENTE_ALIAS, writes, ignorados, reconciliacoes):
                 cliente_tocado = True
         elif entity == "imovel" and prop is not None:
-            if _write_entity(prop, row, value, _IMOVEL_FIELDS, _IMOVEL_ALIAS, writes, ignorados):
+            if _write_entity(prop, winner, value, fonte, unidade,
+                             _IMOVEL_FIELDS, _IMOVEL_ALIAS, writes, ignorados, reconciliacoes):
                 imovel_tocado = True
         elif entity == "matricula" and prop is not None:
-            hint = row.matricula_hint
+            hint = winner.matricula_hint
             if not hint:
-                ignorados.append(f"matricula sem matricula_hint: {row.target_field}")
+                ignorados.append(f"matricula sem matricula_hint: {target_field}")
                 continue
-            if hint not in mat_cache:
-                mat, created = _upsert_matricula(db, tenant_id, prop.id, hint)
-                mat_cache[hint] = (mat, created)
-                if created:
-                    mat_criadas += 1
-                else:
-                    mat_atualizadas += 1
-            mat, _created = mat_cache[hint]
-            # matricula_listada não escreve coluna (só estabelece a matrícula).
-            if row.field_name != "matricula_listada":
-                _write_entity(mat, row, value, _MATRICULA_FIELDS, _MATRICULA_ALIAS, writes, ignorados)
+            mat = _ensure_matricula(hint)
+            _write_entity(mat, winner, value, fonte, unidade,
+                          _MATRICULA_FIELDS, _MATRICULA_ALIAS, writes, ignorados, reconciliacoes)
         else:
-            ignorados.append(f"{entity or '—'}: sem destino (target_field={row.target_field})")
+            ignorados.append(f"{entity or '—'}: sem destino (target_field={target_field})")
 
     db.flush()
 
     area_total = prop.area_total_matriculas() if prop is not None else None
 
-    if writes:
+    if writes or reconciliacoes:
         _audit(db, tenant_id, process_id, user_id, "consolidar", {
             "process_id": process_id, "campos_gravados": len(writes),
             "matriculas_criadas": mat_criadas, "matriculas_atualizadas": mat_atualizadas,
-            "writes": writes,
+            "writes": writes, "reconciliacoes": reconciliacoes,
         })
     db.commit()
 
@@ -294,16 +401,23 @@ def consolidate_process(
         "area_total_matriculas": area_total,
         "writes": writes,
         "ignorados": ignorados,
+        "reconciliacoes": reconciliacoes,
     }
 
 
 def _write_entity(
-    obj: Any, row: ExtractedFieldStaging, value: Any,
+    obj: Any, row: ExtractedFieldStaging, value: Any, fonte: str, unidade: Any,
     allowed: set[str], alias: dict[str, Optional[str]],
-    writes: list[dict[str, Any]], ignorados: list[str],
+    writes: list[dict[str, Any]], ignorados: list[str], reconciliacoes: list[dict[str, Any]],
 ) -> bool:
-    """Grava 1 campo no objeto ORM, respeitando allowlist + alias + tipo. Marca
-    a proveniência em ``field_sources`` quando o modelo tiver a coluna."""
+    """Grava 1 campo no objeto ORM (UPSERT versionado, Ficha 05).
+
+    - allowlist + alias + coerção por tipo (área pela porta única).
+    - RECONCILIAÇÃO: se o campo JÁ foi consolidado (human_validated) e o novo
+      valor diverge, NÃO sobrescreve — devolve como reconciliação (vira alerta).
+    - Idempotente: re-gravar o MESMO valor é no-op silencioso.
+    - Audit por campo: anterior→novo + fonte (o AuditLog é o histórico/versão).
+    """
     target = row.target_field or ""
     col = alias.get(target, target) if target in alias else target
     if col is None:
@@ -313,23 +427,50 @@ def _write_entity(
         ignorados.append(f"{row.target_entity}.{target}")
         return False
 
-    coerced = _coerce(value, obj.__table__.columns[col].type)
+    coerced = _coerce(value, obj.__table__.columns[col].type, col, unidade)
     if coerced is None:
-        ignorados.append(f"{row.target_entity}.{col} (valor incoercível)")
+        ignorados.append(f"{row.target_entity}.{col} (valor incoercível/implausível)")
+        return False
+
+    old = getattr(obj, col, None)
+    has_field_sources = "field_sources" in obj.__table__.columns
+    if has_field_sources:
+        fs_prev = dict(getattr(obj, "field_sources", None) or {})
+        ja_consolidado = fs_prev.get(col) == "human_validated"
+    else:
+        # Matrícula não tem field_sources: valor não-nulo pré-existente = consolidado.
+        fs_prev = {}
+        ja_consolidado = old is not None
+
+    if ja_consolidado and _values_differ(old, coerced):
+        # Doc novo diverge de campo já gravado → NUNCA sobrescreve sozinho (Ficha 05).
+        reconciliacoes.append({
+            "entity": row.target_entity, "entity_id": getattr(obj, "id", None),
+            "field": col, "anterior": _ser(old), "novo": _ser(coerced),
+            "fonte": fonte, "staging_id": row.id,
+        })
+        return False
+
+    if not _values_differ(old, coerced):
+        # Idempotência: mesmo valor → reafirma proveniência mas não conta como write.
+        if has_field_sources and not ja_consolidado:
+            obj.field_sources = {**fs_prev, col: "human_validated"}
         return False
 
     setattr(obj, col, coerced)
-    # proveniência por campo (padrão field_sources)
-    if "field_sources" in obj.__table__.columns:
-        fs = dict(getattr(obj, "field_sources", None) or {})
-        fs[col] = "human_validated"
-        obj.field_sources = fs
+    if has_field_sources:
+        obj.field_sources = {**fs_prev, col: "human_validated"}
     writes.append({
         "entity": row.target_entity, "entity_id": getattr(obj, "id", None),
-        "field": col, "value": coerced if not isinstance(coerced, date) else coerced.isoformat(),
-        "staging_id": row.id, "created": False,
+        "field": col, "anterior": _ser(old), "novo": _ser(coerced),
+        "fonte": fonte, "staging_id": row.id,
     })
     return True
+
+
+def _ser(value: Any) -> Any:
+    """Serializa valor p/ o audit (date → ISO)."""
+    return value.isoformat() if isinstance(value, date) else value
 
 
 def _upsert_matricula(db: Session, tenant_id: int, property_id: int, hint: str):
