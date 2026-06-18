@@ -1,3 +1,10 @@
+from app.models.acao import (
+    Acao,
+    AcaoOrigem,
+    AcaoPrioridade,
+    AcaoStatus,
+    AcaoTipoTriagem,
+)
 from app.models.ai_job import AIJob
 from app.models.audit_log import AuditLog
 from app.models.checklist_template import ChecklistTemplate, ProcessChecklist

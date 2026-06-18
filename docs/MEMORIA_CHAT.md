@@ -577,3 +577,20 @@ em `docs/agentes/` são a fonte de verdade verificada.
   100%, Ficha 04), casando a fonte do LLM por sobreposição de conteúdo (≥0,6, sem cruzar passivo↔ação)
   ou piso `sem_fonte`. UI esconde a lista crua de passivos quando há afirmações. Aditivo, sem quebra de
   shape. Validação LLM E2E é pós-deploy. Doc: `docs/trabalhos/parse_consolidacao.md`.
+
+- **2026-06-18 — Ficha 07: Aba Ações + Quadro de Ações global (`feat/ficha07-aba-acoes`).** Onde o
+  diagnóstico vira trabalho. Entidade nova **`Acao`** (tabela `acoes`, migration `ac7f01b9e3d5`) —
+  ação de remediação triável, **distinta de `Task`** (genérica): carrega origem + **fonte (#70)**,
+  `vinculo_passivo` (JSON solto, **sem FK**), `responsavel_id` **nullable** (MVP sem Bloco 0),
+  `prioridade`, `status` (a_fazer/em_andamento/concluida/bloqueada), `tipo_triagem`
+  (pendente/tarefa/escopo/dispensada), `dedupe_key` (idempotência). **Geração** (`POST
+  /processes/{id}/acoes/generate`, idempotente) lê o diagnóstico mais recente e cria ações `pendente`
+  de `riscos[*].proximo_passo` + `afirmacoes categoria=acao`, cada uma com fonte (sem fonte →
+  `sem_fonte`, nunca inventa). **Triagem** (`POST .../triagem`: tarefa/escopo/dispensar — Princípio 1;
+  `escopo` **só marca** candidata a proposta, NÃO constrói Orçamento). **Quadro global** `/acoes`
+  (kanban por status, ações de todos os casos, card mostra o caso de origem, move entre colunas).
+  **Decisão de domínio (Isis 16/06) — ADR-016:** concluir uma ação **NÃO** resolve o passivo; não há
+  caminho de escrita `Acao`→`RegulatoryIssue`/achado (testado). **Renomeação:** o board `/processes`
+  (casos por macroetapa, antes "Quadro de ações" no menu) virou **"Casos"** para liberar o nome.
+  Validação: `tests/api/test_acoes.py` **10 verdes** + `tsc`/`build` verdes. Decisões fechadas (Isis):
+  ver seção 10. Doc: `docs/trabalhos/ficha07_acoes.md`.
