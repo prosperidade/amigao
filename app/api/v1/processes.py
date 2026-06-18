@@ -6,7 +6,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import AccessContext, get_access_context, get_current_internal_user, get_db
-from app.models.extracted_field_staging import ExtractedFieldStatus
+from app.models.document import Document
+from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
 from app.models.macroetapa import (
     MACROETAPA_LABELS,
     MACROETAPA_METADATA,
@@ -570,6 +571,67 @@ def extract_process_documents(
     )
 
 
+def _enrich_timeline_origin(db: Session, tenant_id: int, logs: Any) -> list[AuditLogRead]:
+    """Liga cada evento de decisão de staging ao DOCUMENTO de origem do campo.
+
+    `fix/historico-eventos-humanizado` (Item 2): o `fonte` cru do audit
+    `staging_decidir` é a fonte opcional do `escolher_fonte` — quase sempre
+    `null` e enganosa. A rastreabilidade real é o documento de onde o campo foi
+    extraído (`ExtractedFieldStaging.document_id`). Resolvemos no read-time
+    (via `field_id`) para que eventos JÁ gravados (ex.: process 13) também
+    ganhem a origem, sem reescrever o histórico imutável.
+    """
+    import json  # noqa: PLC0415
+
+    parsed: dict[int, dict[str, Any]] = {}
+    field_ids: set[int] = set()
+    for log in logs:
+        if log.action == "staging_decidir" and log.details:
+            try:
+                data = json.loads(log.details)
+            except (ValueError, TypeError):
+                continue
+            if isinstance(data, dict):
+                parsed[log.id] = data
+                fid = data.get("field_id")
+                if isinstance(fid, int):
+                    field_ids.add(fid)
+
+    doc_by_field: dict[int, str] = {}
+    if field_ids:
+        staging_rows = (
+            db.query(ExtractedFieldStaging.id, ExtractedFieldStaging.document_id)
+            .filter(
+                ExtractedFieldStaging.tenant_id == tenant_id,
+                ExtractedFieldStaging.id.in_(field_ids),
+            )
+            .all()
+        )
+        doc_ids = {did for _fid, did in staging_rows if did is not None}
+        name_by_doc: dict[int, str] = {}
+        if doc_ids:
+            for did, name in (
+                db.query(Document.id, Document.original_file_name)
+                .filter(Document.tenant_id == tenant_id, Document.id.in_(doc_ids))
+                .all()
+            ):
+                name_by_doc[did] = name
+        for fid, did in staging_rows:
+            if did is not None and did in name_by_doc:
+                doc_by_field[fid] = name_by_doc[did]
+
+    out: list[AuditLogRead] = []
+    for log in logs:
+        item = AuditLogRead.model_validate(log)
+        data = parsed.get(log.id)
+        if data is not None:
+            fid = data.get("field_id")
+            if isinstance(fid, int) and fid in doc_by_field:
+                item.origin_document = doc_by_field[fid]
+        out.append(item)
+    return out
+
+
 @router.get("/{process_id}/timeline", response_model=list[AuditLogRead])
 def get_process_timeline(
     process_id: int,
@@ -579,7 +641,8 @@ def get_process_timeline(
     """Retorna a linha do tempo (timeline) de eventos e logs de auditoria do processo."""
     repo = ProcessRepository(db, access_context.tenant_id)
     repo.get_scoped_or_404(process_id, client_id=access_context.client_id)
-    return repo.get_timeline(process_id)
+    logs = repo.get_timeline(process_id)
+    return _enrich_timeline_origin(db, access_context.tenant_id, logs)
 
 
 # ---------------------------------------------------------------------------

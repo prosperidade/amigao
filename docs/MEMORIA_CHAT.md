@@ -594,3 +594,21 @@ em `docs/agentes/` são a fonte de verdade verificada.
   (casos por macroetapa, antes "Quadro de ações" no menu) virou **"Casos"** para liberar o nome.
   Validação: `tests/api/test_acoes.py` **10 verdes** + `tsc`/`build` verdes. Decisões fechadas (Isis):
   ver seção 10. Doc: `docs/trabalhos/ficha07_acoes.md`.
+
+- **2026-06-18 — Histórico de eventos: humanizar + fonte (`fix/historico-eventos-humanizado`).** A tela
+  "Histórico de eventos do caso" (rodapé de `/processes/{id}`) cuspia **JSON cru** ao consultor
+  (`{"field_id":401,"acao":"aceitar","target_field":"geo_certificacao_codigo","matricula_hint":"4655",
+  "fonte":null,...}`). **Item 1 (humanizar):** novo `frontend/.../historicoEventos.ts` (`describeEvento`)
+  → frase PT-BR por evento ("Código de certificação SIGEF da matrícula 4655 aceito."), cobrindo todos
+  os tipos do caso real + fallback genérico que nunca imprime JSON; rótulos via módulo central
+  `fieldLabels.ts` **estendido** com os target_field de staging (vira base p/ humanizar outras telas);
+  gênero do particípio; ícone/cor por tipo (padrão da severidade); `TimelineTab.tsx` reescrito.
+  **Item 2 (fonte — MEDIDO, não suposto):** o `fonte:null` é o param `body.fonte` do `escolher_fonte`
+  (nunca passado em aceitar/rejeitar/lote) — fonte da *decisão* (humano), não do *dado*. A fonte real
+  estava ignorada: `ExtractedFieldStaging.document_id`. Tratei via enriquecimento read-time no
+  `GET /timeline` (`field_id → staging.document_id → Document`) → `origin_document`; UI mostra
+  "Origem do dado: <documento>", nunca "fonte: null"; read-time cobre eventos já gravados (process 13)
+  sem reescrever audit. **Lição:** campo enganoso (`fonte:null`) não se exibe — ou mostra a origem real
+  (documento) ou some. Escopo restrito ao histórico. Validação: `historicoEventos.test.ts` 11 casos
+  (zero termo técnico), backend `test_timeline_enriches...`, `npm test` 64 verdes, tsc/build verdes.
+  Doc: `docs/trabalhos/historico_eventos.md`.
