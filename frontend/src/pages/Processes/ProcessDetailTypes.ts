@@ -2,7 +2,7 @@
  * ProcessDetail — Shared types and constants
  */
 import {
-  Stethoscope, LayoutGrid, Briefcase, ListChecks,
+  Stethoscope, LayoutGrid, Briefcase, ListChecks, ListTodo,
   FolderOpen, CalendarDays, Bot, Scale, PackageCheck,
   AlertTriangle, MessageCircle,
 } from 'lucide-react';
@@ -156,7 +156,10 @@ export interface TabDef {
 export const TABS: TabDef[] = [
   { key: 'diagnosis',  label: 'Visão geral', icon: Stethoscope,  block_type: 'permanent' },
   { key: 'alertas',    label: 'Alertas',     icon: AlertTriangle, block_type: 'active'   },
-  { key: 'tasks',      label: 'Ações',       icon: ListChecks,   block_type: 'active'    },
+  // Ficha 07 — Aba Ações: o diagnóstico vira trabalho triável (com fonte).
+  { key: 'acoes',      label: 'Ações',       icon: ListChecks,   block_type: 'active'    },
+  // Tarefas genéricas (Task) — kanban operacional, distinto das Ações de remediação.
+  { key: 'tasks',      label: 'Tarefas',     icon: ListTodo,     block_type: 'active'    },
   { key: 'documents',  label: 'Documentos',       icon: FolderOpen,   block_type: 'permanent' },
   { key: 'messages',   label: 'Comunicação',      icon: MessageCircle, block_type: 'permanent' },
   { key: 'dossier',    label: 'Dados',            icon: LayoutGrid,   block_type: 'permanent' },

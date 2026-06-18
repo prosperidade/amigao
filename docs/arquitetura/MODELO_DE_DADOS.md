@@ -362,6 +362,34 @@ Migrations notáveis:
 3. **`AIJob.output_data` mencionado em alguns docs antigos — não existe.** O campo correto é `result` (JSONB). Documentação antiga errada.
 4. **Migração da chave antiga do dual-emit do A2-diagnostico.** Frontend lê schema novo com fallback; consolidar em sprint cleanup futura.
 
+## Acao (Ficha 07)
+
+Tabela `acoes` — ação de remediação **triável**, vinculada a um processo (caso). É onde o diagnóstico
+vira trabalho. Distinta de `Task` (tarefa genérica/kanban operacional): `Acao` carrega origem com
+fonte (#70), vínculo ao passivo e triagem.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `tenant_id` | FK tenants (RESTRICT) | isolamento |
+| `process_id` | FK processes (CASCADE) | caso dono |
+| `titulo` | String | obrigatório |
+| `descricao` | Text | opcional |
+| `origem` | enum `acao_origem` | `diagnostico`/`auditor`/`manual` |
+| `origem_descricao` | String | texto do passivo de origem |
+| `origem_fontes` | JSONB | lista de `SourceRef` (#70); nunca vazia (injeta `sem_fonte`) |
+| `vinculo_passivo` | JSONB | `{tipo, ref, descricao}` — **sem FK** (ADR-016: não propaga status ao passivo) |
+| `responsavel_id` | FK users (SET NULL) | **nullable** — MVP sem Bloco 0 |
+| `prazo` | Date | opcional |
+| `prioridade` | enum `acao_prioridade` | `alta`/`media`/`baixa` |
+| `status` | enum `acao_status` | `a_fazer`/`em_andamento`/`concluida`/`bloqueada` (colunas do kanban) |
+| `tipo_triagem` | enum `acao_tipo_triagem` | `pendente`/`tarefa`/`escopo`/`dispensada` |
+| `dedupe_key` | String(120) | idempotência da geração; NULL para manual |
+| `created_by_user_id` | FK users (SET NULL) | autor (manual) |
+| `concluida_at` | DateTime | carimbo ao concluir (não toca o passivo) |
+
+Unique `(tenant_id, dedupe_key)` garante idempotência da geração. Migration `ac7f01b9e3d5`. Decisão
+ação×passivo: [ADR-016](../adr/016-acao-nao-resolve-passivo.md).
+
 ## Próximas leituras
 
 - [`API_v1.md`](./API_v1.md) — como acessar essas entidades pela superfície REST

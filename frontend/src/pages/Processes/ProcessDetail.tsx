@@ -20,6 +20,7 @@ import { Process, TABS } from './ProcessDetailTypes';
 import { MACROETAPA_LABELS } from './quadro-types';
 import ProcessHeader from './ProcessHeader';
 import DiagnosisTab from './DiagnosisTab';
+import AcoesTab from './AcoesTab';
 import TasksTab from './TasksTab';
 import DocumentsTab from './DocumentsTab';
 import MessagesTab from './MessagesTab';
@@ -32,7 +33,7 @@ import SaidasTab from './SaidasTab';
 import AlertasTab from './AlertasTab';
 import AIPanel from '@/pages/AI/AIPanel';
 
-type TabKey = 'diagnosis' | 'alertas' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'messages' | 'timeline' | 'ai' | 'saidas';
+type TabKey = 'diagnosis' | 'alertas' | 'acoes' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'messages' | 'timeline' | 'ai' | 'saidas';
 
 const STAGE_ORDER = [
   'entrada_demanda',
@@ -311,6 +312,7 @@ export default function ProcessDetail() {
             />
           )}
           {activeTab === 'alertas' && <AlertasTab processId={processId} propertyId={process.property_id} />}
+          {activeTab === 'acoes' && <AcoesTab processId={processId} />}
           {activeTab === 'dossier' && <ProcessDossier processId={processId} />}
           {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}
           {activeTab === 'commercial' && <ProcessCommercial processId={processId} />}

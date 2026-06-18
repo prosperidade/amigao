@@ -489,6 +489,23 @@ WhatsApp é "sem JWT" por ser chamado por provider externo, mas é gated por HMA
 4. **CORS** — em `BACKEND_CORS_ORIGINS` no `.env.example`. Em prod, incluir `https://regenteambiental.com.br` e `https://www.regenteambiental.com.br`.
 5. **Swagger desabilitado em prod** — checklist em `ops/production-secrets-checklist.md` exige `ENVIRONMENT=production` resultar em `/docs` desabilitado.
 
+## Acoes (Ficha 07)
+
+Perfil `internal`. Tenant isolation em todas as queries.
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/processes/{pid}/acoes?status=&tipo_triagem=` | Lista as ações do caso (filtros opcionais) |
+| `POST` | `/processes/{pid}/acoes` | Criação manual (origem `manual`, triagem `tarefa`) |
+| `POST` | `/processes/{pid}/acoes/generate` | Gera ações `pendente` do diagnóstico mais recente — idempotente; resposta `{created, skipped, diagnosis_version, acoes}` |
+| `PATCH` | `/processes/{pid}/acoes/{id}` | Edita status/prioridade/prazo/título/descrição/responsável (AuditLog por campo) |
+| `POST` | `/processes/{pid}/acoes/{id}/triagem` | `{decisao: "tarefa"\|"escopo"\|"dispensar"}` (Princípio 1) |
+| `GET` | `/acoes/kanban?tipo_triagem=` | Quadro global por status; cada card traz `process_title`/`client_name`/`property_name` |
+
+Concluir uma ação (`status=concluida`) carimba `concluida_at` mas **não** altera o passivo de origem
+([ADR-016](../adr/016-acao-nao-resolve-passivo.md)). `escopo` apenas marca candidata a proposta — não
+constrói o Orçamento.
+
 ## Próximas leituras
 
 - [`GOVERNANCA_IA.md`](./GOVERNANCA_IA.md) — política aplicada nos endpoints de IA

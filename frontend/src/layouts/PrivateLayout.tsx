@@ -11,6 +11,7 @@ import {
   Leaf,
   FileText,
   Bot,
+  ListChecks,
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -44,7 +45,10 @@ export default function PrivateLayout() {
 
   const menu = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-    { name: 'Quadro de ações', icon: Briefcase, path: '/processes' },
+    // "Casos" = board de casos por macroetapa (antes rotulado "Quadro de ações";
+    // renomeado na Ficha 07 para liberar o nome ao quadro de ações de remediação).
+    { name: 'Casos', icon: Briefcase, path: '/processes' },
+    { name: 'Quadro de Ações', icon: ListChecks, path: '/acoes' },
     { name: 'Clientes', icon: Users, path: '/clients' },
     { name: 'Imóveis', icon: MapPin, path: '/properties' },
     { name: 'Propostas', icon: FileText, path: '/proposals' },

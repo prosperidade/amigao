@@ -476,6 +476,21 @@ registradas, sem confronto espacial, até `Property.geom` chegar.
 4. **Portal cliente** — cliente final não acompanha próprio caso ainda; congelado.
 5. **`Property.geom`** — fluxo 2 não cruza dados espaciais hoje (auditor_imovel pendente).
 
+## Diagnóstico → Ação → Triagem (Ficha 07)
+
+Onde o diagnóstico vira trabalho.
+
+1. **Diagnóstico** existe (`RegulatoryDiagnosis` com `riscos`/`afirmacoes`, cada um com fonte #70).
+2. **Gerar** — `POST /processes/{id}/acoes/generate` cria uma `Acao` `pendente` por ação de remediação
+   (`risco.proximo_passo` + `afirmacao categoria=acao`), preenchendo origem e fonte. Idempotente
+   (`dedupe_key` por process+passivo+título).
+3. **Triar** — na aba Ações, o consultor decide cada pendente: `tarefa` (trabalho interno), `escopo`
+   (candidata a item de proposta — só marca) ou `dispensar`. Princípio 1.
+4. **Trabalhar** — status de kanban (`a_fazer`→`em_andamento`→`concluida`/`bloqueada`), editável na
+   aba ou no **Quadro de Ações global** (`/acoes`, todos os casos).
+5. **Concluir ≠ resolver passivo** — concluir a ação carimba `concluida_at` mas **não** toca
+   `RegulatoryIssue`/achado (ADR-016). O saneamento real do passivo é gesto separado, pós-contratação.
+
 ## Próximas leituras
 
 - [`API_v1.md`](./API_v1.md) — endpoints que materializam cada passo
