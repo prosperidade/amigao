@@ -1,9 +1,13 @@
+import json
+
 from fastapi.testclient import TestClient
 
 import app.workers.tasks as worker_tasks
 from app.core.security import get_password_hash
 from app.models.audit_log import AuditLog
 from app.models.client import Client, ClientStatus, ClientType
+from app.models.document import Document
+from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
 from app.models.process import Process, ProcessStatus
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -281,6 +285,89 @@ def test_get_process_timeline_serializes_audit_logs(client: TestClient, db_sessi
     ]
     assert all(item["entity_id"] == process.id for item in payload)
     assert any(item["details"] == '{"channels":["email"],"email_sent":true}' for item in payload)
+
+
+def test_timeline_enriches_staging_decision_with_origin_document(client: TestClient, db_session):
+    """fix/historico-eventos-humanizado (Item 2): o evento de decisão de staging
+    ganha `origin_document` (documento de onde o campo veio) resolvido no
+    read-time via field_id → staging.document_id. Sem inventar fonte."""
+    tenant = Tenant(name="Tenant Origem")
+    db_session.add(tenant)
+    db_session.flush()
+    user = User(
+        email="consultor.origem@example.com",
+        full_name="Consultor Origem",
+        hashed_password=get_password_hash("consultor123"),
+        tenant_id=tenant.id,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    cli = Client(
+        tenant_id=tenant.id, full_name="Cliente Origem",
+        client_type=ClientType.pf, status=ClientStatus.active,
+    )
+    db_session.add(cli)
+    db_session.flush()
+    process = Process(
+        tenant_id=tenant.id, client_id=cli.id, title="Processo Origem",
+        process_type="car", status=ProcessStatus.diagnostico,
+    )
+    db_session.add(process)
+    db_session.flush()
+
+    doc = Document(
+        tenant_id=tenant.id,
+        process_id=process.id,
+        original_file_name="Matrícula 4655 - Cartório.pdf",
+        filename="abc.pdf",
+        content_type="application/pdf",
+        storage_key="x/abc.pdf",
+        file_size_bytes=10,
+        uploaded_by_user_id=user.id,
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    staging = ExtractedFieldStaging(
+        tenant_id=tenant.id,
+        process_id=process.id,
+        document_id=doc.id,
+        field_name="codigo_certificacao",
+        target_entity="matricula",
+        target_field="geo_certificacao_codigo",
+        matricula_hint="4655",
+        status=ExtractedFieldStatus.aceito,
+    )
+    db_session.add(staging)
+    db_session.flush()
+
+    db_session.add_all([
+        AuditLog(
+            tenant_id=tenant.id, user_id=user.id, entity_type="process",
+            entity_id=process.id, action="staging_decidir",
+            details=json.dumps({
+                "field_id": staging.id, "acao": "aceitar", "status": "aceito",
+                "target_entity": "matricula", "target_field": "geo_certificacao_codigo",
+                "matricula_hint": "4655", "fonte": None,
+            }),
+        ),
+        AuditLog(
+            tenant_id=tenant.id, user_id=user.id, entity_type="process",
+            entity_id=process.id, action="created", details="Caso criado",
+        ),
+    ])
+    db_session.commit()
+
+    headers = _login(client, "consultor.origem@example.com", "consultor123")
+    resp = client.get(f"/api/v1/processes/{process.id}/timeline", headers=headers)
+    assert resp.status_code == 200
+    payload = {item["action"]: item for item in resp.json()}
+
+    # O evento de decisão ganhou o documento de origem (rastreabilidade real).
+    assert payload["staging_decidir"]["origin_document"] == "Matrícula 4655 - Cartório.pdf"
+    # Eventos sem campo de staging não recebem origem (não inventa fonte).
+    assert payload["created"]["origin_document"] is None
 
 
 # ---------------------------------------------------------------------------

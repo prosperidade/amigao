@@ -19,4 +19,11 @@ class AuditLogRead(BaseModel):
     hash_previous: str | None = None
     created_at: datetime | None = None
 
+    # Rastreabilidade do histórico (fix/historico-eventos-humanizado): para
+    # eventos de decisão sobre um campo de staging, o documento de ORIGEM do
+    # dado decidido (resolvido no read-time via field_id → staging.document_id).
+    # `fonte` no audit cru é a fonte opcional do `escolher_fonte` (quase sempre
+    # null); a rastreabilidade real é o documento. None quando não se aplica.
+    origin_document: str | None = None
+
     model_config = {"from_attributes": True}

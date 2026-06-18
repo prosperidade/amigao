@@ -80,6 +80,31 @@ export const FIELD_LABELS: Record<string, string> = {
   local_emissao: 'Local de emissão',
   data_emissao: 'Data de emissão',
   validade: 'Validade',
+
+  // ── Campos de DESTINO do staging (Ficha 01 — base Cliente/Imóvel/Matrícula).
+  //    São os `target_field` que aparecem no histórico de decisões do consultor.
+  full_name: 'Nome',
+  document: 'CPF / CNPJ',
+  birth_date: 'Data de nascimento',
+  address: 'Endereço',
+  car_status: 'Situação do CAR',
+  total_area_ha: 'Área total (ha)',
+  area_grafica_ha: 'Área gráfica (ha)',
+  app_area_ha: 'Área de APP (ha)',
+  rl_status: 'Reserva legal',
+  rat_protocolo: 'Protocolo do RAT',
+  rat_data_emissao: 'Data de emissão do RAT',
+  modulos_fiscais: 'Módulos fiscais',
+  codigo_incra_sncr: 'Código INCRA / SNCR',
+  proprietarios: 'Proprietários',
+  registro_livro_folha_ficha: 'Registro (livro / folha / ficha)',
+  averbacao_app: 'Averbação de APP',
+  averbacao_rl: 'Averbação de RL',
+  geo_certificacao_codigo: 'Código de certificação SIGEF',
+  geo_certificacao_status: 'Situação da certificação SIGEF',
+  onus_gravames: 'Ônus e gravames',
+  nirf_cib: 'NIRF / CIB',
+  vtn: 'VTN',
 };
 
 /**
