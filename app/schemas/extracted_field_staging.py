@@ -98,6 +98,7 @@ class ConsolidationResult(BaseModel):
     cliente_atualizado: bool
     imovel_atualizado: bool
     area_total_matriculas: Optional[float] = None
+    acoes_criadas: int = 0   # divergências não resolvidas que viraram Ação (opção b)
     writes: list[ConsolidationWrite] = []
     ignorados: list[str] = []   # campos aceitos sem coluna correspondente
     reconciliacoes: list[ConsolidationReconciliation] = []

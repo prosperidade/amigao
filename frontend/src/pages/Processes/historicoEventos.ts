@@ -167,9 +167,11 @@ export function describeEvento(log: TimelineEvent): HistoricoEvento {
       const criadas = num(obj?.matriculas_criadas);
       const atualizadas = num(obj?.matriculas_atualizadas);
       const recon = Array.isArray(obj?.reconciliacoes) ? (obj!.reconciliacoes as unknown[]).length : 0;
+      const acoes = num(obj?.acoes_criadas);
       const partes: string[] = [];
       if (criadas > 0) partes.push(plural(criadas, 'matrícula criada', 'matrículas criadas'));
       if (atualizadas > 0) partes.push(plural(atualizadas, 'matrícula atualizada', 'matrículas atualizadas'));
+      if (acoes > 0) partes.push(`${plural(acoes, 'ação criada', 'ações criadas')} para divergências`);
       if (recon > 0) partes.push(`${plural(recon, 'divergência', 'divergências')} aguardando decisão`);
       return {
         kind: 'consolidado',
