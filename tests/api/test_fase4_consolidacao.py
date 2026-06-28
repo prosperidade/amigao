@@ -123,6 +123,87 @@ def test_ciclo_completo_decisao_e_consolidacao(client: TestClient, db_session):
     assert db_session.query(Matricula).filter(Matricula.property_id == prop.id).count() == 2
 
 
+def test_consolidacao_parcial_divergente_vira_acao(client: TestClient, db_session):
+    """Consolidação PARCIAL (decisão Isis, opção b): aceita-se só os consistentes
+    e consolida-se SEM resolver o divergente_transcricao. Os consistentes gravam
+    e o divergente vira UMA Acao (origem=consolidacao). Audit registra. Idempotente."""
+    from app.models.acao import Acao, AcaoOrigem
+    from app.models.audit_log import AuditLog
+
+    tenant, proc, cli, prop, ids = _setup(db_session, email="f4parcial@example.com")
+    db_session.commit()
+    h = _login(client, "f4parcial@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    # aceita os consistentes; o divergente (area_declarada_ha→total_area_ha) fica pendente
+    client.post(f"{base}/staging-fields/aceitar-consistentes", headers=h)
+
+    # consolida sem resolver o divergente → não bloqueia
+    r = client.post(f"{base}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    res = r.json()
+    assert res["campos_gravados"] > 0          # consistentes gravaram
+    assert res["matriculas_criadas"] == 2
+    assert res["acoes_criadas"] == 1           # divergente virou ação
+
+    acoes = db_session.query(Acao).filter(Acao.process_id == proc.id).all()
+    assert len(acoes) == 1
+    assert acoes[0].origem == AcaoOrigem.consolidacao
+    assert acoes[0].origem_fontes                       # carrega fonte (Princípio 11)
+    assert acoes[0].vinculo_passivo["tipo"] == "divergencia"
+
+    # audit action='consolidar' passou a existir (antes: ZERO)
+    audits = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.entity_id == proc.id, AuditLog.action == "consolidar")
+        .all()
+    )
+    assert len(audits) >= 1
+    assert audits[0].hash_sha256 is not None            # hash chain (Princípio 2)
+
+    # idempotência: re-consolidar não duplica gravação nem ação
+    r2 = client.post(f"{base}/consolidar", headers=h)
+    assert r2.json()["acoes_criadas"] == 0
+    assert db_session.query(Acao).filter(Acao.process_id == proc.id).count() == 1
+
+
+def test_rl_bridge_matricula_para_imovel(client: TestClient, db_session):
+    """Ponte matrícula→imóvel (Princípio 11): RL só chega como averbação na
+    matrícula; o Hub lê prop.rl_status. Derivamos 'averbada' marcando a origem
+    como derivada (transparente). APP NÃO é derivada de texto livre."""
+    tenant, proc, cli, prop, ids = _setup(db_session, email="f4rl@example.com")
+    assert prop.rl_status is None
+    db_session.commit()
+    h = _login(client, "f4rl@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    client.post(f"{base}/staging-fields/aceitar-consistentes", headers=h)  # inclui averbacao_rl da 4.698
+    r = client.post(f"{base}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+
+    db_session.refresh(prop)
+    assert prop.rl_status == "averbada"
+    assert (prop.field_sources or {}).get("rl_status") == "derived_matricula"
+    # APP não é inventada de texto livre — sem dado estruturado, fica vazia.
+    assert prop.app_area_ha is None
+
+
+def test_rl_status_nivel_imovel_grava_via_allowlist(client: TestClient, db_session):
+    """rl_status passou a estar na allowlist do imóvel: o RL de nível-imóvel
+    (rl_declarada_ha→imovel.rl_status) grava (antes caía em `ignorados`)."""
+    tenant, proc, cli, prop = _setup_min(db_session, "f4rlimovel@example.com")
+    C = ExtractedFieldStatus
+    db_session.add(_st(tenant.id, proc.id, "car", "rl_declarada_ha", "proposta", C.aceito,
+                       entity="imovel", target="rl_status"))
+    db_session.commit()
+    h = _login(client, "f4rlimovel@example.com")
+    r = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    assert "imovel.rl_status" not in r.json().get("ignorados", [])
+    db_session.refresh(prop)
+    assert prop.rl_status == "proposta"
+
+
 def test_editar_grava_decided_value_e_consolida(client: TestClient, db_session):
     tenant, proc, cli, prop, ids = _setup(db_session, email="f4b@example.com")
     db_session.commit()

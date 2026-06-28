@@ -90,6 +90,7 @@ class AcaoOrigem(str, enum.Enum):
     diagnostico = "diagnostico"   # gerada de um risco/afirmação do diagnóstico
     auditor = "auditor"           # gerada de um finding determinístico do auditor
     manual = "manual"             # consultor criou do zero
+    consolidacao = "consolidacao"  # gerada de uma divergência não resolvida na consolidação
 
 
 # Transições válidas no kanban — qualquer coluna alcança qualquer outra

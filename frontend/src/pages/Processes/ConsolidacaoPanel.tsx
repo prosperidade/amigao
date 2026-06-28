@@ -36,6 +36,7 @@ interface ConsolidationResult {
   cliente_atualizado: boolean;
   imovel_atualizado: boolean;
   area_total_matriculas: number | null;
+  acoes_criadas: number;
 }
 
 const STATUS_CLS: Record<string, string> = {
@@ -96,6 +97,8 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
     () => fields.filter(f => f.status === 'divergente_transcricao').length,
     [fields],
   );
+  // Campos que GRAVAM na consolidação (escolhido/editado já viram 'aceito').
+  const consolidaveis = useMemo(() => fields.filter(f => f.status === 'aceito').length, [fields]);
   const grupos = useMemo(() => {
     const by: Record<string, StagingField[]> = {};
     for (const f of fields) {
@@ -192,14 +195,13 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
 
       <div className="pt-2 border-t border-gray-100 dark:border-white/10 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-xs text-gray-500 dark:text-slate-400">
-          {pendentesObrig > 0
-            ? `${pendentesObrig} divergência(s) de transcrição aguardam escolha ativa.`
-            : 'Sem divergências pendentes de escolha.'}
+          {`${consolidaveis} campo(s) serão gravados`}
+          {pendentesObrig > 0 && ` · ${pendentesObrig} divergência(s) virarão ações a resolver`}.
         </div>
         <button
           onClick={() => consolidate.mutate()}
-          disabled={consolidate.isPending || pendentesObrig > 0}
-          title={pendentesObrig > 0 ? 'Resolva as divergências de transcrição antes de consolidar.' : 'Gravar os campos aceitos na base'}
+          disabled={consolidate.isPending || consolidaveis === 0}
+          title={consolidaveis === 0 ? 'Aceite ao menos um campo para consolidar.' : 'Gravar os campos aceitos na base (divergências viram ações)'}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium"
         >
           {consolidate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
@@ -211,6 +213,7 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
         <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-3 text-sm text-emerald-800 dark:text-emerald-300">
           Consolidado: {consolidated.campos_gravados} campo(s) gravado(s) · {consolidated.matriculas_criadas} matrícula(s) criada(s)
           {consolidated.matriculas_atualizadas > 0 && ` · ${consolidated.matriculas_atualizadas} atualizada(s)`}
+          {consolidated.acoes_criadas > 0 && ` · ${consolidated.acoes_criadas} ação(ões) criada(s) para divergências`}
           {consolidated.area_total_matriculas != null && ` · área total (soma das matrículas): ${consolidated.area_total_matriculas} ha`}.
         </div>
       )}

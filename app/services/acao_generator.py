@@ -23,6 +23,10 @@ from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
 from app.models.acao import Acao, AcaoOrigem, AcaoStatus, AcaoTipoTriagem
+from app.models.extracted_field_staging import (
+    ExtractedFieldStaging,
+    ExtractedFieldStatus,
+)
 from app.models.process import Process
 from app.models.regulatory import RegulatoryDiagnosis
 
@@ -205,3 +209,125 @@ def generate_acoes_from_diagnosis(
         )
 
     return created, skipped, diag.version
+
+
+# ---------------------------------------------------------------------------
+# Ações nascidas da CONSOLIDAÇÃO (divergência não resolvida — decisão Isis opção b)
+# ---------------------------------------------------------------------------
+
+def _dedupe_key_divergencia(process_id: int, entity: str, hint: str | None, field: str) -> str:
+    """Chave estável por (processo, destino da divergência). Cabe em String(120)."""
+    raw = f"{entity}|{hint or ''}|{field}".strip().lower()
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:24]
+    return f"p{process_id}:divg:{digest}"
+
+
+def _scalar(row: ExtractedFieldStaging) -> Any:
+    fv = row.field_value
+    return fv.get("value") if isinstance(fv, dict) and "value" in fv else fv
+
+
+def generate_acoes_from_divergencias(
+    db: Session,
+    *,
+    process: Process,
+    tenant_id: int,
+) -> tuple[list[Acao], int]:
+    """Gera uma ``Acao`` ``pendente`` por divergência de transcrição NÃO resolvida.
+
+    Consolidação parcial (decisão Isis, opção b): o divergente não bloqueia — os
+    consistentes já gravaram; cada divergência pendente vira trabalho rastreável.
+    Só ``divergente_transcricao`` (``divergente_fundo`` tem caminho próprio na
+    matriz — não duplicar). Fonte = os valores concorrentes e seus documentos
+    (Princípio 11; ``SourceRef``). Idempotente por ``dedupe_key``. Não comita.
+    """
+    from app.schemas.stage_output import SourceRef  # noqa: PLC0415
+
+    rows = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process.id,
+            ExtractedFieldStaging.status == ExtractedFieldStatus.divergente_transcricao,
+        )
+        .order_by(ExtractedFieldStaging.id.asc())
+        .all()
+    )
+    if not rows:
+        return [], 0
+
+    # Agrupa por DESTINO: fontes concorrentes do mesmo campo → UMA ação.
+    grupos: dict[tuple, list[ExtractedFieldStaging]] = {}
+    for r in rows:
+        key = ((r.target_entity or "").lower(), r.matricula_hint, r.target_field or r.field_name)
+        grupos.setdefault(key, []).append(r)
+
+    existing_keys = {
+        row[0]
+        for row in db.query(Acao.dedupe_key)
+        .filter(
+            Acao.tenant_id == tenant_id,
+            Acao.process_id == process.id,
+            Acao.dedupe_key.isnot(None),
+        )
+        .all()
+    }
+
+    created: list[Acao] = []
+    for (entity, hint, field), group in grupos.items():
+        key = _dedupe_key_divergencia(process.id, entity, hint, field)
+        if key in existing_keys:
+            continue
+
+        fontes: list[dict[str, Any]] = []
+        partes: list[str] = []
+        for g in group:
+            valor = _scalar(g)
+            doc = g.source_doc_type or "—"
+            fontes.append(
+                SourceRef(
+                    tipo="documento",
+                    ref=f"staging:{g.id}",
+                    descricao=doc,
+                    valor=str(valor) if valor is not None else None,
+                ).model_dump()
+            )
+            partes.append(f"{doc}={valor}")
+        if not fontes:
+            fontes = [SourceRef(tipo="sem_fonte", sem_fonte=True).model_dump()]
+
+        hint_txt = f" (matrícula {hint})" if hint else ""
+        titulo = f"Resolver divergência de {field}{hint_txt}"
+        origem_descricao = ("Divergência: " + " vs ".join(partes)) if partes else None
+
+        acao = Acao(
+            tenant_id=tenant_id,
+            process_id=process.id,
+            titulo=titulo,
+            origem=AcaoOrigem.consolidacao,
+            origem_descricao=(origem_descricao or None) and origem_descricao[:255],
+            origem_fontes=fontes,
+            vinculo_passivo={
+                "tipo": "divergencia",
+                "ref": f"staging:{group[0].id}",
+                "descricao": origem_descricao,
+            },
+            status=AcaoStatus.a_fazer,
+            tipo_triagem=AcaoTipoTriagem.pendente,
+            dedupe_key=key,
+        )
+        db.add(acao)
+        created.append(acao)
+
+    if created:
+        db.flush()
+        logger.info(
+            "acoes_from_divergencias",
+            extra={
+                "process_id": process.id,
+                "tenant_id": tenant_id,
+                "acoes_created": len(created),
+            },
+        )
+
+    return created, len(created)

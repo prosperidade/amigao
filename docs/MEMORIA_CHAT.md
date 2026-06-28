@@ -100,6 +100,12 @@ não propaga `uf` ao diagnóstico — ligada à #38). Dívidas novas por PR: ver
   do consultor); **"Possui arquivo do CAR"** não vira campo (Isis, 28/05).
 - **Triagem 2 eixos** independentes (urgência + valor estratégico).
 - **Reconciliação Opção A** (modal na divergência).
+- **Consolidação PARCIAL — opção b** (Isis, 28/06): consolidar com divergente não
+  resolvido **não bloqueia** — os campos consistentes gravam e cada divergente vira
+  uma **Ação** (com fonte, idempotente). `divergente_fundo` segue como achado da
+  matriz (não vira ação). Ponte matrícula→imóvel: RL derivada com fonte
+  (`derived_matricula`); APP **nunca** parseada de texto livre (Princípio 11).
+  Implementado em `fix/consolidacao-gate-divergente` (ADR-017).
 
 ## 11. Preferências do André
 

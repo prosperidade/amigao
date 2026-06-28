@@ -451,19 +451,33 @@ A entrada estruturada do imóvel (Ficha 01) é um pipeline de 4 fases:
    (`staging_consolidation.py`, determinístico, idempotente): grava o
    `status=aceito` em `Client`/`Property`/`Matricula` (upsert por
    `matricula_hint`). Detalhes Ficha 05:
+   - **Consolidação PARCIAL (decisão Isis, opção b).** O botão "Consolidar na base"
+     dispara sempre que houver ≥1 campo aceito — um `divergente_transcricao` não
+     resolvido **NÃO bloqueia** o resto. Os consistentes gravam; cada divergência
+     pendente vira uma **`Acao`** (`origem=consolidacao`, com fonte — Princípio 11;
+     idempotente por `dedupe_key`). O valor do divergente **não** é gravado.
+     (`divergente_fundo` segue pelo caminho próprio do achado — não vira Ação.)
    - **Multi-fonte → vencedora por destino** `(entidade,[hint],campo)`: ordem
      edição-consultor > **âncora SIGEF** (`area_ha`/`denominacao_imovel`) >
      confiança > id.
    - **UPSERT versionado + audit por campo** (`anterior→novo+fonte`); **reconciliação**:
      doc novo divergente de campo já consolidado NÃO sobrescreve — volta como alerta.
-   - **Idempotente**: re-gravar o mesmo valor é no-op. **Achado** (`divergente_fundo`
-     aceito, `decided_value=None`) não grava valor. Área implausível não grava.
+   - **Ponte matrícula→imóvel (RL).** `rl_status` entrou na allowlist do imóvel.
+     Se o imóvel não tem RL e ≥1 matrícula tem `averbacao_rl`, deriva-se
+     `rl_status='averbada'` marcando `field_sources['rl_status']='derived_matricula'`
+     (transparente; consultor corrige). **APP não** é derivada de texto livre
+     (`app_area_ha` só de dado estruturado nível-imóvel — Princípio 11).
+   - **Audit:** `action='consolidar'` (com hash chain) registra quem/quando/campos
+     gravados/ações criadas — dispara quando há gravação **ou** ação criada.
+   - **Idempotente**: re-gravar o mesmo valor é no-op; re-consolidar não duplica
+     ação. **Achado** (`divergente_fundo` aceito, `decided_value=None`) não grava
+     valor. Área implausível não grava.
    - **Não** sobrescreve `Property.total_area_ha` — a área do imóvel é derivada
      (`area_total_matriculas()`).
 5. **Imóvel Hub (resultado visível).** `GET /properties/{id}/summary` **deriva**
    Matrícula (`"; ".join` dos números) e Área (soma das matrículas) das `Matricula`
    consolidadas quando as colunas cruas de `Property` estão vazias — fim dos "—"
-   após "Confirmar e gravar".
+   após "Confirmar e gravar". RL aparece após a ponte matrícula→imóvel.
 
 Gap D1: linhas técnicas da matriz (APP/RL/hidrografia/cobertura) ficam
 registradas, sem confronto espacial, até `Property.geom` chegar.

@@ -28,6 +28,7 @@ from app.models.extracted_field_staging import (
     ExtractedFieldStaging,
     ExtractedFieldStatus,
 )
+from app.services.audit_hash import stamp_audit_hash
 from app.services.inconsistency_matrix import (
     _to_float_br,
     is_area_plausible,
@@ -53,8 +54,11 @@ _DIVERGENTES = {
 _CLIENTE_FIELDS = {"full_name", "legal_name", "cpf_cnpj", "email", "phone", "secondary_phone", "birth_date"}
 _CLIENTE_ALIAS = {"document": "cpf_cnpj", "address": None}
 
+# rl_status entra na allowlist (antes era descartado: rl_declarada_ha → imovel.rl_status
+# caía em `ignorados`, deixando o Hub com "—" em Reserva Legal). app_area_ha já estava.
 _IMOVEL_FIELDS = {"car_code", "car_status", "municipality", "state", "app_area_ha",
-                  "area_grafica_ha", "area_documental_ha", "biome", "ccir", "nirf", "tipologia"}
+                  "area_grafica_ha", "area_documental_ha", "biome", "ccir", "nirf",
+                  "tipologia", "rl_status"}
 _IMOVEL_ALIAS: dict[str, Optional[str]] = {}
 
 _MATRICULA_FIELDS = {"numero_matricula", "cartorio", "registro_livro_folha_ficha",
@@ -381,12 +385,39 @@ def consolidate_process(
 
     db.flush()
 
+    # ── Consolidação PARCIAL (decisão Isis, opção b) ────────────────────────
+    # Divergente de transcrição NÃO resolvido não bloqueia: os consistentes já
+    # gravaram acima; cada divergência pendente vira uma Ação (rastreável, com
+    # fonte). divergente_fundo tem caminho próprio (achado roteado pela matriz)
+    # — não duplicar aqui. Idempotente via dedupe_key. NÃO grava valor.
+    from app.services.acao_generator import generate_acoes_from_divergencias  # noqa: PLC0415
+
+    acoes, acoes_criadas = generate_acoes_from_divergencias(
+        db, process=process, tenant_id=tenant_id
+    )
+
+    # ── Ponte RL matrícula→imóvel (Princípio 11 — derivar com fonte) ────────
+    # O Hub lê prop.rl_status; a RL pode chegar só como averbação na matrícula.
+    # Se o imóvel não tem RL e ≥1 matrícula tem averbação de RL, derivamos
+    # 'averbada' marcando a origem como derivada (não human_validated): é
+    # transparente e o consultor pode corrigir. APP NÃO é derivada de texto
+    # livre (averbacao_app→app_area_ha exigiria inventar um número).
+    if prop is not None and not (prop.rl_status or "").strip():
+        if any((m.averbacao_rl or "").strip() for m in prop.matriculas):
+            prop.rl_status = "averbada"
+            fs_prev = dict(getattr(prop, "field_sources", None) or {})
+            prop.field_sources = {**fs_prev, "rl_status": "derived_matricula"}
+            imovel_tocado = True
+            db.flush()
+
     area_total = prop.area_total_matriculas() if prop is not None else None
 
-    if writes or reconciliacoes:
+    if writes or reconciliacoes or acoes_criadas:
         _audit(db, tenant_id, process_id, user_id, "consolidar", {
             "process_id": process_id, "campos_gravados": len(writes),
             "matriculas_criadas": mat_criadas, "matriculas_atualizadas": mat_atualizadas,
+            "acoes_criadas": acoes_criadas,
+            "acoes": [{"id": a.id, "titulo": a.titulo} for a in acoes],
             "writes": writes, "reconciliacoes": reconciliacoes,
         })
     db.commit()
@@ -399,6 +430,7 @@ def consolidate_process(
         "cliente_atualizado": cliente_tocado,
         "imovel_atualizado": imovel_tocado,
         "area_total_matriculas": area_total,
+        "acoes_criadas": acoes_criadas,
         "writes": writes,
         "ignorados": ignorados,
         "reconciliacoes": reconciliacoes,
@@ -505,8 +537,12 @@ def _load_property(db: Session, tenant_id: int, property_id: int):
 
 def _audit(db: Session, tenant_id: int, process_id: int, user_id: Optional[int],
            action: str, details: dict[str, Any]) -> None:
-    db.add(AuditLog(
+    """AuditLog com hash chain SHA-256 (Princípio 2 — tudo auditável)."""
+    log = AuditLog(
         tenant_id=tenant_id, user_id=user_id, entity_type="process",
         entity_id=process_id, action=action,
         details=json.dumps(details, ensure_ascii=False, default=str),
-    ))
+    )
+    db.add(log)
+    db.flush()
+    stamp_audit_hash(db, log)
