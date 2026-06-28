@@ -130,7 +130,7 @@ export default function QuadroAcoes() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-            Casos
+            Quadro de Ações
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">
             Fluxo macro dos casos em andamento

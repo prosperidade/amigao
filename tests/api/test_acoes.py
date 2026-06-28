@@ -1,8 +1,8 @@
-"""Testes da Ficha 07 — Ações (aba do caso + Quadro de Ações global).
+"""Testes da Ficha 07 — Ações (aba do caso).
 
 Cobre: geração com fonte a partir do diagnóstico (idempotente), triagem do
-consultor, edição de status no kanban, garantia "concluir ação NÃO altera o
-passivo" (ADR-016), quadro global com caso de origem e tenant isolation.
+consultor, edição de status, garantia "concluir ação NÃO altera o passivo"
+(ADR-016) e tenant isolation da lista do caso.
 """
 
 from __future__ import annotations
@@ -133,7 +133,6 @@ def _seed_diagnosis(db_session, *, tenant: Tenant, process: Process, version: in
 
 def test_unauthorized_returns_401(client: TestClient):
     assert client.get("/api/v1/processes/1/acoes").status_code == 401
-    assert client.get("/api/v1/acoes/kanban").status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -310,41 +309,11 @@ def test_concluir_acao_nao_altera_passivo(client: TestClient, db_session):
 
 
 # ---------------------------------------------------------------------------
-# Quadro global
+# Tenant isolation (lista do caso)
 # ---------------------------------------------------------------------------
 
 
-def test_kanban_groups_by_status_with_case_origin(client: TestClient, db_session):
-    tenant, _ = _seed_internal_user(db_session)
-    _, _, process = _seed_case(db_session, tenant=tenant, title="Caso São Jorge")
-    db_session.commit()
-
-    headers = _login(client, "consultor@example.com", "senha123")
-    a = client.post(
-        f"/api/v1/processes/{process.id}/acoes", headers=headers, json={"titulo": "A1"}
-    ).json()
-    # Move para em_andamento.
-    client.patch(
-        f"/api/v1/processes/{process.id}/acoes/{a['id']}",
-        headers=headers, json={"status": "em_andamento"},
-    )
-
-    r = client.get("/api/v1/acoes/kanban", headers=headers)
-    assert r.status_code == 200
-    data = r.json()
-    assert data["total"] == 1
-    cols = {c["status"]: c for c in data["columns"]}
-    assert [c["status"] for c in data["columns"]] == [
-        "a_fazer", "em_andamento", "concluida", "bloqueada",
-    ]
-    assert cols["em_andamento"]["count"] == 1
-    card = cols["em_andamento"]["cards"][0]
-    assert card["process_title"] == "Caso São Jorge"
-    assert card["client_name"] == "Fazenda Boa Vista"
-    assert card["property_name"] == "Imóvel São Jorge"
-
-
-def test_kanban_tenant_isolation(client: TestClient, db_session):
+def test_list_acoes_tenant_isolation(client: TestClient, db_session):
     tenant_a, _ = _seed_internal_user(db_session, name="A", email="a@example.com")
     _, _, proc_a = _seed_case(db_session, tenant=tenant_a)
     tenant_b, _ = _seed_internal_user(db_session, name="B", email="b@example.com")
@@ -356,10 +325,9 @@ def test_kanban_tenant_isolation(client: TestClient, db_session):
     client.post(f"/api/v1/processes/{proc_a.id}/acoes", headers=headers_a, json={"titulo": "de A"})
     client.post(f"/api/v1/processes/{proc_b.id}/acoes", headers=headers_b, json={"titulo": "de B"})
 
-    data_a = client.get("/api/v1/acoes/kanban", headers=headers_a).json()
-    assert data_a["total"] == 1
-    titulos_a = [c["titulo"] for col in data_a["columns"] for c in col["cards"]]
-    assert titulos_a == ["de A"]
+    # Tenant A só vê a ação do próprio caso.
+    data_a = client.get(f"/api/v1/processes/{proc_a.id}/acoes", headers=headers_a).json()
+    assert [a["titulo"] for a in data_a] == ["de A"]
 
     # Tenant A não acessa ação/processo do tenant B.
     assert client.get(f"/api/v1/processes/{proc_b.id}/acoes", headers=headers_a).status_code == 404

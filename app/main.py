@@ -179,7 +179,6 @@ app.include_router(decisions.router, prefix=f"{settings.API_V1_STR}/processes", 
 app.include_router(regulatory.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Diagnóstico Regulatório"])
 app.include_router(regulatory.property_router, prefix=f"{settings.API_V1_STR}/properties", tags=["Diagnóstico Regulatório"])
 app.include_router(acoes.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Ações (Ficha 07)"])
-app.include_router(acoes.acoes_router, prefix=f"{settings.API_V1_STR}/acoes", tags=["Ações (Ficha 07)"])
 app.include_router(intake_feedback.classify_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Classificação de Demanda"])
 app.include_router(intake_feedback.admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["Admin / Métricas"])
 app.include_router(audit.router, prefix=f"{settings.API_V1_STR}/admin", tags=["Admin / Auditoria"])

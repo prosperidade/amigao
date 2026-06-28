@@ -127,28 +127,3 @@ class AcaoGenerateOut(BaseModel):
         description="Versão do diagnóstico que originou as ações (None = sem diagnóstico)",
     )
     acoes: list[AcaoOut] = Field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Quadro de Ações global (kanban por status)
-# ---------------------------------------------------------------------------
-
-
-class AcaoKanbanCard(AcaoOut):
-    """Card do quadro global — ação + caso de origem (Ficha 07 §5)."""
-
-    process_title: str | None = None
-    client_name: str | None = None
-    property_name: str | None = None
-
-
-class AcaoKanbanColumn(BaseModel):
-    status: AcaoStatus
-    label: str
-    count: int
-    cards: list[AcaoKanbanCard]
-
-
-class AcaoKanbanResponse(BaseModel):
-    columns: list[AcaoKanbanColumn]
-    total: int

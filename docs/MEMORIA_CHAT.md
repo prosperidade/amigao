@@ -128,6 +128,17 @@ em `docs/agentes/` são a fonte de verdade verificada.
 
 ## 15. Eventos significativos
 
+- **2026-06-28 — Revertido o vacilo do sidebar do #74 + limpeza do órfão (`fix/reverter-sidebar-quadro-acoes`).**
+  O #74 renomeou o board `/processes` de "Quadro de ações" para "Casos" e criou uma aba nova
+  "Quadro de Ações" (`/acoes`, `QuadroAcoesGlobal`). Ambas desfeitas: sidebar volta ao item único
+  **"Quadro de Ações"** (capitalização normalizada no menu e no h1) → `/processes`. Por decisão do
+  André, a dívida foi **resolvida na hora, não registrada**: apagados o componente
+  `QuadroAcoesGlobal`, os hooks `useAcoesKanban`/`useMoveAcaoStatus`, os tipos `AcaoKanban*` (front
+  e back), o endpoint `GET /acoes/kanban` + `acoes_router` e os testes de kanban (preservada a
+  cobertura de tenant isolation da lista do caso). **Preservado** o resto do backend Ficha 07
+  (`Acao`, migration, `/processes/{id}/acoes*`) e a aba "Ações" do workspace (`AcoesTab`). Verificado
+  por grep que nada mais consumia o que foi apagado. Zero código órfão. Mapa em
+  `docs/trabalhos/reverter_sidebar.md`. tsc + build + pytest verdes.
 - **2026-05-31 — PR 2.1 (WhatsApp inbound) mergeado (#38).** Canal WhatsApp via Evolution, dormente
   até credenciais; e-mail inbound adiado (dívida #35). Atualiza o "próximo passo" da seção 13.
 - **2026-05-31 — Correção dos 2 críticos da Isis (`fix/intake-uploads-criticos-isis`).** Persistência:

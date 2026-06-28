@@ -47,24 +47,6 @@ export interface Acao {
   updated_at: string | null;
 }
 
-export interface AcaoKanbanCard extends Acao {
-  process_title: string | null;
-  client_name: string | null;
-  property_name: string | null;
-}
-
-export interface AcaoKanbanColumn {
-  status: AcaoStatus;
-  label: string;
-  count: number;
-  cards: AcaoKanbanCard[];
-}
-
-export interface AcaoKanbanResponse {
-  columns: AcaoKanbanColumn[];
-  total: number;
-}
-
 export interface AcaoGenerateResponse {
   created: number;
   skipped: number;

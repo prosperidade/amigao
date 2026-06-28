@@ -369,6 +369,7 @@ Próximos estados na fila: SP, MG, TO (próxima semana).
 - React 19 + Vite + TypeScript + TailwindCSS + React Query + Zustand
 - 37+ telas/abas em 10 áreas (Auth, Clients, Processes, Properties, Intake, Contracts, Proposals, Dashboard, AI, Settings)
   - **PROMPT_9:** aba **Alertas** nova no ProcessDetail (Regra B preventiva + 5 botões da P4 + textarea de justificativa); **AnalysesTab** do PropertyHub agora é lente do ADR-012 com chips verbo-por-estado.
+  - **Sidebar (2026-06-28):** item único **"Quadro de Ações" → `/processes`** (revertido o rename "Casos" + a aba global `/acoes` do #74). Código órfão do quadro global removido na mesma passada: `QuadroAcoesGlobal`, hooks `useAcoesKanban`/`useMoveAcaoStatus`, tipos `AcaoKanban*`, endpoint `GET /acoes/kanban` + `acoes_router`. Aba "Ações" do workspace (`AcoesTab`) e o resto do backend Ficha 07 preservados — ver `docs/trabalhos/reverter_sidebar.md`.
 - TypeScript strict, zero `any` explícito, mutations uniformizadas via async/await
 - Token em Zustand persist + interceptor de 401/403 em `frontend/src/lib/api.ts`
 - **Vitest+RTL:** 31/31 verde (4 testes pré-existentes + 10 do PROMPT_9 em `AlertaCard.test.tsx` e `DiagnosisAssinatura.test.tsx`). Runner `frontend/scripts/run-vitest.mjs` injeta `NODE_OPTIONS=--experimental-require-module` (workaround pro jsdom 27 + Node 22.11).
