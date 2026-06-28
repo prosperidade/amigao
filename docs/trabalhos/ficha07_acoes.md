@@ -60,12 +60,13 @@ consumida depois (**não** construímos o Orçamento aqui).
 - **Aba Ações** (`AcoesTab`) — lista as ações do caso, filtra por status e triagem, botão "Gerar do
   diagnóstico", criação manual, e por card: origem com fonte (chips), prioridade, prazo, status
   editável, botões de triagem. Responsável aparece `—`.
-- **Quadro de Ações global** (`/acoes`, `QuadroAcoesGlobal`) — kanban por status com ações de todos
-  os casos; cada card mostra o caso de origem (cliente · imóvel · processo) e move entre colunas
-  (setas = muda status). Distinto do board de **Casos** (`/processes`, casos por macroetapa).
-
-> **Renomeação:** o board `/processes` (casos por macroetapa) era rotulado "Quadro de ações" no
-> menu; passou a **"Casos"** para liberar o nome ao quadro de ações de remediação desta ficha.
+> **Revertido em 2026-06-28:** o "Quadro de Ações global" (`/acoes`, `QuadroAcoesGlobal`) e a
+> renomeação do board `/processes` para "Casos" foram **desfeitos**. O sidebar voltou ao item único
+> **"Quadro de Ações" → `/processes`** (board de casos por macroetapa). O componente
+> `QuadroAcoesGlobal`, os hooks `useAcoesKanban`/`useMoveAcaoStatus`, os tipos `AcaoKanban*` e o
+> endpoint `GET /acoes/kanban` foram **removidos** (código órfão, sem consumidor). A aba **Ações**
+> do workspace (abaixo) e o restante do backend Ficha 07 permanecem. Ver
+> `docs/trabalhos/reverter_sidebar.md`.
 
 ## Endpoints
 

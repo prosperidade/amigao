@@ -1,11 +1,10 @@
-"""Endpoints da Ficha 07 — Ações (aba do caso + Quadro de Ações global).
+"""Endpoints da Ficha 07 — Ações (aba do caso).
 
 * ``GET   /processes/{process_id}/acoes``                  (lista do caso; filtra status/triagem)
 * ``POST  /processes/{process_id}/acoes``                  (criação manual)
 * ``POST  /processes/{process_id}/acoes/generate``         (gera do diagnóstico — idempotente)
 * ``PATCH /processes/{process_id}/acoes/{acao_id}``        (edita status/prazo/prioridade/título)
 * ``POST  /processes/{process_id}/acoes/{acao_id}/triagem``(tarefa/escopo/dispensar — Princípio 1)
-* ``GET   /acoes/kanban``                                  (quadro global por status, todos os casos)
 
 Auth: perfil ``internal``. Tenant isolation em todas as queries.
 
@@ -31,16 +30,11 @@ from app.models.acao import (
     AcaoTipoTriagem,
 )
 from app.models.audit_log import AuditLog
-from app.models.client import Client
 from app.models.process import Process
-from app.models.property import Property
 from app.models.user import User
 from app.schemas.acao import (
     AcaoCreate,
     AcaoGenerateOut,
-    AcaoKanbanCard,
-    AcaoKanbanColumn,
-    AcaoKanbanResponse,
     AcaoOut,
     AcaoTriagemDecision,
     AcaoUpdate,
@@ -49,15 +43,7 @@ from app.services.acao_generator import generate_acoes_from_diagnosis
 from app.services.audit_hash import stamp_audit_hash
 
 process_router = APIRouter()
-acoes_router = APIRouter()
 
-
-_STATUS_LABELS: dict[AcaoStatus, str] = {
-    AcaoStatus.a_fazer: "A fazer",
-    AcaoStatus.em_andamento: "Em andamento",
-    AcaoStatus.concluida: "Concluída",
-    AcaoStatus.bloqueada: "Bloqueada",
-}
 
 _TRIAGEM_MAP: dict[Literal["tarefa", "escopo", "dispensar"], AcaoTipoTriagem] = {
     "tarefa": AcaoTipoTriagem.tarefa,
@@ -349,58 +335,3 @@ def triar_acao(
     db.commit()
     db.refresh(acao)
     return acao
-
-
-# ---------------------------------------------------------------------------
-# /acoes/kanban — Quadro de Ações global (por status)
-# ---------------------------------------------------------------------------
-
-
-@acoes_router.get("/kanban", response_model=AcaoKanbanResponse)
-def acoes_kanban(
-    tipo_triagem: AcaoTipoTriagem | None = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_internal_user),
-) -> AcaoKanbanResponse:
-    """Quadro global: ações de TODOS os casos do tenant, agrupadas por status.
-
-    Cada card mostra o caso de origem (título do processo, cliente, imóvel).
-    Mover um card de coluna = ``PATCH .../acoes/{id}`` com novo ``status``.
-    """
-    rows = (
-        db.query(Acao, Process.title, Client.full_name, Property.name)
-        .join(Process, Process.id == Acao.process_id)
-        .outerjoin(Client, Client.id == Process.client_id)
-        .outerjoin(Property, Property.id == Process.property_id)
-        .filter(Acao.tenant_id == current_user.tenant_id)
-        .order_by(Acao.created_at.desc(), Acao.id.desc())
-    )
-    if tipo_triagem is not None:
-        rows = rows.filter(Acao.tipo_triagem == tipo_triagem)
-
-    grouped: dict[AcaoStatus, list[AcaoKanbanCard]] = {s: [] for s in AcaoStatus}
-    total = 0
-    for acao, process_title, client_name, property_name in rows.all():
-        card = AcaoKanbanCard.model_validate(acao)
-        card.process_title = process_title
-        card.client_name = client_name
-        card.property_name = property_name
-        grouped[acao.status].append(card)
-        total += 1
-
-    columns = [
-        AcaoKanbanColumn(
-            status=s,
-            label=_STATUS_LABELS[s],
-            count=len(grouped[s]),
-            cards=grouped[s],
-        )
-        # Ordem fixa das colunas do kanban.
-        for s in (
-            AcaoStatus.a_fazer,
-            AcaoStatus.em_andamento,
-            AcaoStatus.concluida,
-            AcaoStatus.bloqueada,
-        )
-    ]
-    return AcaoKanbanResponse(columns=columns, total=total)
