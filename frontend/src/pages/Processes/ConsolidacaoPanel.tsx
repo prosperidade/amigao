@@ -10,11 +10,19 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
 import {
   CheckCircle2, XCircle, Pencil, ListChecks, Database, Loader2, Layers,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { labelFor, humanizeValue } from '@/lib/labels/fieldLabels';
+
+/** Mensagem de erro legível a partir do AxiosError (detail do backend, senão genérica). */
+function errDetail(e: unknown, fallback: string): string {
+  const ax = e as AxiosError<{ detail?: string }>;
+  return ax?.response?.data?.detail ?? ax?.message ?? fallback;
+}
 
 interface StagingField {
   id: number;
@@ -82,14 +90,21 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
     mutationFn: (p: { id: number; acao: string; valor?: string }) =>
       api.post(`/processes/${processId}/staging-fields/${p.id}/decidir`, { acao: p.acao, valor: p.valor }).then(r => r.data),
     onSuccess: () => { setEditingId(null); invalidate(); },
+    onError: (e) => toast.error(errDetail(e, 'Falha ao decidir o campo.')),
   });
   const acceptAll = useMutation({
     mutationFn: () => api.post(`/processes/${processId}/staging-fields/aceitar-consistentes`, {}).then(r => r.data),
     onSuccess: invalidate,
+    onError: (e) => toast.error(errDetail(e, 'Falha ao aceitar os consistentes.')),
   });
   const consolidate = useMutation<ConsolidationResult>({
     mutationFn: () => api.post(`/processes/${processId}/consolidar`, {}).then(r => r.data),
-    onSuccess: (res) => { setConsolidated(res); invalidate(); },
+    onSuccess: (res) => {
+      setConsolidated(res);
+      invalidate();
+      toast.success(`Consolidado: ${res.campos_gravados} campo(s) gravado(s)${res.acoes_criadas > 0 ? ` · ${res.acoes_criadas} ação(ões)` : ''}.`);
+    },
+    onError: (e) => toast.error(errDetail(e, 'Falha ao consolidar na base.')),
   });
 
   const consistentesCount = useMemo(() => fields.filter(f => f.status === 'consistente').length, [fields]);
