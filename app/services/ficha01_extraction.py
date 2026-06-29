@@ -660,6 +660,175 @@ def extract_and_stage(
 
 
 # ---------------------------------------------------------------------------
+# Saneamento RETROATIVO do staging já gravado (mesma regra do #81, aplicada a
+# linhas que entraram ANTES da limpeza-na-origem). Idempotente.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SaneamentoResult:
+    """Resumo de um saneamento retroativo (antes×depois + o que saiu)."""
+
+    process_id: Optional[int]
+    rows_before: int
+    rows_after: int
+    garbage_removed: int = 0       # 2b — lixo em campo de código
+    duplicates_removed: int = 0    # 2a — duplicata de formato (escalares)
+    lists_collapsed: int = 0       # 2c — lista repetida colapsada
+    decisions_preserved: int = 0   # lixo/duplicata que carregava decisão do consultor
+    removed_ids: list[int] = field(default_factory=list)
+    details: list[str] = field(default_factory=list)
+
+    @property
+    def total_removed(self) -> int:
+        return self.garbage_removed + self.duplicates_removed + self.lists_collapsed
+
+
+def _staging_value_unidade(row) -> tuple[Any, Optional[str]]:
+    """Reconstrói (value, unidade) de uma linha de staging — mesmo shape que o
+    dedup da origem (``field_value = {"value": ..., "unidade": ...}``)."""
+    fv = row.field_value if isinstance(row.field_value, dict) else {}
+    value = fv.get("value", row.field_value)
+    unidade = fv.get("unidade") if isinstance(fv, dict) else None
+    return value, unidade
+
+
+def _is_consultor_decided(row, status_enum) -> bool:
+    """True se a linha carrega uma DECISÃO explícita do consultor (aceito/rejeitado).
+
+    ``consistente``/``divergente_*`` são propostas da matriz (re-deriváveis), não
+    decisões — podem ser deduplicadas. ``pendente`` idem."""
+    return row.status in (status_enum.aceito, status_enum.rejeitado)
+
+
+def _pick_canonical(grp: list, *, is_list: bool, status_enum) -> Any:
+    """Escolhe a linha canônica de um grupo de redundantes.
+
+    Preferência (maior vence): decisão do consultor > 'aceito' sobre 'rejeitado' >
+    (lista: mais itens) > (escalar: formato BR com vírgula) > menor id (mais antiga).
+    Pôr a decidida como sobrevivente PRESERVA a decisão sem precisar transferi-la."""
+    def score(r) -> tuple:
+        decided = 1 if _is_consultor_decided(r, status_enum) else 0
+        accepted = 1 if r.status == status_enum.aceito else 0
+        value, _ = _staging_value_unidade(r)
+        richness = len(value) if (is_list and isinstance(value, list)) else 0
+        br = 1 if (not is_list and isinstance(value, str) and "," in value) else 0
+        return (decided, accepted, richness, br, -(r.id or 0))
+    return max(grp, key=score)
+
+
+def sanear_staging_process(
+    db_session,
+    *,
+    tenant_id: int,
+    process_id: int,
+    dry_run: bool = False,
+) -> SaneamentoResult:
+    """Aplica a regra de limpeza do #81 ao staging JÁ existente de um processo.
+
+    A limpeza-na-origem (``build_staging_fields``/``extract_and_stage``) só vale
+    para extrações novas; este saneamento sana o que entrou antes. Três regras,
+    todas reusando os helpers da origem (sem nova heurística):
+
+    - 2b LIXO em campo de código: ``field_name`` em :data:`_CODE_FIELDS` e
+      :func:`_is_garbage_for_code` → remove (não é código). PRESERVA a linha se
+      o consultor já decidiu sobre ela (não apagamos decisão sem necessidade).
+    - 2a DUPLICATA DE FORMATO: linhas escalares que normalizam para o MESMO
+      número ("349.9022"≡"349,9022") por (fonte, campo, hint) → mantém 1.
+    - 2c LISTA REPETIDA: ``pendencias_rat``/``onus`` (:data:`_LIST_COLLAPSE_FIELDS`)
+      → 1 linha por (fonte, campo, hint).
+
+    A chave de agrupamento (fonte, campo, hint, token) usa o MESMO
+    :func:`_dedup_token` da origem, então valores genuinamente diferentes (token
+    distinto) NUNCA são fundidos — divergências reais seguem como insumo da matriz.
+    Idempotente: rodar 2× não remove nada na 2ª passada.
+    """
+    from app.models.extracted_field_staging import (  # noqa: PLC0415
+        ExtractedFieldStaging,
+        ExtractedFieldStatus,
+    )
+
+    rows = (
+        db_session.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+        )
+        .order_by(ExtractedFieldStaging.id.asc())
+        .all()
+    )
+    result = SaneamentoResult(
+        process_id=process_id, rows_before=len(rows), rows_after=len(rows),
+    )
+
+    to_delete: list[Any] = []
+    survivors: list[Any] = []
+
+    # ── 2b — lixo em campo de código ────────────────────────────────────────
+    for row in rows:
+        value, _ = _staging_value_unidade(row)
+        if row.field_name in _CODE_FIELDS and _is_garbage_for_code(value):
+            if _is_consultor_decided(row, ExtractedFieldStatus):
+                result.decisions_preserved += 1
+                result.details.append(
+                    f"id={row.id} lixo em {row.field_name} PRESERVADO "
+                    f"(decisão do consultor: {row.status.value})"
+                )
+                survivors.append(row)
+                continue
+            to_delete.append(row)
+            result.garbage_removed += 1
+            result.details.append(f"id={row.id} lixo removido em {row.field_name}: {value!r}")
+        else:
+            survivors.append(row)
+
+    # ── 2a/2c — duplicata de formato + lista repetida ───────────────────────
+    groups: dict[tuple, list[Any]] = {}
+    for row in survivors:
+        value, unidade = _staging_value_unidade(row)
+        token = _dedup_token(row.field_name, value, unidade)
+        key = (row.source_doc_type, row.field_name, row.matricula_hint, token)
+        groups.setdefault(key, []).append(row)
+
+    for key, grp in groups.items():
+        if len(grp) <= 1:
+            continue
+        is_list = key[1] in _LIST_COLLAPSE_FIELDS
+        winner = _pick_canonical(grp, is_list=is_list, status_enum=ExtractedFieldStatus)
+        for row in grp:
+            if row is winner:
+                continue
+            if _is_consultor_decided(row, ExtractedFieldStatus):
+                result.decisions_preserved += 1
+            to_delete.append(row)
+            if is_list:
+                result.lists_collapsed += 1
+            else:
+                result.duplicates_removed += 1
+            result.details.append(
+                f"id={row.id} redundante de {row.field_name} "
+                f"(canônica id={winner.id}) removido"
+                + (" [colapso de lista]" if is_list else " [duplicata de formato]")
+            )
+
+    if not dry_run:
+        for row in to_delete:
+            db_session.delete(row)
+        db_session.flush()
+
+    result.removed_ids = [r.id for r in to_delete]
+    result.rows_after = result.rows_before - len(to_delete)
+
+    logger.info(
+        "sanear_staging: process_id=%s before=%d after=%d (lixo=%d, formato=%d, "
+        "lista=%d, decisões_preservadas=%d, dry_run=%s)",
+        process_id, result.rows_before, result.rows_after, result.garbage_removed,
+        result.duplicates_removed, result.lists_collapsed, result.decisions_preserved,
+        dry_run,
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
