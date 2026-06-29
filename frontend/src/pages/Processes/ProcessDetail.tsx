@@ -30,7 +30,7 @@ import ProcessCommercial from './ProcessCommercial';
 import WorkspaceRightPanel from './WorkspaceRightPanel';
 import DecisionsTab from './DecisionsTab';
 import SaidasTab from './SaidasTab';
-import AlertasTab from './AlertasTab';
+import ConferenciaTab from './ConferenciaTab';
 import AIPanel from '@/pages/AI/AIPanel';
 
 type TabKey = 'diagnosis' | 'alertas' | 'acoes' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'messages' | 'timeline' | 'ai' | 'saidas';
@@ -297,11 +297,10 @@ export default function ProcessDetail() {
           {activeTab === 'diagnosis' && (
             <DiagnosisTab
               process={process}
-              // PROMPT_9 — modal de pendentes do gate camada 2 leva direto pro
-              // card correspondente na aba Alertas (com scroll).
+              // Sprint 0 — os alertas regulatórios passaram a viver NA própria
+              // Visão geral (abaixo da assinatura). O modal de pendentes do gate
+              // só precisa rolar até o card; não troca mais de aba.
               onGoToAlerta={(issueId) => {
-                setActiveTab('alertas');
-                // setTimeout pra dar tempo do render da aba completar.
                 setTimeout(() => {
                   document.getElementById(`alerta-${issueId}`)?.scrollIntoView({
                     behavior: 'smooth',
@@ -311,7 +310,7 @@ export default function ProcessDetail() {
               }}
             />
           )}
-          {activeTab === 'alertas' && <AlertasTab processId={processId} propertyId={process.property_id} />}
+          {activeTab === 'alertas' && <ConferenciaTab processId={processId} />}
           {activeTab === 'acoes' && <AcoesTab processId={processId} />}
           {activeTab === 'dossier' && <ProcessDossier processId={processId} />}
           {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}

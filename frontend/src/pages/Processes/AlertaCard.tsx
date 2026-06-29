@@ -21,8 +21,10 @@
 
 import { useState } from 'react';
 import type { AxiosError } from 'axios';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
 
+import { useCreateAcao } from '@/lib/acoes/hooks';
 import {
   useDecision,
   useUpdateIssue,
@@ -93,6 +95,29 @@ export default function AlertaCard({ issue, processId }: AlertaCardProps) {
   // ── Mutations ───────────────────────────────────────────────────────────
   const updateIssue = useUpdateIssue(issue.property_id);
   const upsertDecision = useUpsertDecision(processId, issue.id);
+  // "→ Ações": cria uma Ação na aba Ações a partir deste alerta (reusa o fluxo
+  // de criação manual — o alerta NÃO vira ação sozinho, é o consultor que envia).
+  const createAcao = useCreateAcao(processId);
+
+  function handleEnviarParaAcoes() {
+    const familiaLabel = issue.familia ? FAMILIA_LABEL[issue.familia] : null;
+    const codigo = issue.codigo_alerta ?? familiaLabel ?? 'alerta regulatório';
+    const descricao = [
+      familiaLabel ? `Família: ${familiaLabel}` : null,
+      `Severidade: ${SEVERITY_LABEL[issue.severity]}`,
+      issue.documentos_cruzados?.length
+        ? `Documentos: ${issue.documentos_cruzados.join(' × ')}`
+        : null,
+      '(enviado da Visão geral)',
+    ].filter(Boolean).join(' · ');
+    createAcao.mutate(
+      { titulo: `Resolver alerta: ${codigo}`, descricao },
+      {
+        onSuccess: () => toast.success('Ação criada na aba Ações.'),
+        onError: () => toast.error('Falha ao criar a ação.'),
+      },
+    );
+  }
 
   // ── Decisão atual neste processo ────────────────────────────────────────
   const decisionQuery = useDecision(processId, issue.id, decisaoExigida);
@@ -182,6 +207,16 @@ export default function AlertaCard({ issue, processId }: AlertaCardProps) {
             </p>
           )}
         </div>
+        <button
+          type="button"
+          onClick={handleEnviarParaAcoes}
+          disabled={createAcao.isPending}
+          title="Criar uma ação na aba Ações a partir deste alerta"
+          className="shrink-0 inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50"
+        >
+          {createAcao.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRight className="w-3 h-3" />}
+          Ações
+        </button>
       </header>
 
       {/* Status perenes do achado */}

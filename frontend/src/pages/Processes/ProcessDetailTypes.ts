@@ -155,7 +155,7 @@ export interface TabDef {
 
 export const TABS: TabDef[] = [
   { key: 'diagnosis',  label: 'Visão geral', icon: Stethoscope,  block_type: 'permanent' },
-  { key: 'alertas',    label: 'Alertas',     icon: AlertTriangle, block_type: 'active'   },
+  { key: 'alertas',    label: 'Conferência', icon: AlertTriangle, block_type: 'active'   },
   // Ficha 07 — Aba Ações: o diagnóstico vira trabalho triável (com fonte).
   { key: 'acoes',      label: 'Ações',       icon: ListChecks,   block_type: 'active'    },
   // Tarefas genéricas (Task) — kanban operacional, distinto das Ações de remediação.
