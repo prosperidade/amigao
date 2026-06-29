@@ -256,7 +256,16 @@ def create_case(
         from app.services.audit_hash import stamp_audit_hash
         stamp_audit_hash(db, audit)
 
-        # --- 5. Checklist ---
+        # --- 4b. Checklists das macroetapas (Fase 0.2) ---
+        # O caso nasce com os 7 MacroetapaChecklist. Sem isso o gate de avanço
+        # trava em False ("Etapa não iniciada (sem checklist)") e o card nunca
+        # sai de entrada_demanda. Ver docs/trabalhos/movimentacao_card.md.
+        from app.services.macroetapa_engine import (  # noqa: PLC0415
+            initialize_macroetapa_checklists,
+        )
+        initialize_macroetapa_checklists(db, process, current_user.tenant_id)
+
+        # --- 5. Checklist (documental) ---
         checklist_generated = False
         template = (
             db.query(ChecklistTemplate)

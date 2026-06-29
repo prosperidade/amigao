@@ -190,6 +190,29 @@ def run_agent_chain(
         )
         db.commit()
 
+        # Fase 0.2 — elo evento→card: se a chain é a da etapa atual do processo e
+        # rodou com sucesso, marca o checklist da etapa → card "pronto para
+        # avançar" (Princípio 1: agentes propõem; consultor confirma o avanço).
+        # Best-effort: nunca derruba a chain por causa do marcador.
+        if process_id is not None and all(r.success for r in results):
+            try:
+                from app.models.process import Process  # noqa: PLC0415
+                from app.services.macroetapa_engine import mark_stage_agents_done  # noqa: PLC0415
+
+                proc = db.query(Process).filter(Process.id == process_id).first()
+                if proc is not None:
+                    marked = mark_stage_agents_done(
+                        db, proc, tenant_id=tenant_id, chain_name=chain_name,
+                    )
+                    if marked is not None:
+                        db.commit()
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                logger.warning(
+                    "run_agent_chain: falha ao marcar checklist da etapa (process %s): %s",
+                    process_id, exc,
+                )
+
         return {
             "status": "success",
             "chain": chain_name,

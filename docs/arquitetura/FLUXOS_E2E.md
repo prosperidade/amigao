@@ -482,6 +482,34 @@ A entrada estruturada do imóvel (Ficha 01) é um pipeline de 4 fases:
 Gap D1: linhas técnicas da matriz (APP/RL/hidrografia/cobertura) ficam
 registradas, sem confronto espacial, até `Property.geom` chegar.
 
+## Fluxo 9 — Movimentação do card (Fase 0.2, Ficha 07 §6)
+
+O card do Quadro percorre as 7 macroetapas (`Process.macroetapa`, eixo distinto
+do `ProcessStatus` legado — ver MAQUINA_DE_ESTADOS §1b). **Por evento, com
+avanço confirmado pelo consultor** (ADR-018):
+
+```
+Intake cria o caso
+   │ initialize_macroetapa_checklists → 7 MacroetapaChecklist (E1 ativa)
+   │ (caso legado: backfill lazy na 1ª leitura — ensure_macroetapa_checklists)
+   ▼
+Etapa atual = entrada_demanda (card na coluna E1)
+   │ Consultor: "Rodar agentes da etapa"  → POST /macroetapa/run-agents
+   │   → enfileira a chain da etapa (MACROETAPA_AGENT_CHAIN; E1 = "intake")
+   │   → worker conclui → mark_stage_agents_done marca o checklist
+   ▼
+Estado da etapa = pronta_para_avancar  (gate can_advance = True)
+   │ Consultor: "Avançar etapa"  → POST /macroetapa  (NÃO dispara chain)
+   │   → gate valida (checklist OK + docs + diagnóstico assinado nas etapas
+   │      de diagnóstico) → advance_macroetapa → audit macroetapa_changed
+   ▼
+Card muda de coluna (E1 → E2 ...). Repete por etapa.
+```
+
+Travas (seção 7): E1→E2 = agentes do intake rodados; E2→E3/E4 = diagnóstico
+assinado + consolidação (fluxo 8). Ramo E2→E3|E4 e gates finos de E5..E7 são
+dívida da fase seguinte (transições seguem lineares por ora).
+
 ## Pendências e dívidas
 
 1. **Inbox connector para Acompanhamento** — fluxo 4 hoje é manual. (WhatsApp inbound — fluxo 7 — já cobre o canal de mensagem; e-mail inbound via Resend segue não construído.)

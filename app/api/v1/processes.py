@@ -9,6 +9,7 @@ from app.api.deps import AccessContext, get_access_context, get_current_internal
 from app.models.document import Document
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
 from app.models.macroetapa import (
+    MACROETAPA_AGENT_CHAIN,
     MACROETAPA_LABELS,
     MACROETAPA_METADATA,
     MACROETAPA_ORDER,
@@ -42,6 +43,7 @@ from app.schemas.macroetapa import (
     MacroetapaAdvanceRequest,
     MacroetapaChecklistResponse,
     MacroetapaStatusResponse,
+    RunStageAgentsResponse,
     StageOutputCreate,
     StageOutputResponse,
 )
@@ -57,6 +59,7 @@ from app.schemas.process import (
 )
 from app.services.macroetapa_engine import (
     advance_macroetapa,
+    ensure_macroetapa_checklists,
     get_macroetapa_status,
     initialize_macroetapa_checklists,
     toggle_action,
@@ -659,6 +662,9 @@ def get_process_macroetapa_status(
     """Retorna status completo da macroetapa do processo (stepper, checklists, next action)."""
     repo = ProcessRepository(db, current_user.tenant_id)
     process = repo.get_or_404(process_id, detail="Processo não encontrado")
+    # Fase 0.2 — backfill lazy de checklists para casos legados (idempotente).
+    if ensure_macroetapa_checklists(db, process, current_user.tenant_id):
+        db.commit()
     return get_macroetapa_status(db, process)
 
 
@@ -670,6 +676,10 @@ def _compute_can_advance(
 ) -> CanAdvanceResponse:
     """Helper interno: avalia se um processo pode avançar de etapa."""
     from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+
+    # Fase 0.2 — backfill lazy de checklists para casos legados (idempotente).
+    if ensure_macroetapa_checklists(db, process, process.tenant_id):
+        db.commit()
 
     current_etapa_str = process.macroetapa
     current_etapa: Optional[Macroetapa] = None
@@ -851,32 +861,70 @@ def advance_process_macroetapa(
     except Exception as exc:
         logger.warning("Falha ao invalidar kanban-insights cache: %s", exc)
 
-    # Trigger chain de agentes automatica por macroetapa (async, fire-and-forget)
-    _MACROETAPA_CHAINS: dict[str, str] = {
-        "diagnostico_tecnico": "diagnostico_completo",
-        "caminho_regulatorio": "enquadramento_regulatorio",
-        "orcamento_negociacao": "gerar_proposta",
-    }
-    chain_name = _MACROETAPA_CHAINS.get(body.macroetapa.value)
-    if chain_name:
-        try:
-            from app.workers.agent_tasks import run_agent_chain  # noqa: PLC0415
-            run_agent_chain.delay(
-                chain_name=chain_name,
-                tenant_id=current_user.tenant_id,
-                user_id=current_user.id,
-                process_id=process_id,
-                metadata={},
-                stop_on_review=True,
-            )
-            logger.info(
-                "Chain '%s' enfileirada para process_id=%s (macroetapa=%s)",
-                chain_name, process_id, body.macroetapa.value,
-            )
-        except Exception as exc:
-            logger.warning("Falha ao enfileirar chain '%s': %s", chain_name, exc)
-
+    # Fase 0.2 — de-inversão (ADR-017): avançar o card NÃO dispara mais a chain.
+    # Rodar os agentes é uma ação própria do consultor (POST .../macroetapa/run-agents),
+    # anterior e separada do avanço. Avançar só move o card (gate já validado acima).
     return process
+
+
+@router.post("/{process_id}/macroetapa/run-agents", response_model=RunStageAgentsResponse)
+def run_stage_agents(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Fase 0.2 — "Rodar os agentes da etapa" (Ficha 07 §2/§6).
+
+    Dispara, async, a chain de agentes da macroetapa ATUAL do processo
+    (`MACROETAPA_AGENT_CHAIN`). Ao concluir com sucesso, o worker marca o
+    checklist da etapa (`mark_stage_agents_done`) e o card fica
+    `pronta_para_avancar` — o avanço efetivo só ocorre quando o consultor
+    confirma em "Avançar etapa". Etapas sem chain (coleta/contrato) são manuais.
+    """
+    repo = ProcessRepository(db, current_user.tenant_id)
+    process = repo.get_or_404(process_id, detail="Processo não encontrado")
+
+    current = Macroetapa(process.macroetapa) if process.macroetapa else None
+    if current is None:
+        raise HTTPException(status_code=409, detail="Processo sem macroetapa definida.")
+
+    chain_name = MACROETAPA_AGENT_CHAIN.get(current)
+    if not chain_name:
+        return RunStageAgentsResponse(
+            dispatched=False,
+            macroetapa=current.value,
+            chain_name=None,
+            detail="Esta etapa não tem agentes automáticos — é conduzida manualmente.",
+        )
+
+    try:
+        from app.workers.agent_tasks import run_agent_chain  # noqa: PLC0415
+        run_agent_chain.delay(
+            chain_name=chain_name,
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            process_id=process_id,
+            metadata={"macroetapa": current.value},
+            stop_on_review=True,
+        )
+    except Exception as exc:
+        logger.warning("Falha ao enfileirar chain '%s': %s", chain_name, exc)
+        raise HTTPException(status_code=503, detail="Não foi possível enfileirar os agentes da etapa.")
+
+    repo.add_audit(
+        user_id=current_user.id,
+        process=process,
+        action="stage_agents_dispatched",
+        details=f"Agentes da etapa '{current.value}' disparados (chain '{chain_name}')",
+        new_value=chain_name,
+    )
+    db.commit()
+    logger.info("Chain '%s' enfileirada para process_id=%s (run-agents, macroetapa=%s)",
+                chain_name, process_id, current.value)
+    return RunStageAgentsResponse(
+        dispatched=True, macroetapa=current.value, chain_name=chain_name,
+        detail="Agentes da etapa disparados. Acompanhe na aba IA; ao concluir, a etapa fica pronta para avançar.",
+    )
 
 
 @router.post("/{process_id}/macroetapa/initialize", response_model=MacroetapaStatusResponse)

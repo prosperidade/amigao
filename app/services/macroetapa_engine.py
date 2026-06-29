@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.macroetapa import (
     DEFAULT_ACTIONS,
@@ -245,6 +246,95 @@ def _ensure_checklist(db: Session, process: Process, tenant_id: int) -> None:
         )
         db.add(checklist)
         db.flush()
+
+
+def ensure_macroetapa_checklists(
+    db: Session, process: Process, tenant_id: int
+) -> bool:
+    """Fase 0.2 — backfill idempotente de checklists para casos legados.
+
+    Casos criados antes da Fase 0.2 nasceram sem `MacroetapaChecklist` (o intake
+    não inicializava) — `can_advance` travava em False para sempre. Chamado nos
+    caminhos de LEITURA da macroetapa (status/gate); se faltar checklist, cria os
+    7 (lazy, self-healing). Retorna True se criou algo (o caller deve commitar).
+    """
+    if not process.macroetapa:
+        return False
+    existing = (
+        db.query(MacroetapaChecklist.id)
+        .filter(MacroetapaChecklist.process_id == process.id)
+        .first()
+    )
+    if existing:
+        return False
+    created = initialize_macroetapa_checklists(db, process, tenant_id)
+    return bool(created)
+
+
+# ---------------------------------------------------------------------------
+# Elo evento→card (Fase 0.2) — agentes da etapa concluídos → "pronto para avançar"
+# ---------------------------------------------------------------------------
+
+def mark_stage_agents_done(
+    db: Session,
+    process: Process,
+    *,
+    tenant_id: int,
+    chain_name: str | None = None,
+) -> MacroetapaChecklist | None:
+    """Marca o checklist da etapa ATUAL como produzido pelos agentes da etapa.
+
+    É o elo "rodar os agentes de uma etapa → card fica pronto para avançar"
+    (Ficha 07 §6). Princípio 1: os agentes PROPÕEM (marcam o checklist e levam o
+    card a `pronta_para_avancar`); o consultor DECIDE (confirma o avanço no botão
+    "Avançar etapa"). NÃO avança a macroetapa aqui.
+
+    - Só marca se `chain_name` for a chain da etapa atual (`MACROETAPA_AGENT_CHAIN`)
+      — evita que um agente avulso de outra etapa marque a etapa corrente.
+    - Idempotente: se já está tudo marcado, é no-op.
+    - Cria o checklist da etapa se faltar (caso legado).
+    """
+    current = Macroetapa(process.macroetapa) if process.macroetapa else None
+    if current is None:
+        return None
+
+    expected_chain = MACROETAPA_AGENT_CHAIN.get(current)
+    if chain_name is not None and expected_chain is not None and chain_name != expected_chain:
+        return None  # chain avulsa — não é a da etapa corrente
+
+    _ensure_checklist(db, process, tenant_id)
+    checklist = (
+        db.query(MacroetapaChecklist)
+        .filter(
+            MacroetapaChecklist.process_id == process.id,
+            MacroetapaChecklist.macroetapa == current,
+        )
+        .first()
+    )
+    if checklist is None:
+        return None
+
+    suggestion = f"Produzido pela execução dos agentes da etapa ({chain_name or expected_chain or current.value})"
+    # Dicts NOVOS (não compartilham referência com o snapshot carregado): a coluna
+    # `actions` é PortableJSON sem MutableList, então mutar in-place não é detectado
+    # como dirty. Construir objetos novos + flag_modified garante a persistência.
+    now = datetime.now(UTC).isoformat()
+    actions = []
+    for src in (checklist.actions or []):
+        action = dict(src)
+        if not action.get("completed"):
+            action["completed"] = True
+            action["completed_at"] = now
+            action["agent_suggestion"] = action.get("agent_suggestion") or suggestion
+            # Os agentes propõem; a confirmação humana é o clique em "Avançar etapa"
+            # (não exigimos validação por item nesta fase — gate fica no avanço).
+            action["needs_human_validation"] = False
+        actions.append(action)
+    checklist.actions = actions
+    flag_modified(checklist, "actions")
+    checklist.completion_pct = calculate_completion_pct(actions)
+    db.flush()
+    return checklist
 
 
 # ---------------------------------------------------------------------------

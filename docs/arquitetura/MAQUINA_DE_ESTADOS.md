@@ -80,6 +80,57 @@ TERMINAL_PROCESS_STATUSES = {ProcessStatus.arquivado}
 
 ---
 
+## 1b. Máquina de estados — Macroetapa (o card do Quadro)
+
+**Fonte canônica:** `app/models/macroetapa.py:Macroetapa` + `MACROETAPA_TRANSITIONS`;
+engine em `app/services/macroetapa_engine.py`.
+
+> **Duas máquinas paralelas.** O processo tem **dois** eixos de estado, distintos
+> e não sincronizados: `ProcessStatus` (seção 1, lifecycle legado de 11 estados,
+> mudado manualmente por `PATCH /status`) e `Process.macroetapa` (as 7 etapas E1..E7
+> da Ficha 07). **É a `macroetapa` que define a coluna do card** no Quadro
+> (`GET /processes/kanban`). Mexer no MVP de movimentação é mexer na `macroetapa`,
+> não no `status` legado (medido em `docs/trabalhos/diagnostico_movimentacao.md`).
+
+### Etapas (7, lineares)
+
+```
+entrada_demanda → diagnostico_preliminar → coleta_documental →
+diagnostico_tecnico → caminho_regulatorio → orcamento_negociacao →
+contrato_formalizacao (terminal MVP1)
+```
+
+`MACROETAPA_TRANSITIONS` é estritamente linear (cada etapa só vai para a seguinte).
+O ramo E2→E3|E4 (pular coleta) ainda **não** existe — dívida da fase seguinte.
+
+### Como o card anda (elo evento→pronto→avanço confirmado — Fase 0.2)
+
+1. **Nasce com checklist.** O intake cria os 7 `MacroetapaChecklist`
+   (`initialize_macroetapa_checklists`). Casos legados recebem backfill **lazy**
+   na 1ª leitura (`ensure_macroetapa_checklists`). Sem checklist, o gate
+   `can_advance_macroetapa` trava em `False`.
+2. **Rodar os agentes da etapa** (`POST /macroetapa/run-agents`) dispara a chain
+   da etapa atual (`MACROETAPA_AGENT_CHAIN`). Ao concluir, o worker chama
+   `mark_stage_agents_done` → marca o checklist → estado da etapa vira
+   `pronta_para_avancar` (`compute_macroetapa_state`).
+3. **Consultor confirma** (`POST /macroetapa`, "Avançar etapa"). O gate
+   (`can_advance_macroetapa`: checklist OK + docs obrigatórios + diagnóstico
+   assinado nas etapas de diagnóstico) valida e `advance_macroetapa` sobe a
+   `macroetapa`. Audit `macroetapa_changed`.
+
+> **Princípio 1 / ADR-018:** rodar os agentes (a IA propõe) é uma ação **separada**
+> de avançar (o humano decide). Avançar **não** dispara chain. Exceção: assinar um
+> `RegulatoryDiagnosis` auto-avança a etapa de diagnóstico (ato humano explícito).
+
+### Estados formais da etapa (`MacroetapaState`, derivado)
+
+`nao_iniciada · em_andamento · aguardando_input · aguardando_validacao · travada ·
+pronta_para_avancar · concluida` — calculados por `compute_macroetapa_state` a
+partir do checklist + flags (blockers, diagnóstico assinado). Cache opcional em
+`MacroetapaChecklist.state`.
+
+---
+
 ## 2. Máquina de estados — Tarefa
 
 **Fonte canônica:** `app/models/task.py:TaskStatus` + `VALID_TASK_TRANSITIONS`
