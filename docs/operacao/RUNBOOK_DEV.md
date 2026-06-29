@@ -248,6 +248,24 @@ Custo histórico observado: $0.0030 para 7 templates do Redator em gpt-4o-mini.
 docker compose exec api python scripts/reindex_sync.py
 ```
 
+### Saneamento retroativo do staging (limpeza da tela de Conferência)
+
+Aplica a regra de limpeza do #81 ao staging **já gravado** de um processo
+(processos cujo staging entrou antes da limpeza-na-origem): remove duplicata de
+formato (`349.9022`≡`349,9022`), lixo em campo de código (`"Certidão de Embargo"`
+num `numero_car`) e lista repetida (`pendencias_rat`/`onus`). **Idempotente** e
+**não apaga decisões do consultor**.
+
+```bash
+# Sempre prévia com --dry-run antes de aplicar:
+docker compose exec api python scripts/sanear_staging.py --process-id 13 --dry-run
+docker compose exec api python scripts/sanear_staging.py --process-id 13          # aplica
+docker compose exec api python scripts/sanear_staging.py --process-id 13 -v       # lista cada linha tocada
+```
+
+O tenant é derivado do processo (`--tenant-id` força). Reporta antes×depois e
+linhas removidas/coalescidas. Detalhes em `docs/trabalhos/staging_limpeza_retroativa.md`.
+
 ## Padrões de código
 
 - **Python:** Pydantic v2 (`model_config = ConfigDict(...)`, `.model_dump()`), SQLAlchemy 2 (`sqlalchemy.orm.declarative_base`), tipos PostgreSQL-only quando precisar (JSONB, Geometry).

@@ -105,6 +105,13 @@ export const FIELD_LABELS: Record<string, string> = {
   onus_gravames: 'Ônus e gravames',
   nirf_cib: 'NIRF / CIB',
   vtn: 'VTN',
+  // pendencias_rat (RAT) tem target_field=regulatory_issues; sem esta entrada o
+  // fallback humanizado mostrava "Regulatory issues" cru na tela do consultor.
+  regulatory_issues: 'Pendências regulatórias',
+  pendencias_rat: 'Pendências regulatórias',
+  rl_declarada_ha: 'Reserva legal (ha)',
+  app_declarada_ha: 'Área de APP (ha)',
+  area_declarada_ha: 'Área declarada (ha)',
 };
 
 /**
