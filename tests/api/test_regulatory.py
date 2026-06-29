@@ -811,8 +811,9 @@ class TestValidateAdvancesMacroetapa:
         db_session.flush()
         return diag
 
-    def _seed_diagnostic_stage(self, db_session, process, completion_pct=1.0):
-        """Coloca o processo em diagnostico_preliminar com checklist completo."""
+    def _seed_diagnostic_stage(self, db_session, process, completion_pct=100.0):
+        """Coloca o processo em diagnostico_preliminar com checklist completo
+        (completion_pct na escala 0–100; 100 = completo)."""
         from app.models.macroetapa import Macroetapa, MacroetapaChecklist
         process.macroetapa = Macroetapa.diagnostico_preliminar.value
         cl = MacroetapaChecklist(
@@ -832,7 +833,7 @@ class TestValidateAdvancesMacroetapa:
 
         tenant, _user = _seed_internal_user(db_session)
         _, _, process = _seed_client_property_process(db_session, tenant=tenant)
-        self._seed_diagnostic_stage(db_session, process, completion_pct=1.0)
+        self._seed_diagnostic_stage(db_session, process, completion_pct=100.0)
         self._seed_diagnosis(db_session, tenant=tenant, process=process)
         db_session.commit()
         process_id = process.id
@@ -862,7 +863,7 @@ class TestValidateAdvancesMacroetapa:
             process_id=process.id,
             macroetapa=Macroetapa.coleta_documental.value,
             actions=[{"id": "cd_01", "label": "x", "completed": True}],
-            completion_pct=1.0,
+            completion_pct=100.0,
         ))
         self._seed_diagnosis(db_session, tenant=tenant, process=process)
         db_session.commit()
@@ -888,7 +889,7 @@ class TestValidateAdvancesMacroetapa:
 
         tenant, _user = _seed_internal_user(db_session)
         _, _, process = _seed_client_property_process(db_session, tenant=tenant)
-        self._seed_diagnostic_stage(db_session, process, completion_pct=0.5)
+        self._seed_diagnostic_stage(db_session, process, completion_pct=50.0)
         self._seed_diagnosis(db_session, tenant=tenant, process=process)
         db_session.commit()
         process_id = process.id

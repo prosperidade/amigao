@@ -142,9 +142,17 @@ em `docs/agentes/` são a fonte de verdade verificada.
   → card fica `pronta_para_avancar`. De-inversão (ADR-018): avançar NÃO dispara mais
   chain; novo `POST /macroetapa/run-agents` ("Rodar agentes da etapa") é o gatilho, e
   o avanço é confirmado pelo consultor. UI: botão "Rodar agentes da etapa" no
-  WorkspaceRightPanel. Flag p/ André: gate compara `completion_pct < 1.0` mas o pct é
-  0–100 (furo latente, não corrigido — fora de escopo). Ramo E2→E3|E4 e gates finos
-  E5..E7 são fase seguinte. 8 testes novos verdes. Doc: `docs/trabalhos/movimentacao_card.md`.
+  WorkspaceRightPanel. Ramo E2→E3|E4 e gates finos E5..E7 são fase seguinte. 8 testes
+  novos verdes. Doc: `docs/trabalhos/movimentacao_card.md`. **#82 mergeado pelo agente
+  paralelo.**
+
+- **2026-06-29 — Fix do gate: escala 0–100 (`fix/gate-completion-pct-escala`, follow-up do #82).**
+  `completion_pct` é 0–100 em todo o sistema, mas o gate (`can_advance_macroetapa`) e o
+  badge (`compute_macroetapa_state`) comparavam `< 1.0`/`>= 1.0` — escala errada: etapa a
+  20% "passava". Ajustado p/ `COMPLETE_PCT` (=100) nos 3 pontos, sem converter pct p/ fração;
+  testes de escala atualizados (1.0→100, 0.5→50) + prova de que 20% não avança e o badge não
+  mente. Era pra entrar no #82, mas o #82 foi mergeado antes → virou follow-up. 11 testes do
+  gate verdes.
 
 - **2026-06-28 — Revertido o vacilo do sidebar do #74 + limpeza do órfão (`fix/reverter-sidebar-quadro-acoes`).**
   O #74 renomeou o board `/processes` de "Quadro de ações" para "Casos" e criou uma aba nova

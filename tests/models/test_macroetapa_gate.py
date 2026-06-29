@@ -20,9 +20,9 @@ from app.models.macroetapa import (
 )
 
 
-def _checklist(*, completion_pct: float = 1.0, actions: list[dict] | None = None):
+def _checklist(*, completion_pct: float = 100.0, actions: list[dict] | None = None):
     """Stub leve do ORM MacroetapaChecklist com só os atributos lidos pelas
-    funções pure."""
+    funções pure. `completion_pct` na escala 0–100 (100 = etapa completa)."""
     return SimpleNamespace(
         completion_pct=completion_pct,
         actions=actions or [{"id": "x", "completed": True}],
@@ -83,7 +83,7 @@ class TestComputeMacroetapaStateBadge:
         não estiver assinado — card e bloco "diagnóstico assinado" passam a
         concordar."""
         state = compute_macroetapa_state(
-            _checklist(completion_pct=1.0),
+            _checklist(completion_pct=100.0),
             is_current=True,
             current_macroetapa=Macroetapa.diagnostico_preliminar,
             diagnosis_validated=False,
@@ -92,7 +92,7 @@ class TestComputeMacroetapaStateBadge:
 
     def test_diagnostico_preliminar_100pct_com_assinatura_e_pronta(self) -> None:
         state = compute_macroetapa_state(
-            _checklist(completion_pct=1.0),
+            _checklist(completion_pct=100.0),
             is_current=True,
             current_macroetapa=Macroetapa.diagnostico_preliminar,
             diagnosis_validated=True,
@@ -100,11 +100,42 @@ class TestComputeMacroetapaStateBadge:
         assert state is MacroetapaState.pronta_para_avancar
 
     def test_etapa_nao_diagnostica_100pct_e_pronta_sem_assinatura(self) -> None:
-        """Para etapas não-diagnósticas, completion_pct=1.0 continua mandando."""
+        """Para etapas não-diagnósticas, completion_pct=100 (completo) manda."""
         state = compute_macroetapa_state(
-            _checklist(completion_pct=1.0),
+            _checklist(completion_pct=100.0),
             is_current=True,
             current_macroetapa=Macroetapa.coleta_documental,
             diagnosis_validated=False,
         )
         assert state is MacroetapaState.pronta_para_avancar
+
+
+class TestGateEscala0a100:
+    """Fecha o furo latente: `completion_pct` é 0–100; o gate/estado comparavam
+    contra 1.0, então uma etapa a 20% "passava". Agora só passa a 100."""
+
+    def test_checklist_20pct_nao_passa_o_gate(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=20.0),
+            current_macroetapa=Macroetapa.coleta_documental,
+        )
+        assert ok is False
+        assert any("incompleto" in b.lower() for b in blockers)
+
+    def test_checklist_100pct_passa_o_gate(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.coleta_documental,
+        )
+        assert ok is True
+        assert blockers == []
+
+    def test_estado_20pct_e_em_andamento_nao_pronta(self) -> None:
+        """Badge não mente: a 20% a etapa está em andamento, não pronta."""
+        state = compute_macroetapa_state(
+            _checklist(completion_pct=20.0),
+            is_current=True,
+            current_macroetapa=Macroetapa.coleta_documental,
+            diagnosis_validated=False,
+        )
+        assert state is MacroetapaState.em_andamento
