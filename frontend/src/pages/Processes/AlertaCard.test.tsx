@@ -14,6 +14,7 @@ vi.mock('@/lib/api', () => ({
     get: vi.fn(),
     patch: vi.fn(),
     put: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -151,5 +152,32 @@ describe('AlertaCard — justificativa obrigatória (#19)', () => {
 
     const submit = screen.getByRole('button', { name: /Registrar decisão/i });
     expect(submit).not.toBeDisabled();
+  });
+});
+
+describe('AlertaCard — botão "→ Ações" (Sprint 0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mock404Decision();
+  });
+
+  it('cria uma Ação no processo a partir do alerta', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: 99 } });
+    render(
+      withQuery(
+        <AlertaCard
+          issue={makeIssue({ codigo_alerta: 'AREA_MATRICULA_X_CAR', familia: 'area', severity: 'critico' })}
+          processId={42}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByRole('button', { name: /Ações/i }));
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    const [url, payload] = vi.mocked(api.post).mock.calls[0];
+    expect(url).toBe('/processes/42/acoes');
+    expect((payload as { titulo: string }).titulo).toContain('AREA_MATRICULA_X_CAR');
   });
 });

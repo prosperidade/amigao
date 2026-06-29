@@ -192,8 +192,8 @@ export default function DiagnosisAssinatura({
         </div>
         {pendentesCount !== null && pendentesCount > 0 && (
           <p className="text-[11px] text-amber-700 dark:text-amber-300">
-            {pendentesCount} alerta(s) crítico(s) sem decisão. Vá para "Alertas" e
-            decida cada um antes de assinar.
+            {pendentesCount} alerta(s) crítico(s) sem decisão. Decida cada um
+            abaixo (nesta tela) antes de assinar.
           </p>
         )}
       </div>

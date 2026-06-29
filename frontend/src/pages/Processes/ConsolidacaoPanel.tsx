@@ -208,22 +208,6 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
         </div>
       ))}
 
-      <div className="pt-2 border-t border-gray-100 dark:border-white/10 flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-xs text-gray-500 dark:text-slate-400">
-          {`${consolidaveis} campo(s) serão gravados`}
-          {pendentesObrig > 0 && ` · ${pendentesObrig} divergência(s) virarão ações a resolver`}.
-        </div>
-        <button
-          onClick={() => consolidate.mutate()}
-          disabled={consolidate.isPending || consolidaveis === 0}
-          title={consolidaveis === 0 ? 'Aceite ao menos um campo para consolidar.' : 'Gravar os campos aceitos na base (divergências viram ações)'}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium"
-        >
-          {consolidate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-          Consolidar na base
-        </button>
-      </div>
-
       {consolidated && (
         <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-3 text-sm text-emerald-800 dark:text-emerald-300">
           Consolidado: {consolidated.campos_gravados} campo(s) gravado(s) · {consolidated.matriculas_criadas} matrícula(s) criada(s)
@@ -232,6 +216,24 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
           {consolidated.area_total_matriculas != null && ` · área total (soma das matrículas): ${consolidated.area_total_matriculas} ha`}.
         </div>
       )}
+
+      {/* Ação PRINCIPAL da aba Conferência — barra fixa (sticky) no rodapé do
+          card pra ficar sempre à vista, não enterrada no fim do scroll. */}
+      <div className="sticky bottom-0 z-10 -mx-5 -mb-5 px-5 py-3 rounded-b-xl border-t border-gray-200 dark:border-white/10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs text-gray-500 dark:text-slate-400">
+          {`${consolidaveis} campo(s) serão gravados`}
+          {pendentesObrig > 0 && ` · ${pendentesObrig} divergência(s) virarão ações a resolver`}.
+        </div>
+        <button
+          onClick={() => consolidate.mutate()}
+          disabled={consolidate.isPending || consolidaveis === 0}
+          title={consolidaveis === 0 ? 'Aceite ao menos um campo para gravar.' : 'Gravar os campos aceitos na base (divergências viram ações)'}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium"
+        >
+          {consolidate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+          Gravar na base
+        </button>
+      </div>
     </div>
   );
 }

@@ -6,6 +6,9 @@ import { Process } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
 import { CONFIDENCE_STYLES } from '@/types/agent';
 import DiagnosisAssinatura from './DiagnosisAssinatura';
+import { useIssues } from '@/lib/regulatory/hooks';
+import { SEVERITY_ORDER } from '@/lib/regulatory/labels';
+import AlertaCard from './AlertaCard';
 
 interface DiagnosisTabProps {
   process: Process;
@@ -29,6 +32,16 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
   const diagResult = diagJob?.result as Record<string, unknown> | undefined;
   const diagRunning = jobs.some(j => j.agent_name === 'diagnostico' && (j.status === 'running' || j.status === 'pending'));
 
+  // Sprint 0 — alertas regulatórios do auditor nascem aqui (junto do diagnóstico),
+  // não mais na aba Conferência. Críticos primeiro; desempate por detected_at.
+  const { data: issues } = useIssues(process.property_id, 'open');
+  const alertas = issues
+    ? [...issues].sort((a, b) => {
+        const sev = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+        return sev !== 0 ? sev : b.detected_at.localeCompare(a.detected_at);
+      })
+    : [];
+
   return (
     <div className="space-y-4">
 
@@ -40,6 +53,25 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
         propertyId={process.property_id}
         onGoToAlerta={onGoToAlerta}
       />
+
+      {/* Sprint 0 — Alertas regulatórios do auditor (movidos da aba Conferência).
+          Cada card tem "→ Ações" para enviar o alerta à aba Ações. */}
+      {alertas.length > 0 && (
+        <div className="space-y-4">
+          <header>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500" /> Alertas regulatórios — {alertas.length}
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+              Adjudique o achado, decida o que fazer neste processo, e envie para
+              Ações quando virar trabalho. A decisão é contextual ao processo.
+            </p>
+          </header>
+          {alertas.map(issue => (
+            <AlertaCard key={issue.id} issue={issue} processId={process.id} />
+          ))}
+        </div>
+      )}
 
       {process.initial_diagnosis ? (
         <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/5 dark:to-teal-500/5 border border-emerald-100 dark:border-emerald-500/20 p-5">
