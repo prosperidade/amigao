@@ -66,7 +66,15 @@ MACROETAPA_INDEX: dict[Macroetapa, int] = {m: i for i, m in enumerate(MACROETAPA
 
 MACROETAPA_TRANSITIONS: dict[Macroetapa, list[Macroetapa]] = {
     Macroetapa.entrada_demanda: [Macroetapa.diagnostico_preliminar],
-    Macroetapa.diagnostico_preliminar: [Macroetapa.coleta_documental],
+    # Sprint 1 (Ficha 07) — RAMO condicional na saída da E2: se há documento
+    # essencial pendente vai para a coleta (E3); senão pula direto ao diagnóstico
+    # técnico (E4). AMBOS são transições válidas; o DESTINO recomendado é resolvido
+    # por `resolve_next_macroetapa`. `coleta_documental` fica em 1º (default/legado
+    # — `nexts[0]` preserva o comportamento de callers que não ramificam).
+    Macroetapa.diagnostico_preliminar: [
+        Macroetapa.coleta_documental,
+        Macroetapa.diagnostico_tecnico,
+    ],
     Macroetapa.coleta_documental: [Macroetapa.diagnostico_tecnico],
     Macroetapa.diagnostico_tecnico: [Macroetapa.caminho_regulatorio],
     Macroetapa.caminho_regulatorio: [Macroetapa.orcamento_negociacao],
@@ -81,6 +89,37 @@ def is_valid_macroetapa_transition(
     from_etapa: Macroetapa, to_etapa: Macroetapa
 ) -> bool:
     return to_etapa in MACROETAPA_TRANSITIONS.get(from_etapa, [])
+
+
+def resolve_next_macroetapa(
+    current: Macroetapa | None,
+    *,
+    has_essential_pending: bool = False,
+) -> Macroetapa | None:
+    """Sprint 1 (Ficha 07) — resolve o DESTINO recomendado do avanço.
+
+    Ramo na saída da E2 (`diagnostico_preliminar`):
+      - há documento essencial pendente → `coleta_documental` (E3);
+      - senão → `diagnostico_tecnico` (E4), pulando a coleta.
+
+    Demais etapas: sucessor único e linear (`nexts[0]`). Terminal → ``None``.
+
+    NÃO automatiza o avanço — só indica para onde o avanço (confirmado pelo
+    consultor) deve apontar. O gate de prontidão continua valendo (#82: agentes
+    propõem, consultor decide).
+    """
+    if current is None:
+        return None
+    nexts = MACROETAPA_TRANSITIONS.get(current, [])
+    if not nexts:
+        return None
+    if current is Macroetapa.diagnostico_preliminar:
+        return (
+            Macroetapa.coleta_documental
+            if has_essential_pending
+            else Macroetapa.diagnostico_tecnico
+        )
+    return nexts[0]
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +454,7 @@ def list_macroetapa_blockers(
     checklist: MacroetapaChecklist | None,
     *,
     documents_pending_required: int = 0,
+    current_macroetapa: Macroetapa | None = None,
 ) -> list[str]:
     """Coleta blockers que impedem o avanço da etapa.
 
@@ -422,9 +462,17 @@ def list_macroetapa_blockers(
       - documentos obrigatórios pendentes
       - actions críticas marcadas (futuro: ações com flag `blocking=True`)
       - validação humana pendente
+
+    Sprint 1 (Ficha 07) — exceção do RAMO da E2: em `diagnostico_preliminar`
+    documento essencial pendente NÃO trava o avanço; ele ROTEIA para a coleta
+    (E3) via `resolve_next_macroetapa`. Travar a E2 por doc pendente impediria
+    justamente o caminho que existe para coletar esse doc. Nas demais etapas
+    (notadamente a própria `coleta_documental`) o doc pendente continua sendo
+    blocker.
     """
     blockers: list[str] = []
-    if documents_pending_required > 0:
+    docs_block = current_macroetapa is not Macroetapa.diagnostico_preliminar
+    if docs_block and documents_pending_required > 0:
         blockers.append(
             f"{documents_pending_required} documento(s) obrigatório(s) pendente(s)"
         )
@@ -453,7 +501,9 @@ def can_advance_macroetapa(
     o processo).
     """
     blockers = list_macroetapa_blockers(
-        checklist, documents_pending_required=documents_pending_required
+        checklist,
+        documents_pending_required=documents_pending_required,
+        current_macroetapa=current_macroetapa,
     )
     if checklist is None:
         return False, ["Etapa não iniciada (sem checklist)."]

@@ -13,13 +13,13 @@ from app.models.macroetapa import (
     MACROETAPA_LABELS,
     MACROETAPA_METADATA,
     MACROETAPA_ORDER,
-    MACROETAPA_TRANSITIONS,
     Macroetapa,
     MacroetapaChecklist,
     MacroetapaState,
     can_advance_macroetapa,
     compute_macroetapa_state,
     list_macroetapa_blockers,
+    resolve_next_macroetapa,
 )
 from app.models.process import Process as ProcessModel
 from app.models.process import ProcessStatus, is_valid_transition
@@ -218,14 +218,17 @@ def get_kanban_view(
                 if item.get("required") and item.get("status") == "pending":
                     missing_docs += 1
 
-        # CAM3FT-004 — estado formal da etapa (cálculo dinâmico)
-        blockers_list = list_macroetapa_blockers(
-            cl, documents_pending_required=missing_docs
-        )
         try:
             current_macroetapa_enum = Macroetapa(etapa) if etapa else None
         except ValueError:
             current_macroetapa_enum = None
+        # CAM3FT-004 — estado formal da etapa (cálculo dinâmico). Sprint 1: o
+        # ramo da E2 faz doc pendente ROTEAR (não travar) em diagnostico_preliminar.
+        blockers_list = list_macroetapa_blockers(
+            cl,
+            documents_pending_required=missing_docs,
+            current_macroetapa=current_macroetapa_enum,
+        )
         diagnosis_validated = proc.id in validated_diagnosis_ids
         state_enum = (
             compute_macroetapa_state(
@@ -745,10 +748,14 @@ def _compute_can_advance(
             diagnosis_validated=diagnosis_validated,
         ).value
 
-    next_etapa = None
-    if current_etapa:
-        nexts = MACROETAPA_TRANSITIONS.get(current_etapa, [])
-        next_etapa = nexts[0].value if nexts else None
+    # Sprint 1 (Ficha 07) — DESTINO recomendado do avanço. Na saída da E2 o ramo
+    # depende de haver documento essencial pendente (`missing_docs`): se há, vai
+    # para a coleta (E3); senão pula para o diagnóstico técnico (E4). Demais
+    # etapas seguem o sucessor linear.
+    next_macro = resolve_next_macroetapa(
+        current_etapa, has_essential_pending=missing_docs > 0
+    )
+    next_etapa = next_macro.value if next_macro else None
 
     meta = MACROETAPA_METADATA.get(current_etapa, {}) if current_etapa else {}
 

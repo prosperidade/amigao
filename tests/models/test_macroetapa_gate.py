@@ -17,6 +17,8 @@ from app.models.macroetapa import (
     MacroetapaState,
     can_advance_macroetapa,
     compute_macroetapa_state,
+    list_macroetapa_blockers,
+    resolve_next_macroetapa,
 )
 
 
@@ -139,3 +141,95 @@ class TestGateEscala0a100:
             diagnosis_validated=False,
         )
         assert state is MacroetapaState.em_andamento
+
+
+class TestResolveNextMacroetapaRamoE2:
+    """Sprint 1 (Ficha 07) — ramo condicional na saída da E2.
+
+    `resolve_next_macroetapa` decide o DESTINO recomendado do avanço:
+    coleta (E3) quando há documento essencial pendente, diagnóstico técnico
+    (E4) quando não há. Demais etapas seguem o sucessor linear.
+    """
+
+    def test_e2_com_doc_essencial_pendente_vai_para_coleta(self) -> None:
+        assert resolve_next_macroetapa(
+            Macroetapa.diagnostico_preliminar, has_essential_pending=True
+        ) is Macroetapa.coleta_documental
+
+    def test_e2_sem_doc_essencial_pendente_pula_para_diagnostico_tecnico(self) -> None:
+        assert resolve_next_macroetapa(
+            Macroetapa.diagnostico_preliminar, has_essential_pending=False
+        ) is Macroetapa.diagnostico_tecnico
+
+    def test_e1_segue_linear_para_e2(self) -> None:
+        assert resolve_next_macroetapa(
+            Macroetapa.entrada_demanda, has_essential_pending=True
+        ) is Macroetapa.diagnostico_preliminar
+
+    def test_coleta_segue_linear_para_diagnostico_tecnico(self) -> None:
+        """E3 (quando percorrida) sempre vai para E4 — pendência não a afeta."""
+        assert resolve_next_macroetapa(
+            Macroetapa.coleta_documental, has_essential_pending=True
+        ) is Macroetapa.diagnostico_tecnico
+
+    def test_etapa_terminal_retorna_none(self) -> None:
+        assert resolve_next_macroetapa(Macroetapa.contrato_formalizacao) is None
+
+    def test_current_none_retorna_none(self) -> None:
+        assert resolve_next_macroetapa(None) is None
+
+    def test_ambas_transicoes_da_e2_sao_validas(self) -> None:
+        """E4 alcançável direto da E2 (não exige passar por E3)."""
+        from app.models.macroetapa import is_valid_macroetapa_transition
+
+        assert is_valid_macroetapa_transition(
+            Macroetapa.diagnostico_preliminar, Macroetapa.coleta_documental
+        )
+        assert is_valid_macroetapa_transition(
+            Macroetapa.diagnostico_preliminar, Macroetapa.diagnostico_tecnico
+        )
+
+
+class TestRamoE2DocPendenteRoteiaNaoTrava:
+    """Sprint 1 — doc essencial pendente ROTEIA (não trava) ao sair da E2.
+
+    Travar a E2 por documento pendente impediria justamente o caminho que
+    existe para coletá-lo (E3). Nas demais etapas o doc pendente segue blocker.
+    """
+
+    def test_e2_com_doc_pendente_nao_gera_blocker(self) -> None:
+        blockers = list_macroetapa_blockers(
+            _checklist(),
+            documents_pending_required=3,
+            current_macroetapa=Macroetapa.diagnostico_preliminar,
+        )
+        assert blockers == []
+
+    def test_coleta_com_doc_pendente_gera_blocker(self) -> None:
+        blockers = list_macroetapa_blockers(
+            _checklist(),
+            documents_pending_required=2,
+            current_macroetapa=Macroetapa.coleta_documental,
+        )
+        assert any("pendente" in b.lower() for b in blockers)
+
+    def test_e2_avanca_com_doc_pendente_se_assinado(self) -> None:
+        """Com diagnóstico assinado + checklist 100%, a E2 avança mesmo com
+        documento essencial pendente (vai rotear para a coleta)."""
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            documents_pending_required=3,
+            current_macroetapa=Macroetapa.diagnostico_preliminar,
+            diagnosis_validated=True,
+        )
+        assert ok is True
+        assert blockers == []
+
+    def test_coleta_nao_avanca_com_doc_pendente(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            documents_pending_required=1,
+            current_macroetapa=Macroetapa.coleta_documental,
+        )
+        assert ok is False
+        assert any("pendente" in b.lower() for b in blockers)

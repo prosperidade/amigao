@@ -507,8 +507,13 @@ Card muda de coluna (E1 → E2 ...). Repete por etapa.
 ```
 
 Travas (seção 7): E1→E2 = agentes do intake rodados; E2→E3/E4 = diagnóstico
-assinado + consolidação (fluxo 8). Ramo E2→E3|E4 e gates finos de E5..E7 são
-dívida da fase seguinte (transições seguem lineares por ora).
+assinado + consolidação (fluxo 8). **Ramo E2→E3|E4 implementado (Sprint 1 /
+ADR-019):** na saída da E2, `resolve_next_macroetapa` recomenda a Coleta (E3) se
+há documento essencial pendente (`ProcessChecklist` required+pending), senão pula
+direto ao Diagnóstico Técnico (E4) — a E3 pulada aparece como `skipped` no stepper.
+Doc pendente **roteia** (não trava) na E2; a E4 é alcançável direto da E2 (gate da
+E4 é condição, não "E3 anterior"). Gates finos de E5..E7 seguem dívida da fase
+seguinte (transições lineares por ora).
 
 ## Pendências e dívidas
 

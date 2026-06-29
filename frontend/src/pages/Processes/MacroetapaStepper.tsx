@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react';
+import { Check, ChevronsRight } from 'lucide-react';
 import type { MacroetapaStep } from './quadro-types';
 
 interface Props {
@@ -21,11 +21,15 @@ export default function MacroetapaStepper({ steps, compact }: Props) {
                     ? 'bg-emerald-500 text-white'
                     : step.status === 'active'
                       ? 'bg-emerald-100 border-2 border-emerald-500 text-emerald-600 dark:bg-emerald-900/30'
-                      : 'bg-gray-100 border border-gray-300 text-gray-400 dark:bg-zinc-800 dark:border-zinc-600'
+                      : step.status === 'skipped'
+                        ? 'bg-gray-50 border border-dashed border-gray-300 text-gray-400 dark:bg-zinc-900 dark:border-zinc-600'
+                        : 'bg-gray-100 border border-gray-300 text-gray-400 dark:bg-zinc-800 dark:border-zinc-600'
                 }`}
               >
                 {step.status === 'completed' ? (
                   <Check className="w-3.5 h-3.5" />
+                ) : step.status === 'skipped' ? (
+                  <ChevronsRight className="w-3.5 h-3.5" />
                 ) : (
                   <span className="text-xs font-bold">{i + 1}</span>
                 )}
@@ -49,10 +53,15 @@ export default function MacroetapaStepper({ steps, compact }: Props) {
                     ? 'text-emerald-700 dark:text-emerald-400'
                     : step.status === 'completed'
                       ? 'text-gray-500 dark:text-gray-400'
-                      : 'text-gray-400 dark:text-gray-500'
+                      : step.status === 'skipped'
+                        ? 'text-gray-400 italic dark:text-gray-500'
+                        : 'text-gray-400 dark:text-gray-500'
                 }`}
               >
                 {step.label}
+                {step.status === 'skipped' && (
+                  <span className="ml-1 not-italic text-xs text-gray-400">· pulada</span>
+                )}
               </p>
               {!compact && step.status === 'active' && step.completion_pct > 0 && (
                 <p className="text-xs text-gray-500 mt-0.5">{step.completion_pct.toFixed(0)}% concluído</p>
