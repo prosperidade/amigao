@@ -44,6 +44,9 @@ interface MacroetapaStep {
   macroetapa: string;
   actions: ActionItem[];
   status: string;
+  completion_pct?: number;
+  // Chain de agentes da etapa (null = etapa manual, sem agentes automáticos).
+  agent_chain?: string | null;
   // CAM3WS-004 (Sprint N) — agentes da etapa vindos do backend.
   primary_agents?: string[];
   secondary_agents?: string[];
@@ -89,6 +92,23 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
     },
     onError: (err: AxiosError<{ detail?: string }>) => {
       toast.error(err.response?.data?.detail ?? 'Erro ao avançar etapa');
+    },
+  });
+
+  // Fase 0.2 — "Rodar os agentes da etapa" (Ficha 07 §2/§6). Dispara a chain da
+  // etapa atual; ao concluir, o worker marca o checklist e o card fica "pronto
+  // para avançar". Distinto dos botões por-agente abaixo (esses rodam 1 agente).
+  const runStageAgentsMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/processes/${processId}/macroetapa/run-agents`, {}).then(r => r.data),
+    onSuccess: (data: { dispatched: boolean; detail: string }) => {
+      toast.success(data.detail);
+      queryClient.invalidateQueries({ queryKey: ['ai-jobs', processId] });
+      queryClient.invalidateQueries({ queryKey: ['process-macroetapa-status', processId] });
+      queryClient.invalidateQueries({ queryKey: ['process-can-advance', processId] });
+    },
+    onError: (err: AxiosError<{ detail?: string }>) => {
+      toast.error(err.response?.data?.detail ?? 'Erro ao rodar agentes da etapa');
     },
   });
 
@@ -162,6 +182,23 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
           </div>
         )}
       </div>
+
+      {/* Fase 0.2 — Rodar os agentes da etapa (Ficha 07 §6). Só aparece quando a
+          etapa tem chain de agentes; etapas manuais (coleta/contrato) não. */}
+      {currentStep?.agent_chain && (
+        <button
+          type="button"
+          onClick={() => runStageAgentsMutation.mutate()}
+          disabled={runStageAgentsMutation.isPending}
+          title="Roda os agentes desta etapa. Ao concluir, a etapa fica pronta para avançar."
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-sky-500/20 transition-colors"
+        >
+          {runStageAgentsMutation.isPending
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Zap className="w-4 h-4" />}
+          <span className="truncate">Rodar agentes da etapa</span>
+        </button>
+      )}
 
       {/* Botão Avançar etapa (Regente Cam3 CAM3FT-005 — gate formal) */}
       {gate.next_macroetapa && (

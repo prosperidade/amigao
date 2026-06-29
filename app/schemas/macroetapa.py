@@ -42,6 +42,14 @@ class ActionValidateRequest(BaseModel):
     action_id: str
 
 
+# Fase 0.2 — resposta do "Rodar agentes da etapa"
+class RunStageAgentsResponse(BaseModel):
+    dispatched: bool
+    macroetapa: str
+    chain_name: Optional[str] = None
+    detail: str
+
+
 class MacroetapaStep(BaseModel):
     macroetapa: str
     label: str

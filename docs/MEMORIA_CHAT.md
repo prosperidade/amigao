@@ -134,6 +134,18 @@ em `docs/agentes/` são a fonte de verdade verificada.
 
 ## 15. Eventos significativos
 
+- **2026-06-29 — Fase 0.2: movimentação do card (`feat/movimentacao-card`).** O card
+  agora anda pelas 7 macroetapas. Dois furos do #78 fechados: (1) o intake passa a
+  criar os 7 `MacroetapaChecklist` (+ backfill lazy idempotente p/ os casos legados)
+  — sem isso o gate travava em False; (2) elo evento→card: `mark_stage_agents_done`
+  marca o checklist quando a chain da etapa conclui (hook no worker `run_agent_chain`)
+  → card fica `pronta_para_avancar`. De-inversão (ADR-018): avançar NÃO dispara mais
+  chain; novo `POST /macroetapa/run-agents` ("Rodar agentes da etapa") é o gatilho, e
+  o avanço é confirmado pelo consultor. UI: botão "Rodar agentes da etapa" no
+  WorkspaceRightPanel. Flag p/ André: gate compara `completion_pct < 1.0` mas o pct é
+  0–100 (furo latente, não corrigido — fora de escopo). Ramo E2→E3|E4 e gates finos
+  E5..E7 são fase seguinte. 8 testes novos verdes. Doc: `docs/trabalhos/movimentacao_card.md`.
+
 - **2026-06-28 — Revertido o vacilo do sidebar do #74 + limpeza do órfão (`fix/reverter-sidebar-quadro-acoes`).**
   O #74 renomeou o board `/processes` de "Quadro de ações" para "Casos" e criou uma aba nova
   "Quadro de Ações" (`/acoes`, `QuadroAcoesGlobal`). Ambas desfeitas: sidebar volta ao item único
