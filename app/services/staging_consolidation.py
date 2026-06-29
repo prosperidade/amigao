@@ -20,7 +20,7 @@ from datetime import UTC, date, datetime
 from typing import Any, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import Date, Float, Numeric
+from sqlalchemy import Date, Float, Numeric, String
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
@@ -76,6 +76,20 @@ def _raw_value(row: ExtractedFieldStaging) -> Any:
     return src
 
 
+def _stringify_structured(value: Any) -> str:
+    """Serializa dict/list em texto legível para colunas textuais.
+
+    O extrator às vezes stage valores estruturados (ex.: ``averbacao_app`` como
+    ``{"area": ..., "referencia": ...}``); gravar um dict numa coluna ``Text``
+    estoura o driver (``psycopg2: can't adapt type 'dict'``) e derruba a
+    consolidação inteira. Degradar com elegância: vira "chave: valor · …"."""
+    if isinstance(value, dict):
+        return " · ".join(f"{k}: {_stringify_structured(v)}" for k, v in value.items())
+    if isinstance(value, list):
+        return "; ".join(_stringify_structured(v) for v in value)
+    return str(value)
+
+
 def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = None) -> Any:
     """Coage o valor para o tipo da coluna (área PT-BR → float, data → date).
 
@@ -100,6 +114,10 @@ def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = 
             except ValueError:
                 continue
         return None
+    # Coluna textual (String/Text) recebendo estrutura → serializa, nunca crasha.
+    # (Colunas JSON portáveis NÃO são String → preservam o dict/list.)
+    if isinstance(value, (dict, list)) and isinstance(column_type, String):
+        return _stringify_structured(value)
     return value
 
 

@@ -373,6 +373,75 @@ def _value_key(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value).strip().lower())
 
 
+# Campos numéricos (têm unidade) cujo valor "349.9022" e "349,9022" são o MESMO
+# dado em formatos diferentes — devem deduplicar como um só (2a).
+def _numeric_dedup_key(value: Any) -> Optional[str]:
+    """Chave numérica canônica: o ÚLTIMO separador é o decimal; ignora milhar e
+    unidade. "349.9022", "349,9022" e "349,9022 ha" → a mesma chave."""
+    if isinstance(value, (dict, list)):
+        return None
+    s = re.sub(r"[^\d.,]", "", str(value))
+    if not re.search(r"\d", s):
+        return None
+    last = max(s.rfind("."), s.rfind(","))
+    if last >= 0:
+        intp = re.sub(r"[.,]", "", s[:last])
+        decp = re.sub(r"[^\d]", "", s[last + 1:])
+        s = f"{intp}.{decp}" if decp else intp
+    try:
+        return f"num:{round(float(s), 6)}"
+    except ValueError:
+        return None
+
+
+# Campos que esperam um CÓDIGO (UUID/identificador). O LLM às vezes preenche com
+# frase/título quando não acha o valor ("Certidão de Embargo", "Coordenadas não
+# disponíveis", "Plano de Recuperação (PRAD)", "Área embargada em…") — é lixo, não
+# vira staging (2b).
+_CODE_FIELDS = {
+    "codigo_certificacao", "numero_geo", "codigo_sncr_incra",
+    "codigo_incra", "numero_car", "nirf_cib",
+}
+
+
+def _is_garbage_for_code(value: Any) -> bool:
+    """True se ``value`` é frase/título (lixo do LLM) num campo que espera código."""
+    if isinstance(value, (dict, list)):
+        return False
+    s = str(value).strip()
+    if not s:
+        return False
+    from app.services.inconsistency_matrix import _is_doc_title  # noqa: PLC0415
+    if _is_doc_title(s):
+        return True
+    words = s.split()
+    if len(words) >= 4:
+        # frase longa SEM nenhum token que pareça código (alfanumérico com dígito) = lixo
+        has_code_token = any(
+            len(w) >= 6 and any(c.isdigit() for c in w) and re.fullmatch(r"[0-9A-Za-z./\-]+", w)
+            for w in words
+        )
+        return not has_code_token
+    return False
+
+
+# Campos-LISTA que descrevem um conjunto (pendências, ônus): não devem virar N
+# linhas de staging — colapsam em 1 por (campo, matrícula), mesmo que re-extrações
+# produzam listas ligeiramente diferentes (2c).
+_LIST_COLLAPSE_FIELDS = {"pendencias_rat", "onus"}
+
+
+def _dedup_token(field_name: str, value: Any, unidade: Optional[str]) -> str:
+    """Token de valor para a chave de dedup, ciente do tipo do campo (2a/2c)."""
+    if field_name in _LIST_COLLAPSE_FIELDS:
+        return "__list__"               # 1 linha por (campo, hint)
+    if unidade:                          # campo numérico → normaliza formato
+        nk = _numeric_dedup_key(value)
+        if nk is not None:
+            return nk
+    return _value_key(value)
+
+
 def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingField]:
     """Mapeia o JSON extraído → linhas de staging (sem persistir).
 
@@ -401,8 +470,13 @@ def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingF
         value, embedded_conf = _unwrap_llm_value(value)
         if _is_empty(value):
             continue
-        # 4c — dedup no MESMO doc: campo+hint+valor repetido vira 1 linha.
-        dedup_key = (spec.field_name, doc_hint, _value_key(value))
+        # 2b — campo de código recebendo frase/título (lixo do LLM): descarta.
+        if spec.field_name in _CODE_FIELDS and _is_garbage_for_code(value):
+            logger.info("ficha01_extraction: descartado lixo em %s: %r", spec.field_name, value)
+            continue
+        # 2a/2c/4c — dedup no MESMO doc: campo+hint+valor (numérico normaliza
+        # formato; campo-lista colapsa) repetido vira 1 linha.
+        dedup_key = (spec.field_name, doc_hint, _dedup_token(spec.field_name, value, spec.unidade))
         if dedup_key in seen_keys:
             continue
         seen_keys.add(dedup_key)
@@ -548,12 +622,15 @@ def extract_and_stage(
         scope = scope.filter(ExtractedFieldStaging.document_id == document_id)
     seen: set[tuple[Any, ...]] = set()
     for existing in scope.all():
-        ev = existing.field_value.get("value") if isinstance(existing.field_value, dict) else existing.field_value
-        seen.add((existing.field_name, existing.matricula_hint, _value_key(ev)))
+        fv = existing.field_value if isinstance(existing.field_value, dict) else {}
+        ev = fv.get("value", existing.field_value)
+        seen.add((existing.field_name, existing.matricula_hint,
+                  _dedup_token(existing.field_name, ev, fv.get("unidade"))))
 
     written = 0
     for f in fields:
-        key = (f.field_name, f.matricula_hint, _value_key(f.field_value.get("value")))
+        key = (f.field_name, f.matricula_hint,
+               _dedup_token(f.field_name, f.field_value.get("value"), f.field_value.get("unidade")))
         if key in seen:
             continue
         seen.add(key)

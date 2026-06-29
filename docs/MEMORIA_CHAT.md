@@ -629,3 +629,18 @@ em `docs/agentes/` são a fonte de verdade verificada.
   (documento) ou some. Escopo restrito ao histórico. Validação: `historicoEventos.test.ts` 11 casos
   (zero termo técnico), backend `test_timeline_enriches...`, `npm test` 64 verdes, tsc/build verdes.
   Doc: `docs/trabalhos/historico_eventos.md`.
+
+- **2026-06-29 — Consolidação dava 500 + limpeza do staging (`fix/consolidacao-clique-grava`).** Pós-#79,
+  clicar "Consolidar na base" no caso 13 não gravava (`audit consolidar`=0). Console: `POST /consolidar
+  → 500`. **Causa-raiz reproduzida local:** `psycopg2 can't adapt type 'dict'` — extrator stage
+  `averbacao_app`/`averbacao_rl` como **dict** e a consolidação gravava o dict numa coluna **Text** →
+  500 → **rollback de tudo** (por isso nem audit). **Fix (TASK 1):** `_coerce` serializa dict/list em
+  texto quando a coluna é String/Text (JSON portável preserva o dict). **Limpeza na origem (TASK 2,
+  `ficha01_extraction.py`):** (a) dedup de formato "349.9022"≡"349,9022" (`_numeric_dedup_key`); (b)
+  descarta lixo em campo de código ("Certidão de Embargo"/"Coordenadas não disponíveis"/"PRAD") reusando
+  `_is_doc_title` do #72; (c) campo-lista (`pendencias_rat`/`onus`) colapsa em 1 por (campo, matrícula);
+  dedup intra-doc e cross-run. **Lições:** o Console mostra request que falha mesmo sem nosso `onError`;
+  o botão "Consolidar na base" (roxo) estava enterrado no fim de 129 campos — confundiu com "Aceitar
+  consistentes" (verde). Validação: `test_repro_caso13.py` (grava: matrícula/property/audit/3 ações) +
+  `test_ficha01_staging_limpeza.py` (7) + regressão 29+28, ruff limpo, sem migration. Doc:
+  `docs/trabalhos/consolidacao_clique_e_staging.md`.
