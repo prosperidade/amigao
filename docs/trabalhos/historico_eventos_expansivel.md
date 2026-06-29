@@ -38,13 +38,33 @@ visíveis na linha do tempo; as **decisões individuais de conferência**
 - A humanização de cada evento (`historicoEventos.ts`) **não mudou** — continua a
   fonte das frases PT-BR.
 
+## Refinamento — "só fica o último resultado" (2026-06-29)
+
+Após o 1º deploy, o André apontou que **resultados que se repetem** ainda
+poluíam: no caso 13, 3 `consolidar` + 5 `staging_aceitar_consistentes` (lote)
+apareciam como cards fixos (cada clique de teste gerou um). Regra adicionada:
+
+- `RESULTADO_RECORRENTE_KINDS = {consolidado, lote}` — só o **mais recente** de
+  cada tipo (maior `created_at`, desempate por id) fica visível; as ocorrências
+  anteriores recolhem no bloco expansível, junto das decisões.
+- `resumoCluster` generalizado: cluster só de decisões → "N decisões de
+  conferência…"; cluster misto (com resultados anteriores) → "N eventos
+  anteriores · …".
+
+**Decoupling (resposta a uma dúvida de produto):** o **botão** "Consolidar na
+base" (ação) e os **resultados** de consolidação (eventos no histórico, vindos da
+auditoria) são independentes. Mover o botão para outra seção (follow-up parado)
+NÃO afeta esta regra de apresentação — os resultados vivem no histórico e seguem
+"só o último visível" onde quer que o botão esteja.
+
 ## Validação
 
-- `historicoBlocos.test.ts` — **6 verdes**: run contíguo colapsa; decisão isolada
-  vira marco; marco no meio quebra em dois clusters; paredão de 77 → 1 cluster;
-  `resumoCluster` conta total + breakdown; singular/plural.
-- Suíte frontend completa: **70 passed** (11 arquivos). `tsc --noEmit` verde.
-  `eslint --max-warnings=0` verde. `vite build` verde.
+- `historicoBlocos.test.ts` — **9 verdes**: run contíguo colapsa; decisão isolada
+  vira marco; marco no meio quebra em dois; paredão de 77 → 1 cluster; resultado
+  recorrente só mostra o mais recente; consolidação única não recolhe; `resumoCluster`
+  (só-decisões / misto / singular).
+- Suíte frontend completa: **73 passed** (11 arquivos). `tsc --noEmit` verde.
+  `eslint --max-warnings=0` verde.
 
 ### Aceite (visual)
 - Histórico do caso: marcos legíveis; bloco "N decisões de conferência [expandir]"
