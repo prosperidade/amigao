@@ -363,6 +363,14 @@ def get_macroetapa_status(
         status = "pending"
         if current and i < current_index:
             status = "completed"
+            # Sprint 1 (Ficha 07) — a coleta documental (E3) pode ser PULADA pelo
+            # ramo da E2 (E2→E4 quando não há documento essencial pendente). Um
+            # step pulado NÃO pode aparecer como "completed" (o badge não mente):
+            # se ficou para trás com o checklist intocado (0%), é "skipped".
+            if etapa is Macroetapa.coleta_documental and (
+                cl is None or float(cl.completion_pct or 0.0) == 0.0
+            ):
+                status = "skipped"
         elif current and i == current_index:
             status = "active"
 

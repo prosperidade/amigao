@@ -81,7 +81,9 @@ export interface MacroetapaStep {
   macroetapa: string;
   label: string;
   order: number;
-  status: 'pending' | 'active' | 'completed';
+  // 'skipped' — etapa pulada pelo ramo da E2 (Ficha 07): coleta documental
+  // ignorada quando não há documento essencial pendente.
+  status: 'pending' | 'active' | 'completed' | 'skipped';
   completion_pct: number;
   actions: ActionItem[];
   agent_chain: string | null;

@@ -664,3 +664,20 @@ em `docs/agentes/` são a fonte de verdade verificada.
   consistentes" (verde). Validação: `test_repro_caso13.py` (grava: matrícula/property/audit/3 ações) +
   `test_ficha01_staging_limpeza.py` (7) + regressão 29+28, ruff limpo, sem migration. Doc:
   `docs/trabalhos/consolidacao_clique_e_staging.md`.
+
+- **2026-06-29 — SPRINT 1: ramo condicional E2→E3/E4 (`feat/sprint1-ramo-e2`, ADR-019).** A Ficha 07
+  quer um ramo na saída da E2 (Diagnóstico Preliminar): se há **documento essencial pendente** → Coleta
+  (E3); senão → pula direto ao Diagnóstico Técnico (E4). **TASK 0 (medido):** (1) o `DiagnosticoAgent`
+  NÃO emite lista estruturada de essenciais (só `checklist_documental`=ações), mas o sinal canônico já
+  existe — `ProcessChecklist` com `required`+`pending` (= `missing_docs`, contado no kanban/detalhe/gate,
+  gerado no intake) → TASK 1 dispensada, nada de inventar regra nem tocar prompt de agente; (2) máquina
+  era linear (`next_macroetapa = nexts[0]`); (3) gate da E4 NÃO exigia "E3 concluída" — mas
+  `list_macroetapa_blockers` travava a E2 por doc pendente, contradizendo o ramo. **Impl:**
+  `MACROETAPA_TRANSITIONS[diagnostico_preliminar]=[coleta_documental, diagnostico_tecnico]` (ambas
+  válidas); `resolve_next_macroetapa(current, has_essential_pending)` decide o destino; doc pendente
+  **roteia** (não trava) só na E2; `get_macroetapa_status` marca a coleta pulada como `skipped` (badge
+  não mente) + estilo no `MacroetapaStepper`. Avanço segue **confirmado pelo consultor** (ADR-018) — o
+  ramo decide só o destino. Gate recém-corrigido (0–100 + diagnóstico assinado) intacto. **Validação:**
+  `test_ramo_e2.py` prova os 2 caminhos reais + E4 sem E3 + audit `macroetapa_changed`; bateria
+  transição/gate 97 verdes; regressão processes+regulatory 100 verdes; tsc/build limpos. Doc:
+  `docs/trabalhos/sprint1_ramo_e2.md`.

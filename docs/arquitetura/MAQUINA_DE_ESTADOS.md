@@ -92,16 +92,32 @@ engine em `app/services/macroetapa_engine.py`.
 > (`GET /processes/kanban`). Mexer no MVP de movimentação é mexer na `macroetapa`,
 > não no `status` legado (medido em `docs/trabalhos/diagnostico_movimentacao.md`).
 
-### Etapas (7, lineares)
+### Etapas (7) — lineares, com **um ramo** na saída da E2
 
 ```
-entrada_demanda → diagnostico_preliminar → coleta_documental →
+entrada_demanda → diagnostico_preliminar ─┬─(há doc essencial pendente)→ coleta_documental ─┐
+                                          └─(sem doc essencial pendente)──────────────────────┴→ diagnostico_tecnico
 diagnostico_tecnico → caminho_regulatorio → orcamento_negociacao →
 contrato_formalizacao (terminal MVP1)
 ```
 
-`MACROETAPA_TRANSITIONS` é estritamente linear (cada etapa só vai para a seguinte).
-O ramo E2→E3|E4 (pular coleta) ainda **não** existe — dívida da fase seguinte.
+`MACROETAPA_TRANSITIONS` é linear em todas as etapas **exceto** na saída da
+`diagnostico_preliminar` (E2), que tem **dois** destinos válidos
+(`coleta_documental` e `diagnostico_tecnico`). O DESTINO recomendado é resolvido
+por `resolve_next_macroetapa(current, has_essential_pending)` — **Sprint 1 /
+Ficha 07 / ADR-019**:
+
+- **há documento essencial pendente** (`ProcessChecklist` com item `required` em
+  `status="pending"` → `missing_docs > 0`) → vai para a **Coleta Documental (E3)**;
+- **sem documento essencial pendente** → **pula a coleta** e vai direto para o
+  **Diagnóstico Técnico (E4)**.
+
+O ramo só decide o **destino** do avanço — não o automatiza (o consultor confirma,
+Princípio 1 / ADR-018). A E4 é alcançável **direto da E2**: o gate da E4 é uma
+**condição** (diagnóstico assinado + sem essencial pendente OU coleta concluída),
+não "a etapa E3 imediatamente anterior". Documento essencial pendente **roteia**
+(não trava) na E2 — travar a E2 impediria justamente o caminho da coleta. A E3
+pulada aparece como `skipped` no stepper (não `completed` — o badge não mente).
 
 ### Como o card anda (elo evento→pronto→avanço confirmado — Fase 0.2)
 
@@ -116,7 +132,9 @@ O ramo E2→E3|E4 (pular coleta) ainda **não** existe — dívida da fase segui
 3. **Consultor confirma** (`POST /macroetapa`, "Avançar etapa"). O gate
    (`can_advance_macroetapa`: checklist OK + docs obrigatórios + diagnóstico
    assinado nas etapas de diagnóstico) valida e `advance_macroetapa` sobe a
-   `macroetapa`. Audit `macroetapa_changed`.
+   `macroetapa`. Audit `macroetapa_changed`. **Exceção do ramo da E2 (ADR-019):**
+   na `diagnostico_preliminar` o documento essencial pendente **não** entra como
+   blocker — ele decide o destino (`next_macroetapa`) entre E3 e E4.
 
 > **Princípio 1 / ADR-018:** rodar os agentes (a IA propõe) é uma ação **separada**
 > de avançar (o humano decide). Avançar **não** dispara chain. Exceção: assinar um
