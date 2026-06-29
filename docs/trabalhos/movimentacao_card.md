@@ -81,14 +81,26 @@ decide" — Princípio 1.)
 
 ---
 
-## Inconsistência observada (NÃO corrigida — fora de escopo, flag p/ André)
-O gate compara `completion_pct < 1.0`, mas `completion_pct` é gravado como
-**percentual 0–100** (`calculate_completion_pct` retorna `*100`). Logo o blocker
-"checklist incompleto" só dispara quando o pct é praticamente 0 — um checklist a
-20% passaria. Não afeta esta entrega (o marcador leva a etapa a **100**), mas é um
-furo latente do gate. Vale uma decisão separada: tratar `completion_pct` como
-fração (0–1) **ou** ajustar o gate para `< 100`. Não toquei (a regra era não
-refatorar o que está fora do escopo da movimentação).
+## Furo latente do gate — CORRIGIDO (follow-up do #82, decisão do André)
+`completion_pct` é gravado na escala **0–100** em todo o sistema
+(`calculate_completion_pct` retorna `completed/total*100`), mas o gate comparava
+`< 1.0` — escala errada: um checklist a 20% "passava". Corrigido para a escala
+0–100 na branch `fix/gate-completion-pct-escala` (sem converter pct para fração —
+produtores/consumidores de pct ficam intactos):
+- `can_advance_macroetapa`: `< 1.0` → `< COMPLETE_PCT` (=100).
+- `compute_macroetapa_state` (o badge): os dois `pct >= 1.0` → `>= COMPLETE_PCT`.
+  Estendi ao estado **porque o gate e o badge são a mesma regra** — fixar só o
+  gate deixaria o badge mentindo ("pronto para avançar" a 20%) enquanto o botão
+  bloqueia. Constante `COMPLETE_PCT = 100.0` em `app/models/macroetapa.py`.
+- Testes: stubs que usavam `completion_pct=1.0`/`0.5` como "completo/50%"
+  (escala-fração, em `test_macroetapa_gate` e `test_regulatory`) passam a 100/50
+  (escala 0–100), preservando a intenção. Novos testes provam: **20% NÃO passa o
+  gate** (card não avança) e o badge a 20% é `em_andamento`; **100% passa**.
+- NÃO toquei `calculate_completion_pct` nem caminhos de exibição do pct (kanban,
+  dossiê) — só as três comparações de prontidão na escala errada.
+
+> Observação de processo: este fix era pra entrar no #82, mas o #82 foi mergeado
+> (pelo agente paralelo) antes — virou follow-up em cima do `main`.
 
 ---
 

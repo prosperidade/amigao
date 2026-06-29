@@ -356,6 +356,11 @@ DIAGNOSTIC_MACROETAPAS: frozenset[Macroetapa] = frozenset(
     {Macroetapa.diagnostico_preliminar, Macroetapa.diagnostico_tecnico}
 )
 
+# `completion_pct` é gravado na escala 0–100 em todo o sistema
+# (`calculate_completion_pct` retorna `completed/total * 100`). O gate e o estado
+# formal comparam contra ESTA escala — etapa só está "completa" a 100, não a 1.
+COMPLETE_PCT: float = 100.0
+
 
 def compute_macroetapa_state(
     checklist: MacroetapaChecklist,
@@ -375,7 +380,7 @@ def compute_macroetapa_state(
         `RegulatoryDiagnosis.validated_at` preenchido → aguardando_validacao,
         mesmo com checklist 100% (fix/diagnostico-propaga-estado — Princípio 1:
         peça formal só "fecha" depois da assinatura do consultor).
-      - completion_pct >= 1.0 → concluida (ou pronta_para_avancar se ainda corrente)
+      - completion_pct >= 100 → concluida (ou pronta_para_avancar se ainda corrente)
       - tem actions completas mas não todas → em_andamento
       - é a corrente sem progresso → aguardando_input
     """
@@ -391,13 +396,13 @@ def compute_macroetapa_state(
     pct = float(checklist.completion_pct or 0.0)
     is_diagnostic_stage = current_macroetapa in DIAGNOSTIC_MACROETAPAS
 
-    if is_diagnostic_stage and pct >= 1.0 and not diagnosis_validated:
+    if is_diagnostic_stage and pct >= COMPLETE_PCT and not diagnosis_validated:
         # Checklist cheio mas diagnóstico não assinado: ainda não é
         # pronta_para_avancar — o card precisa concordar com o bloco
         # "diagnóstico assinado".
         return MacroetapaState.aguardando_validacao
 
-    if pct >= 1.0:
+    if pct >= COMPLETE_PCT:
         return MacroetapaState.pronta_para_avancar if is_current else MacroetapaState.concluida
     if pct > 0:
         return MacroetapaState.em_andamento
@@ -452,7 +457,7 @@ def can_advance_macroetapa(
     )
     if checklist is None:
         return False, ["Etapa não iniciada (sem checklist)."]
-    if require_complete and float(checklist.completion_pct or 0.0) < 1.0:
+    if require_complete and float(checklist.completion_pct or 0.0) < COMPLETE_PCT:
         blockers.append("Output mínimo não atingido (checklist incompleto).")
     if current_macroetapa in DIAGNOSTIC_MACROETAPAS and not diagnosis_validated:
         blockers.append("Diagnóstico desta etapa ainda não foi assinado pelo consultor.")
