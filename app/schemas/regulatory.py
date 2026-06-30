@@ -175,6 +175,25 @@ class RegulatoryIssueUpdate(BaseModel):
         return self
 
 
+class DiagnosisNoteOut(BaseModel):
+    """Nota DERIVADA na leitura — não-acionável, nunca armazenada (ADR-020).
+
+    Estado derivado se calcula na leitura, não vira linha em `regulatory_issues`
+    (Princípio 11; mesmo padrão de RL "averbada" derivada). Hoje cobre só a
+    "verificação espacial pendente" quando `Property.geom IS NULL`. `source` é
+    sempre 'derived' (rastreabilidade); `acionavel` é sempre False (a UI a
+    renderiza como nota discreta, sem botões de decisão)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    codigo: str
+    titulo: str
+    texto: str
+    severity: RegulatoryIssueSeverity = RegulatoryIssueSeverity.informativo
+    source: Literal["derived"] = "derived"
+    acionavel: Literal[False] = False
+
+
 # ---------------------------------------------------------------------------
 # PROMPT_7 (ADR-012) — Schemas de ProcessIssueDecision
 # ---------------------------------------------------------------------------

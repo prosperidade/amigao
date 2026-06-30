@@ -21,6 +21,7 @@ import {
 import type { AxiosError } from 'axios';
 import { api } from '@/lib/api';
 import type {
+  DiagnosisNote,
   ProcessIssueDecision,
   ProcessIssueDecisionUpsertPayload,
   RegulatoryDiagnosis,
@@ -30,6 +31,7 @@ import type {
 
 export const regulatoryKeys = {
   issues: (propertyId: number) => ['regulatory', 'issues', propertyId] as const,
+  notes: (propertyId: number) => ['regulatory', 'notes', propertyId] as const,
   decision: (processId: number, issueId: number) =>
     ['regulatory', 'decision', processId, issueId] as const,
   diagnoses: (processId: number) => ['regulatory', 'diagnoses', processId] as const,
@@ -48,6 +50,21 @@ export function useIssues(
         params: { status: statusFilter },
       });
       return r.data as RegulatoryIssue[];
+    },
+    enabled: !!propertyId,
+  });
+}
+
+// ─── Notas derivadas (ADR-020) — não-acionáveis, calculadas na leitura ───────
+
+export function useDiagnosisNotes(
+  propertyId: number | null,
+): UseQueryResult<DiagnosisNote[]> {
+  return useQuery<DiagnosisNote[]>({
+    queryKey: propertyId ? regulatoryKeys.notes(propertyId) : ['regulatory', 'notes', 'noop'],
+    queryFn: async () => {
+      const r = await api.get(`/properties/${propertyId}/diagnosis-notes`);
+      return r.data as DiagnosisNote[];
     },
     enabled: !!propertyId,
   });

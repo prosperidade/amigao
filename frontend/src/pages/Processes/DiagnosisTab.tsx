@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Stethoscope, Brain, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Stethoscope, Brain, AlertTriangle, CheckCircle2, Loader2, Info } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Process } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
 import { CONFIDENCE_STYLES } from '@/types/agent';
 import DiagnosisAssinatura from './DiagnosisAssinatura';
-import { useIssues } from '@/lib/regulatory/hooks';
+import { useIssues, useDiagnosisNotes } from '@/lib/regulatory/hooks';
 import { SEVERITY_ORDER } from '@/lib/regulatory/labels';
 import AlertaCard from './AlertaCard';
 
@@ -42,6 +42,10 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
       })
     : [];
 
+  // ADR-020 — notas DERIVADAS na leitura (não-acionáveis, nunca armazenadas).
+  // Ex.: "verificação espacial pendente" quando o imóvel não tem geom.
+  const { data: notas = [] } = useDiagnosisNotes(process.property_id);
+
   return (
     <div className="space-y-4">
 
@@ -69,6 +73,24 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
           </header>
           {alertas.map(issue => (
             <AlertaCard key={issue.id} issue={issue} processId={process.id} />
+          ))}
+        </div>
+      )}
+
+      {/* ADR-020 — Notas da análise: derivadas na leitura, NÃO-acionáveis.
+          Linha discreta, sem selects/decisão/"→ Ações" — não é achado. */}
+      {notas.length > 0 && (
+        <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-4 space-y-2">
+          <p className="text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+            Notas da análise
+          </p>
+          {notas.map(nota => (
+            <div key={nota.codigo} className="flex items-start gap-2 text-sm text-gray-500 dark:text-slate-400">
+              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-gray-400 dark:text-slate-500" />
+              <span className="min-w-0">
+                <span className="text-gray-600 dark:text-slate-300">{nota.titulo}</span> — {nota.texto}
+              </span>
+            </div>
           ))}
         </div>
       )}

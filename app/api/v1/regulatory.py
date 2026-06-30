@@ -47,6 +47,7 @@ from app.models.regulatory import (
 )
 from app.models.user import User
 from app.schemas.regulatory import (
+    DiagnosisNoteOut,
     IssueStatusFilter,
     ProcessIssueDecisionCreate,
     ProcessIssueDecisionOut,
@@ -451,6 +452,46 @@ def list_property_issues(
         query = query.filter(RegulatoryIssue.resolved_at.is_not(None))
     # "all" → sem filtro adicional
     return query.order_by(RegulatoryIssue.detected_at.desc()).all()
+
+
+@property_router.get("/{property_id}/diagnosis-notes", response_model=list[DiagnosisNoteOut])
+def list_property_diagnosis_notes(
+    property_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> list[DiagnosisNoteOut]:
+    """Notas DERIVADAS na leitura (ADR-020) — não-acionáveis, nunca armazenadas.
+
+    Estado derivado se calcula aqui, não vira linha em `regulatory_issues`
+    (Princípio 11). Hoje: "verificação espacial pendente" quando
+    `Property.geom IS NULL`. Quando D1 popular geom, o auditor passa a emitir
+    achados ESPACIAIS REAIS (persistidos) e esta nota deixa de aparecer.
+    """
+    _get_property_or_404(db, property_id, current_user.tenant_id)
+    # Checa presença de geom SEM carregar a geometria (blob) — só o id.
+    geom_present = (
+        db.query(Property.id)
+        .filter(
+            Property.id == property_id,
+            Property.tenant_id == current_user.tenant_id,
+            Property.geom.isnot(None),
+        )
+        .first()
+        is not None
+    )
+    notes: list[DiagnosisNoteOut] = []
+    if not geom_present:
+        notes.append(
+            DiagnosisNoteOut(
+                codigo="VERIFICACAO_ESPACIAL_PENDENTE",
+                titulo="Verificação espacial pendente",
+                texto=(
+                    "geom indisponível (D1) — a análise espacial (APP, RL, UC, "
+                    "sobreposição com terceiros) ainda não pôde ser executada."
+                ),
+            )
+        )
+    return notes
 
 
 @property_router.patch(

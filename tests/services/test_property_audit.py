@@ -85,10 +85,13 @@ class TestAuditPropertyDeterministico:
     em vez do `type` genérico antigo. `grade` é o único eixo de severidade
     (4 níveis) — saiu `severity` de 3 níveis do AuditFinding."""
 
-    def test_property_vazio_nao_levanta_emite_so_finding_de_geom_pendente(self):
+    def test_property_vazio_nao_levanta_e_nao_emite_geom_pendente(self):
+        # ADR-020: property vazio sem geom NÃO emite mais nada — a "verificação
+        # espacial pendente" virou nota derivada na leitura, não finding.
         findings = audit_property(property_data={})
         codigos = [f.codigo_alerta for f in findings]
-        assert "VERIFICACAO_ESPACIAL_PENDENTE" in codigos
+        assert "VERIFICACAO_ESPACIAL_PENDENTE" not in codigos
+        assert findings == []
 
     def test_areas_divergentes_matricula_e_car_gera_finding(self):
         findings = audit_property(property_data={
@@ -147,12 +150,12 @@ class TestAuditPropertyDeterministico:
         # 40% diff → critico pela régua
         assert rl_findings[0].grade == GRADE_CRITICO
 
-    def test_sem_geom_marca_verificacao_espacial_pendente(self):
+    def test_sem_geom_NAO_emite_verificacao_espacial_pendente(self):
+        # ADR-020 (anti-regressão): sem geom NÃO vira mais finding/issue — a nota
+        # "verificação espacial pendente" é derivada na leitura (endpoint).
         findings = audit_property(property_data={"area_documental_ha": 100, "car_area_ha": 100})
         pendente = [f for f in findings if f.codigo_alerta == "VERIFICACAO_ESPACIAL_PENDENTE"]
-        assert len(pendente) == 1
-        assert pendente[0].grade == GRADE_INFORMATIVO
-        assert pendente[0].familia == "geoespacial"
+        assert pendente == []
 
     def test_com_geom_nao_marca_verificacao_espacial_pendente(self):
         findings = audit_property(property_data={"geom": object()})
@@ -175,13 +178,14 @@ class TestAuditPropertyDeterministico:
         )
         codigos = sorted({f.codigo_alerta for f in findings})
         # esperado: pares matrícula × CAR, matrícula × CCIR, CAR × CCIR (área);
-        # GEO_AUSENTE; RL_MATRICULA_DIVERGENTE_RL_CAR; VERIFICACAO_ESPACIAL_PENDENTE.
+        # GEO_AUSENTE; RL_MATRICULA_DIVERGENTE_RL_CAR.
         assert "AREA_MATRICULA_X_CAR" in codigos
         assert "AREA_MATRICULA_X_CCIR" in codigos
         assert "AREA_CAR_X_CCIR" in codigos
         assert "GEO_AUSENTE" in codigos
         assert "RL_MATRICULA_DIVERGENTE_RL_CAR" in codigos
-        assert "VERIFICACAO_ESPACIAL_PENDENTE" in codigos
+        # ADR-020: geom None NÃO emite mais o pendente (virou nota derivada).
+        assert "VERIFICACAO_ESPACIAL_PENDENTE" not in codigos
 
 
 class TestFindingToIssueTypeRemoved:

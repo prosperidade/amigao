@@ -1795,3 +1795,24 @@ imóvel/processo; a skill do diagnóstico só casa quando o caller põe `uf` no
 
 **Limpeza:** docx Word duplicados movidos de `docs/skills/` para
 `docs/_archive/skills-fontes-word/` (fonte de verdade = SKILL.md).
+
+## ADR-020 — verificação espacial derivada, não armazenada (30/06/2026)
+
+Diagnóstico read-only do caso 13 (property 10): 11 `VERIFICACAO_ESPACIAL_PENDENTE`
+idênticos sobreviveram a tudo. Raiz: placeholder informativo (`geom IS NULL` →
+"análise espacial não rodou") era **armazenado** como `RegulatoryIssue` e
+re-emitido a cada E2/E4. Decisão do André: estado derivado calcula-se na leitura,
+nunca vira linha (Princípio 11).
+
+**Mudanças (branch `fix/derivar-verificacao-espacial-d1`):**
+- `property_audit.py`: removido o ramo `geom is None` (auditor para de emitir).
+- Backend: `GET /properties/{id}/diagnosis-notes` deriva a nota
+  (`source="derived"`, `acionavel=false`) quando `geom IS NULL`.
+- Frontend `DiagnosisTab`: achados (AlertaCard) ≠ notas (linha discreta, sem botões).
+- Catálogo: `VERIFICACAO_ESPACIAL_PENDENTE` aposentado (mantido p/ FK legada).
+- Anti-regressão: `audit_property`/`auditor_imovel` NÃO emitem; endpoint deriva.
+
+**Validação:** 201 backend + 76 frontend verdes; tsc/eslint ok. Gatilho D1: quando
+geom for populado, a seção emite achados ESPACIAIS REAIS (persistidos). Constraint
+UNIQUE (3º caso dedupe-sem-constraint) → dívida #48. Limpeza de prod é Parte 2
+(pós-deploy, dry-run aprovado antes). Ver `docs/adr/020-verificacao-espacial-derivada.md`.

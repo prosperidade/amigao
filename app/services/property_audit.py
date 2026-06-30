@@ -336,26 +336,14 @@ def audit_property(
             ))
 
     # --- 4. Sobreposição espacial — depende de geom (D1, ausente hoje) -----
-    # MVP: se geom é None, marcamos "verificação espacial pendente" como FYI.
-    # Quando D1 (parser shapefile) chegar, esta seção faz overlay PostGIS real
-    # (área CAR × APP, sobreposição com UC, etc.).
-    if property_data.get("geom") is None:
-        findings.append(AuditFinding(
-            codigo_alerta="VERIFICACAO_ESPACIAL_PENDENTE",
-            familia="geoespacial",
-            grade=GRADE_INFORMATIVO,
-            tema="geometria",
-            descricao=(
-                "Property.geom não populado — verificação espacial (APP, RL, UC, "
-                "sobreposição com terceiros) não pôde ser executada."
-            ),
-            impacto=(
-                "Cruzamento documental concluído sem overlay PostGIS. Quando o "
-                "parser de shapefile/KML for habilitado (gap D1), esta análise "
-                "complementa o auditor."
-            ),
-            evidencia={"geom_present": False},
-        ))
+    # Verificação espacial: DERIVADA na leitura quando geom IS NULL (ADR-020) —
+    # NÃO emitida como RegulatoryIssue armazenado. Estado derivado se calcula na
+    # leitura, nunca vira linha (Princípio 11; mesmo padrão de RL "averbada"
+    # derivada e APP "—"). O endpoint GET /properties/{id}/diagnosis-notes
+    # devolve a nota não-acionável "Verificação espacial pendente — geom
+    # indisponível (D1)". Quando D1 (parser shapefile/KML) popular geom, ESTA
+    # seção passa a emitir achados ESPACIAIS REAIS (overlay PostGIS: CAR × APP,
+    # sobreposição com UC/terceiros) — aí sim findings persistidos.
 
     return findings
 

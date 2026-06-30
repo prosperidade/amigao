@@ -78,6 +78,20 @@ export interface RegulatoryIssue {
   resolved_at: string | null;
 }
 
+/**
+ * Nota DERIVADA na leitura (ADR-020) — não-acionável, nunca armazenada.
+ * Vem de `GET /properties/{id}/diagnosis-notes`. A UI a renderiza como linha
+ * discreta (sem selects/decisão), separada dos achados.
+ */
+export interface DiagnosisNote {
+  codigo: string;
+  titulo: string;
+  texto: string;
+  severity: RegulatoryIssueSeverity;
+  source: 'derived';
+  acionavel: false;
+}
+
 export interface ProcessIssueDecision {
   id: number;
   process_id: number;
