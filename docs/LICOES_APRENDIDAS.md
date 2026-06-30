@@ -85,4 +85,8 @@ coluna a tela de resultado lê e prove que ela aparece populada.
 > Origem: validação Isis 16/06. Fix: `get_property_hub_summary` deriva Matrícula/Área das matrículas;
 > Fluxo 8 em `docs/arquitetura/FLUXOS_E2E.md` agora inclui o passo "Imóvel Hub (resultado visível)".
 
-> Atualizado: 2026-06-17.
+## Agente que PERSISTE precisa ser idempotente
+Um agente determinístico que grava no banco (ex.: `auditor_imovel` criando `RegulatoryIssue`) roda toda vez que a etapa re-executa a chain. Sem dedupe na criação, cada execução insere de novo — o caso 13 acumulou o **mesmo** alerta 11× ao longo de ~2 semanas. Regra: persistência de achado/ação passa por chave de dedupe (reusar o padrão `dedupe_key` de `acao_generator`); re-rodar não duplica. Medir geração × exibição antes de corrigir (contar linhas no banco vs. renderizadas) — são fixes diferentes.
+> Origem: `fix/alertas-regulatorios-duplicados` (2026-06-30). Fix: guard de dedupe em `_persist_issues` + `app/services/regulatory_dedupe.py` + `scripts/sanear_alertas_duplicados.py`. Ver `docs/trabalhos/alertas_duplicados.md`.
+
+> Atualizado: 2026-06-30.
