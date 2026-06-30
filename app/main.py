@@ -10,8 +10,8 @@ from sqlalchemy import text
 
 from app.api.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.api.v1 import (
-    agents,
     acoes,
+    agents,
     ai,
     audit,
     auth,

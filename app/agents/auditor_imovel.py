@@ -216,14 +216,53 @@ class AuditorImovelAgent(BaseAgent):
             RegulatoryIssue,
             RegulatoryIssueSeverity,
         )
+        from app.services.regulatory_dedupe import issue_dedupe_key  # noqa: PLC0415
 
         property_id = property_data.get("id")
         if not property_id:
             # Sem property persistida (caso de teste/dry-run), apenas reporta no payload.
             return []
 
+        # Idempotência (Ficha 07 §2): um achado por (property, codigo_alerta, tema,
+        # descricao) enquanto NÃO resolvido. O auditor roda toda vez que a etapa
+        # E2/E4 re-roda os agentes; sem este guard, cada execução inseria uma
+        # duplicata (medido no caso 13: 11 linhas idênticas). Re-rodar agora reusa
+        # a issue existente — preservando a decisão do consultor em status_achado.
+        existing = (
+            self.ctx.session.query(RegulatoryIssue)
+            .filter(
+                RegulatoryIssue.tenant_id == self.ctx.tenant_id,
+                RegulatoryIssue.property_id == property_id,
+                RegulatoryIssue.resolved_at.is_(None),
+            )
+            .all()
+        )
+        by_key: dict[str, RegulatoryIssue] = {}
+        for iss in existing:
+            payload: dict[str, Any] = iss.payload or {}
+            key = issue_dedupe_key(
+                property_id=property_id,
+                codigo_alerta=iss.codigo_alerta,
+                type_legacy=iss.type.value if iss.type is not None else None,
+                tema=payload.get("tema"),
+                descricao=payload.get("descricao"),
+            )
+            by_key.setdefault(key, iss)
+
         ids: list[int] = []
         for f in findings:
+            key = issue_dedupe_key(
+                property_id=property_id,
+                codigo_alerta=f.codigo_alerta,
+                type_legacy=None,
+                tema=f.tema,
+                descricao=f.descricao,
+            )
+            hit = by_key.get(key)
+            if hit is not None:
+                # Achado idêntico já existe e não está resolvido — não duplica.
+                ids.append(hit.id)
+                continue
             issue = RegulatoryIssue(
                 tenant_id=self.ctx.tenant_id,
                 property_id=property_id,
@@ -249,6 +288,7 @@ class AuditorImovelAgent(BaseAgent):
             )
             self.ctx.session.add(issue)
             self.ctx.session.flush()
+            by_key[key] = issue  # evita duplicar dentro da mesma execução
             ids.append(issue.id)
         self.ctx.session.commit()
         return ids

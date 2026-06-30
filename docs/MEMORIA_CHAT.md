@@ -681,3 +681,11 @@ em `docs/agentes/` são a fonte de verdade verificada.
   `test_ramo_e2.py` prova os 2 caminhos reais + E4 sem E3 + audit `macroetapa_changed`; bateria
   transição/gate 97 verdes; regressão processes+regulatory 100 verdes; tsc/build limpos. Doc:
   `docs/trabalhos/sprint1_ramo_e2.md`.
+
+- **Alertas regulatórios duplicados 11× (2026-06-30, `fix/alertas-regulatorios-duplicados`):** medido no
+  caso 13 (property 10): mesmo `VERIFICACAO_ESPACIAL_PENDENTE` com 11 linhas idênticas → **GERAÇÃO**
+  (`auditor_imovel._persist_issues` inseria por finding a cada re-execução, sem dedupe), não render. Fix:
+  guard de idempotência em `_persist_issues` + `app/services/regulatory_dedupe.py` + `scripts/sanear_alertas_duplicados.py`
+  (preserva `status_achado`; reporta decisões conflitantes sem apagar). Caso 13 tem 22 confirmada × 23
+  descartada → pendência de decisão do André. Doc: `docs/trabalhos/alertas_duplicados.md`. Lição: agente
+  que persiste precisa ser idempotente (LICOES_APRENDIDAS).
