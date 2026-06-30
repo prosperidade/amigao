@@ -91,6 +91,18 @@ o tratamento de erro continua frágil. **Origem:** Onda A (24/05).
 devolve 500 + retry manual. Tratar com retry server-side. Improvável para consultor único.
 **Origem:** Onda B (24/05).
 
+**48. UNIQUE constraint de idempotência em `regulatory_issues` (3º caso do padrão "dedupe sem
+constraint").** Hoje a não-duplicação de achados é só **app-level** (`auditor_imovel._persist_issues`
+consulta + `by_key`); `pg_constraint` em `regulatory_issues` tem só PK + 4 FKs, nenhuma UNIQUE. Foi
+a causa-raiz das 11 linhas `VERIFICACAO_ESPACIAL_PENDENTE` (caso 13). O ADR-020 removeu **aquele**
+emissor (virou nota derivada), mas os OUTROS códigos (área, GEO, RL) seguem sem cinto de segurança
+no banco — uma regressão no guard ou uma corrida volta a duplicar. **Fix futuro (PR próprio):**
+índice UNIQUE parcial sobre chave estável `(tenant_id, property_id, codigo_alerta, tema, subject_ref)`
+para `resolved_at IS NULL` — exige (a) desenhar `subject_ref`/chave estável (hoje o desempate usa
+`descricao`, que varia com texto livre) e (b) **varredura table-wide** de duplicatas pré-existentes
+antes de criar o índice (senão a migration falha). Mesmo padrão recorrente do staging (#81) e ações
+(Ficha 07). **Origem:** diagnóstico dos alertas espaciais (30/06, ADR-020).
+
 **45. Extrator de campos sem skill procedural.** O `ExtratorAgent.execute()` chama
 `extract_document_fields()` direto — **não** passa por `_compose_system_with_skills`. O
 prompt de extração vive hardcoded em `document_extractor.py` (com fallback; pode vir do
