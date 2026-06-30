@@ -98,7 +98,10 @@ class TestExecuteSemLLM:
         assert data["method"] == "deterministic_tools"
         assert data["requires_review"] is True
 
-    def test_sem_geom_nao_levanta_e_marca_pendente(self):
+    def test_sem_geom_nao_levanta_e_NAO_emite_pendente(self):
+        # ADR-020 (anti-regressão): sem geom o auditor roda normal, reporta
+        # geom_present=False no payload, mas NÃO emite mais o finding/issue
+        # VERIFICACAO_ESPACIAL_PENDENTE — virou nota derivada na leitura.
         agent = AuditorImovelAgent(_ctx())
         with ExitStack() as stack:
             _enter_default_patches(stack, property_overrides={
@@ -112,7 +115,7 @@ class TestExecuteSemLLM:
         data = result.data
         assert data["geom_present"] is False
         raw_codigos = [f["codigo_alerta"] for f in data["findings_raw"]]
-        assert "VERIFICACAO_ESPACIAL_PENDENTE" in raw_codigos
+        assert "VERIFICACAO_ESPACIAL_PENDENTE" not in raw_codigos
 
     def test_geo_incra_ausente_aparece_no_payload(self):
         agent = AuditorImovelAgent(_ctx())

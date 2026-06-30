@@ -82,6 +82,47 @@ def _seed_client_property_process(db_session, *, tenant: Tenant) -> tuple[Client
 
 
 # ---------------------------------------------------------------------------
+# /properties/{id}/diagnosis-notes — nota DERIVADA (ADR-020)
+# ---------------------------------------------------------------------------
+
+class TestDiagnosisNotesDerived:
+    """ADR-020 — "verificação espacial pendente" é nota DERIVADA na leitura
+    (não armazenada como RegulatoryIssue). Sai do endpoint quando geom IS NULL."""
+
+    def test_unauthorized_returns_401(self, client: TestClient):
+        r = client.get("/api/v1/properties/1/diagnosis-notes")
+        assert r.status_code == 401
+
+    def test_geom_null_deriva_nota_espacial(self, client: TestClient, db_session):
+        tenant, user = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        # prop nasce sem geom (NULL) — o cenário do caso 13.
+        headers = _login(client, user.email, "senha123")
+        r = client.get(f"/api/v1/properties/{prop.id}/diagnosis-notes", headers=headers)
+        assert r.status_code == 200
+        notas = r.json()
+        assert len(notas) == 1
+        nota = notas[0]
+        assert nota["codigo"] == "VERIFICACAO_ESPACIAL_PENDENTE"
+        assert nota["source"] == "derived"
+        assert nota["acionavel"] is False
+        assert nota["severity"] == "informativo"
+
+    def test_nota_NAO_vira_issue_armazenada(self, client: TestClient, db_session):
+        # A nota derivada não pode ter criado linha em regulatory_issues.
+        tenant, user = _seed_internal_user(db_session)
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        headers = _login(client, user.email, "senha123")
+        client.get(f"/api/v1/properties/{prop.id}/diagnosis-notes", headers=headers)
+        count = (
+            db_session.query(RegulatoryIssue)
+            .filter(RegulatoryIssue.property_id == prop.id)
+            .count()
+        )
+        assert count == 0
+
+
+# ---------------------------------------------------------------------------
 # /processes/{id}/diagnoses
 # ---------------------------------------------------------------------------
 

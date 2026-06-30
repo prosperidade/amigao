@@ -191,8 +191,14 @@ REGULATORY_ISSUE_CATALOG_SEED: list[tuple[str, str, str, str, str, bool, bool, l
      "consulta_externa", "alto", True, True, []),
 
     # --- Interno do sistema (não da sócia) ---
+    # APOSENTADO (ADR-020): "verificação espacial pendente" virou NOTA DERIVADA na
+    # leitura (GET /properties/{id}/diagnosis-notes quando geom IS NULL) — não é
+    # mais emitida como RegulatoryIssue. A entrada PERMANECE no catálogo só para a
+    # FK das linhas legadas continuar válida até a limpeza retroativa (Parte 2);
+    # nada mais cria issues com este código. Quando D1 popular geom, os achados
+    # espaciais REAIS terão códigos próprios.
     ("VERIFICACAO_ESPACIAL_PENDENTE", "geoespacial",
-     "Verificação espacial não pôde ser executada (Property.geom ausente)",
+     "Verificação espacial não pôde ser executada (Property.geom ausente) — APOSENTADO (ADR-020)",
      "geoespacial", "informativo", False, False, []),
 ]
 
