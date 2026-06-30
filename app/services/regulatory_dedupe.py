@@ -66,6 +66,7 @@ class SaneamentoAlertasResult:
     duplicates_removed: int = 0
     groups_collapsed: int = 0
     decisions_preserved: int = 0
+    decisions_reset: int = 0  # decisões conflitantes resetadas p/ suspeita (opção A)
     conflicts: list[str] = field(default_factory=list)  # grupos com decisões conflitantes
     details: list[str] = field(default_factory=list)
 
@@ -97,6 +98,7 @@ def sanear_alertas_duplicados(
     tenant_id: int,
     property_id: Optional[int] = None,
     dry_run: bool = False,
+    reset_conflicting: bool = False,
 ) -> SaneamentoAlertasResult:
     """Colapsa grupos de ``RegulatoryIssue`` não resolvidos que são duplicatas
     exatas (mesma ``issue_dedupe_key``), preservando o sinal humano.
@@ -107,12 +109,22 @@ def sanear_alertas_duplicados(
       - Se NÃO há decidida, mantém-se a MAIS RECENTE (maior ``detected_at``) e
         removem-se as demais.
       - Grupos com ≥2 decididas CONFLITANTES (ex.: uma ``confirmada`` e uma
-        ``descartada``) são reportados em ``conflicts`` e NADA é apagado entre
-        elas — a resolução é decisão humana (não destruímos julgamento).
+        ``descartada``): por padrão são reportados em ``conflicts`` e NADA é
+        apagado entre elas. Com ``reset_conflicting=True`` (opção A validada pelo
+        André no caso 13 — as decisões eram cliques de teste sobre as duplicatas),
+        as decididas SEM ``ProcessIssueDecision`` são resetadas para
+        ``status_achado=suspeita`` / ``status_saneamento=pendente`` e o grupo
+        colapsa como ruído (mantém a mais recente). Linhas com decisão contextual
+        (``ProcessIssueDecision``) seguem protegidas.
 
     Idempotente: rodar de novo não remove nada na segunda passada.
     """
-    from app.models.regulatory import ProcessIssueDecision, RegulatoryIssue  # noqa: PLC0415
+    from app.models.regulatory import (  # noqa: PLC0415
+        ProcessIssueDecision,
+        RegulatoryIssue,
+        StatusAchado,
+        StatusSaneamento,
+    )
 
     result = SaneamentoAlertasResult()
 
@@ -158,9 +170,9 @@ def sanear_alertas_duplicados(
         decided = [g for g in group if _is_decided(g, decided_issue_ids)]
         undecided = [g for g in group if g not in decided]
 
-        if len(decided) >= 2:
+        if len(decided) >= 2 and not reset_conflicting:
             # Conflito: ≥2 decididas (possivelmente confirmada × descartada).
-            # Preserva todas as decididas; remove só o ruído não decidido.
+            # Sem opção A: preserva todas as decididas; remove só o ruído.
             result.conflicts.append(
                 f"{key} — {len(decided)} linhas decididas (ids="
                 f"{[g.id for g in decided]}); resolução é humana"
@@ -168,6 +180,24 @@ def sanear_alertas_duplicados(
             result.decisions_preserved += len(decided)
             to_remove = undecided
             keepers = decided
+        elif len(decided) >= 2 and reset_conflicting:
+            # Opção A (André, caso 13): reseta as decididas conflitantes que NÃO
+            # têm decisão contextual e colapsa o grupo como ruído.
+            protegidas = [g for g in decided if g.id in decided_issue_ids]
+            resettaveis = [g for g in decided if g.id not in decided_issue_ids]
+            for g in resettaveis:
+                if not dry_run:
+                    g.status_achado = StatusAchado.suspeita
+                    g.status_saneamento = StatusSaneamento.pendente
+                result.decisions_reset += 1
+            if protegidas:
+                # Alguma linha tem ProcessIssueDecision — mantém-na; remove o resto.
+                keepers = protegidas
+                to_remove = [g for g in group if g not in keepers]
+                result.decisions_preserved += len(protegidas)
+            else:
+                keepers = [max(group, key=lambda g: (g.detected_at, g.id))]
+                to_remove = [g for g in group if g not in keepers]
         elif len(decided) == 1:
             keepers = decided
             to_remove = undecided

@@ -78,17 +78,23 @@ outro imóvel afetado.
    Efeito no caso 13: remove as **9** `suspeita` (ids 18,19,20,21,24,25,26,27,28),
    preserva **22** (confirmada) e **23** (descartada), e **reporta o conflito**.
 
-### Pendência para o André (decisão humana)
+### Decisão do André: opção (A) — resetar conflitantes
 
-Depois do saneamento, o caso 13 fica com **2 cards** (confirmada × descartada),
-não 1. As duas são decisões humanas conflitantes sobre o mesmo achado — provável
-fallout do bug (consultor clicou em duplicatas). Como decidir:
+As 2 decisões (22 `confirmada`, 23 `descartada`) eram **cliques de teste** sobre as
+duplicatas. O André validou a **opção A**: resetar ambas para `suspeita` e deixar
+o dedupe manter 1. Implementado como flag explícito e auditável
+`--reset-conflicting` (default OFF — preserva o comportamento seguro):
 
-- **(A)** Foram cliques de teste → resetar ambas para `suspeita` e deixar o dedupe
-  manter 1. (Posso adicionar um passo/flag explícito quando o André confirmar.)
-- **(B)** Uma decisão vale → o André diz qual; mantemos essa 1.
+```
+python scripts/sanear_alertas_duplicados.py --process-id 13 --reset-conflicting --dry-run
+python scripts/sanear_alertas_duplicados.py --process-id 13 --reset-conflicting
+```
 
-Enquanto não houver definição, o script **não** apaga nenhuma das 2 decididas.
+Efeito no caso 13: 22 e 23 (sem `ProcessIssueDecision`) são resetadas para
+`suspeita`/`pendente`, o grupo colapsa e sobra **1 linha** (a mais recente).
+`decisions_reset=2`, `duplicates_removed=10`, `conflicts=[]`. Linhas com
+`ProcessIssueDecision` (decisão contextual) seguem **protegidas** e nunca são
+resetadas/apagadas.
 
 ---
 

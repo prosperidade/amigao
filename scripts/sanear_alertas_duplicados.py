@@ -21,6 +21,10 @@ Uso (dentro do container api, ou no venv host apontando o .env de prod):
     python scripts/sanear_alertas_duplicados.py --process-id 13           # deriva property/tenant
     python scripts/sanear_alertas_duplicados.py --process-id 13 --dry-run # só relata
     python scripts/sanear_alertas_duplicados.py --process-id 13 -v        # lista cada grupo
+
+Caso 13 (decisão do André = opção A; 22/23 eram cliques de teste):
+    python scripts/sanear_alertas_duplicados.py --process-id 13 --reset-conflicting --dry-run
+    python scripts/sanear_alertas_duplicados.py --process-id 13 --reset-conflicting
 """
 
 from __future__ import annotations
@@ -41,6 +45,12 @@ def main() -> int:
     parser.add_argument("--property-id", type=int, default=None, help="Limita ao imóvel.")
     parser.add_argument("--tenant-id", type=int, default=None, help="Tenant (derivado se omitido).")
     parser.add_argument("--dry-run", action="store_true", help="Só relata; não grava.")
+    parser.add_argument(
+        "--reset-conflicting", action="store_true",
+        help="Opção A: reseta decisões conflitantes (sem ProcessIssueDecision) "
+             "para suspeita e colapsa o grupo. Use quando as decisões eram cliques "
+             "de teste sobre duplicatas (ex.: caso 13).",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Lista cada grupo tocado.")
     args = parser.parse_args()
 
@@ -70,6 +80,7 @@ def main() -> int:
             tenant_id=tenant_id,
             property_id=property_id,
             dry_run=args.dry_run,
+            reset_conflicting=args.reset_conflicting,
         )
         if not args.dry_run:
             session.commit()
@@ -83,6 +94,8 @@ def main() -> int:
               f"(grupos colapsados={result.groups_collapsed})")
         if result.decisions_preserved:
             print(f"  decisões do consultor preservadas: {result.decisions_preserved}")
+        if result.decisions_reset:
+            print(f"  decisões conflitantes resetadas p/ suspeita (opção A): {result.decisions_reset}")
         if result.conflicts:
             print(f"  ⚠ grupos com decisões CONFLITANTES (resolução humana): {len(result.conflicts)}")
             for c in result.conflicts:

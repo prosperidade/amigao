@@ -151,6 +151,28 @@ class TestSaneamento:
         assert confirmada.id in remaining_ids
         assert descartada.id in remaining_ids
 
+    def test_opcao_a_reseta_conflitantes_e_colapsa_em_um(self, db_session, tenant, property_record):
+        """Opção A (André, caso 13): as 2 decisões conflitantes eram cliques de
+        teste sobre duplicatas → reset p/ suspeita e colapsa o grupo em 1."""
+        _mk_issue(db_session, tenant_id=tenant.id, property_id=property_record.id,
+                  status_achado=StatusAchado.confirmada)
+        _mk_issue(db_session, tenant_id=tenant.id, property_id=property_record.id,
+                  status_achado=StatusAchado.descartada)
+        for _ in range(9):  # ruído (como o caso 13: 9 suspeita + 2 decididas)
+            _mk_issue(db_session, tenant_id=tenant.id, property_id=property_record.id)
+
+        result = sanear_alertas_duplicados(
+            db_session, tenant_id=tenant.id, property_id=property_record.id,
+            reset_conflicting=True,
+        )
+
+        assert result.decisions_reset == 2
+        assert result.conflicts == []  # não reporta como pendência humana
+        assert result.duplicates_removed == 10  # 11 → 1
+        remaining = db_session.query(RegulatoryIssue).filter_by(property_id=property_record.id).all()
+        assert len(remaining) == 1
+        assert remaining[0].status_achado == StatusAchado.suspeita
+
     def test_idempotente(self, db_session, tenant, property_record):
         for _ in range(4):
             _mk_issue(db_session, tenant_id=tenant.id, property_id=property_record.id)
