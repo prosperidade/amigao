@@ -239,7 +239,7 @@ class AuditorImovelAgent(BaseAgent):
         )
         by_key: dict[str, RegulatoryIssue] = {}
         for iss in existing:
-            payload = iss.payload or {}
+            payload: dict[str, Any] = iss.payload or {}
             key = issue_dedupe_key(
                 property_id=property_id,
                 codigo_alerta=iss.codigo_alerta,
