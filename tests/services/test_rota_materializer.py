@@ -11,6 +11,7 @@ Cobre o essencial pedido no sprint:
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.agents.base import AgentResult
 from app.models.client import Client, ClientStatus, ClientType
@@ -23,10 +24,9 @@ from app.models.rota import (
     RotaStatus,
 )
 from app.models.tenant import Tenant
-from app.schemas.stage_output import Etapa, EnquadramentoRegulatorioContent
+from app.schemas.stage_output import EnquadramentoRegulatorioContent, Etapa
 from app.services import rota_materializer as mat
 from app.services.rota_materializer import _etapa_from_raw, materialize_rota
-
 
 # ---------------------------------------------------------------------------
 # _etapa_from_raw — típado vs bruto (o coração da decisão "ler o típado")
@@ -71,7 +71,7 @@ def test_etapa_from_raw_prefers_typed_shape_when_present():
 def test_bruto_top_level_would_break_strict_schema():
     """Documenta a armadilha: validar o bruto direto contra o schema QUEBRA
     (Etapa é extra=forbid; 'fonte_trecho' é campo estranho). Por isso reconstruímos."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         EnquadramentoRegulatorioContent.model_validate(
             {
                 "content": "x",

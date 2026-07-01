@@ -23,7 +23,6 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.services import rota_materializer as mat
 
-
 # ---------------------------------------------------------------------------
 # Helpers de seed / auth / fake agent
 # ---------------------------------------------------------------------------

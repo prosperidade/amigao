@@ -304,9 +304,7 @@ def validar_passo(
     # se estava 'desatualizada' e não há mais passo pendente, o diff foi aceito.
     db.flush()
     pendentes = [p for p in rota.passos if p.status != RotaPassoStatus.validado]
-    if not pendentes and rota.status in (RotaStatus.proposta, RotaStatus.desatualizada):
-        rota.status = RotaStatus.em_validacao
-    elif rota.status == RotaStatus.proposta:
+    if not pendentes and rota.status in (RotaStatus.proposta, RotaStatus.desatualizada) or rota.status == RotaStatus.proposta:
         rota.status = RotaStatus.em_validacao
 
     db.commit()
