@@ -220,6 +220,32 @@ boundaries por rota/seção (degrade local em vez de nuke global). O **gatilho e
 errado" pós-IA/criar-caso) **não foi reproduzido** (precisa de navegador/devtools) → repro pendente.
 **Origem:** mergulho fluxo agêntico (01/06).
 
+## P3 — Rota Regulatória E5 (Sprint 2 · follow-ons nomeados)
+
+Abertos deliberadamente ao entregar a Rota (ADR-021). O snapshot editável já existe; estes
+estendem, não corrigem.
+
+**49. Documento da Rota em Saídas.** Gerar a peça formal da rota (para o dossiê/Saídas). O
+`RedatorAgent` **não tem template "rota"** — exige template novo + `requires_review=True`.
+Hoje a rota vive só como entidade/tela, sem documento. **Origem:** Rota E5 (Sprint 2).
+
+**50. Religar `auditor → legislacao` (a "cadeia pela metade").** Hoje a `LegislacaoAgent` keia
+por `demand_type`, não pelos passivos do auditor — a Rota não é a somatória das Ações (Ficha
+§3.5). Alimentar os findings do auditor na legislação para que a rota derive dos passivos.
+Medido no diagnóstico read-only (TASK 7). **Origem:** Rota E5 (Sprint 2).
+
+**51. Gatilho "Ação mudou em Ações → desatualiza a rota".** Quando uma Ação vinculada muda,
+marcar a rota `desatualizada`. Depende do link rota↔ações (hoje inexistente). **Origem:**
+Rota E5 (Sprint 2).
+
+**52. Auto-RAG de fundamento ao adicionar passo manual** (Ficha §8.1 "REPROCESSE"). Ao criar
+um passo manual, buscar a norma que o sustenta no RAG. MVP: o consultor digita o fundamento/
+origem em `origem_manual_nota`. **Origem:** Rota E5 (Sprint 2).
+
+**53. Aprendizado real da Legislação a partir das reordenações.** O MVP só CAPTURA o sinal
+(persiste a ordem do consultor). Fechar o loop de feedback-ao-modelo (reordenação vira sinal
+de treino/ajuste do prompt) é follow-on. **Origem:** Rota E5 (Sprint 2).
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos

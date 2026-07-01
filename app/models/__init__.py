@@ -41,6 +41,14 @@ from app.models.regulatory import (
     StatusAchado,
     StatusSaneamento,
 )
+from app.models.rota import (
+    Rota,
+    RotaPasso,
+    RotaPassoClassificacao,
+    RotaPassoOrigem,
+    RotaPassoStatus,
+    RotaStatus,
+)
 from app.models.stage_output import StageOutput
 from app.models.task import Task
 from app.models.tenant import Tenant

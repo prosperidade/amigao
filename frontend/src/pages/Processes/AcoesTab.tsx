@@ -17,15 +17,27 @@ import {
   type AcaoTipoTriagem,
 } from '@/lib/acoes/types';
 import AcaoCard from './AcaoCard';
+import RotaTab from './RotaTab';
 
 interface AcoesTabProps {
   processId: number;
+  /** Macroetapa que o consultor está visualizando. Na E5 (`caminho_regulatorio`)
+   *  a aba Ações vira a Rota Regulatória (Ficha §8.1 — não é 7ª aba). */
+  currentStage?: string;
 }
 
 type StatusFilter = AcaoStatus | 'all';
 type TriagemFilter = AcaoTipoTriagem | 'all';
 
-export default function AcoesTab({ processId }: AcoesTabProps) {
+export default function AcoesTab({ processId, currentStage }: AcoesTabProps) {
+  // Ficha §8.1: na etapa E5, a aba Ações renderiza a Rota. Fora da E5, segue normal.
+  if (currentStage === 'caminho_regulatorio') {
+    return <RotaTab processId={processId} />;
+  }
+  return <AcoesList processId={processId} />;
+}
+
+function AcoesList({ processId }: { processId: number }) {
   const { data: acoes, isLoading } = useAcoes(processId);
   const generateMut = useGenerateAcoes(processId);
   const createMut = useCreateAcao(processId);

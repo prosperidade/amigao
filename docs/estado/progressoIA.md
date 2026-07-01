@@ -1816,3 +1816,32 @@ nunca vira linha (Princípio 11).
 geom for populado, a seção emite achados ESPACIAIS REAIS (persistidos). Constraint
 UNIQUE (3º caso dedupe-sem-constraint) → dívida #48. Limpeza de prod é Parte 2
 (pós-deploy, dry-run aprovado antes). Ver `docs/adr/020-verificacao-espacial-derivada.md`.
+
+## Rota Regulatória (E5, Sprint 2) — materializar o caminho regulatório (30/06/2026)
+
+Diagnóstico read-only mostrou que as `etapas` da `LegislacaoAgent` eram efêmeras
+(viviam só no JSON do `AIJob`, sem tabela/tela, perdidas ao recarregar). Este
+sprint materializa a Rota como **snapshot editável e assinável**.
+
+**Mudanças (branch `feat/rota-e5-sprint2`, ADR-021):**
+- Entidades `Rota` + `RotaPasso` (`app/models/rota.py`) + migration `d1e2f3a4b5c6`
+  — `dedupe_key` + UNIQUE parcial desde o commit 1 (dívida #48). 4º caso a nascer
+  com a constraint correta.
+- `rota_materializer.py`: roda a legislação e reconstrói o `Etapa` **TIPADO**
+  (`sources`+`prazo_fonte`) do dual-emit — NUNCA o bruto top-level (que quebra o
+  schema strict). Reconciliação aditiva/não-destrutiva (padrão ADR-017): preserva
+  edição/ordem/classificação/manual; rota validada + diff → `desatualizada`.
+- Endpoints (`app/api/v1/rotas.py`): gerar/reordenar/editar/add-manual/validar/
+  fechar. Validar exige classificação (Ficha §8.1); fechar exige todos validados e
+  grava `AuditLog` com **hash chain SHA-256** — 1º uso real da cadeia (dívida #18).
+- UI (`RotaTab.tsx`): na E5 a aba Ações vira a Rota (não é 7ª aba). Drag-reorder via
+  `framer-motion <Reorder>` (sem `@dnd-kit`); badge de fonte honesto; toggle
+  faturável/direção; validar passo a passo; "Fechar rota" gateado.
+
+**Decisões travadas (André):** demand_type-driven (não religar a chain agora); ler o
+típado; @dnd-kit rejeitado; "nenhum passo sem norma" enforça na validação; dedupe é
+higiene não oráculo. **Validação:** 18 testes novos verdes (materializador + API);
+`tsc --noEmit` limpo; migration round-trip up/down no vereda_dev. **Follow-ons
+nomeados:** dívidas #49–#53 (doc em Saídas, religar auditor→legislacao, gatilho ação→
+rota, auto-RAG de fundamento, aprendizado das reordenações). Ver
+`docs/adr/021-rota-e5-snapshot-editavel.md`.
