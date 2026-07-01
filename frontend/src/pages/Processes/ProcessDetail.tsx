@@ -311,7 +311,7 @@ export default function ProcessDetail() {
             />
           )}
           {activeTab === 'alertas' && <ConferenciaTab processId={processId} />}
-          {activeTab === 'acoes' && <AcoesTab processId={processId} />}
+          {activeTab === 'acoes' && <AcoesTab processId={processId} currentStage={viewingStage ?? currentStage} />}
           {activeTab === 'dossier' && <ProcessDossier processId={processId} />}
           {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}
           {activeTab === 'commercial' && <ProcessCommercial processId={processId} />}
