@@ -648,7 +648,10 @@ def _plural(n: int, singular: str, plural: str) -> str:
     return f"{n} {singular if n == 1 else plural}"
 
 
-_VALID_SOURCES = {"raw", "ai_extracted", "human_validated"}
+# pendente_oficializacao (Ficha 07 §3.4): o Hub GRAVA o selo mas NÃO dispara o
+# automatismo de ação — disparo é exclusivo do POST /processes/{pid}/field-selo
+# (gatilho contextual ao processo, ADR-022).
+_VALID_SOURCES = {"raw", "ai_extracted", "human_validated", "pendente_oficializacao"}
 _TRACKED_FIELDS = {
     "registry_number", "ccir", "nirf", "car_code", "total_area_ha",
     "municipality", "state", "biome",

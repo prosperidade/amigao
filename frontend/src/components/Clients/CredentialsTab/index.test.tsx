@@ -96,7 +96,9 @@ describe('CredentialsTab', () => {
         password: 'senha-super-secreta',
         portal: 'sema',
       }));
-    });
+      // timeout de parede: sob a suíte cheia (13 arquivos em paralelo) o worker
+      // sofre contenção de CPU e o default de 1s flakeia — medido no Sprint 3.
+    }, { timeout: 5000 });
   });
 
   it('preserva senha no PATCH quando campo fica vazio no modo editar', async () => {
@@ -133,6 +135,6 @@ describe('CredentialsTab', () => {
       expect(api.patch).toHaveBeenCalledWith('/credentials/1', expect.objectContaining({
         label: 'SEMA-MT',
       }));
-    });
+    }, { timeout: 5000 });
   });
 });
