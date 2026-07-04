@@ -82,3 +82,20 @@ def test_idempotencia_entre_runs_preservada(db_session):
 
     assert n1 == 1
     assert n2 == 0
+
+
+def test_normalize_fontes_tolerante_a_entrada_malformada():
+    """Fonte malformada vira ``sem_fonte`` legível; lista vazia nunca silencia."""
+    from app.services.acao_generator import _normalize_fontes
+
+    out = _normalize_fontes(
+        [{"tipo": "documento", "ref": "doc:1"}, {"tipo": "tipo_inexistente"}, "string solta"],
+        passivo_desc="Área diverge",
+    )
+    assert out[0]["tipo"] == "documento"
+    assert out[1]["tipo"] == "sem_fonte" and out[1]["sem_fonte"] is True
+
+    vazio = _normalize_fontes([], passivo_desc="Área diverge")
+    assert len(vazio) == 1
+    assert vazio[0]["tipo"] == "sem_fonte"
+    assert "Área diverge" in (vazio[0]["descricao"] or "")

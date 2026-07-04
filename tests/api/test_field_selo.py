@@ -155,6 +155,45 @@ class TestFieldSeloEndpoint:
         # não-validado não gera ação
         assert len(_acoes_oficializacao(db_session, tenant.id, proc.id)) == 0
 
+    def test_selo_em_campo_do_cliente(self, client, db_session):
+        tenant, proc, cli, prop, mat = _setup(db_session, "selo11@example.com")
+        db_session.commit()
+        h = _login(client, "selo11@example.com")
+
+        r = client.post(f"/api/v1/processes/{proc.id}/field-selo", headers=h, json={
+            "entity": "cliente", "entity_id": cli.id,
+            "field": "cpf_cnpj", "selo": "pendente_oficializacao",
+        })
+        assert r.status_code == 200, r.text
+        assert r.json()["acao_criada"] is True
+        db_session.refresh(cli)
+        assert cli.field_sources["cpf_cnpj"] == "pendente_oficializacao"
+        acoes = _acoes_oficializacao(db_session, tenant.id, proc.id)
+        assert acoes[0].titulo == "Atualização de arquivos oficiais — CPF/CNPJ"
+
+    def test_processo_inexistente_404(self, client, db_session):
+        tenant, proc, cli, prop, mat = _setup(db_session, "selo12@example.com")
+        db_session.commit()
+        h = _login(client, "selo12@example.com")
+        r = client.post("/api/v1/processes/999999/field-selo", headers=h, json={
+            "entity": "imovel", "entity_id": prop.id,
+            "field": "car_code", "selo": "human_validated",
+        })
+        assert r.status_code == 404
+
+    def test_matricula_em_processo_sem_imovel_404(self, client, db_session):
+        tenant, proc, cli, prop, mat = _setup(db_session, "selo13@example.com")
+        proc2 = Process(tenant_id=tenant.id, client_id=cli.id, property_id=None,
+                        title="Sem imóvel", process_type="prad", status=ProcessStatus.triagem)
+        db_session.add(proc2)
+        db_session.commit()
+        h = _login(client, "selo13@example.com")
+        r = client.post(f"/api/v1/processes/{proc2.id}/field-selo", headers=h, json={
+            "entity": "matricula", "entity_id": mat.id,
+            "field": "nirf_cib", "selo": "human_validated",
+        })
+        assert r.status_code == 404
+
     def test_campo_fora_da_allowlist_422(self, client, db_session):
         tenant, proc, cli, prop, mat = _setup(db_session, "selo5@example.com")
         db_session.commit()
@@ -263,3 +302,17 @@ class TestDossierExtensao:
         assert areas["area_documental_ha"] is None
         assert areas["area_grafica_ha"] == 1010.71
         assert areas["area_total_matriculas_ha"] == 660.6561
+
+    def test_inconsistencies_endpoint(self, client, db_session):
+        tenant, proc, cli, prop, mat = _setup(db_session, "selo14@example.com")
+        db_session.commit()
+        h = _login(client, "selo14@example.com")
+
+        r = client.get(f"/api/v1/processes/{proc.id}/inconsistencies", headers=h)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["process_id"] == proc.id
+        assert body["total"] == len(body["inconsistencies"])
+        assert body["total"] == body["errors"] + body["warnings"] + sum(
+            1 for i in body["inconsistencies"] if i["severity"] not in ("error", "warning")
+        )
