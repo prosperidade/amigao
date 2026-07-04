@@ -91,6 +91,7 @@ class AcaoOrigem(str, enum.Enum):
     auditor = "auditor"           # gerada de um finding determinístico do auditor
     manual = "manual"             # consultor criou do zero
     consolidacao = "consolidacao"  # gerada de uma divergência não resolvida na consolidação
+    oficializacao = "oficializacao"  # gerada do selo "Correto, pendente de oficialização" (Ficha 07 §9)
 
 
 # Transições válidas no kanban — qualquer coluna alcança qualquer outra

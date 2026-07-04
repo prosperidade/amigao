@@ -70,6 +70,11 @@ class Matricula(Base):
     # O cruzamento com Cliente é achado do auditor (fase 3), não aqui.
     proprietarios = Column(PortableJSON, nullable=True, default=list)
 
+    # Sprint 3 (Selo) — proveniência por campo, espelha Client/Property:
+    # {field: "raw"|"ai_extracted"|"human_validated"|"pendente_oficializacao"}.
+    # Fecha o ponto cego que obrigava a consolidação ao fallback `old is not None`.
+    field_sources = Column(PortableJSON, nullable=True, default=dict)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

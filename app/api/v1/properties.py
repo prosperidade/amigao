@@ -135,7 +135,12 @@ def create_property_matricula(
         property_id, detail="Property not found"
     )
     repo = MatriculaRepository(db, current_user.tenant_id)
-    db_obj = repo.create({**matricula_in.model_dump(), "property_id": property_id})
+    data = matricula_in.model_dump()
+    # Proveniência explícita: digitado pelo consultor = human_validated. Sem isso,
+    # a consolidação trataria o valor manual como não-consolidado e um doc novo
+    # divergente o sobrescreveria em silêncio (o fallback `old is not None` saiu).
+    field_sources = {k: "human_validated" for k, v in data.items() if v is not None}
+    db_obj = repo.create({**data, "property_id": property_id, "field_sources": field_sources})
     db.commit()
     db.refresh(db_obj)
     return db_obj
