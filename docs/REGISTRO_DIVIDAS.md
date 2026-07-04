@@ -254,6 +254,24 @@ origem em `origem_manual_nota`. **Origem:** Rota E5 (Sprint 2).
 (persiste a ordem do consultor). Fechar o loop de feedback-ao-modelo (reordenação vira sinal
 de treino/ajuste do prompt) é follow-on. **Origem:** Rota E5 (Sprint 2).
 
+**55. Grupos de contiguidade por matrícula (follow-on ① do Sprint 4).** O MVP registra a
+declaração no nível do imóvel (`Property.matriculas_contiguas` tri-state, ADR-023). Quando um
+imóvel tiver N grupos, modelar `grupo_contiguidade` na `Matricula` + soma derivada POR GRUPO
+(consumidores da soma teriam que virar group-aware: dossiê, Hub, prompts, matriz, auditor).
+O corte MVP contorna: não-contíguo = separar em outra Property (re-home já existe).
+**Origem:** Sprint 4 (Ficha 07 §9).
+
+**56. N CARs / CAR por grupo (follow-on ② do Sprint 4).** `Property.car_code` é 1 slot
+(String). Dois grupos não-contíguos = dois CARs legais; hoje o 2º não é representável e o
+passivo determinístico "CAR nao cadastrado" (`diagnostico.py`) dá falso-negativo com 1 CAR
+presente. Depende do #55 OU da separação em Properties (caminho MVP). **Origem:** Sprint 4.
+
+**57. Split-wizard / UI de mover matrícula (follow-on ③ do Sprint 4).** O re-home existe
+como API (`PATCH /properties/{pid}/matriculas/{mid}`, auditado) e o aviso de não-contiguidade
+orienta a separação — mas não há botão na UI. Wizard: escolher matrículas → criar/escolher
+imóvel destino → mover em lote (processos/docs continuam no imóvel de origem; avaliar o que
+migra junto). **Origem:** Sprint 4 (TASK 0a).
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos

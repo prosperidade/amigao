@@ -1882,3 +1882,40 @@ Hub não dispara; dispensada não recria; #17 segue fechada e #21 (WorkflowTempl
 renumerada para #54. **Validação:** testes de oscilação/dispensada/hub×endpoint/
 IDOR/regressão seen_this_run verdes; suíte frontend 80/80; rótulo completo coberto
 por teste de componente. Ver `docs/adr/022-selo-oficializacao-field-sources.md`.
+
+---
+
+## Sprint 4 — Granularidade matrícula×imóvel + integridade da consolidação (04/07/2026)
+
+### Motivação (caso 13 como espécime)
+
+Dois "CCIRs" completos e conflitantes na matrícula 2923 passaram sem divergência
+(bucket único por tipo na matriz colapsava documentos) e a consolidação gravou o
+vencedor por menor id — um registro frankenstein colhido da legenda de
+confrontações de uma planta topográfica mal-classificada. A certidão de embargo
+(classificada `sigef`) criou a "matrícula" 492262. E a soma cega de matrículas de
+duas fazendas distintas alimentava os prompts de diagnóstico/legislação com 1.713 ha
+onde o imóvel real tem ~1.010 ha.
+
+### O que foi feito (toca IA)
+
+- **Contexto dos prompts com honestidade de área:** `DiagnosticoAgent._load_process_data`
+  e `LegislacaoAgent._load_process_context` passam `matriculas_contiguas` +
+  `area_total_nota` (ressalva textual) — o LLM não dimensiona porte/passivo sobre
+  soma possivelmente fictícia sem saber disso. Nenhum prompt-template alterado
+  (entra pelo dict serializado, mesmo padrão da matriz de inconsistências).
+- **Matriz de inconsistências multi-documento:** sources por (doc_type, document_id)
+  (`ccir#228` × `ccir#231`) em `_group_sources` e na coleta de áreas por matrícula —
+  divergência entre docs do MESMO tipo passa a ser acusada e marca o staging
+  (`divergente_transcricao`/`fundo`), acionando o gate de decisão do consultor.
+- **Consolidação nunca desempata conteúdo:** conflito real entre docs distintos
+  volta ao consultor e vira Ação (`divergencias_devolvidas` no resultado);
+  `_pick_winner` restrito a proveniência. Guard fantasma: só matricula/ccir/itr/car
+  criam Matricula.
+- **Sem mudança de gateway/custos** — sprint determinístico (zero chamadas LLM novas).
+
+**Decisões travadas (André):** tri-state no Property (grupos por matrícula = #55);
+declarar-e-avisar (nunca automação); soma anotada nunca suprimida; contrato
+intocado; caso 13/2923 em prod gated na Isis. **Validação:** matriz 13/13 (4 novos
+multi-doc), suíte de consolidação/selo/staging + `test_sprint4_contiguidade.py`
+(15 novos). Ver `docs/adr/023-matriculas-contiguas-integridade-consolidacao.md`.
