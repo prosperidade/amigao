@@ -4,6 +4,7 @@ Dossier API — Sprint 3
   GET  /processes/{id}/dossier          — retorna dossiê agregado do processo
   GET  /processes/{id}/inconsistencies  — lista inconsistências técnicas
   POST /processes/{id}/dossier/refresh  — força re-análise (alias GET)
+  POST /processes/{id}/field-selo       — selo de 3 estados por campo (Ficha 07 §3.4)
 """
 
 import logging
@@ -18,7 +19,9 @@ from app.models.document import Document
 from app.models.process import Process
 from app.models.property import Property
 from app.models.user import User
+from app.schemas.field_selo import FieldSeloRequest, FieldSeloResponse
 from app.services.dossier import ProcessDossier, generate_dossier, validate_technical_consistency
+from app.services.field_selo import set_field_selo
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -139,3 +142,32 @@ def refresh_dossier(
     _get_process_or_404(db, process_id, current_user.tenant_id)
     dossier = generate_dossier(db, process_id, current_user.tenant_id)
     return _serialize_dossier(dossier)
+
+
+# ---------------------------------------------------------------------------
+# POST /processes/{process_id}/field-selo — Selo de 3 estados (Ficha 07 §3.4/§9)
+# ---------------------------------------------------------------------------
+
+@router.post("/{process_id}/field-selo", response_model=FieldSeloResponse)
+def post_field_selo(
+    process_id: int,
+    body: FieldSeloRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Aplica o selo a um campo de cliente/imóvel/matrícula ligado a este processo.
+
+    Selo perene (grava no ``field_sources`` da entidade), gatilho contextual:
+    ``pendente_oficializacao`` dispara AQUI a ação "Atualização de arquivos
+    oficiais" no processo (ADR-022). Selo nunca trava avanço de macroetapa.
+    """
+    return set_field_selo(
+        db,
+        tenant_id=current_user.tenant_id,
+        process_id=process_id,
+        user_id=current_user.id,
+        entity=body.entity,
+        entity_id=body.entity_id,
+        field=body.field,
+        selo=body.selo,
+    )
