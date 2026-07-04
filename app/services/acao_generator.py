@@ -274,10 +274,16 @@ def generate_acoes_from_divergencias(
     }
 
     created: list[Acao] = []
+    # Guard intra-run (mesmo padrão do generate_acoes_from_diagnosis): o sha1
+    # truncado é derivado de string com separador ingênuo — dois destinos
+    # distintos podem colidir na MESMA execução e estourar uq_acoes_tenant_dedupe
+    # no flush, derrubando a consolidação inteira.
+    seen_this_run: set[str] = set()
     for (entity, hint, field), group in grupos.items():
         key = _dedupe_key_divergencia(process.id, entity, hint, field)
-        if key in existing_keys:
+        if key in existing_keys or key in seen_this_run:
             continue
+        seen_this_run.add(key)
 
         fontes: list[dict[str, Any]] = []
         partes: list[str] = []
@@ -331,3 +337,130 @@ def generate_acoes_from_divergencias(
         )
 
     return created, len(created)
+
+
+# ---------------------------------------------------------------------------
+# Ação nascida do SELO "Correto, pendente de oficialização" (Ficha 07 §3.4/§9)
+# ---------------------------------------------------------------------------
+
+# Rótulos pt-BR dos campos seláveis (título da ação e UI). Fallback: o nome cru.
+FIELD_LABELS: dict[str, str] = {
+    # Matrícula
+    "numero_matricula": "Nº da matrícula",
+    "cartorio": "Cartório",
+    "registro_livro_folha_ficha": "Registro (livro/folha/ficha)",
+    "codigo_incra_sncr": "Código INCRA/SNCR",
+    "nirf_cib": "NIRF/CIB",
+    "area_ha": "Área da matrícula (ha)",
+    "denominacao_imovel": "Denominação do imóvel",
+    "geo_certificacao_codigo": "Nº SIGEF (certificação)",
+    "geo_certificacao_status": "Status da certificação SIGEF",
+    "averbacao_app": "Averbação de APP",
+    "averbacao_rl": "Averbação de Reserva Legal",
+    "onus_gravames": "Ônus e gravames",
+    "proprietarios": "Proprietários",
+    # Imóvel
+    "registry_number": "Matrícula (imóvel)",
+    "car_code": "Nº CAR",
+    "car_status": "Status do CAR",
+    "ccir": "CCIR",
+    "nirf": "NIRF",
+    "total_area_ha": "Área total (ha)",
+    "area_documental_ha": "Área documental (ha)",
+    "area_grafica_ha": "Área gráfica (ha)",
+    "app_area_ha": "Área de APP (ha)",
+    "rl_status": "Situação da Reserva Legal",
+    "municipality": "Município",
+    "state": "UF",
+    "biome": "Bioma",
+    "tipologia": "Tipologia",
+    # Cliente
+    "full_name": "Nome completo",
+    "legal_name": "Razão social",
+    "cpf_cnpj": "CPF/CNPJ",
+    "email": "E-mail",
+    "phone": "Telefone",
+    "secondary_phone": "Telefone secundário",
+    "birth_date": "Data de nascimento",
+}
+
+
+def field_label(field: str) -> str:
+    return FIELD_LABELS.get(field, field)
+
+
+def _dedupe_key_oficializacao(process_id: int, entity: str, entity_id: int, field: str) -> str:
+    """Chave estável por DESTINO do selo — nunca por valor/estado do selo.
+
+    Oscilar pendente→validado→pendente reusa a MESMA chave: a ação não duplica
+    e, se o consultor a dispensou, a linha dispensada (mesma chave) bloqueia a
+    recriação — o sistema não desfaz triagem humana (Ficha 07 §9)."""
+    raw = f"{entity}|{entity_id}|{field}".strip().lower()
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:24]
+    return f"p{process_id}:ofic:{digest}"
+
+
+def generate_acao_oficializacao(
+    db: Session,
+    *,
+    process: Process,
+    tenant_id: int,
+    entity: str,
+    entity_id: int,
+    field: str,
+) -> tuple[Acao | None, bool]:
+    """Cria a ação "Atualização de arquivos oficiais — {campo}" ao selar
+    ``pendente_oficializacao`` (Ficha 07 §9). 1 ação POR CAMPO.
+
+    Idempotente por ``dedupe_key`` (destino, não valor): existente — em qualquer
+    triagem, inclusive ``dispensada`` — bloqueia. Não comita — o caller decide a
+    transação. Retorna ``(acao_ou_None, criada)``."""
+    from app.schemas.stage_output import SourceRef  # noqa: PLC0415
+
+    key = _dedupe_key_oficializacao(process.id, entity, entity_id, field)
+    exists = (
+        db.query(Acao.id)
+        .filter(Acao.tenant_id == tenant_id, Acao.dedupe_key == key)
+        .first()
+    )
+    if exists is not None:
+        return None, False
+
+    rotulo = field_label(field)
+    acao = Acao(
+        tenant_id=tenant_id,
+        process_id=process.id,
+        titulo=f"Atualização de arquivos oficiais — {rotulo}",
+        origem=AcaoOrigem.oficializacao,
+        origem_descricao=(
+            f"Campo '{rotulo}' selado como 'Correto, pendente de oficialização'"
+        ),
+        origem_fontes=[
+            SourceRef(
+                tipo="atendimento",
+                ref=f"selo:{entity}:{entity_id}:{field}",
+                descricao="Selo aplicado pelo consultor no dossiê do processo",
+            ).model_dump()
+        ],
+        vinculo_passivo={
+            "tipo": "oficializacao",
+            "ref": f"{entity}:{entity_id}:{field}",
+            "descricao": f"Verdade técnica ainda não oficializada: {rotulo}",
+        },
+        status=AcaoStatus.a_fazer,
+        tipo_triagem=AcaoTipoTriagem.pendente,
+        dedupe_key=key,
+    )
+    db.add(acao)
+    db.flush()
+    logger.info(
+        "acao_oficializacao_created",
+        extra={
+            "process_id": process.id,
+            "tenant_id": tenant_id,
+            "entity": entity,
+            "entity_id": entity_id,
+            "field": field,
+        },
+    )
+    return acao, True
