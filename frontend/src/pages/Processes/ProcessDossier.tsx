@@ -3,13 +3,63 @@
  * Exibe dados agregados: imóvel, cliente, documentos e inconsistências.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { AlertTriangle, CheckCircle2, Info, MapPin, User, FileText, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, Info, KeyRound, MapPin, Ruler, User, FileText, RefreshCw } from 'lucide-react';
+import { acoesKeys } from '@/lib/acoes/hooks';
 
 interface Inconsistency {
   severity: string;
   title: string;
   description: string;
+}
+
+// ─── Selo de 3 estados (Ficha 07 §3.4) ───────────────────────────────────────
+
+type SeloValue = 'nao_validado' | 'human_validated' | 'pendente_oficializacao';
+type SeloEntity = 'cliente' | 'imovel' | 'matricula';
+
+// Rótulos COMPLETOS — decisão travada: não abreviar o 2º para "Pendente".
+const SELO_OPTIONS: { value: SeloValue; label: string }[] = [
+  { value: 'nao_validado',            label: 'Não validado' },
+  { value: 'human_validated',         label: 'Validado' },
+  { value: 'pendente_oficializacao',  label: 'Correto, pendente de oficialização' },
+];
+
+const SELO_BADGE: Record<SeloValue, { label: string; cls: string }> = {
+  human_validated:        { label: 'Validado', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' },
+  pendente_oficializacao: { label: 'Correto, pendente de oficialização', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400' },
+  nao_validado:           { label: 'Não validado', cls: 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-slate-400' },
+};
+
+function seloOf(fieldSources: Record<string, string> | undefined, field: string): SeloValue {
+  const src = fieldSources?.[field];
+  if (src === 'human_validated' || src === 'pendente_oficializacao') return src;
+  return 'nao_validado'; // raw | ai_extracted | derived_matricula | ausente — default por construção
+}
+
+interface DossierMatricula {
+  id: number;
+  numero_matricula: string | null;
+  geo_certificacao_codigo: string | null;
+  geo_certificacao_status: string | null;
+  codigo_incra_sncr: string | null;
+  nirf_cib: string | null;
+  area_ha: number | null;
+  field_sources: Record<string, string>;
+}
+
+interface DossierAreas {
+  area_documental_ha: number | null;
+  area_grafica_ha: number | null;
+  area_total_matriculas_ha: number | null;
+}
+
+interface SeloPayload {
+  entity: SeloEntity;
+  entity_id: number;
+  field: string;
+  selo: SeloValue;
 }
 
 interface DossierDocument {
@@ -49,6 +99,25 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
   const refreshMutation = useMutation({
     mutationFn: () => api.post(`/processes/${processId}/dossier/refresh`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['dossier', processId] }),
+  });
+
+  // Selo de 3 estados — grava no field_sources da entidade; o backend cria a
+  // ação "Atualização de arquivos oficiais" quando pendente_oficializacao.
+  const seloMutation = useMutation({
+    mutationFn: async (payload: SeloPayload) => {
+      const res = await api.post(`/processes/${processId}/field-selo`, payload);
+      return res.data as { acao_criada: boolean };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['dossier', processId] });
+      queryClient.invalidateQueries({ queryKey: acoesKeys.list(processId) });
+      if (data.acao_criada) {
+        toast.success('Selo aplicado — ação "Atualização de arquivos oficiais" criada em Ações');
+      } else {
+        toast.success('Selo atualizado');
+      }
+    },
+    onError: () => toast.error('Falha ao aplicar o selo'),
   });
 
   if (isLoading) {
@@ -118,6 +187,84 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Campos-chave — copiáveis + selo de 3 estados (Ficha 07 §3.4) */}
+      {property && (
+        <div className="rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-500/15 flex items-center justify-center">
+              <KeyRound className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-200">Campos-chave</h3>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-slate-500 mb-4">
+            Selar como "Correto, pendente de oficialização" cria automaticamente a ação
+            "Atualização de arquivos oficiais" em Ações. O selo não trava o avanço do caso.
+          </p>
+          <div className="space-y-1">
+            <KeyFieldRow
+              label="CAR"
+              value={property.car_code}
+              entity="imovel"
+              entityId={property.id}
+              field="car_code"
+              fieldSources={property.field_sources}
+              onSelo={p => seloMutation.mutate(p)}
+              pending={seloMutation.isPending}
+            />
+          </div>
+          {(property.matriculas as DossierMatricula[] | undefined)?.map(m => (
+            <div key={m.id} className="mt-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1">
+                Matrícula {m.numero_matricula ?? `#${m.id}`}
+                {m.area_ha != null && <span className="font-normal"> · {m.area_ha} ha</span>}
+              </p>
+              <div className="space-y-1">
+                <KeyFieldRow label="Nº SIGEF" value={m.geo_certificacao_codigo} entity="matricula" entityId={m.id} field="geo_certificacao_codigo" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
+                <KeyFieldRow label="INCRA/SNCR" value={m.codigo_incra_sncr} entity="matricula" entityId={m.id} field="codigo_incra_sncr" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
+                <KeyFieldRow label="NIRF" value={m.nirf_cib} entity="matricula" entityId={m.id} field="nirf_cib" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
+              </div>
+            </div>
+          ))}
+          {(!property.matriculas || property.matriculas.length === 0) && (
+            <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
+              Nenhuma matrícula consolidada ainda — SIGEF, INCRA/SNCR e NIRF aparecem aqui após a consolidação.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Áreas — documental × gráfica × total derivada (Ficha 07 §3.4) */}
+      {property && (
+        <div className="rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-7 h-7 rounded-lg bg-cyan-50 dark:bg-cyan-500/15 flex items-center justify-center">
+              <Ruler className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-200">Áreas</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <AreaTile
+              label="Documental"
+              value={(property.areas as DossierAreas | undefined)?.area_documental_ha ?? null}
+              origem={origemLabel(property.field_sources, 'area_documental_ha')}
+              note="Sem fonte no staging — dado ausente, não erro."
+            />
+            <AreaTile
+              label="Gráfica"
+              value={(property.areas as DossierAreas | undefined)?.area_grafica_ha ?? null}
+              origem={origemLabel(property.field_sources, 'area_grafica_ha')}
+              note="Sem fonte no staging — dado ausente, não erro."
+            />
+            <AreaTile
+              label="Total"
+              value={(property.areas as DossierAreas | undefined)?.area_total_matriculas_ha ?? null}
+              origem="Derivada da soma das matrículas"
+              note="Sem matrícula com área consolidada ainda."
+            />
+          </div>
         </div>
       )}
 
@@ -276,6 +423,108 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Auxiliares do selo / campos-chave / áreas ───────────────────────────────
+
+const ORIGEM_LABEL: Record<string, string> = {
+  raw: 'Bruto',
+  ai_extracted: 'Extraído por IA',
+  human_validated: 'Validado pelo consultor',
+  pendente_oficializacao: 'Correto, pendente de oficialização',
+  derived_matricula: 'Derivado da matrícula',
+};
+
+function origemLabel(fieldSources: Record<string, string> | undefined, field: string): string {
+  const src = fieldSources?.[field];
+  return src ? (ORIGEM_LABEL[src] ?? src) : 'Consolidado do staging';
+}
+
+function KeyFieldRow({
+  label,
+  value,
+  entity,
+  entityId,
+  field,
+  fieldSources,
+  onSelo,
+  pending,
+}: {
+  label: string;
+  value: string | null | undefined;
+  entity: SeloEntity;
+  entityId: number;
+  field: string;
+  fieldSources: Record<string, string> | undefined;
+  onSelo: (payload: SeloPayload) => void;
+  pending: boolean;
+}) {
+  const selo = seloOf(fieldSources, field);
+  const badge = SELO_BADGE[selo];
+
+  const copy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado`);
+    } catch {
+      toast.error('Não foi possível copiar');
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 py-1.5 border-b border-gray-50 dark:border-white/5 last:border-0">
+      <span className="text-xs text-gray-400 dark:text-slate-500 w-24 shrink-0">{label}</span>
+      <span className="text-sm font-mono font-semibold text-gray-800 dark:text-white truncate">
+        {value ?? '—'}
+      </span>
+      {value && (
+        <button
+          onClick={copy}
+          title={`Copiar ${label}`}
+          className="p-1 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <span className={`px-1.5 py-0.5 text-[10px] rounded font-medium ${badge.cls}`}>{badge.label}</span>
+      <select
+        value={selo}
+        disabled={pending}
+        onChange={e => onSelo({ entity, entity_id: entityId, field, selo: e.target.value as SeloValue })}
+        aria-label={`Selo de ${label}`}
+        className="ml-auto text-xs rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 px-2 py-1 disabled:opacity-40"
+      >
+        {SELO_OPTIONS.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function AreaTile({
+  label,
+  value,
+  origem,
+  note,
+}: {
+  label: string;
+  value: number | null;
+  origem: string;
+  note: string;
+}) {
+  return (
+    <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
+      <p className="text-xs text-gray-400 dark:text-slate-500 mb-0.5">{label}</p>
+      <p className="text-sm font-semibold text-gray-800 dark:text-white">
+        {value != null ? `${value} ha` : '—'}
+      </p>
+      <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
+        {value != null ? origem : note}
+      </p>
     </div>
   );
 }

@@ -9,7 +9,7 @@
  * Regras: validar exige classificação; "Fechar rota" só habilita com TODOS os
  * passos validados; rota 'desatualizada' trava o fechamento até aceitar o diff.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AxiosError } from 'axios';
 import { Reorder, useDragControls } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -238,9 +238,14 @@ export default function RotaTab({ processId }: RotaTabProps) {
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novaNota, setNovaNota] = useState('');
 
-  useEffect(() => {
+  // Sincroniza a ordem local quando o servidor manda passos novos — padrão
+  // "adjusting state during render" do React (setState em effect é barrado
+  // pelo react-hooks/set-state-in-effect e re-renderiza dobrado).
+  const [passosSincronizados, setPassosSincronizados] = useState(rota?.passos);
+  if (rota?.passos !== passosSincronizados) {
+    setPassosSincronizados(rota?.passos);
     setOrder(rota?.passos ?? []);
-  }, [rota?.passos]);
+  }
 
   const gerar = () => {
     gerarMut.mutate(undefined, {

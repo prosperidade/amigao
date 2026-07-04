@@ -483,14 +483,13 @@ def _write_entity(
         return False
 
     old = getattr(obj, col, None)
-    has_field_sources = "field_sources" in obj.__table__.columns
-    if has_field_sources:
-        fs_prev = dict(getattr(obj, "field_sources", None) or {})
-        ja_consolidado = fs_prev.get(col) == "human_validated"
-    else:
-        # Matrícula não tem field_sources: valor não-nulo pré-existente = consolidado.
-        fs_prev = {}
-        ja_consolidado = old is not None
+    # Cliente, Imóvel e Matrícula têm field_sources (a Matrícula ganhou a coluna no
+    # Sprint 3, com backfill das linhas legadas) — o fallback `old is not None` foi
+    # aposentado. `pendente_oficializacao` também protege: é verdade técnica selada
+    # pelo consultor (Ficha 07 §3.4); doc novo divergente vira reconciliação, não
+    # sobrescrita silenciosa.
+    fs_prev = dict(getattr(obj, "field_sources", None) or {})
+    ja_consolidado = fs_prev.get(col) in ("human_validated", "pendente_oficializacao")
 
     if ja_consolidado and _values_differ(old, coerced):
         # Doc novo diverge de campo já gravado → NUNCA sobrescreve sozinho (Ficha 05).
@@ -503,13 +502,12 @@ def _write_entity(
 
     if not _values_differ(old, coerced):
         # Idempotência: mesmo valor → reafirma proveniência mas não conta como write.
-        if has_field_sources and not ja_consolidado:
+        if not ja_consolidado:
             obj.field_sources = {**fs_prev, col: "human_validated"}
         return False
 
     setattr(obj, col, coerced)
-    if has_field_sources:
-        obj.field_sources = {**fs_prev, col: "human_validated"}
+    obj.field_sources = {**fs_prev, col: "human_validated"}
     writes.append({
         "entity": row.target_entity, "entity_id": getattr(obj, "id", None),
         "field": col, "anterior": _ser(old), "novo": _ser(coerced),
@@ -537,7 +535,12 @@ def _upsert_matricula(db: Session, tenant_id: int, property_id: int, hint: str):
     )
     if mat is not None:
         return mat, False
-    mat = Matricula(tenant_id=tenant_id, property_id=property_id, numero_matricula=hint)
+    # numero_matricula vem de staging ACEITO (hint) → proveniência explícita já
+    # na criação; sem isso, um doc futuro com formatação diferente sobrescreveria.
+    mat = Matricula(
+        tenant_id=tenant_id, property_id=property_id, numero_matricula=hint,
+        field_sources={"numero_matricula": "human_validated"},
+    )
     db.add(mat)
     db.flush()
     return mat, True

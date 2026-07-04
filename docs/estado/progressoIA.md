@@ -1845,3 +1845,40 @@ higiene não oráculo. **Validação:** 18 testes novos verdes (materializador +
 nomeados:** dívidas #49–#53 (doc em Saídas, religar auditor→legislacao, gatilho ação→
 rota, auto-RAG de fundamento, aprendizado das reordenações). Ver
 `docs/adr/021-rota-e5-snapshot-editavel.md`.
+
+## Selo de 3 estados + automatismo de ação (Sprint 3 — 03/07/2026)
+
+Ficha 07 §3.4/§9: três estados do dado (VALIDADO · CORRETO, PENDENTE DE
+OFICIALIZAÇÃO · NÃO VALIDADO) e o automatismo — ao selar "pendente de
+oficialização", o sistema cria sozinho a ação "Atualização de arquivos oficiais"
+(proposta; o consultor edita/remove). Determinístico (sem LLM), mas fecha o loop
+IA→humano: campo extraído pela IA ganha adjudicação explícita do consultor.
+
+**Mudanças (branch `feat/selo-oficializacao-sprint3`, ADR-022):**
+- Selo = vocabulário de `field_sources` (SEM enum de banco novo):
+  `human_validated` (existia) · `pendente_oficializacao` (novo) · não-validado =
+  default por construção (raw|ai_extracted|derived_matricula|ausente).
+- `matriculas.field_sources` (migration `f2a4c6e8b0d2` + backfill legado) fecha o
+  ponto cego; consolidação aposenta o fallback `old is not None` — proveniência
+  explícita nas 3 entidades; `pendente_oficializacao` também protege contra
+  sobrescrita silenciosa (vira reconciliação).
+- `generate_acao_oficializacao` (acao_generator): origem=`oficializacao`
+  (migration `a3b5d7f9c1e3`), dedupe por DESTINO
+  `p{pid}:ofic:{sha1(entity|entity_id|field)[:24]}` — oscilação não duplica,
+  dispensada não recria, selo→VALIDADO não remove a ação.
+- De passagem: gap `seen_this_run` em `generate_acoes_from_divergencias` corrigido
+  (colisão intra-run estourava a UNIQUE e derrubava a consolidação) + regressão.
+- `POST /processes/{pid}/field-selo`: IDOR guard (tenant + vínculo ao processo →
+  404), selo perene na entidade, AuditLog hash chain, gatilho EXCLUSIVO do
+  automatismo (Hub grava selo mas não dispara). Dossiê estendido: selos por campo,
+  campos-chave da matrícula (SIGEF/INCRA-SNCR/NIRF) e áreas documental × gráfica ×
+  total derivada.
+- UI `ProcessDossier`: campos-chave copiáveis (clipboard+toast), seletor de selo
+  com rótulos COMPLETOS ("Correto, pendente de oficialização" — sem abreviar),
+  áreas com "—" honesto quando falta fonte. Selo nunca trava avanço.
+
+**Decisões travadas (André):** vocabulário de field_sources; 1 ação por campo;
+Hub não dispara; dispensada não recria; #17 segue fechada e #21 (WorkflowTemplate)
+renumerada para #54. **Validação:** testes de oscilação/dispensada/hub×endpoint/
+IDOR/regressão seen_this_run verdes; suíte frontend 80/80; rótulo completo coberto
+por teste de componente. Ver `docs/adr/022-selo-oficializacao-field-sources.md`.

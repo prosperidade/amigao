@@ -27,6 +27,12 @@ PATCH `/issues` + bloqueio do PUT `/decision` quando achado em `suspeita`
 (`assert_decisao_permitida`). Sem máquina de estados completa — barrou só
 o absurdo óbvio. Ver tabela "Fechadas" abaixo.*
 
+> **Nota de reconciliação (03/07/2026, Sprint 3 do selo — ADR-022):** o selo de 3 estados
+> NÃO reabre a #17 — substrato disjunto. A #17 trata da coerência entre status do
+> `RegulatoryIssue` (achado/saneamento/decisão); o selo vive no `field_sources` das
+> entidades cadastrais (Client/Property/Matricula) e não circula por aqueles enums.
+> A #17 permanece fechada como estava no PROMPT_8.
+
 ## P2 — produto/domínio (precisam da sócia)
 
 **6. Conjunto canônico de documentos esperados** (para `DOCUMENTO_AUSENTE`). A régua de
@@ -55,7 +61,9 @@ expiração de senhas/procurações/acessos de portal, modelar `valid_until` no 
 criar alerta proativo (cron/Vigia ou dashboard). **Origem:** UI das credenciais no Cliente Hub
 (31/05), divergência entre prompt e schema real.
 
-**21. Criar WorkflowTemplate para demand_types sem cobertura.** Auditoria de cobertura
+**54. Criar WorkflowTemplate para demand_types sem cobertura.** *(Renumerada de #21 em
+03/07/2026 — o número colidia com a dívida #21 "pares de status semanticamente incoerentes"
+da revisão do PROMPT_6, abaixo.)* Auditoria de cobertura
 em `docs/arquivo/auditorias/2026-05-28_cobertura_templates.md` aponta ausência de
 template ativo para: `prad`, `sobreposicao`, `supressao`, `due_diligence`,
 `arrendamento`, `condicionantes_antigas`, `misto`, `nao_identificado`. **Origem:**
@@ -436,6 +444,7 @@ cerimônia.
 | **Frente D** | Cripto de segredos por usuário (white label LLM + credenciais de portal) | 2026-05-28 (ADR-014) | Padrão Fernet (AES-128-CBC + HMAC-SHA256): módulo `app/core/encryption.py` (`get_fernet`/`encrypt_str`/`decrypt_str` com MultiFernet pra rotação), type decorator `EncryptedString` em `app/models/types.py`, `CREDENTIAL_ENCRYPTION_KEY` obrigatória (falha no startup, sem fallback), `tools/gen_encryption_key.py`. 8 testes verdes. **Nenhuma coluna real alterada** — aplicação fica pra dívida #27 (PR 2.3 + PR LLM). |
 | **40** | Dois `SKILL.md` inválidos silenciosamente ignorados (skills não injetadas) | 2026-06-01 (`fix/skills-frontmatter-40`) | Corrigido **só o front-matter** dos 2 arquivos (corpo de domínio intacto). `diagnostico/situacao_ambiental_imovel_rural/SKILL.md`: adicionado `agent: diagnostico`, `name` ganhou prefixo `diagnostico/`, `applies_to` virou mapping `{uf: [GO, MS, MT]}`, `version` em string. `auditor_imovel/analise_divergencias_documentais/SKILL.md`: `name` ganhou prefixo, `applies_to` (era string) virou `{doc_types: []}` (não restringe), a string descritiva e o campo `movimento` viraram `description`. **Provado rodando** (container api): `discover_skills()` lista as 2 **sem warning** de `SkillParseError`, `load_skill()` retorna `SkillContent` para ambas, e `DiagnosticoAgent._compose_system_with_skills()` com `ctx.metadata={"uf":"MS"}` injeta o corpo da skill (55 KB) entre `<!-- skills:start -->`/`<!-- skills:end -->`. Controle negativo: sem `uf` não injeta → virou dívida **#44** (ligada à #38). Auditor segue determinístico (`prompt_slugs=[]`, sem LLM) — skill entra no catálogo mas não é injetada. 26 testes de skills verdes. Docx Word duplicados movidos de `docs/skills/` para `docs/_archive/skills-fontes-word/`. |
 | **27** | Aplicar `EncryptedString` em colunas reais | 2026-05-30 (PR LLM + PR 2.3) | **PR LLM:** chave de IA do consultor cifrada em `User.preferences['ai']['api_key_encrypted']` (JSONB, via `encrypt_str`). **PR 2.3:** modelo `Credential` (tabela `credentials`) com `password_encrypted` usando o type decorator `EncryptedString` — **primeiro uso real em coluna de tabela**. Cofre de logins de portais por cliente (SEMA/IBAMA/SICAR/INCRA/banco), CRUD tenant-scoped, AuditLog hash chain, senha nunca em plaintext na API (verificado por SQL nos testes). Migration `c0d1e2f3a4b5` também **reunificou 2 heads do Alembic** (PROMPT_7 `e3d4f5g6a7b8` + PR 2.2 `e6f7a8b9c0d1`, ambas de `d2c3e4f5a6b8`) que quebravam `alembic upgrade head`. |
+| **Gap `seen_this_run` em `generate_acoes_from_divergencias`** | Colisão de `dedupe_key` intra-run (separador ingênuo no sha1: `hint="a\|b", field="c"` ≡ `hint="a", field="b\|c"`) adicionava 2 `Acao` com a mesma chave no MESMO flush → `uq_acoes_tenant_dedupe` estourava e derrubava a consolidação inteira | 2026-07-03 (Sprint 3 — selo, ADR-022) | Guard `seen_this_run` no loop (mesmo padrão do `generate_acoes_from_diagnosis`); regressão coberta em `tests/services/test_acao_generator_divergencias.py` (colisão intra-run → 1 ação, sem IntegrityError; idempotência entre runs preservada). Gap medido no diagnóstico read-only do sprint; régua "o sprint toca o arquivo" aplicada. |
 | **Storage R2 + Redis SSL + download silencioso** | OCR não lia o doc ("no_bytes" sem causa) + evento realtime quebrado em prod | 2026-06-01 (`fix/storage-r2-region-redis`) | **Causa raiz (provada no Render Shell):** clients boto3 com `region_name="us-east-1"` hardcoded — R2 exige `region="auto"`, senão o scope SigV4 não bate no GET server-side → `SignatureDoesNotMatch` (o upload presigned tolerava → arquivo subia mas nunca era lido). **Agravante:** `download_bytes` engolia **todo** `ClientError` e retornava `b""`, mascarando o `SignatureDoesNotMatch` como `no_bytes` genérico por semanas. **Fix:** `S3_REGION` (default `"auto"`, configurável) nos 2 clients; `download_bytes` retorna `b""` só para NoSuchKey/404 e re-levanta `StorageDownloadError(code)` com log ERROR para o resto; `ocr_then_extract` registra `storage_error:<code>` (não `no_bytes`). **+Redis:** `redis_url_safe` normaliza `ssl_cert_reqs` (env trazia `CERT_REQUIRED`, redis-py espera `required`) → evento realtime publica; Celery seta `broker_use_ssl` só em `rediss://`. **+Endpoint:** `_with_scheme` respeita `MINIO_SECURE` (https sem scheme na env). Provado rodando local: round-trip MinIO com `region=auto` (sem regressão), `SignatureDoesNotMatch` agora levanta, repro+fix do CERT do Redis, 20 testes verdes. E2E contra R2 real: snippet pronto pro Render Shell. **Lição:** nunca capturar exceção de I/O e retornar vazio — distinguir "ausente" (NoSuchKey → `b""`) de "falhou" (re-levanta com o código). Doc: `docs/trabalhos/storage_r2_redis.md`. **NÃO fecha #42** (bucket presigned — bug distinto). |
 
 ---

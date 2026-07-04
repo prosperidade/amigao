@@ -84,6 +84,8 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
                 "document_number": getattr(client, "document_number", None),
                 "phone": getattr(client, "phone", None),
                 "email": getattr(client, "email", None),
+                # Sprint 3 — selo de 3 estados por campo (Ficha 07 §3.4)
+                "field_sources": client.field_sources or {},
             }
 
     # Imóvel
@@ -105,6 +107,28 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
                 "biome": prop.biome,
                 "has_embargo": prop.has_embargo,
                 "has_geom": prop.geom is not None,
+                # Sprint 3 (Ficha 07 §3.4) — selos por campo + campos-chave da
+                # Matrícula (SIGEF, INCRA/SNCR, NIRF) + reconciliação de áreas.
+                "field_sources": prop.field_sources or {},
+                "matriculas": [
+                    {
+                        "id": m.id,
+                        "numero_matricula": m.numero_matricula,
+                        "geo_certificacao_codigo": m.geo_certificacao_codigo,
+                        "geo_certificacao_status": m.geo_certificacao_status,
+                        "codigo_incra_sncr": m.codigo_incra_sncr,
+                        "nirf_cib": m.nirf_cib,
+                        "area_ha": m.area_ha,
+                        "field_sources": m.field_sources or {},
+                    }
+                    for m in sorted(prop.matriculas, key=lambda m: m.id)
+                ],
+                "areas": {
+                    "area_documental_ha": prop.area_documental_ha,
+                    "area_grafica_ha": prop.area_grafica_ha,
+                    # Derivada da soma das matrículas (Ficha 01) — nunca digitada.
+                    "area_total_matriculas_ha": prop.area_total_matriculas(),
+                },
             }
 
     # Documentos
