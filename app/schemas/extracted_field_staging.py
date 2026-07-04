@@ -90,6 +90,17 @@ class ConsolidationReconciliation(BaseModel):
     staging_id: int
 
 
+class ConsolidationDivergenciaDevolvida(BaseModel):
+    """Grupo aceito com valores conflitantes de docs distintos (Sprint 4): a
+    consolidação NÃO desempata conteúdo — devolve a `divergente_transcricao`
+    para o consultor decidir (Ficha §3.3); a divergência vira Ação."""
+    entity: str
+    matricula_hint: Optional[str] = None
+    field: str
+    valores: list[Any] = []
+    staging_ids: list[int] = []
+
+
 class ConsolidationResult(BaseModel):
     process_id: int
     campos_gravados: int
@@ -98,7 +109,11 @@ class ConsolidationResult(BaseModel):
     cliente_atualizado: bool
     imovel_atualizado: bool
     area_total_matriculas: Optional[float] = None
+    # Sprint 4 (Ficha 07 §9): ressalva quando a soma cobre matrículas não
+    # declaradas contíguas — anotada, nunca suprimida.
+    area_total_nota: Optional[str] = None
     acoes_criadas: int = 0   # divergências não resolvidas que viraram Ação (opção b)
     writes: list[ConsolidationWrite] = []
     ignorados: list[str] = []   # campos aceitos sem coluna correspondente
     reconciliacoes: list[ConsolidationReconciliation] = []
+    divergencias_devolvidas: list[ConsolidationDivergenciaDevolvida] = []

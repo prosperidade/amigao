@@ -53,6 +53,9 @@ interface DossierAreas {
   area_documental_ha: number | null;
   area_grafica_ha: number | null;
   area_total_matriculas_ha: number | null;
+  // Sprint 4 (Ficha 07 §9) — ressalva quando a soma cobre matrículas não
+  // declaradas contíguas (anotada, nunca suprimida)
+  area_total_nota: string | null;
 }
 
 interface SeloPayload {
@@ -244,6 +247,22 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
               <Ruler className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
             </div>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-200">Áreas</h3>
+            {/* Sprint 4 — espelho da declaração de contiguidade (edição: Hub do Imóvel) */}
+            {property.matriculas_contiguas === true && (
+              <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                Matrículas contíguas ✓
+              </span>
+            )}
+            {property.matriculas_contiguas === false && (
+              <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                Matrículas NÃO contíguas
+              </span>
+            )}
+            {property.matriculas_contiguas == null && (property.matriculas?.length ?? 0) > 1 && (
+              <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-slate-400">
+                Contiguidade não declarada
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <AreaTile
@@ -263,6 +282,7 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
               value={(property.areas as DossierAreas | undefined)?.area_total_matriculas_ha ?? null}
               origem="Derivada da soma das matrículas"
               note="Sem matrícula com área consolidada ainda."
+              ressalva={(property.areas as DossierAreas | undefined)?.area_total_nota ?? null}
             />
           </div>
         </div>
@@ -510,11 +530,13 @@ function AreaTile({
   value,
   origem,
   note,
+  ressalva,
 }: {
   label: string;
   value: number | null;
   origem: string;
   note: string;
+  ressalva?: string | null;
 }) {
   return (
     <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
@@ -525,6 +547,11 @@ function AreaTile({
       <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
         {value != null ? origem : note}
       </p>
+      {value != null && ressalva && (
+        <p className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg p-1.5 mt-1.5">
+          ⚠ {ressalva}
+        </p>
+      )}
     </div>
   );
 }

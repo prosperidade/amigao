@@ -778,12 +778,19 @@ def _compute_can_advance(
     if process.property_id:
         prop = db.query(Property).filter(Property.id == process.property_id).first()
         if prop:
-            if not prop.registry_number:
+            mats_count = len(prop.matriculas or [])
+            if not prop.registry_number and mats_count == 0:
                 gaps.append("Matrícula do imóvel não preenchida")
             if not prop.car_code:
                 gaps.append("Código CAR do imóvel não preenchido")
-            if not prop.total_area_ha:
+            # Sprint 4: soma derivada das matrículas conta como área conhecida
+            # (antes: falso positivo pós-consolidação, que nunca grava total_area_ha).
+            area_derivada = prop.area_total_matriculas() if mats_count else 0.0
+            if not prop.total_area_ha and not area_derivada:
                 gaps.append("Área total do imóvel não informada")
+            # Sprint 4 (Ficha 07 §9) — informativa, nunca trava.
+            if mats_count > 1 and prop.matriculas_contiguas is None:
+                gaps.append("Contiguidade das matrículas não declarada (>1 matrícula)")
             if not prop.biome:
                 gaps.append("Bioma do imóvel não identificado")
     if not process.initial_summary:
