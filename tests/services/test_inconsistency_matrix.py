@@ -122,3 +122,67 @@ def test_matriz_vazia_sem_staging():
     res = build_matrix([])
     assert res.matriz["linhas"] == []
     assert res.status_updates == []
+
+
+# ---------------------------------------------------------------------------
+# Sprint 4 — fix do bucket: N documentos do MESMO tipo são fontes distintas
+# (shape do caso 13: 2 "CCIRs" completos e conflitantes na matrícula 2923).
+# ---------------------------------------------------------------------------
+
+def _row_doc(source_doc_type, field_name, value, *, document_id, matricula_hint=None, unidade=None):
+    r = _row(source_doc_type, field_name, value, matricula_hint=matricula_hint, unidade=unidade)
+    r.document_id = document_id
+    return r
+
+
+def _caso13_dois_ccirs():
+    """Doc 228 (planta lida como ccir) × doc 231 (CCIR real) — ambos hint 2923."""
+    return [
+        _row_doc("ccir", "denominacao", "Fazenda Shangri-lá ( Parte 2)", document_id=228, matricula_hint="2923"),
+        _row_doc("ccir", "area_ha", "349,9022", document_id=228, matricula_hint="2923", unidade="ha"),
+        _row_doc("ccir", "codigo_sncr_incra", "950.068.390.895-4", document_id=228, matricula_hint="2923"),
+        _row_doc("ccir", "denominacao", "Fazenda Sao Jorge Lote 1 B", document_id=231, matricula_hint="2923"),
+        _row_doc("ccir", "area_ha", "660,6561", document_id=231, matricula_hint="2923", unidade="ha"),
+        _row_doc("ccir", "codigo_sncr_incra", "000.051.123.390-9", document_id=231, matricula_hint="2923"),
+    ]
+
+
+def test_dois_ccirs_area_divergente_na_mesma_matricula():
+    """Antes do fix: bucket único 'ccir' colapsava os 2 docs (keep-max silencioso)
+    e a linha area_matricula:2923 nem existia. Agora: divergência REAL."""
+    res = build_matrix(_caso13_dois_ccirs())
+    lin = _by_item(res.matriz)["area_matricula:2923"]
+    assert lin["situacao"] == "divergente"
+    assert set(lin["fontes"].keys()) == {"ccir#228", "ccir#231"}
+    assert lin["fontes"]["ccir#228"] == 349.9022
+    assert lin["fontes"]["ccir#231"] == 660.6561
+
+
+def test_dois_ccirs_denominacao_divergente():
+    res = build_matrix(_caso13_dois_ccirs())
+    lin = _by_item(res.matriz)["denominacao_imovel"]
+    assert lin["situacao"] == "divergente"
+    assert lin["fontes"]["ccir#228"] == "Fazenda Shangri-lá ( Parte 2)"
+    assert lin["fontes"]["ccir#231"] == "Fazenda Sao Jorge Lote 1 B"
+    # staging das duas denominações marcado divergente (gate do aceitar)
+    updates = [(row.field_name, st) for row, st in res.status_updates]
+    denom = [st for fn, st in updates if fn == "denominacao"]
+    assert denom and all(s == "divergente_transcricao" for s in denom)
+
+
+def test_dois_ccirs_incra_distintos_atencao():
+    lin = _by_item(build_matrix(_caso13_dois_ccirs()).matriz)["codigo_incra_sncr"]
+    assert lin["situacao"] == "atencao"
+    assert set(lin["fontes"].keys()) == {"ccir#228", "ccir#231"}
+
+
+def test_tipo_com_um_doc_mantem_chave_simples():
+    """Back-compat: 1 doc por tipo → chaves/labels antigas ('ccir', não 'ccir#N')."""
+    rows = [
+        _row_doc("ccir", "denominacao", "Fazenda São Jorge", document_id=231),
+        _row_doc("ccir", "codigo_sncr_incra", "111.111.111.111-1", document_id=231),
+        _row_doc("itr", "nome_imovel", "São Jorge", document_id=234),
+    ]
+    res = build_matrix(rows)
+    lin = _by_item(res.matriz)["denominacao_imovel"]
+    assert "ccir" in lin["fontes"] and "ccir#231" not in lin["fontes"]

@@ -417,39 +417,16 @@ def consolidate_process(
     for key, rows in grupos.items():
         target_field = key[-1]
         winner = _pick_winner(rows, prefer_sigef=(target_field in _SIGEF_ANCHORED))
-
-        # ── Coerência matriz×consolidação (Sprint 4 / caso 13) ──────────────
-        # Dois valores completos conflitantes de docs distintos no MESMO destino
-        # (ex.: 2 CCIRs na matrícula 2923) NÃO são desempatados aqui: voltam a
-        # `divergente_transcricao` — a matriz/Conferência acusa e a divergência
-        # vira Ação (generate_acoes_from_divergencias, logo abaixo). Edição
-        # explícita do consultor É decisão — vence e grava.
-        if not _is_consultor_edit(winner):
-            conflito = _group_conflict_values(rows, target_field)
-            if len(conflito) > 1:
-                for r in rows:
-                    r.status = ExtractedFieldStatus.divergente_transcricao
-                    r.decided_value = None
-                divergencias_devolvidas.append({
-                    "entity": key[0], "matricula_hint": key[1] if len(key) == 3 else None,
-                    "field": target_field, "valores": [_ser(v) for v in conflito],
-                    "staging_ids": [r.id for r in rows],
-                })
-                continue
-
-        value = _raw_value(winner)
-        fonte = _fonte_of(winner)
-        unidade = winner.field_value.get("unidade") if isinstance(winner.field_value, dict) else None
         entity = key[0]
 
+        # ── Resolve o objeto de destino (guard fantasma para matrícula) ─────
+        obj: Any = None
+        allowed: set[str]
+        alias: dict[str, Optional[str]]
         if entity == "cliente" and client is not None:
-            if _write_entity(client, winner, value, fonte, unidade,
-                             _CLIENTE_FIELDS, _CLIENTE_ALIAS, writes, ignorados, reconciliacoes):
-                cliente_tocado = True
+            obj, allowed, alias = client, _CLIENTE_FIELDS, _CLIENTE_ALIAS
         elif entity == "imovel" and prop is not None:
-            if _write_entity(prop, winner, value, fonte, unidade,
-                             _IMOVEL_FIELDS, _IMOVEL_ALIAS, writes, ignorados, reconciliacoes):
-                imovel_tocado = True
+            obj, allowed, alias = prop, _IMOVEL_FIELDS, _IMOVEL_ALIAS
         elif entity == "matricula" and prop is not None:
             hint = winner.matricula_hint
             if not hint:
@@ -462,17 +439,54 @@ def consolidate_process(
                 or _is_consultor_edit(r)
                 for r in rows
             )
-            mat = _ensure_matricula(hint, allow_create=allow_create)
-            if mat is None:
+            obj = _ensure_matricula(hint, allow_create=allow_create)
+            if obj is None:
                 ignorados.append(
                     f"matricula {hint}.{target_field} (hint de '{(winner.source_doc_type or '—')}' "
                     "não cria matrícula — guard fantasma; cadastre-a manualmente se for real)"
                 )
                 continue
-            _write_entity(mat, winner, value, fonte, unidade,
-                          _MATRICULA_FIELDS, _MATRICULA_ALIAS, writes, ignorados, reconciliacoes)
+            allowed, alias = _MATRICULA_FIELDS, _MATRICULA_ALIAS
         else:
             ignorados.append(f"{entity or '—'}: sem destino (target_field={target_field})")
+            continue
+
+        # ── Coerência matriz×consolidação (Sprint 4 / caso 13) ──────────────
+        # Dois valores completos conflitantes de docs distintos no MESMO destino
+        # (ex.: 2 CCIRs na matrícula 2923) NÃO são desempatados aqui: voltam a
+        # `divergente_transcricao` — a matriz/Conferência acusa e a divergência
+        # vira Ação (generate_acoes_from_divergencias, logo abaixo). Duas saídas
+        # NÃO passam pelo guard: edição explícita do consultor É decisão (vence
+        # e grava); e destino JÁ consolidado (human_validated/pendente_oficializacao)
+        # segue o caminho de RECONCILIAÇÃO da Ficha 05 dentro de _write_entity —
+        # a decisão anterior do consultor não é rebaixada a divergência nova.
+        col = alias.get(target_field, target_field) if target_field in alias else target_field
+        fs_atual = dict(getattr(obj, "field_sources", None) or {})
+        ja_consolidado = col is not None and fs_atual.get(col) in (
+            "human_validated", "pendente_oficializacao"
+        )
+        if not _is_consultor_edit(winner) and not ja_consolidado:
+            conflito = _group_conflict_values(rows, target_field)
+            if len(conflito) > 1:
+                for r in rows:
+                    r.status = ExtractedFieldStatus.divergente_transcricao
+                    r.decided_value = None
+                divergencias_devolvidas.append({
+                    "entity": entity, "matricula_hint": key[1] if len(key) == 3 else None,
+                    "field": target_field, "valores": [_ser(v) for v in conflito],
+                    "staging_ids": [r.id for r in rows],
+                })
+                continue
+
+        value = _raw_value(winner)
+        fonte = _fonte_of(winner)
+        unidade = winner.field_value.get("unidade") if isinstance(winner.field_value, dict) else None
+        wrote = _write_entity(obj, winner, value, fonte, unidade,
+                              allowed, alias, writes, ignorados, reconciliacoes)
+        if wrote and entity == "cliente":
+            cliente_tocado = True
+        elif wrote and entity == "imovel":
+            imovel_tocado = True
 
     db.flush()
 

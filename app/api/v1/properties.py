@@ -16,15 +16,14 @@ from app.models.macroetapa import (
     compute_macroetapa_state,
     list_macroetapa_blockers,
 )
+from app.models.matricula import Matricula as MatriculaModel
 from app.models.process import Process as ProcessModel
 from app.models.process import ProcessStatus
 from app.models.property import Property as PropertyModel
 from app.models.stage_output import StageOutput
 from app.models.user import User
-from app.models.matricula import Matricula as MatriculaModel
 from app.repositories import MatriculaRepository, PropertyRepository
 from app.schemas.matricula import Matricula, MatriculaCreate, MatriculaMoveRequest
-from app.services.audit_hash import stamp_audit_hash
 from app.schemas.property import Property, PropertyCreate, PropertyUpdate
 from app.schemas.property_hub import (
     PropertyAISummary,
@@ -37,6 +36,7 @@ from app.schemas.property_hub import (
     PropertyHubSummary,
     PropertyHubTechnicalKpis,
 )
+from app.services.audit_hash import stamp_audit_hash
 
 router = APIRouter()
 
