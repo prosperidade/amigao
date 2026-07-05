@@ -128,7 +128,12 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
                     "area_grafica_ha": prop.area_grafica_ha,
                     # Derivada da soma das matrículas (Ficha 01) — nunca digitada.
                     "area_total_matriculas_ha": prop.area_total_matriculas(),
+                    # Sprint 4 (Ficha 07 §9): soma anotada quando contiguidade
+                    # não declarada/negada — nunca suprimida (ADR-023).
+                    "area_total_nota": prop.nota_soma_matriculas(),
                 },
+                # Sprint 4 — declaração do consultor (None = não informado).
+                "matriculas_contiguas": prop.matriculas_contiguas,
             }
 
     # Documentos
@@ -311,13 +316,48 @@ def validate_technical_consistency(
                 field="property.geom",
             ))
 
-        if not prop.total_area_ha:
+        # Sprint 4: a soma derivada das matrículas CONTA como área conhecida —
+        # antes o aviso disparava mesmo com matrículas consolidadas (falso
+        # positivo: a consolidação nunca grava total_area_ha).
+        area_derivada = prop.area_total_matriculas() if prop.matriculas else 0.0
+        if not prop.total_area_ha and not area_derivada:
             issues.append(Inconsistency(
                 code="MISSING_AREA",
                 severity="warning",
                 title="Área total do imóvel não informada",
                 description="A área total em hectares não foi cadastrada. Pode impactar cálculos de passivo ambiental.",
                 field="property.total_area_ha",
+            ))
+
+        # Sprint 4 (Ficha 07 §9) — contiguidade: lacuna informativa com >1
+        # matrícula e declaração ausente; aviso de orientação quando negada.
+        # NUNCA trava (radar-não-cancela) — gaps/inconsistências são informativos.
+        mats_count = len(prop.matriculas or [])
+        if mats_count > 1 and prop.matriculas_contiguas is None:
+            issues.append(Inconsistency(
+                code="CONTIGUIDADE_NAO_DECLARADA",
+                severity="info",
+                title="Contiguidade das matrículas não declarada",
+                description=(
+                    f"O imóvel tem {mats_count} matrículas e o consultor ainda não "
+                    "declarou se são contíguas e do mesmo titular (um imóvel rural "
+                    "= um CAR — Lei 8.629/93 art. 4º I). Declare no Hub do Imóvel; "
+                    "enquanto isso, a área total exibida é uma soma com ressalva."
+                ),
+                field="property.matriculas_contiguas",
+            ))
+        elif mats_count > 1 and prop.matriculas_contiguas is False:
+            issues.append(Inconsistency(
+                code="MATRICULAS_NAO_CONTIGUAS",
+                severity="warning",
+                title="Matrículas declaradas não contíguas",
+                description=(
+                    "Matrículas não contíguas são, legalmente, imóveis rurais "
+                    "separados (um CAR cada — Ficha 07 §9). Recomendação: cadastre "
+                    "um novo imóvel e mova para ele as matrículas do outro grupo; "
+                    "a soma de áreas exibida não representa um único imóvel."
+                ),
+                field="property.matriculas_contiguas",
             ))
 
     # ── Regras por tipo de demanda ────────────────────────────────────────────

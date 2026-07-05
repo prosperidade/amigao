@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -15,13 +16,14 @@ from app.models.macroetapa import (
     compute_macroetapa_state,
     list_macroetapa_blockers,
 )
+from app.models.matricula import Matricula as MatriculaModel
 from app.models.process import Process as ProcessModel
 from app.models.process import ProcessStatus
 from app.models.property import Property as PropertyModel
 from app.models.stage_output import StageOutput
 from app.models.user import User
 from app.repositories import MatriculaRepository, PropertyRepository
-from app.schemas.matricula import Matricula, MatriculaCreate
+from app.schemas.matricula import Matricula, MatriculaCreate, MatriculaMoveRequest
 from app.schemas.property import Property, PropertyCreate, PropertyUpdate
 from app.schemas.property_hub import (
     PropertyAISummary,
@@ -34,6 +36,7 @@ from app.schemas.property_hub import (
     PropertyHubSummary,
     PropertyHubTechnicalKpis,
 )
+from app.services.audit_hash import stamp_audit_hash
 
 router = APIRouter()
 
@@ -91,7 +94,29 @@ def update_property(
     current_user: User = Depends(deps.get_current_internal_user),
 ):
     repo = PropertyRepository(db, current_user.tenant_id)
-    property_obj = repo.update(id, property_in.model_dump(exclude_unset=True), detail="Property not found")
+    data = property_in.model_dump(exclude_unset=True)
+    property_obj = repo.update(id, data, detail="Property not found")
+    # Sprint 4 (Ficha 07 §9): declarar contiguidade é decisão do consultor —
+    # grava selo human_validated (padrão Sprint 3) + AuditLog com hash chain.
+    if "matriculas_contiguas" in data:
+        fs = dict(property_obj.field_sources or {})
+        fs["matriculas_contiguas"] = "human_validated"
+        property_obj.field_sources = fs
+        log = AuditLog(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            entity_type="property",
+            entity_id=property_obj.id,
+            action="declarar_contiguidade",
+            details=json.dumps(
+                {"matriculas_contiguas": data["matriculas_contiguas"],
+                 "matriculas_count": len(property_obj.matriculas or [])},
+                ensure_ascii=False,
+            ),
+        )
+        db.add(log)
+        db.flush()
+        stamp_audit_hash(db, log)
     db.commit()
     db.refresh(property_obj)
     return property_obj
@@ -144,6 +169,59 @@ def create_property_matricula(
     db.commit()
     db.refresh(db_obj)
     return db_obj
+
+
+@router.patch("/{property_id}/matriculas/{matricula_id}", response_model=Matricula)
+def move_property_matricula(
+    *,
+    property_id: int,
+    matricula_id: int,
+    move_in: MatriculaMoveRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_internal_user),
+):
+    """Re-home: move a matrícula para outro imóvel do mesmo tenant (Sprint 4).
+
+    Ficha 07 §9 — "matrículas não contíguas → tratadas separadamente". Cadastro
+    de imóvel novo + este PATCH é o caminho de separação no MVP (split-wizard é
+    follow-on). Auditado com hash chain (Princípio 2).
+    """
+    mat = (
+        db.query(MatriculaModel)
+        .filter(
+            MatriculaModel.id == matricula_id,
+            MatriculaModel.tenant_id == current_user.tenant_id,
+            MatriculaModel.property_id == property_id,
+        )
+        .first()
+    )
+    if mat is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matrícula não encontrada")
+    target = PropertyRepository(db, current_user.tenant_id).get_or_404(
+        move_in.property_id, detail="Imóvel de destino não encontrado"
+    )
+    if target.id == property_id:
+        return mat  # no-op idempotente
+
+    mat.property_id = target.id
+    log = AuditLog(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        entity_type="property",
+        entity_id=property_id,
+        action="matricula_movida",
+        details=json.dumps(
+            {"matricula_id": mat.id, "numero_matricula": mat.numero_matricula,
+             "de_property_id": property_id, "para_property_id": target.id},
+            ensure_ascii=False,
+        ),
+    )
+    db.add(log)
+    db.flush()
+    stamp_audit_hash(db, log)
+    db.commit()
+    db.refresh(mat)
+    return mat
 
 
 @router.get("/{property_id}/delete-preview")
@@ -401,6 +479,10 @@ def get_property_hub_summary(
     registry_number = prop.registry_number or ("; ".join(nums) if nums else None)
     area_matriculas = prop.area_total_matriculas() if mats else 0.0
     total_area_ha = prop.total_area_ha if prop.total_area_ha else (area_matriculas or None)
+    # Sprint 4 (Ficha 07 §9): quando a "Área total" exibida é a soma derivada e a
+    # contiguidade não foi declarada (ou foi negada), a ressalva viaja JUNTO com
+    # o número — soma anotada, nunca suprimida (ADR-023).
+    area_total_nota = prop.nota_soma_matriculas() if not prop.total_area_ha else None
 
     header = PropertyHubHeader(
         id=prop.id,
@@ -427,6 +509,9 @@ def get_property_hub_summary(
         area_grafica_ha=prop.area_grafica_ha,
         tipologia=prop.tipologia,
         strategic_notes=prop.strategic_notes,
+        matriculas_contiguas=prop.matriculas_contiguas,
+        matriculas_count=len(mats),
+        area_total_nota=area_total_nota,
     )
 
     return PropertyHubSummary(header=header, chips=chips, kpis=kpis, health=health, state=state)

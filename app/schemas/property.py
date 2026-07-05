@@ -19,6 +19,9 @@ class PropertyBase(BaseModel):
     has_embargo: bool = False
     status: str = "active"
     notes: Optional[str] = None
+    # Sprint 4 (Ficha 07 §9) — tri-state: None = não informado; True/False =
+    # declaração do consultor ("contíguas e do mesmo titular?").
+    matriculas_contiguas: Optional[bool] = None
 
 
 class PropertyCreate(PropertyBase):
@@ -39,6 +42,7 @@ class PropertyUpdate(BaseModel):
     has_embargo: Optional[bool] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    matriculas_contiguas: Optional[bool] = None
 
 
 class Property(PropertyBase):

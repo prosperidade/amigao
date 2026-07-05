@@ -36,6 +36,13 @@ class PropertyHubHeader(BaseModel):
     tipologia: Optional[str] = None                 # agricultura | pecuaria | misto | outro
     strategic_notes: Optional[str] = None
 
+    # Sprint 4 (Ficha 07 §9) — declaração de contiguidade + honestidade da soma.
+    # `matriculas_contiguas`: None = não informado; `area_total_nota`: ressalva
+    # quando a área exibida é soma de matrículas não declaradas contíguas.
+    matriculas_contiguas: Optional[bool] = None
+    matriculas_count: int = 0
+    area_total_nota: Optional[str] = None
+
 
 class PropertyFieldValidateRequest(BaseModel):
     fields: list[str]  # nomes dos campos que o humano está validando

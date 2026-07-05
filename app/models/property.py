@@ -37,6 +37,14 @@ class Property(Base):
     # Ex: {"car_code": "human_validated", "registry_number": "ai_extracted", ...}
     field_sources = Column(PortableJSON, nullable=True, default=dict)
 
+    # Sprint 4 (Ficha 07 §9) — "matrículas contíguas?": grupo de matrículas
+    # contíguas do mesmo titular = um imóvel rural, um CAR (Lei 8.629/93 art. 4º I).
+    # Tri-state: NULL = não informado (legado, sem backfill); True/False =
+    # declaração do consultor (grava selo human_validated em field_sources).
+    # False = declarar-e-avisar: a soma derivada é ANOTADA, nunca suprimida;
+    # a separação em outro imóvel é orientação, não automação (ADR-023).
+    matriculas_contiguas = Column(Boolean, nullable=True)
+
     # Regente Cam2 CAM2IH-003/004 (Sprint H) — campos técnicos do Dashboard + Aba Informações
     rl_status = Column(String, nullable=True)           # averbada | proposta | pendente | cancelada
     app_area_ha = Column(Float, nullable=True)
@@ -70,3 +78,23 @@ class Property(Base):
         """
         total = sum((m.area_ha or 0.0) for m in self.matriculas)
         return round(total, 4)
+
+    def nota_soma_matriculas(self) -> "str | None":
+        """Anotação de honestidade da soma (Sprint 4 / Ficha 07 §9).
+
+        Com >1 matrícula e contiguidade não declarada (NULL) ou negada (False),
+        a soma única pode não corresponder a um imóvel rural — quem exibe ou
+        raciocina sobre ela recebe a ressalva junto. None = nada a ressalvar.
+        """
+        if len(self.matriculas or []) <= 1 or self.matriculas_contiguas is True:
+            return None
+        if self.matriculas_contiguas is False:
+            return (
+                "Soma de matrículas declaradas NÃO contíguas — não representa um "
+                "único imóvel rural; tratar os grupos como imóveis separados "
+                "(um CAR por imóvel)."
+            )
+        return (
+            "Soma de matrículas não declaradas contíguas — pode não representar "
+            "um único imóvel rural."
+        )

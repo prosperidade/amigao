@@ -87,12 +87,26 @@ def test_repro_caso13_consolidar(client: TestClient, db_session):
 
     # Gravou: matrículas criadas + ações das divergências de denominação.
     assert res["campos_gravados"] > 0
-    assert res["matriculas_criadas"] >= 3            # 6776, 2923, 492262
-    assert res["acoes_criadas"] == 3                 # denominacao divergente em 3 destinos
+    # Sprint 4 (guard fantasma): 492262 vinha SÓ de sigef (certidão de embargo
+    # mal-classificada) — não cria mais matrícula. Ficam 6776 e 2923.
+    assert res["matriculas_criadas"] == 2
+    # Sprint 4 (coerência matriz×consolidação): os DOIS proprietarios aceitos e
+    # conflitantes da 2923 não são desempatados em silêncio — voltam como
+    # divergência devolvida e viram a 4ª ação (3 denominações + 1 proprietarios).
+    assert res["acoes_criadas"] == 4
+    devolvidas = res["divergencias_devolvidas"]
+    assert len(devolvidas) == 1
+    assert devolvidas[0]["field"] == "proprietarios"
+    assert devolvidas[0]["matricula_hint"] == "2923"
 
     from app.models.acao import Acao, AcaoOrigem
     from app.models.audit_log import AuditLog
     from app.models.matricula import Matricula
+
+    # guard fantasma: a "matrícula" 492262 (nº da certidão de embargo) NÃO existe.
+    assert db_session.query(Matricula).filter(
+        Matricula.numero_matricula == "492262").first() is None
+    assert any("492262" in ig for ig in res["ignorados"])
 
     # averbacao_app/rl gravados como TEXTO legível (não dict cru).
     m6776 = db_session.query(Matricula).filter(Matricula.numero_matricula == "6776").first()
@@ -100,10 +114,14 @@ def test_repro_caso13_consolidar(client: TestClient, db_session):
     assert isinstance(m6776.averbacao_app, str) and "186,1647" in m6776.averbacao_app
     assert isinstance(m6776.averbacao_rl, str)
 
+    # proprietarios da 2923 NÃO gravados (conflito devolvido ao consultor).
+    m2923 = db_session.query(Matricula).filter(Matricula.numero_matricula == "2923").first()
+    assert m2923 is not None and m2923.proprietarios in (None, [])
+
     # audit 'consolidar' passou a existir (era ZERO).
     assert db_session.query(AuditLog).filter(
         AuditLog.entity_id == proc.id, AuditLog.action == "consolidar").count() >= 1
 
     # ações nascidas das divergências, com origem própria.
     acoes = db_session.query(Acao).filter(Acao.process_id == proc.id, Acao.origem == AcaoOrigem.consolidacao).all()
-    assert len(acoes) == 3
+    assert len(acoes) == 4

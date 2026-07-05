@@ -67,6 +67,14 @@ _MATRICULA_FIELDS = {"numero_matricula", "cartorio", "registro_livro_folha_ficha
                      "averbacao_app", "averbacao_rl", "onus_gravames", "proprietarios"}
 _MATRICULA_ALIAS: dict[str, Optional[str]] = {}
 
+# Guard fantasma (Sprint 4): só documentos que legitimamente DECLARAM matrícula
+# criam Matricula nova na consolidação. `sigef` fica de fora da criação (só
+# atualiza existente): foi o vetor real do caso 13 — certidão de embargo e
+# contrato PRAD mal-classificados como `sigef` criaram a "matrícula" 492262
+# (nº da certidão). Hint órfão fica no staging (ignorados) — o cadastro manual
+# (POST /properties/{id}/matriculas) segue sendo a via legítima.
+_MATRICULA_CREATOR_DOC_TYPES = {"matricula", "ccir", "itr", "car"}
+
 
 def _raw_value(row: ExtractedFieldStaging) -> Any:
     """Valor efetivo da decisão: decided_value se houver, senão a fonte."""
@@ -166,6 +174,30 @@ def _norm_cmp(value: Any) -> Any:
     if isinstance(value, str):
         return value.strip().lower()
     return value
+
+
+def _group_conflict_values(rows: list[ExtractedFieldStaging], target_field: str) -> list[Any]:
+    """Valores DISTINTOS (normalizados) de um grupo de staging aceito (Sprint 4).
+
+    A consolidação NUNCA escolhe silenciosamente entre dois valores completos
+    conflitantes de documentos distintos — isso é decisão do consultor (Ficha
+    §3.3: escolher fonte / digitar / criar ação). `_pick_winner` só desempata o
+    que é o MESMO valor em fontes diferentes (proveniência), não conteúdo.
+    Área normaliza pela porta única (349,9022 ≡ 349.9022 não é conflito).
+    """
+    seen: dict[str, Any] = {}
+    for r in rows:
+        v = _raw_value(r)
+        if target_field in _AREA_COLUMNS:
+            unidade = r.field_value.get("unidade") if isinstance(r.field_value, dict) else None
+            parsed = parse_area_ha(v, unidade)
+            key = f"ha:{round(parsed, 4)}" if parsed is not None else f"raw:{_norm_cmp(v)}"
+        elif isinstance(v, (dict, list)):
+            key = json.dumps(v, sort_keys=True, ensure_ascii=False, default=str)
+        else:
+            key = f"s:{_norm_cmp(v)}"
+        seen.setdefault(key, v)
+    return list(seen.values())
 
 
 def _values_differ(old: Any, new: Any) -> bool:
@@ -355,51 +387,106 @@ def consolidate_process(
                if entity == "matricula" else (entity, row.target_field))
         grupos.setdefault(key, []).append(row)
 
-    # cache de matrículas por hint (upsert idempotente)
+    # cache de matrículas por hint (upsert idempotente). Miss com criação vetada
+    # fica cacheado como None — um grupo posterior COM doc criador re-tenta.
     mat_cache: dict[str, tuple[Any, bool]] = {}
 
-    def _ensure_matricula(hint: str):
+    def _ensure_matricula(hint: str, allow_create: bool = True):
         nonlocal mat_criadas, mat_atualizadas
-        if hint not in mat_cache:
-            mat, created = _upsert_matricula(db, tenant_id, prop.id, hint)
-            mat_cache[hint] = (mat, created)
+        cached = mat_cache.get(hint)
+        if cached is not None and (cached[0] is not None or not allow_create):
+            return cached[0]
+        primeira_vez = cached is None
+        mat, created = _upsert_matricula(db, tenant_id, prop.id, hint, allow_create=allow_create)
+        mat_cache[hint] = (mat, created)
+        if mat is not None:
             if created:
                 mat_criadas += 1
-            else:
+            elif primeira_vez:
                 mat_atualizadas += 1
-        return mat_cache[hint][0]
+        return mat
 
-    # matrícula citada no CAR mas sem campo próprio aceito ainda existe na base.
+    # matrícula citada no CAR mas sem campo próprio aceito ainda existe na base
+    # (o CAR é doc criador — guard fantasma não se aplica aqui).
     for hint in matricula_estabelecida:
         if prop is not None:
             _ensure_matricula(hint)
 
+    divergencias_devolvidas: list[dict[str, Any]] = []
+
     for key, rows in grupos.items():
         target_field = key[-1]
         winner = _pick_winner(rows, prefer_sigef=(target_field in _SIGEF_ANCHORED))
-        value = _raw_value(winner)
-        fonte = _fonte_of(winner)
-        unidade = winner.field_value.get("unidade") if isinstance(winner.field_value, dict) else None
         entity = key[0]
 
+        # ── Resolve o objeto de destino (guard fantasma para matrícula) ─────
+        obj: Any = None
+        allowed: set[str]
+        alias: dict[str, Optional[str]]
         if entity == "cliente" and client is not None:
-            if _write_entity(client, winner, value, fonte, unidade,
-                             _CLIENTE_FIELDS, _CLIENTE_ALIAS, writes, ignorados, reconciliacoes):
-                cliente_tocado = True
+            obj, allowed, alias = client, _CLIENTE_FIELDS, _CLIENTE_ALIAS
         elif entity == "imovel" and prop is not None:
-            if _write_entity(prop, winner, value, fonte, unidade,
-                             _IMOVEL_FIELDS, _IMOVEL_ALIAS, writes, ignorados, reconciliacoes):
-                imovel_tocado = True
+            obj, allowed, alias = prop, _IMOVEL_FIELDS, _IMOVEL_ALIAS
         elif entity == "matricula" and prop is not None:
             hint = winner.matricula_hint
             if not hint:
                 ignorados.append(f"matricula sem matricula_hint: {target_field}")
                 continue
-            mat = _ensure_matricula(hint)
-            _write_entity(mat, winner, value, fonte, unidade,
-                          _MATRICULA_FIELDS, _MATRICULA_ALIAS, writes, ignorados, reconciliacoes)
+            # Guard fantasma: hint vindo só de tipos que não declaram matrícula
+            # (sigef, outro…) não CRIA matrícula — atualiza se já existir.
+            allow_create = any(
+                (r.source_doc_type or "").lower() in _MATRICULA_CREATOR_DOC_TYPES
+                or _is_consultor_edit(r)
+                for r in rows
+            )
+            obj = _ensure_matricula(hint, allow_create=allow_create)
+            if obj is None:
+                ignorados.append(
+                    f"matricula {hint}.{target_field} (hint de '{(winner.source_doc_type or '—')}' "
+                    "não cria matrícula — guard fantasma; cadastre-a manualmente se for real)"
+                )
+                continue
+            allowed, alias = _MATRICULA_FIELDS, _MATRICULA_ALIAS
         else:
             ignorados.append(f"{entity or '—'}: sem destino (target_field={target_field})")
+            continue
+
+        # ── Coerência matriz×consolidação (Sprint 4 / caso 13) ──────────────
+        # Dois valores completos conflitantes de docs distintos no MESMO destino
+        # (ex.: 2 CCIRs na matrícula 2923) NÃO são desempatados aqui: voltam a
+        # `divergente_transcricao` — a matriz/Conferência acusa e a divergência
+        # vira Ação (generate_acoes_from_divergencias, logo abaixo). Duas saídas
+        # NÃO passam pelo guard: edição explícita do consultor É decisão (vence
+        # e grava); e destino JÁ consolidado (human_validated/pendente_oficializacao)
+        # segue o caminho de RECONCILIAÇÃO da Ficha 05 dentro de _write_entity —
+        # a decisão anterior do consultor não é rebaixada a divergência nova.
+        col = alias.get(target_field, target_field) if target_field in alias else target_field
+        fs_atual = dict(getattr(obj, "field_sources", None) or {})
+        ja_consolidado = col is not None and fs_atual.get(col) in (
+            "human_validated", "pendente_oficializacao"
+        )
+        if not _is_consultor_edit(winner) and not ja_consolidado:
+            conflito = _group_conflict_values(rows, target_field)
+            if len(conflito) > 1:
+                for r in rows:
+                    r.status = ExtractedFieldStatus.divergente_transcricao
+                    r.decided_value = None
+                divergencias_devolvidas.append({
+                    "entity": entity, "matricula_hint": key[1] if len(key) == 3 else None,
+                    "field": target_field, "valores": [_ser(v) for v in conflito],
+                    "staging_ids": [r.id for r in rows],
+                })
+                continue
+
+        value = _raw_value(winner)
+        fonte = _fonte_of(winner)
+        unidade = winner.field_value.get("unidade") if isinstance(winner.field_value, dict) else None
+        wrote = _write_entity(obj, winner, value, fonte, unidade,
+                              allowed, alias, writes, ignorados, reconciliacoes)
+        if wrote and entity == "cliente":
+            cliente_tocado = True
+        elif wrote and entity == "imovel":
+            imovel_tocado = True
 
     db.flush()
 
@@ -430,13 +517,14 @@ def consolidate_process(
 
     area_total = prop.area_total_matriculas() if prop is not None else None
 
-    if writes or reconciliacoes or acoes_criadas:
+    if writes or reconciliacoes or acoes_criadas or divergencias_devolvidas:
         _audit(db, tenant_id, process_id, user_id, "consolidar", {
             "process_id": process_id, "campos_gravados": len(writes),
             "matriculas_criadas": mat_criadas, "matriculas_atualizadas": mat_atualizadas,
             "acoes_criadas": acoes_criadas,
             "acoes": [{"id": a.id, "titulo": a.titulo} for a in acoes],
             "writes": writes, "reconciliacoes": reconciliacoes,
+            "divergencias_devolvidas": divergencias_devolvidas,
         })
     db.commit()
 
@@ -448,10 +536,12 @@ def consolidate_process(
         "cliente_atualizado": cliente_tocado,
         "imovel_atualizado": imovel_tocado,
         "area_total_matriculas": area_total,
+        "area_total_nota": prop.nota_soma_matriculas() if prop is not None else None,
         "acoes_criadas": acoes_criadas,
         "writes": writes,
         "ignorados": ignorados,
         "reconciliacoes": reconciliacoes,
+        "divergencias_devolvidas": divergencias_devolvidas,
     }
 
 
@@ -521,7 +611,9 @@ def _ser(value: Any) -> Any:
     return value.isoformat() if isinstance(value, date) else value
 
 
-def _upsert_matricula(db: Session, tenant_id: int, property_id: int, hint: str):
+def _upsert_matricula(
+    db: Session, tenant_id: int, property_id: int, hint: str, *, allow_create: bool = True,
+):
     from app.models.matricula import Matricula  # noqa: PLC0415
 
     mat = (
@@ -535,6 +627,8 @@ def _upsert_matricula(db: Session, tenant_id: int, property_id: int, hint: str):
     )
     if mat is not None:
         return mat, False
+    if not allow_create:  # guard fantasma (Sprint 4) — ver _MATRICULA_CREATOR_DOC_TYPES
+        return None, False
     # numero_matricula vem de staging ACEITO (hint) → proveniência explícita já
     # na criação; sem isso, um doc futuro com formatação diferente sobrescreveria.
     mat = Matricula(

@@ -300,6 +300,14 @@ class DiagnosticoAgent(BaseAgent):
                     "car_code": prop.car_code,
                     "car_status": prop.car_status,
                     "has_embargo": prop.has_embargo,
+                    # Sprint 4 (Ficha 07 §9): o LLM não raciocina porte/passivo
+                    # sobre soma possivelmente fictícia — a ressalva viaja junto.
+                    "matriculas_count": len(prop.matriculas or []),
+                    "matriculas_contiguas": prop.matriculas_contiguas,
+                    "area_total_matriculas_ha": (
+                        prop.area_total_matriculas() if prop.matriculas else None
+                    ),
+                    "area_total_nota": prop.nota_soma_matriculas(),
                 }
 
         docs = (

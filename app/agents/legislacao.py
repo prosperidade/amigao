@@ -411,6 +411,12 @@ class LegislacaoAgent(BaseAgent):
                 ctx["area_ha"] = prop.total_area_ha
                 ctx["has_embargo"] = prop.has_embargo
                 ctx["car_status"] = prop.car_status or ""
+                # Sprint 4 (Ficha 07 §9): porte/exigência não pode ser dimensionado
+                # sobre soma de matrículas possivelmente não-contíguas sem ressalva.
+                ctx["matriculas_contiguas"] = prop.matriculas_contiguas
+                nota = prop.nota_soma_matriculas()
+                if nota:
+                    ctx["area_nota"] = nota
 
         return ctx
 

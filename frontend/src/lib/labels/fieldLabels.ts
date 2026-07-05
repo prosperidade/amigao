@@ -89,6 +89,7 @@ export const FIELD_LABELS: Record<string, string> = {
   address: 'Endereço',
   car_status: 'Situação do CAR',
   total_area_ha: 'Área total (ha)',
+  matriculas_contiguas: 'Matrículas contíguas',
   area_grafica_ha: 'Área gráfica (ha)',
   app_area_ha: 'Área de APP (ha)',
   rl_status: 'Reserva legal',

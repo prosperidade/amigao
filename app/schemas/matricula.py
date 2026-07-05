@@ -33,6 +33,17 @@ class MatriculaUpdate(MatriculaBase):
     pass
 
 
+class MatriculaMoveRequest(BaseModel):
+    """Re-home (Sprint 4 / Ficha 07 §9): mover a matrícula para outro imóvel.
+
+    Caminho mínimo para "matrículas não contíguas → tratadas separadamente":
+    o consultor cadastra outro imóvel e move as matrículas do grupo. Só o
+    destino é editável; tenant vem do JWT, origem vem do path.
+    """
+
+    property_id: int
+
+
 class Matricula(MatriculaBase):
     id: int
     tenant_id: int

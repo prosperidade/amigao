@@ -58,6 +58,10 @@ interface PropertyHubHeader {
   area_grafica_ha: number | null;
   tipologia: string | null;
   strategic_notes: string | null;
+  // Sprint 4 (Ficha 07 §9) — contiguidade tri-state + soma anotada
+  matriculas_contiguas: boolean | null;
+  matriculas_count: number;
+  area_total_nota: string | null;
 }
 
 // CAM2IH-010 (Sprint H) — labels pt-BR das 6 categorias canônicas Regente.
@@ -173,6 +177,17 @@ export default function PropertyHub() {
       toast.success('Campo validado');
     },
     onError: () => toast.error('Falha ao validar campo'),
+  });
+
+  // Sprint 4 (Ficha 07 §9) — declarar contiguidade (tri-state; grava selo no backend)
+  const declareContiguidade = useMutation({
+    mutationFn: (value: boolean) =>
+      api.patch(`/properties/${propertyId}`, { matriculas_contiguas: value }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['property-hub-summary', propertyId] });
+      toast.success('Contiguidade declarada');
+    },
+    onError: () => toast.error('Falha ao declarar contiguidade'),
   });
 
   const { data: summary, isLoading } = useQuery({
@@ -361,7 +376,15 @@ export default function PropertyHub() {
             })}
           </div>
           <div className="p-5">
-            {tab === 'info' && <InfoTab header={header} kpis={kpis} onValidate={(fields) => validateFields.mutate(fields)} />}
+            {tab === 'info' && (
+              <InfoTab
+                header={header}
+                kpis={kpis}
+                onValidate={(fields) => validateFields.mutate(fields)}
+                onDeclareContiguidade={(v) => declareContiguidade.mutate(v)}
+                declaringContiguidade={declareContiguidade.isPending}
+              />
+            )}
             {tab === 'documents' && <DocumentsTab propertyId={propertyId} />}
             {tab === 'analyses' && <AnalysesTab propertyId={propertyId} count={kpis.analyses_count} cases={cases} />}
             {tab === 'history' && <HistoryTab events={events} />}
@@ -517,10 +540,12 @@ function AIPanel({ summary }: { summary: PropertyAISummary | undefined }) {
   );
 }
 
-function InfoTab({ header, kpis, onValidate }: {
+function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringContiguidade }: {
   header: PropertyHubHeader;
   kpis: PropertyHubKpis;
   onValidate?: (fields: string[]) => void;
+  onDeclareContiguidade?: (value: boolean) => void;
+  declaringContiguidade?: boolean;
 }) {
   const src = header.field_sources;
   return (
@@ -540,10 +565,66 @@ function InfoTab({ header, kpis, onValidate }: {
           <InfoField label="CAR" value={header.car_code} sub={header.car_status} source={src.car_code} onValidate={onValidate ? () => onValidate(['car_code']) : undefined} />
           <InfoField label="CCIR" value={header.ccir} source={src.ccir} onValidate={onValidate ? () => onValidate(['ccir']) : undefined} />
           <InfoField label="NIRF" value={header.nirf} source={src.nirf} onValidate={onValidate ? () => onValidate(['nirf']) : undefined} />
-          <InfoField label="Área total" value={header.total_area_ha ? `${header.total_area_ha} ha` : null} source={src.total_area_ha} onValidate={onValidate ? () => onValidate(['total_area_ha']) : undefined} />
+          <InfoField
+            label="Área total"
+            value={header.total_area_ha ? `${header.total_area_ha} ha` : null}
+            sub={header.area_total_nota ?? undefined}
+            source={src.total_area_ha}
+            onValidate={onValidate ? () => onValidate(['total_area_ha']) : undefined}
+          />
           <InfoField label="Localização" value={header.municipality && header.state ? `${header.municipality}/${header.state}` : null} />
           <InfoField label="Bioma" value={header.biome} source={src.biome} />
           <InfoField label="Embargo" value={header.has_embargo ? 'Sim' : 'Não'} />
+        </div>
+        {/* Sprint 4 (Ficha 07 §9) — declaração de contiguidade (tri-state) */}
+        <div className="mt-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
+              Matrículas contíguas?
+            </span>
+            {src.matriculas_contiguas === 'human_validated' && (
+              <span title="Declarado pelo consultor" className="text-[9px] px-1 rounded font-medium bg-emerald-100 text-emerald-700">✓</span>
+            )}
+            {header.matriculas_count > 1 && header.matriculas_contiguas === null && (
+              <span className="text-[9px] px-1 rounded font-medium bg-amber-100 text-amber-700">
+                declaração pendente ({header.matriculas_count} matrículas)
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] text-gray-500 dark:text-slate-400 mt-0.5 mb-2">
+            As matrículas são contíguas e do mesmo titular? Grupo contíguo do mesmo
+            titular = um imóvel rural, um CAR (Lei 8.629/93). Matrículas não
+            contíguas são tratadas como imóveis separados.
+          </p>
+          <div className="flex items-center gap-2">
+            {([
+              { v: true, label: 'Sim, contíguas' },
+              { v: false, label: 'Não contíguas' },
+            ] as const).map(opt => (
+              <button
+                key={String(opt.v)}
+                disabled={declaringContiguidade || !onDeclareContiguidade}
+                onClick={() => onDeclareContiguidade?.(opt.v)}
+                className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
+                  header.matriculas_contiguas === opt.v
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-white dark:bg-white/5 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-emerald-400'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            {header.matriculas_contiguas === null && (
+              <span className="text-xs text-gray-400 dark:text-slate-500">Não informado</span>
+            )}
+          </div>
+          {header.matriculas_contiguas === false && (
+            <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg p-2">
+              Matrículas não contíguas são imóveis rurais separados (um CAR cada).
+              Recomendação: cadastre um novo imóvel e mova para ele as matrículas do
+              outro grupo. A soma de áreas exibida não representa um único imóvel.
+            </p>
+          )}
         </div>
       </section>
       {/* CAM2IH-003/004 (Sprint H) — Dados técnicos ambientais */}

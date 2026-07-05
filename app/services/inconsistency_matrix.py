@@ -354,7 +354,46 @@ class _Source:
     document_id: Optional[int] = None  # 1º document_id visto (rastreabilidade)
 
 
+def _multi_doc_types(rows: list[Any]) -> set[str]:
+    """Tipos com MAIS de um documento distinto no staging (Sprint 4).
+
+    Dois CCIRs no mesmo processo são duas fontes REAIS — colapsá-los num bucket
+    único fazia `src.fields[fname] = ...` sobrescrever o primeiro em silêncio e
+    a matriz nunca acusava a divergência (caso 13, matrícula 2923). Tipos com um
+    doc só mantêm a chave simples (labels e comportamento inalterados).
+    """
+    docs: dict[str, set[Any]] = {}
+    for row in rows:
+        dt = (getattr(row, "source_doc_type", None) or "outro").lower()
+        if dt == "matricula":
+            continue  # certidões já são per-hint (matricula:{hint})
+        docs.setdefault(dt, set()).add(getattr(row, "document_id", None))
+    return {dt for dt, ids in docs.items() if len(ids) > 1}
+
+
+def _doc_key(dt: str, row: Any, multi: set[str]) -> str:
+    """Chave da fonte: por documento quando o tipo tem N docs (`ccir#231`)."""
+    if dt not in multi:
+        return dt
+    return f"{dt}#{getattr(row, 'document_id', None) or 'x'}"
+
+
+def _sources_of_type(sources: dict[str, _Source], dt: str) -> list[_Source]:
+    """Sources de um tipo, ordenadas por document_id (1º doc primeiro)."""
+    found = [s for k, s in sources.items() if k == dt or k.startswith(f"{dt}#")]
+    return sorted(found, key=lambda s: (s.document_id is None, s.document_id or 0))
+
+
+def _first_source(sources: dict[str, _Source], dt: str) -> Optional[_Source]:
+    """Consumidores singleton (sigef/rat/…): a 1ª source do tipo. Os confrontos
+    campo-a-campo (denominação/INCRA/área) iteram TODAS as sources — é lá que a
+    divergência multi-doc aparece; aqui só precisamos de um representante."""
+    found = _sources_of_type(sources, dt)
+    return found[0] if found else None
+
+
 def _group_sources(rows: list[Any]) -> dict[str, _Source]:
+    multi = _multi_doc_types(rows)
     sources: dict[str, _Source] = {}
     for row in rows:
         dt = (getattr(row, "source_doc_type", None) or "outro").lower()
@@ -362,7 +401,8 @@ def _group_sources(rows: list[Any]) -> dict[str, _Source]:
         fname = getattr(row, "field_name", None)
         val = _row_value(row)
 
-        key = (f"matricula:{hint}" if hint else "matricula") if dt == "matricula" else dt
+        key = ((f"matricula:{hint}" if hint else "matricula") if dt == "matricula"
+               else _doc_key(dt, row, multi))
         src = sources.setdefault(key, _Source(key=key, doc_type=dt))
         if src.document_id is None:
             src.document_id = getattr(row, "document_id", None)
@@ -487,16 +527,19 @@ def _collect_areas(rows: list[Any]) -> _AreaObservations:
     - ``implausiveis`` — área > 100.000 ha (caso #12 item A): erro de parse provável,
       fora do confronto/soma, marcada para revisão.
 
-    Em duplicatas da MESMA fonte/hint mantém o MAIOR valor: o staging real teve a
-    área do RAT às vezes mal-parseada (separador de milhar → '1.0107113' ≈ 1 ha em
-    vez de 1010,7113). Como a mesma fonte tem UMA área verdadeira, o maior recupera
-    o valor correto. (Qualidade da Fase 2 é achado à parte.)
+    Em duplicatas do MESMO documento/hint mantém o MAIOR valor: o staging real teve
+    a área do RAT às vezes mal-parseada (separador de milhar → '1.0107113' ≈ 1 ha em
+    vez de 1010,7113). Como o mesmo doc tem UMA área verdadeira, o maior recupera
+    o valor correto. Documentos DISTINTOS do mesmo tipo NÃO colapsam (Sprint 4):
+    dois CCIRs com áreas diferentes para a mesma matrícula são fontes reais em
+    confronto — viram divergência, nunca keep-max silencioso.
     """
     por_matricula: dict[str, dict[str, tuple[float, Any]]] = {}
     por_imovel: dict[str, tuple[float, Any]] = {}
     sem_vinculo: list[tuple[str, float, Any]] = []
     implausiveis: list[tuple[str, str, float, Any]] = []
     sanity_max = float(AREA_SANITY_MAX_HA)
+    multi = _multi_doc_types(rows)
     for row in rows:
         dt = (getattr(row, "source_doc_type", None) or "outro").lower()
         fn = getattr(row, "field_name", None)
@@ -510,19 +553,20 @@ def _collect_areas(rows: list[Any]) -> _AreaObservations:
             hint = _clean_matricula_hint(getattr(row, "matricula_hint", None)) or "-"
             implausiveis.append((hint, dt, val, row))
             continue
+        label = _doc_key(dt, row, multi)
         if _AREA_LEVEL.get(dt) == "matricula":
             hint = _clean_matricula_hint(getattr(row, "matricula_hint", None))
             if hint is None:
                 sem_vinculo.append((dt, val, row))
                 continue
             bucket = por_matricula.setdefault(hint, {})
-            prev = bucket.get(dt)
+            prev = bucket.get(label)
             if prev is None or val > prev[0]:
-                bucket[dt] = (val, row)
+                bucket[label] = (val, row)
         else:
-            prev = por_imovel.get(dt)
+            prev = por_imovel.get(label)
             if prev is None or val > prev[0]:
-                por_imovel[dt] = (val, row)
+                por_imovel[label] = (val, row)
     return _AreaObservations(por_matricula, por_imovel, sem_vinculo, implausiveis)
 
 
@@ -540,11 +584,13 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
     """Constrói a matriz a partir das linhas de staging do processo."""
     sources = _group_sources(rows)
     matricula_keys = sorted(k for k in sources if k.startswith("matricula"))
-    car = sources.get("car")
-    ccir = sources.get("ccir")
-    itr = sources.get("itr")
-    sigef = sources.get("sigef")
-    rat = sources.get("rat")
+    # Singletons: 1ª source do tipo (com N docs, chaves viram `tipo#doc_id`; os
+    # confrontos campo-a-campo abaixo iteram TODAS — Sprint 4).
+    car = _first_source(sources, "car")
+    ccir = _first_source(sources, "ccir")
+    itr = _first_source(sources, "itr")
+    sigef = _first_source(sources, "sigef")
+    rat = _first_source(sources, "rat")
 
     fontes_presentes = list(sources.keys())
     linhas: list[MatrixRow] = []
@@ -580,14 +626,18 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
             for r in mat_rows:
                 status_updates.append((r, f"divergente_{subtipo}"))
 
-    # soma das matrículas conhecidas (preferindo certidão/matrícula → sigef → …)
+    # soma das matrículas conhecidas (preferindo certidão/matrícula → sigef → …).
+    # Com N docs do mesmo tipo (labels `ccir#231`), casa por prefixo; se o mesmo
+    # tipo trouxe valores conflitantes, a divergência já foi acusada acima — para
+    # a soma seguimos com o MAIOR (conservador) até o consultor decidir.
     area_by_matricula: dict[str, float] = {}
     soma_rows: list[Any] = []
     for hint, bucket in por_matricula.items():
         chosen = None
         for lbl in ("matricula", "sigef", "ccir", "itr"):
-            if lbl in bucket:
-                chosen = bucket[lbl]
+            cands = [bucket[k] for k in bucket if k == lbl or k.startswith(f"{lbl}#")]
+            if cands:
+                chosen = max(cands, key=lambda t: t[0])
                 break
         if chosen is None:
             chosen = next(iter(bucket.values()))
@@ -901,7 +951,7 @@ def _fontes_detalhe(
         rat_entry: dict[str, Any] = {"fonte": "rat", "tipo": "rat", "source_doc_type": "rat"}
         if rat_protocolo:
             rat_entry["protocolo"] = rat_protocolo
-        rat_src = sources.get("rat")
+        rat_src = _first_source(sources, "rat")
         if rat_src is not None and rat_src.document_id is not None:
             rat_entry["document_id"] = rat_src.document_id
         out.append(rat_entry)
