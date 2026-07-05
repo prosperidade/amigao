@@ -32,6 +32,8 @@ services:
       # têm "ç/ã" e espaço, então o destino é normalizado pra ASCII.
       - "./legislação ms/MATOGROSSODOSUL:/app/legislacao_estadual/MS:ro"
       - "./legislação mt/MATOGROSSO:/app/legislacao_estadual/MT:ro"
+      # Corpus AC — pasta "Legislações Regente" (markdown exportado do LEGIS/LegisWeb).
+      - "./Legislações Regente:/app/legislacao_estadual/AC:ro"
     environment:
       # Identificação visual no log de que o override está ativo
       DEV_OVERRIDE: "1"
