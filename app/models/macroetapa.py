@@ -408,6 +408,7 @@ def compute_macroetapa_state(
     has_blockers: bool = False,
     current_macroetapa: Macroetapa | None = None,
     diagnosis_validated: bool = False,
+    contract_signed: bool = True,
 ) -> MacroetapaState:
     """Deriva o estado formal de uma etapa a partir do checklist + flags externas.
 
@@ -419,6 +420,10 @@ def compute_macroetapa_state(
         `RegulatoryDiagnosis.validated_at` preenchido → aguardando_validacao,
         mesmo com checklist 100% (fix/diagnostico-propaga-estado — Princípio 1:
         peça formal só "fecha" depois da assinatura do consultor).
+      - E7 (`contrato_formalizacao`, terminal) sem `Contract.signed_at` →
+        aguardando_validacao, mesmo com checklist 100% (Fase 0, item 9: o
+        caso não está concluído sem contrato assinado — honesto até o
+        fluxo de assinatura do Sprint 5 existir).
       - completion_pct >= 100 → concluida (ou pronta_para_avancar se ainda corrente)
       - tem actions completas mas não todas → em_andamento
       - é a corrente sem progresso → aguardando_input
@@ -439,6 +444,13 @@ def compute_macroetapa_state(
         # Checklist cheio mas diagnóstico não assinado: ainda não é
         # pronta_para_avancar — o card precisa concordar com o bloco
         # "diagnóstico assinado".
+        return MacroetapaState.aguardando_validacao
+
+    if (
+        current_macroetapa == Macroetapa.contrato_formalizacao
+        and pct >= COMPLETE_PCT
+        and not contract_signed
+    ):
         return MacroetapaState.aguardando_validacao
 
     if pct >= COMPLETE_PCT:
@@ -490,6 +502,9 @@ def can_advance_macroetapa(
     require_complete: bool = True,
     current_macroetapa: Macroetapa | None = None,
     diagnosis_validated: bool = False,
+    consolidacao_executada: bool = True,
+    rota_validada: bool = True,
+    proposta_aceita: bool = True,
 ) -> tuple[bool, list[str]]:
     """Regente CAM3FT-005 — só avança se output mínimo OK + sem trava + validações OK.
 
@@ -499,6 +514,19 @@ def can_advance_macroetapa(
     Os callers passam `current_macroetapa` (etapa que está na coluna do card)
     e `diagnosis_validated` (`True` quando existe diagnóstico assinado para
     o processo).
+
+    Fase 0 (gap-analysis Ficha 07, item 2): a Ficha exige que a saída da E2
+    dependa da Consolidação (Ficha 05) ter rodado — sem ela, "base consolidada"
+    não existe. `consolidacao_executada` default `True` preserva o
+    comportamento de callers que ainda não passam o sinal explicitamente;
+    quem sai de `diagnostico_preliminar` deve calcular via
+    `macroetapa_engine.has_consolidated()` e passar aqui.
+
+    Fase 0 (item 9 do adendo): mesma lógica para a saída da E5 (`rota_validada`,
+    via `macroetapa_engine.has_rota_validada()`) e da E6 (`proposta_aceita`,
+    via `has_proposal_accepted()`) — as entidades Rota/Proposal já existem;
+    só faltava o gate ler o estado real delas. Defaults `True` preservam
+    callers que ainda não passam o sinal explicitamente.
     """
     blockers = list_macroetapa_blockers(
         checklist,
@@ -511,4 +539,19 @@ def can_advance_macroetapa(
         blockers.append("Output mínimo não atingido (checklist incompleto).")
     if current_macroetapa in DIAGNOSTIC_MACROETAPAS and not diagnosis_validated:
         blockers.append("Diagnóstico desta etapa ainda não foi assinado pelo consultor.")
+    if current_macroetapa == Macroetapa.diagnostico_preliminar and not consolidacao_executada:
+        blockers.append(
+            "Consolidação ainda não rodou para este processo — "
+            "grave a Conferência na base antes de avançar."
+        )
+    if current_macroetapa == Macroetapa.caminho_regulatorio and not rota_validada:
+        blockers.append(
+            "A rota regulatória ainda não foi fechada (todos os passos "
+            "validados e classificados) — feche a rota antes de avançar."
+        )
+    if current_macroetapa == Macroetapa.orcamento_negociacao and not proposta_aceita:
+        blockers.append(
+            "A proposta ainda não foi aceita pelo cliente — registre o "
+            "aceite antes de avançar."
+        )
     return (len(blockers) == 0), blockers

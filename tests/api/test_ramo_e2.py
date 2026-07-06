@@ -78,6 +78,13 @@ def _seed_e2_ready(db_session, *, required_pending: bool) -> tuple[Tenant, User,
         validated_at=datetime.now(UTC), validated_by_user_id=user.id,
     ))
 
+    # Fase 0 (gap-analysis Ficha 07, item 2) — Consolidação já rodou (sinal
+    # que `has_consolidated` consulta); sem isso a E2 não libera mais.
+    db_session.add(AuditLog(
+        tenant_id=tenant.id, entity_type="process", entity_id=process.id,
+        action="consolidar", details="{}",
+    ))
+
     # ProcessChecklist documental: 1 item obrigatório, pendente ou recebido.
     status = "pending" if required_pending else "received"
     db_session.add(ProcessChecklist(

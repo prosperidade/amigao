@@ -61,6 +61,10 @@ from app.services.macroetapa_engine import (
     advance_macroetapa,
     ensure_macroetapa_checklists,
     get_macroetapa_status,
+    has_consolidated,
+    has_contract_signed,
+    has_proposal_accepted,
+    has_rota_validada,
     initialize_macroetapa_checklists,
     toggle_action,
     validate_action,
@@ -730,12 +734,25 @@ def _compute_can_advance(
         .first()
     )
 
+    # Fase 0 (gap-analysis Ficha 07, item 2) — só é relevante saindo da E2;
+    # calcular sempre é barato (1 query indexada) e mantém o sinal correto
+    # se `current_etapa` mudar de valor mais adiante.
+    consolidacao_executada = has_consolidated(db, process.tenant_id, process.id)
+    # Fase 0 (item 9 do adendo) — mesma lógica pra E5/E6/E7; barato calcular
+    # sempre (1 query indexada cada), independe da etapa atual.
+    rota_validada = has_rota_validada(db, process.tenant_id, process.id)
+    proposta_aceita = has_proposal_accepted(db, process.tenant_id, process.id)
+    contract_signed = has_contract_signed(db, process.tenant_id, process.id)
+
     can, blockers = can_advance_macroetapa(
         cl,
         documents_pending_required=missing_docs,
         require_complete=require_complete,
         current_macroetapa=current_etapa,
         diagnosis_validated=diagnosis_validated,
+        consolidacao_executada=consolidacao_executada,
+        rota_validada=rota_validada,
+        proposta_aceita=proposta_aceita,
     )
 
     state_value = None
@@ -746,6 +763,7 @@ def _compute_can_advance(
             has_blockers=bool(blockers),
             current_macroetapa=current_etapa,
             diagnosis_validated=diagnosis_validated,
+            contract_signed=contract_signed,
         ).value
 
     # Sprint 1 (Ficha 07) — DESTINO recomendado do avanço. Na saída da E2 o ramo
