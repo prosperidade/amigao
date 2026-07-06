@@ -272,6 +272,17 @@ orienta a separação — mas não há botão na UI. Wizard: escolher matrícula
 imóvel destino → mover em lote (processos/docs continuam no imóvel de origem; avaliar o que
 migra junto). **Origem:** Sprint 4 (TASK 0a).
 
+**58. Corpus legislativo do Acre incompleto — N7 sem conteúdo.** A ingestão do corpus AC
+(`scripts/ingest_legislacao_acre.py`, 11 docs, 4.658 chunks) pulou `ACRE_N11.md`
+(byte-idêntico a N10 por SHA-256, sem perda) e `ACRE_LEG_RURAL.md` (compilação dos N#,
+sem conteúdo exclusivo) — **exceto** o N7 (~28KB), cujo único conteúdo exclusivo não
+veio no export da pasta `Legislacoes Regente` e a André confirmou que **não vai vir**
+(não vale reprocessar/perguntar de novo). RAG de legislação AC roda sem o N7 — se
+algum caso futuro precisar do fundamento normativo especificamente do N7, vai faltar
+no `knowledge_catalog` até que outra fonte apareça. **Marco para revisitar:** se a
+sócia trouxer o conteúdo do N7 por outro canal (novo export, PDF avulso). **Origem:**
+Sprint corpus Acre (2026-07-04), fechado sem N7 em 2026-07-06.
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos
