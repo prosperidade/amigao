@@ -2,7 +2,7 @@
 
 **Documento:** Operação · playbooks de incidente
 **Estado:** vivo · adicionar nova entrada cada vez que algo dói duas vezes
-**Última revisão:** 2026-05-30
+**Última revisão:** 2026-07-06
 
 ---
 
@@ -227,6 +227,50 @@ SELECT * FROM knowledge_catalog WHERE identifier = '<lei citada>';
 
 - Forçar re-OCR com Vision: endpoint suporta `?force=true` na re-extração
 - Documento ilegível → pedir ao cliente upload de melhor qualidade
+
+---
+
+### Matrícula espúria com dados emprestados de outro documento ("planta lida como CCIR")
+
+**Sintoma:** duas (ou mais) `Matricula` criadas para o que deveria ser uma só, com
+`area_ha`/`codigo_incra_sncr` plausíveis mas errados — geralmente idênticos entre si e
+diferentes do valor real do documento correto. A soma derivada da `Property` fica maior
+que a soma real (área "fantasma").
+
+**Causa:** o classificador de documentos (`extrator`) é rule-based e não tem um tipo
+próprio para **planta/memorial descritivo** — quando o conteúdo desses documentos cita
+internamente um código INCRA/SNCR ou termos de CCIR (ex.: planta que referencia o CCIR da
+matrícula-mãe), a heurística rotula o documento como `source_doc_type='ccir'`. O
+extrator então "colhe" campos desse falso-CCIR (SNCR, área) hintando a mesma
+`matricula_hint` de um CCIR real vizinho — os dois docs concorrem pelo mesmo hint com
+valores diferentes, e o staging aceita ambos, gerando uma matrícula espúria quando
+consolidado. Caso real: caso 13 (Property 10), docs 228/230 (plantas lidas como `ccir`,
+hint `2923`/`4655`) × doc 231 (CCIR real da mesma área, também hintado `2923` por engano
+de re-hint humano). Ver ADR-023 (`docs/adr/023-matriculas-contiguas-integridade-consolidacao.md`)
+e dívida **#60**.
+
+**Query de detecção reutilizável** (acha hints com mais de um SNCR aceito — assinatura do
+bug):
+
+```sql
+SELECT matricula_hint, document_id, source_doc_type, field_name, field_value, status
+FROM extracted_field_staging
+WHERE matricula_hint IN (
+    SELECT matricula_hint
+    FROM extracted_field_staging
+    WHERE field_name = 'codigo_sncr_incra' AND status = 'aceito'
+    GROUP BY matricula_hint
+    HAVING COUNT(DISTINCT field_value->>'value') > 1
+)
+ORDER BY matricula_hint, document_id;
+```
+
+**Solução (hoje, manual):** conferir cada `document_id` do resultado contra o PDF fonte
+(é planta ou CCIR de verdade?), rejeitar o staging aceito do documento errado, re-hintar
+o documento correto para a matrícula certa, e comparar a `Matricula` real via
+`SELECT id, numero_matricula, area_ha, codigo_incra_sncr FROM matriculas WHERE property_id=<id>`
+antes de decidir o que apagar. **Fix estrutural (não implementado):** tipos próprios para
+`planta`/`memorial_descritivo`/`auto_de_infracao` no classificador (dívida #60).
 
 ---
 

@@ -283,6 +283,30 @@ no `knowledge_catalog` até que outra fonte apareça. **Marco para revisitar:** 
 sócia trouxer o conteúdo do N7 por outro canal (novo export, PDF avulso). **Origem:**
 Sprint corpus Acre (2026-07-04), fechado sem N7 em 2026-07-06.
 
+**59. Tipos próprios para planta/memorial/auto-de-infração no classificador de
+documentos.** O classificador rule-based do `extrator` não distingue planta/memorial
+descritivo de CCIR — quando o conteúdo cita internamente um código INCRA/SNCR ou termos
+de CCIR, a heurística rotula como `source_doc_type='ccir'`. Isso faz o documento "colher"
+campos (SNCR, área) e disputar o mesmo `matricula_hint` de um CCIR real vizinho, gerando
+matrícula espúria quando consolidado (mecanismo documentado em
+`docs/operacao/TROUBLESHOOTING.md`, categoria 2). O guard fantasma e o fix de bucket do
+Sprint 4 (ADR-023) mitigam o **dano** (nada grava sem divergência acusada), não a
+**causa**. **Caso real:** caso 13 (Property 10), docs 228/230 lidos como `ccir` sendo
+plantas. **Origem:** verificação pós-merge #94–#97 (2026-07-06), residual de severidade
+rebaixada citado em ADR-023.
+
+**60. Conceito `registro_anterior` na `Matricula` (linhagem de matrícula).** Quando um
+imóvel rural muda de número de matrícula por reabertura/desmembramento cartorial, o
+sistema hoje não modela a linhagem — cada matrícula é um registro independente sem
+referência à anterior. Evidência real: caso 13, linhagem 2609→2923→4698 (mesma área,
+números diferentes ao longo do tempo); um CCIR de 2024 ainda cita a ficha antiga (2923),
+o que confundiu o extrator/consolidação. **O que destrava:** campo
+`Matricula.registro_anterior` (auto-referência nullable) para o consultor documentar a
+cadeia manualmente quando souber, sem exigir que o sistema infira automaticamente.
+**Sem urgência** — mitigação atual é o consultor validar o SNCR/área manualmente (selo
+de oficialização, ADR-022). **Origem:** verificação pós-merge #94–#97 (2026-07-06),
+diagnóstico da remediação do caso 13.
+
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
 **13. R1 — contratos externos.** Headers `X-Amigao-*` em `alerts.py`, `User-Agent` dos
