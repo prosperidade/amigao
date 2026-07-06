@@ -191,7 +191,9 @@ por `json_parse` ("não foi possível extrair JSON da resposta LLM"), AIJob 124 
 explícito por chamada, parsing tolerante de JSON + retry, e/ou fallback de provider mais robusto.
 **Origem:** mergulho fluxo agêntico (01/06).
 
-**44. A chain não propaga `uf` ao `ctx.metadata` do diagnóstico (skill base só casa com `uf` presente).**
+**44b. A chain não propaga `uf` ao `ctx.metadata` do diagnóstico (skill base só casa com `uf` presente).**
+*(Renumerada 44→44b — colidia com a dívida "OCR Gemini multipágina", acima; ver nota de
+desambiguação no PR #100, `docs/ficha-e-registro`, ainda não mergeado.)*
 Descoberto ao fechar a #40: a skill `diagnostico/situacao_ambiental_imovel_rural` tem
 `applies_to: {uf: [GO, MS, MT]}`, então `matches_context` só a injeta no system prompt quando
 `ctx.metadata["uf"]` existe e está na lista. Provado rodando: com `uf="MS"` a skill é injetada
@@ -204,6 +206,10 @@ automaticamente, e o `DiagnosticoAgent` não auto-enriquece o metadata. Logo, na
 `ctx.metadata` antes do diagnóstico. **Toca orquestração/propagação de contexto na chain → ligada à
 #38** (mesmo PR de chains sensíveis, com aval do André). **NÃO resolvido no PR #40** (escopo de lá era
 só validar os SKILL.md). **Origem:** validação E2E do PR #40 (01/06).
+**✅ FECHADA (06/07, `fix/fase0-gap-ficha07`, item 7 do gap-analysis Ficha 07):** `_build_context`
+(`app/api/v1/agents.py`) deriva `uf` do `Property.state` do processo quando o caller não passa o
+metadado explicitamente (callers que já setam `uf` não são sobrescritos). Testado com UF=AC (corpus
+Acre). Ver `tests/api/test_agents_uf_propagation.py`.
 
 **41. `create-case` não auto-dispara a chain de diagnóstico.** Ao finalizar o caso, só o
 `atendimento` roda; o consultor precisa acionar diagnóstico/legislação manualmente. Decisão de
