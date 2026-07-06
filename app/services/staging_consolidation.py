@@ -20,7 +20,7 @@ from datetime import UTC, date, datetime
 from typing import Any, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import Date, Float, Numeric, String
+from sqlalchemy import Date, Float, Integer, Numeric, String
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
@@ -113,6 +113,11 @@ def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = 
         return ha
     if isinstance(column_type, (Float, Numeric)):
         return _to_float_br(value)
+    if isinstance(column_type, Integer):
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
     if isinstance(column_type, Date):
         if isinstance(value, (date, datetime)):
             return value if isinstance(value, date) else value.date()

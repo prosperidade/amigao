@@ -212,6 +212,7 @@ def audit_property(
     documents: list[dict[str, Any]] | None = None,
     extracted_data: dict[str, Any] | None = None,
     tolerance_pct: Decimal = DEFAULT_AREA_TOLERANCE_PCT,
+    ano_corrente: int | None = None,
 ) -> list[AuditFinding]:
     """Roda a bateria de cruzamentos sobre ``property_data`` + dados extraídos.
 
@@ -230,6 +231,11 @@ def audit_property(
     - ``rl_status``          — averbada/proposta/pendente/cancelada
     - ``rl_declared_ha``     — RL declarada no CAR
     - ``rl_averbada_ha``     — RL averbada na matrícula
+    - ``exercicio_ccir``     — ano do CCIR mais recente lido (Fase 0, item 8)
+
+    ``ano_corrente`` (Fase 0, item 8): ano contra o qual `exercicio_ccir` é
+    comparado. Parâmetro explícito (não ``datetime.now()`` interno) para a
+    função continuar pura/determinística — o caller (agente) injeta o ano real.
 
     Retorna lista de ``AuditFinding`` (zero ou mais).
     """
@@ -344,6 +350,25 @@ def audit_property(
     # indisponível (D1)". Quando D1 (parser shapefile/KML) popular geom, ESTA
     # seção passa a emitir achados ESPACIAIS REAIS (overlay PostGIS: CAR × APP,
     # sobreposição com UC/terceiros) — aí sim findings persistidos.
+
+    # --- 5. CCIR de exercício anterior (Fase 0, item 8) ---------------------
+    # CCIR é documento ANUAL. Catálogo já tinha o código (regulatory_catalog_seed),
+    # faltava o emissor. Determinístico: só compara os dois inteiros.
+    exercicio_ccir = property_data.get("exercicio_ccir")
+    if exercicio_ccir is not None and ano_corrente is not None and exercicio_ccir < ano_corrente:
+        findings.append(AuditFinding(
+            codigo_alerta="CCIR_EXERCICIO_ANTERIOR",
+            familia="fiscal",
+            grade=GRADE_ATENCAO,
+            tema="CCIR",
+            descricao=f"CCIR de exercício {exercicio_ccir}, defasado em relação ao ano corrente ({ano_corrente}).",
+            impacto=(
+                "CCIR desatualizado pode ser recusado por banco/cartório em análises "
+                "recentes — recomenda-se emissão de CCIR do exercício vigente."
+            ),
+            evidencia={"exercicio_ccir": exercicio_ccir, "ano_corrente": ano_corrente},
+            documentos_cruzados=["CCIR"],
+        ))
 
     return findings
 
