@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Stethoscope, Brain, AlertTriangle, CheckCircle2, Loader2, Info } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Stethoscope, Brain, AlertTriangle, CheckCircle2, Loader2, Info, ArrowRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Process } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
@@ -9,6 +10,7 @@ import DiagnosisAssinatura from './DiagnosisAssinatura';
 import { useIssues, useDiagnosisNotes } from '@/lib/regulatory/hooks';
 import { SEVERITY_ORDER } from '@/lib/regulatory/labels';
 import AlertaCard from './AlertaCard';
+import { useCreateAcao } from '@/lib/acoes/hooks';
 
 interface DiagnosisTabProps {
   process: Process;
@@ -16,8 +18,45 @@ interface DiagnosisTabProps {
   onGoToAlerta?: (issueId: number) => void;
 }
 
+// Ficha 07 §3.1 — passivos e ações de remediação com FONTE (Princípio 11).
+// Shape espelha app/schemas/stage_output.py (Afirmacao/SourceRef).
+interface SourceRef {
+  tipo: string;
+  ref: string | null;
+  descricao: string | null;
+  valor: string | null;
+  confianca: string | null;
+  sem_fonte: boolean;
+}
+interface Afirmacao {
+  texto: string;
+  categoria: string | null;
+  fontes: SourceRef[];
+}
+
+function fonteLabel(fontes: SourceRef[] | undefined): string {
+  const f = fontes?.[0];
+  if (!f || f.sem_fonte) return 'sem fonte identificada';
+  const parts = [f.descricao, f.valor].filter(Boolean);
+  const extra = (fontes?.length ?? 0) > 1 ? ` (+${fontes!.length - 1})` : '';
+  return (parts.length > 0 ? parts.join(' — ') : f.tipo) + extra;
+}
+
 export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProps) {
   const navigate = useNavigate();
+  // Item 5 (Ficha 07 §3.1) — "→ Ações" a partir de uma ação de remediação do
+  // diagnóstico, mesmo padrão do AlertaCard (consultor decide, não é automático).
+  const createAcao = useCreateAcao(process.id);
+  function handleEnviarAcaoParaAcoes(texto: string) {
+    createAcao.mutate(
+      { titulo: texto.length > 80 ? `${texto.slice(0, 77)}...` : texto,
+        descricao: `${texto} (enviado da Visão geral — ação de remediação do diagnóstico)` },
+      {
+        onSuccess: () => toast.success('Ação criada na aba Ações.'),
+        onError: () => toast.error('Falha ao criar a ação.'),
+      },
+    );
+  }
 
   // Buscar ultimo job do agente diagnostico para este processo
   const { data: jobs = [] } = useQuery<AIJob[]>({
@@ -153,35 +192,99 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
             </p>
           )}
 
-          {Array.isArray(diagResult.passivos_identificados) && (diagResult.passivos_identificados as string[]).length > 0 && (
-            <div className="mb-3">
-              <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> Passivos Identificados
-              </p>
-              <ul className="space-y-1">
-                {(diagResult.passivos_identificados as string[]).map((p, i) => (
-                  <li key={i} className="text-sm text-gray-700 dark:text-slate-300 flex items-start gap-2">
-                    <span className="text-red-400 mt-0.5">&#x2022;</span> {String(p)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {(() => {
+            const afirmacoes = Array.isArray(diagResult.afirmacoes) ? (diagResult.afirmacoes as Afirmacao[]) : [];
+            const passivosAfirmados = afirmacoes.filter(a => a.categoria === 'passivo');
+            const acoesAfirmadas = afirmacoes.filter(a => a.categoria === 'acao');
+            // Fallback legado — jobs antigos sem `afirmacoes` populado.
+            const passivosLegado = passivosAfirmados.length === 0 && Array.isArray(diagResult.passivos_identificados)
+              ? (diagResult.passivos_identificados as string[])
+              : null;
+            const acoesLegado = acoesAfirmadas.length === 0 && Array.isArray(diagResult.acoes_remediacao)
+              ? (diagResult.acoes_remediacao as string[])
+              : null;
 
-          {Array.isArray(diagResult.acoes_remediacao) && (diagResult.acoes_remediacao as string[]).length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Acoes de Remediacao
-              </p>
-              <ul className="space-y-1">
-                {(diagResult.acoes_remediacao as string[]).map((a, i) => (
-                  <li key={i} className="text-sm text-gray-700 dark:text-slate-300 flex items-start gap-2">
-                    <span className="text-emerald-400 mt-0.5">&#x203A;</span> {String(a)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            return (
+              <>
+                {(passivosAfirmados.length > 0 || (passivosLegado?.length ?? 0) > 0) && (
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Passivos Identificados
+                    </p>
+                    <ul className="space-y-1.5">
+                      {passivosAfirmados.length > 0
+                        ? passivosAfirmados.map((p, i) => (
+                            <li key={i} className="text-sm text-gray-700 dark:text-slate-300">
+                              <div className="flex items-start gap-2">
+                                <span className="text-red-400 mt-0.5">&#x2022;</span> {p.texto}
+                              </div>
+                              <p className="text-xs text-gray-400 dark:text-slate-500 ml-4">
+                                Fonte: {fonteLabel(p.fontes)}
+                              </p>
+                            </li>
+                          ))
+                        : passivosLegado!.map((p, i) => (
+                            <li key={i} className="text-sm text-gray-700 dark:text-slate-300 flex items-start gap-2">
+                              <span className="text-red-400 mt-0.5">&#x2022;</span> {String(p)}
+                            </li>
+                          ))}
+                    </ul>
+                  </div>
+                )}
+
+                {(acoesAfirmadas.length > 0 || (acoesLegado?.length ?? 0) > 0) && (
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Ações de Remediação
+                    </p>
+                    <ul className="space-y-1.5">
+                      {acoesAfirmadas.length > 0
+                        ? acoesAfirmadas.map((a, i) => (
+                            <li key={i} className="text-sm text-gray-700 dark:text-slate-300">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-2 min-w-0">
+                                  <span className="text-emerald-400 mt-0.5">&#x203A;</span>
+                                  <span>{a.texto}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEnviarAcaoParaAcoes(a.texto)}
+                                  disabled={createAcao.isPending}
+                                  title="Criar uma ação na aba Ações a partir desta remediação"
+                                  className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50"
+                                >
+                                  {createAcao.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRight className="w-3 h-3" />}
+                                  Ações
+                                </button>
+                              </div>
+                              <p className="text-xs text-gray-400 dark:text-slate-500 ml-4">
+                                Fonte: {fonteLabel(a.fontes)}
+                              </p>
+                            </li>
+                          ))
+                        : acoesLegado!.map((a, i) => (
+                            <li key={i} className="text-sm text-gray-700 dark:text-slate-300 flex items-start justify-between gap-2">
+                              <span className="flex items-start gap-2 min-w-0">
+                                <span className="text-emerald-400 mt-0.5">&#x203A;</span> {String(a)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleEnviarAcaoParaAcoes(String(a))}
+                                disabled={createAcao.isPending}
+                                title="Criar uma ação na aba Ações a partir desta remediação"
+                                className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50"
+                              >
+                                {createAcao.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRight className="w-3 h-3" />}
+                                Ações
+                              </button>
+                            </li>
+                          ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
