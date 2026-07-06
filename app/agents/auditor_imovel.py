@@ -178,6 +178,7 @@ class AuditorImovelAgent(BaseAgent):
                 # entre as matrículas do imóvel (CCIR é documento anual; várias
                 # matrículas podem ter exercícios diferentes, usa o mais novo).
                 from sqlalchemy import func as _sa_func  # noqa: PLC0415
+
                 from app.models.matricula import Matricula  # noqa: PLC0415
 
                 exercicio_ccir = (
