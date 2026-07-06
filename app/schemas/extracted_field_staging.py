@@ -49,9 +49,13 @@ class StagingDecisionRequest(BaseModel):
       campos irmãos (mesmo target_field/matrícula) das outras fontes.
     - ``editar``: grava ``valor`` (obrigatório) como override manual.
     - ``rejeitar``: descarta o campo (não entra na consolidação).
+    - ``criar_acao``: 3º caminho explícito da divergência (Ficha 07 §3.3) — só
+      em ``divergente_transcricao``. Cria a Ação AGORA (mesmo gerador que a
+      Consolidação roda automaticamente); o campo continua divergente, a
+      decisão do consultor foi "virar trabalho rastreável", não "resolver".
     """
 
-    acao: Literal["aceitar", "escolher_fonte", "editar", "rejeitar"]
+    acao: Literal["aceitar", "escolher_fonte", "editar", "rejeitar", "criar_acao"]
     valor: Optional[Any] = None   # obrigatório em "editar"
     fonte: Optional[str] = None   # metadado opcional em "escolher_fonte"
 
