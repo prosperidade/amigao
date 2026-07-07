@@ -361,6 +361,22 @@ Migrations notáveis:
 2. **`Document.extracted_text` sem cache_twin populado em alguns docs antigos.** Sprint -1 D introduziu cache por SHA-256 mas docs anteriores podem precisar de re-OCR.
 3. **`AIJob.output_data` mencionado em alguns docs antigos — não existe.** O campo correto é `result` (JSONB). Documentação antiga errada.
 4. **Migração da chave antiga do dual-emit do A2-diagnostico.** Frontend lê schema novo com fallback; consolidar em sprint cleanup futura.
+5. **`Property.ccir` DEPRECIADO (Fase 1, N1 item 5, 06/07/2026) — campo NÃO-GRAVÁVEL
+   daqui pra frente.** Motivo: o nome "CCIR" é ambíguo entre 3 números distintos
+   (código SNCR/INCRA permanente do imóvel; número de exercício ANUAL do
+   certificado CCIR; código de autenticidade da certificação) — dois pipelines de
+   extração diferentes (`document_extractor.py` legado × `ficha01_extraction.py`)
+   colhiam números diferentes para o "mesmo" campo. Unificado: o campo-chave único
+   passa a ser `Matricula.codigo_incra_sncr` (permanente, sem ambiguidade,
+   `exercicio_ccir` — Fase 0 item 8 — cobre o número anual separadamente). Os
+   caminhos de escrita automática (`intake_enrichment.py`) e manual
+   (`POST /intake/...`, wizard "new_property.ccir_number") foram desligados;
+   `Property.ccir` fica congelado com o valor legado que já tinha (SEM migração
+   automática — curadoria caso a caso, decisão registrada 06/07; veto do André
+   antes do merge reabre a discussão). **Trigger:** se algum caso real precisar
+   comparar o `Property.ccir` legado contra o `Matricula.codigo_incra_sncr` atual
+   (ex.: para decidir se migra manualmente), isso é o sinal de que vale desenhar
+   a migração de curadoria — não fazer preventivamente.
 
 ## Acao (Ficha 07)
 

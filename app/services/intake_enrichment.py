@@ -39,7 +39,12 @@ logger = logging.getLogger(__name__)
 _PROPERTY_KEY_MAP: dict[str, list[str]] = {
     "registry_number": ["numero_matricula"],
     "car_code": ["numero_car"],
-    "ccir": ["numero_ccir"],
+    # Fase 1 (N1 item 5) — Property.ccir DEPRECIADO: campo ambíguo entre 3
+    # números (código SNCR permanente, número anual do CCIR, autenticidade da
+    # certificação). Campo-chave único passa a ser Matricula.codigo_incra_sncr
+    # (ficha01_extraction.py, já grava lá). SEM migração automática — dado
+    # legado de "ccir" fica congelado, curadoria caso a caso. Ver
+    # docs/arquitetura/MODELO_DE_DADOS.md.
     "nirf": ["nirf"],
     "total_area_ha": ["area_hectares", "area_total_ha"],
     "app_area_ha": ["area_app_ha"],
