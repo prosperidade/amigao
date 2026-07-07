@@ -173,3 +173,81 @@ def test_planta_nao_grava_staging_cadastral_e_deixa_nota_visivel(seeded, db_sess
     assert doc.extraction_status is not None
     assert "planta_topografica" in doc.extraction_status
     assert "revisar" in doc.extraction_status
+
+
+# ---------------------------------------------------------------------------
+# Fase 1 (N2) — auto de infração é FATO DE PASSIVO, não campo cadastral.
+# ---------------------------------------------------------------------------
+
+_AUTO_INFRACAO_TEXT = """
+AUTO DE INFRAÇÃO Nº 123456-D
+IBAMA — Instituto Brasileiro do Meio Ambiente
+
+02. Autuado: José da Silva
+03. CPF: 111.222.333-44
+13. Descrição da infração: Supressão de vegetação nativa sem autorização,
+área de 3,2 hectares.
+14. Enquadramento legal: Lei 9.605/98, art. 70
+19. Valor da multa: R$ 15.000,00
+24. Data da autuação: 10/03/2025
+25. Data de vencimento: 10/04/2025
+"""
+
+_AUTO_INFRACAO_FATO = {
+    "numero_auto": "123456-D",
+    "orgao_autuante": "IBAMA",
+    "autuado_nome": "José da Silva",
+    "autuado_cpf": "111.222.333-44",
+    "data_autuacao": "10/03/2025",
+    "tipo_penalidade": "multa",
+    "descricao_infracao": "Supressão de vegetação nativa sem autorização, área de 3,2 hectares.",
+    "enquadramento_legal": "Lei 9.605/98, art. 70",
+    "coordenadas": None,
+    "valor_multa": "15.000,00",
+    "data_vencimento": "10/04/2025",
+    "confidence": {},
+    "coordenadas_latlong": None,
+}
+
+
+def test_auto_infracao_nao_gera_staging_cadastral_e_grava_fato_no_job(seeded, db_session):
+    """Item 7 (N2): auto de infração NÃO passa pelo staging cadastral (sem
+    hint de matrícula) — o fato vai pro AIJob.result do extrator."""
+    tenant, user, process, doc = seeded
+    doc.document_type = "outro"
+    doc.extracted_text = _AUTO_INFRACAO_TEXT
+    db_session.flush()
+
+    ctx = AgentContext(
+        tenant_id=tenant.id, user_id=user.id, process_id=process.id,
+        session=db_session, metadata={"document_id": doc.id, "doc_type": "outro"},
+    )
+    with patch(
+        "app.services.document_extractor.extract_document_fields",
+        return_value=({}, None),
+    ), patch(
+        "app.services.auto_infracao_extraction.extract_auto_infracao_fato",
+        return_value=dict(_AUTO_INFRACAO_FATO),
+    ):
+        agent = AgentRegistry.create("extrator", ctx)
+        result = agent.run()
+
+    assert result.success is True
+    assert result.data.get("auto_infracao_fato", {}).get("numero_auto") == "123456-D"
+
+    rows = (
+        db_session.query(ExtractedFieldStaging)
+        .filter(ExtractedFieldStaging.document_id == doc.id)
+        .all()
+    )
+    assert rows == [], "auto de infração NÃO deve gerar staging cadastral"
+    assert all(r.matricula_hint is None for r in rows)
+
+    from app.models.ai_job import AIJob
+
+    job = db_session.query(AIJob).filter(AIJob.id == result.ai_job_id).first()
+    assert job is not None
+    assert job.result["auto_infracao_fato"]["orgao_autuante"] == "IBAMA"
+
+    db_session.refresh(doc)
+    assert doc.extraction_status is None  # processado com sucesso, sem nota pendente

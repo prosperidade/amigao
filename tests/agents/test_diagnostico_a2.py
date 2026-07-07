@@ -380,3 +380,117 @@ class TestLacunasLogInfo:
             agent.run()
         msgs = [r.message for r in caplog.records if r.name == "app.agents.diagnostico"]
         assert any("lacunas_empty" in m for m in msgs)
+
+
+# ---------------------------------------------------------------------------
+# Fase 1 (N2, item 10) — DiagnosticoAgent consome fatos de auto de infração.
+# ---------------------------------------------------------------------------
+
+class TestAutoInfracaoNoContexto:
+    _FATO = {
+        "document_id": 7,
+        "numero_auto": "123456-D",
+        "orgao_autuante": "IBAMA",
+        "autuado_nome": "José da Silva",
+        "autuado_cpf": "111.222.333-44",
+        "descricao_infracao": "Supressão de vegetação nativa sem autorização.",
+        "enquadramento_fontes": [
+            {"citacao": "Lei 9.605/98, art. 70", "localizada": True, "chunk_id": 99},
+        ],
+        "nota_titular_divergente": None,
+    }
+
+    def test_afirmacoes_inclui_auto_infracao_deterministico(self):
+        agent = DiagnosticoAgent(_ctx())
+        with ExitStack() as stack:
+            _enter_default_patches(stack)
+            stack.enter_context(patch.object(
+                DiagnosticoAgent, "_load_auto_infracao_fatos",
+                return_value=[dict(self._FATO)],
+            ))
+            complete = stack.enter_context(patch("app.agents.base.complete"))
+            complete.return_value = _make_ai_response({
+                "situacao_geral": "ok",
+                "passivos_identificados": [],
+                "acoes_remediacao": [],
+                "risco_estimado": "baixo",
+            })
+            result = agent.run()
+
+        afirmacoes = result.data["afirmacoes"]
+        auto_af = [a for a in afirmacoes if "123456-D" in a["texto"]]
+        assert len(auto_af) == 1
+        assert "IBAMA" in auto_af[0]["texto"]
+        fontes = auto_af[0]["fontes"]
+        assert any(f["tipo"] == "documento" for f in fontes)
+        assert any(f["tipo"] == "legislacao" and not f["sem_fonte"] for f in fontes)
+
+    def test_enquadramento_nao_localizado_vira_sem_fonte(self):
+        fato = dict(self._FATO)
+        fato["enquadramento_fontes"] = [
+            {"citacao": "Lei 9.605/98, art. 70", "localizada": False, "chunk_id": None},
+        ]
+        agent = DiagnosticoAgent(_ctx())
+        with ExitStack() as stack:
+            _enter_default_patches(stack)
+            stack.enter_context(patch.object(
+                DiagnosticoAgent, "_load_auto_infracao_fatos", return_value=[fato],
+            ))
+            complete = stack.enter_context(patch("app.agents.base.complete"))
+            complete.return_value = _make_ai_response({
+                "situacao_geral": "ok", "passivos_identificados": [],
+                "acoes_remediacao": [], "risco_estimado": "baixo",
+            })
+            result = agent.run()
+
+        auto_af = [a for a in result.data["afirmacoes"] if "123456-D" in a["texto"]][0]
+        legis_fontes = [f for f in auto_af["fontes"] if "9.605" in (f.get("descricao") or "")]
+        assert len(legis_fontes) == 1
+        assert legis_fontes[0]["sem_fonte"] is True
+        assert "não localizada" in legis_fontes[0]["descricao"]
+
+    def test_titular_divergente_vira_afirmacao_informativa_separada(self):
+        fato = dict(self._FATO)
+        fato["nota_titular_divergente"] = (
+            "Autuado do auto de infração (José da Silva) difere do titular "
+            "atual do imóvel — confirmar se houve transferência de "
+            "titularidade após a autuação."
+        )
+        agent = DiagnosticoAgent(_ctx())
+        with ExitStack() as stack:
+            _enter_default_patches(stack)
+            stack.enter_context(patch.object(
+                DiagnosticoAgent, "_load_auto_infracao_fatos", return_value=[fato],
+            ))
+            complete = stack.enter_context(patch("app.agents.base.complete"))
+            complete.return_value = _make_ai_response({
+                "situacao_geral": "ok", "passivos_identificados": [],
+                "acoes_remediacao": [], "risco_estimado": "baixo",
+            })
+            result = agent.run()
+
+        afirmacoes = result.data["afirmacoes"]
+        divergencia = [a for a in afirmacoes if "titular atual" in a["texto"]]
+        assert len(divergencia) == 1
+        # nota informativa NUNCA vira bloqueio — só mais uma Afirmacao no diagnóstico.
+        assert result.success is True
+
+    def test_sem_auto_infracao_nao_afeta_afirmacoes(self):
+        """Sem fatos, a lista de afirmações segue vindo só de passivos/ações
+        do LLM — comportamento legado preservado."""
+        agent = DiagnosticoAgent(_ctx())
+        with ExitStack() as stack:
+            _enter_default_patches(stack)
+            stack.enter_context(patch.object(
+                DiagnosticoAgent, "_load_auto_infracao_fatos", return_value=[],
+            ))
+            complete = stack.enter_context(patch("app.agents.base.complete"))
+            complete.return_value = _make_ai_response({
+                "situacao_geral": "ok",
+                "passivos_identificados": ["CAR pendente"],
+                "acoes_remediacao": [],
+                "risco_estimado": "baixo",
+            })
+            result = agent.run()
+
+        assert all("auto de infra" not in a["texto"].lower() for a in result.data["afirmacoes"])
