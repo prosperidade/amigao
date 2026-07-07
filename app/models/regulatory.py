@@ -30,6 +30,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -398,6 +399,30 @@ class RegulatoryIssue(Base):
         nullable=False,
     )
     resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    # ── Fase 1 (N1 item 6, dívida #48) — chave estável pro UNIQUE parcial ──
+    # `tema` e `subject_ref` colunas NOVAS (nullable — registros antigos ficam
+    # NULL; Postgres trata NULL como distinto em UNIQUE, então legado nunca
+    # colide). `_persist_issues` (auditor_imovel.py) passa a gravar os dois a
+    # partir de agora; dedupe app-level (`issue_dedupe_key`, ainda usa
+    # `descricao` livre) continua como primeira linha de defesa — o índice
+    # abaixo é o CINTO DE SEGURANÇA no banco (3º caso do padrão "dedupe sem
+    # constraint": staging #81, ações Ficha 07, agora regulatory_issues).
+    tema = Column(String, nullable=True)
+    # subject_ref: identifica O QUE especificamente o achado compara — hoje
+    # deriva de `documentos_cruzados` ordenado e concatenado (ex.: "CAR|Matricula")
+    # porque é o campo mais estável já existente no finding (não muda entre
+    # reemissões, ao contrário de valores numéricos/datas na evidência).
+    subject_ref = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_regulatory_issues_chave_estavel_aberta",
+            "tenant_id", "property_id", "codigo_alerta", "tema", "subject_ref",
+            unique=True,
+            postgresql_where=(resolved_at.is_(None)),
+        ),
+    )
 
     @validates("documentos_cruzados")
     def _normalize_documentos_cruzados(self, _key: str, value: Any) -> Any:

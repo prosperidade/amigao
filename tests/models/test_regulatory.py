@@ -364,6 +364,76 @@ class TestRegulatoryIssue:
         db_session.rollback()
 
 
+class TestRegulatoryIssueChaveEstavelUniqueParcial:
+    """Fase 1 (N1 item 6, dívida #48) — UNIQUE parcial em
+    (tenant_id, property_id, codigo_alerta, tema, subject_ref) WHERE
+    resolved_at IS NULL. Cinto de segurança no banco (dedupe hoje é só
+    app-level, `_persist_issues`)."""
+
+    def test_duplicata_exata_nao_resolvida_viola_constraint(self, db_session, tenant, property_record):
+        db_session.add(RegulatoryIssue(
+            tenant_id=tenant.id, property_id=property_record.id,
+            codigo_alerta="AREA_MATRICULA_X_CAR", familia=RegulatoryFamilia.area,
+            tema="área (matrícula × CAR)", subject_ref="CAR|Matricula",
+        ))
+        db_session.flush()
+
+        db_session.add(RegulatoryIssue(
+            tenant_id=tenant.id, property_id=property_record.id,
+            codigo_alerta="AREA_MATRICULA_X_CAR", familia=RegulatoryFamilia.area,
+            tema="área (matrícula × CAR)", subject_ref="CAR|Matricula",
+        ))
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+        db_session.rollback()
+
+    def test_duplicata_resolvida_nao_viola_constraint(self, db_session, tenant, property_record):
+        """Uma issue RESOLVIDA não conta pro UNIQUE — reabrir o mesmo achado
+        depois de saneado no mundo real é legítimo."""
+        resolvida = RegulatoryIssue(
+            tenant_id=tenant.id, property_id=property_record.id,
+            codigo_alerta="AREA_MATRICULA_X_CAR", familia=RegulatoryFamilia.area,
+            tema="área (matrícula × CAR)", subject_ref="CAR|Matricula",
+            resolved_at=datetime.now(UTC),
+        )
+        db_session.add(resolvida)
+        db_session.flush()
+
+        nova = RegulatoryIssue(
+            tenant_id=tenant.id, property_id=property_record.id,
+            codigo_alerta="AREA_MATRICULA_X_CAR", familia=RegulatoryFamilia.area,
+            tema="área (matrícula × CAR)", subject_ref="CAR|Matricula",
+        )
+        db_session.add(nova)
+        db_session.flush()  # não levanta
+        assert nova.id is not None
+
+    def test_tema_ou_subject_ref_diferentes_nao_colidem(self, db_session, tenant, property_record):
+        db_session.add(RegulatoryIssue(
+            tenant_id=tenant.id, property_id=property_record.id,
+            codigo_alerta="AREA_MATRICULA_X_CAR", familia=RegulatoryFamilia.area,
+            tema="área (matrícula × CAR)", subject_ref="CAR|Matricula",
+        ))
+        db_session.flush()
+
+        db_session.add(RegulatoryIssue(
+            tenant_id=tenant.id, property_id=property_record.id,
+            codigo_alerta="AREA_MATRICULA_X_CAR", familia=RegulatoryFamilia.area,
+            tema="área (matrícula × CAR)", subject_ref="CAR|ITR",  # subject_ref distinto
+        ))
+        db_session.flush()  # não levanta
+
+    def test_legado_sem_tema_subject_ref_nao_colide_entre_si(self, db_session, tenant, property_record):
+        """Postgres trata NULL como distinto em UNIQUE — registros antigos
+        (tema=subject_ref=NULL) nunca colidem, mesmo em massa."""
+        for _ in range(3):
+            db_session.add(RegulatoryIssue(
+                tenant_id=tenant.id, property_id=property_record.id,
+                codigo_alerta="AREA_MATRICULA_X_CAR", familia=RegulatoryFamilia.area,
+            ))
+        db_session.flush()  # não levanta
+
+
 class TestRegulatoryIssueCatalog:
     """PROMPT_5 Onda A: catálogo evolutivo. Adicionar código novo é INSERT,
     não migration. O seed inicial vem da migration `c1b2d3e4f5a7`."""
