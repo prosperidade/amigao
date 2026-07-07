@@ -8,11 +8,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 61.** Todo PR que abrir dívida nova incrementa este número
+> **PRÓXIMO NÚMERO LIVRE: 62.** Todo PR que abrir dívida nova incrementa este número
 > (mata a classe de colisão que já aconteceu 2x — #21 e #44, ver nota na entrada 44a/44b
-> abaixo). **#59 e #60 estão reservados** pelo PR #98 (`chore/governanca-pos-94`, aberto,
-> ainda não mergeado — tipos planta/memorial no classificador e conceito
-> `registro_anterior` na Matricula); não reutilizar esses números mesmo que o PR demore.
+> abaixo). #59/#60 (PR #98) já mergeados; #61 usado nesta rodada (Fase 1, ver abaixo).
 
 ## P0 — fecham o pipeline ponta a ponta
 
@@ -298,6 +296,15 @@ no `knowledge_catalog` até que outra fonte apareça. **Marco para revisitar:** 
 sócia trouxer o conteúdo do N7 por outro canal (novo export, PDF avulso). **Origem:**
 Sprint corpus Acre (2026-07-04), fechado sem N7 em 2026-07-06.
 
+**61. Corpus legislativo do Acre NUNCA rodou contra produção (distinta da #58).**
+Confirmado no item 0 da Fase 1 (06/07): `SELECT uf, count(*) FROM knowledge_catalog`
+em prod (`diquycxxkfrjhxtrcmzb`) tem 24.233 linhas — GO/MS/MT/Federal, **zero** com
+`uf='AC'`. O commit `ef76da0` (PR #95) já dizia "Executado em dev" — mesmo padrão
+recorrente da dívida #47 (corpus SEMAD/estadual ausente em prod). Runbook + script
+de reindex síncrono prontos em `docs/trabalhos/corpus_acre_prod.md` e
+`scripts/reindex_legislation_by_uf.py` (PR #102) — falta só rodar com credenciais de
+prod. **Origem:** item 0 da Fase 1 (gap-analysis Ficha 07, 06/07).
+
 **59. Tipos próprios para planta/memorial/auto-de-infração no classificador de
 documentos.** O classificador rule-based do `extrator` não distingue planta/memorial
 descritivo de CCIR — quando o conteúdo cita internamente um código INCRA/SNCR ou termos
@@ -309,6 +316,16 @@ Sprint 4 (ADR-023) mitigam o **dano** (nada grava sem divergência acusada), nã
 **causa**. **Caso real:** caso 13 (Property 10), docs 228/230 lidos como `ccir` sendo
 plantas. **Origem:** verificação pós-merge #94–#97 (2026-07-06), residual de severidade
 rebaixada citado em ADR-023.
+**✅ FECHADA (06/07, `feat/fase1-classificador-n1n2`, N1 item 1):** classificador ganhou
+4 tipos novos (`planta_topografica`, `memorial_descritivo`, `auto_infracao`,
+`certidao_embargo`) com precedência ANTES de `ccir`/`sigef` — a menção fraca de "CCIR"
+na legenda de uma planta não sequestra mais a classificação (fixture do shape real do
+doc 228, `tests/agents/test_extrator_ficha01_staging.py`). `auto_infracao` reusa o tipo
+já existente no pipeline legado (`document_extractor.py`), não duplicado. Planta/memorial
+não têm `_FIELD_SPECS` (não alimentam staging cadastral) nem entram no allowlist de
+criação de `Matricula` (guard já existia, Sprint 4). Item 3 (mesma rodada): o
+`skipped_reason` que já existia e nunca era lido agora vira nota visível em
+`Document.extraction_status` ("recebido, não processado — revisar").
 
 **60. Conceito `registro_anterior` na `Matricula` (linhagem de matrícula).** Quando um
 imóvel rural muda de número de matrícula por reabertura/desmembramento cartorial, o

@@ -48,6 +48,9 @@ export interface Document {
   // PR 2.1 — categoria usada para identificar mídia inbound de WhatsApp
   // (document_category === 'whatsapp_inbound'). Serializada em DocumentResponse.
   document_category?: string;
+  // Fase 1 (N1, item 3) — nota de processamento ("recebido, não processado
+  // (tipo) — revisar: <motivo>"). Null quando o staging cadastral gravou OK.
+  extraction_status?: string | null;
   created_at: string;
 }
 

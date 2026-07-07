@@ -110,3 +110,66 @@ def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session):
     listadas = [r for r in rows if r.field_name == "matricula_listada"]
     # caso #12 item B: hint normalizado (ponto de milhar removido).
     assert {r.matricula_hint for r in listadas} == {"4698", "6776"}
+
+
+# ---------------------------------------------------------------------------
+# Fase 1 (N1) — planta lida como CCIR (caso 13, docs 228/230): classificador
+# honesto + nota visível de processamento (item 3, P12).
+# ---------------------------------------------------------------------------
+
+# Shape real do doc 228: uma PLANTA topográfica que cita "CCIR" na legenda
+# como referência do imóvel — antes da Fase 1, a menção fraca "ccir" roubava
+# a classificação (caía em `ccir`, gerava matrícula espúria).
+_PLANTA_COM_CCIR_NA_LEGENDA = """
+PLANTA TOPOGRÁFICA — LEVANTAMENTO PLANIALTIMÉTRICO
+Fazenda São Jorge — Lote 1B
+Escala gráfica 1:10.000 — Norte magnético
+Sistema de referência: SIRGAS 2000, UTM Fuso 22S
+
+LEGENDA:
+Ref. CCIR: 000.051.123.390-9
+Área total: 660,6561 ha
+Perímetro conforme levantamento topográfico de campo.
+"""
+
+
+def test_planta_com_ccir_na_legenda_nao_vira_ccir(seeded, db_session):
+    """Item 1 (N1): precedência específica-antes-de-genérica — a menção fraca
+    de "CCIR" na legenda de uma planta não sequestra mais a classificação."""
+    from app.services.ficha01_extraction import classify_doc_type
+
+    assert classify_doc_type(_PLANTA_COM_CCIR_NA_LEGENDA, current="outro") == "planta_topografica"
+
+
+def test_planta_nao_grava_staging_cadastral_e_deixa_nota_visivel(seeded, db_session):
+    """Itens 2+3 (N1): planta não alimenta staging cadastral nem cria
+    matrícula; a razão do skip vira nota visível em `Document.extraction_status`."""
+    tenant, user, process, doc = seeded
+    doc.document_type = "outro"
+    doc.extracted_text = _PLANTA_COM_CCIR_NA_LEGENDA
+    db_session.flush()
+
+    ctx = AgentContext(
+        tenant_id=tenant.id, user_id=user.id, process_id=process.id,
+        session=db_session, metadata={"document_id": doc.id, "doc_type": "outro"},
+    )
+    with patch(
+        "app.services.document_extractor.extract_document_fields",
+        return_value=({}, None),
+    ):
+        agent = AgentRegistry.create("extrator", ctx)
+        result = agent.run()
+
+    assert result.success is True
+
+    rows = (
+        db_session.query(ExtractedFieldStaging)
+        .filter(ExtractedFieldStaging.document_id == doc.id)
+        .all()
+    )
+    assert rows == [], "planta não deve gerar NENHUMA linha de staging cadastral"
+
+    db_session.refresh(doc)
+    assert doc.extraction_status is not None
+    assert "planta_topografica" in doc.extraction_status
+    assert "revisar" in doc.extraction_status

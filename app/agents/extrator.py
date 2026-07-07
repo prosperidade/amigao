@@ -194,7 +194,7 @@ class ExtratorAgent(BaseAgent):
         try:
             effective_type = classify_doc_type(text, doc_type)
             ai_job_id = self._current_job.id if self._current_job is not None else None
-            extract_and_stage(
+            result = extract_and_stage(
                 text=text,
                 doc_type=effective_type,
                 tenant_id=self.ctx.tenant_id,
@@ -204,12 +204,43 @@ class ExtratorAgent(BaseAgent):
                 ai_job_id=ai_job_id,
                 created_by_agent="extrator",
             )
+            # Fase 1 (N1, item 3) — P12 na prática: nenhum documento mudo. O
+            # skipped_reason já existia (StagingResult) mas nunca era lido nem
+            # gravado — o documento ficava silenciosamente sem staging cadastral.
+            # `Document.extraction_status` (coluna já existente, nunca usada)
+            # vira a nota visível — mesmo padrão de "linha discreta" da nota
+            # derivada espacial (ADR-020), só que aqui é fato de processamento,
+            # não achado regulatório, e por isso É gravado (não recomputado).
+            if document_id is not None:
+                if result.skipped_reason:
+                    self._record_extraction_note(document_id, effective_type, result.skipped_reason)
+                elif result.rows_written > 0:
+                    self._clear_extraction_note(document_id)
         except Exception as exc:  # pragma: no cover - blindagem; staging é adicional
             import logging  # noqa: PLC0415
 
             logging.getLogger(__name__).warning(
                 "extrator: staging Ficha 01 falhou (ignorado) doc=%s: %s", document_id, exc
             )
+
+    def _record_extraction_note(self, document_id: int, doc_type: str, reason: str) -> None:
+        """Grava a nota de processamento no `Document` (best-effort)."""
+        from app.models.document import Document  # noqa: PLC0415
+
+        doc = self.ctx.session.query(Document).filter(Document.id == document_id).first()
+        if doc is None:
+            return
+        doc.extraction_status = f"recebido, não processado ({doc_type}) — revisar: {reason}"
+        self.ctx.session.flush()
+
+    def _clear_extraction_note(self, document_id: int) -> None:
+        """Limpa a nota quando um reprocessamento posterior grava staging com sucesso."""
+        from app.models.document import Document  # noqa: PLC0415
+
+        doc = self.ctx.session.query(Document).filter(Document.id == document_id).first()
+        if doc is not None and doc.extraction_status is not None:
+            doc.extraction_status = None
+            self.ctx.session.flush()
 
     def _reuse_staging_fields(self, process_id: int | None) -> dict[str, Any] | None:
         """Reúsa a extração já gravada no staging do processo (chain sem doc novo).

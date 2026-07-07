@@ -12,11 +12,22 @@ shape de `AIJob.extracted_fields` (continua vindo do `document_extractor`); este
 módulo é uma extração ADICIONAL, com 1 chamada LLM dedicada por documento.
 
 Tipos canônicos (Ficha 01 §5.1-5.7 + Ficha 02 §8 para o RAT):
-  rg_cpf, endereco, car, ccir, matricula, itr, sigef, rat (+ outro = fallback).
+  rg_cpf, endereco, car, ccir, matricula, itr, sigef, rat,
+  planta_topografica, memorial_descritivo, auto_infracao, certidao_embargo
+  (+ outro = fallback).
 
 NOMENCLATURA RAT (Ficha 02 §8): `rat` = RELATÓRIO DE ANÁLISE TÉCNICA do CAR
 (emitido pelo órgão ao analisar o CAR). "Retificação" é um ATO, não um documento
 — não existe doc_type para ela.
+
+Fase 1 (N1, classificador honesto): `planta_topografica` e `memorial_descritivo`
+são peças TÉCNICAS de apoio — não têm `_FIELD_SPECS` (não alimentam staging
+cadastral) nem entram no allowlist de criação de `Matricula`
+(`staging_consolidation._MATRICULA_CREATOR_DOC_TYPES`). `auto_infracao` é o
+MESMO tipo já usado pelo pipeline legado (`document_extractor.py`) — reusado
+aqui só para o classificador por conteúdo reconhecer; a extração rica de auto
+de infração como fato de passivo (N2) vive em `app/services/auto_infracao_extraction.py`,
+fora do staging cadastral (sem hint de matrícula).
 """
 
 from __future__ import annotations
@@ -33,6 +44,11 @@ logger = logging.getLogger(__name__)
 
 
 # Lista canônica de doc_types do intake (ordem de especificidade na classificação).
+# Fase 1 (N1, classificador honesto): planta_topografica/memorial_descritivo NÃO
+# alimentam staging cadastral nem criam Matricula (sem _FIELD_SPECS abaixo; guard
+# fantasma em staging_consolidation.py já os exclui do allowlist de criação).
+# auto_infracao é o MESMO tipo do pipeline legado (document_extractor.py) —
+# reusado, não duplicado; aqui só ganha entrada no classificador por conteúdo.
 CANONICAL_DOC_TYPES: list[str] = [
     "rg_cpf",
     "endereco",
@@ -42,6 +58,10 @@ CANONICAL_DOC_TYPES: list[str] = [
     "itr",
     "sigef",
     "rat",
+    "planta_topografica",
+    "memorial_descritivo",
+    "auto_infracao",
+    "certidao_embargo",
     "outro",
 ]
 
@@ -54,14 +74,21 @@ _SPECIFIC_DOC_TYPES = {t for t in CANONICAL_DOC_TYPES if t != "outro"}
 # ORDEM DE DECISÃO DETERMINÍSTICA — "o tipo é do DOCUMENTO, não de uma menção
 # interna". Cada documento é identificado pelo seu CABEÇALHO/identidade própria,
 # que vence menções a outros sistemas no corpo:
-#   1. rat       — "relatório de análise técnica" (parecer do órgão)
-#   2. matricula — certidão de registro: "inteiro teor", "oficial registrador",
+#   1. rat                 — "relatório de análise técnica" (parecer do órgão)
+#   2. auto_infracao / 3. certidao_embargo — cabeçalho de órgão fiscalizador,
+#                  identidade forte e inconfundível; vêm cedo de propósito.
+#   4. planta_topografica / 5. memorial_descritivo — peças técnicas de desenho/
+#                  descrição de perímetro. Vêm ANTES de ccir/sigef porque costumam
+#                  CITAR esses sistemas em legenda ("CCIR nº...") sem SER um CCIR
+#                  ou uma certificação SIGEF (caso 13, docs 228/230: planta lida
+#                  como `ccir` pela menção fraca — a causa raiz que este item fecha).
+#   6. matricula — certidão de registro: "inteiro teor", "oficial registrador",
 #                  "registro de imóveis". Vem ANTES de sigef/ccir/itr porque a
 #                  certidão CITA georref/CCIR/CAR no corpo (cadeia/averbações) e
 #                  não pode ser sequestrada por esses termos.
-#   3. car       — "recibo de inscrição ... CAR"
-#   4. ccir / 5. itr / 6. sigef — identidades próprias (memorial/certificação)
-#   7. rg_cpf / 8. endereco
+#   7. car       — "recibo de inscrição ... CAR"
+#   8. ccir / 9. itr / 10. sigef — identidades próprias (memorial/certificação)
+#   11. rg_cpf / 12. endereco
 # Caso real #11: a "Certidão de Inteiro Teor da Matrícula 6776" caía em `sigef`
 # porque continha "memorial descritivo" (seção de georref embutida) e `sigef`
 # vinha antes de `matricula`. Corrigido com a precedência + marcadores fortes.
@@ -71,6 +98,34 @@ _CLASSIFY_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("rat", (
         "relatorio de analise tecnica", "relatório de análise técnica",
         "analise tecnica do car", "análise técnica do car", "go-rat", "rat-",
+    )),
+    # Fase 1 (N1) — auto de infração / certidão de embargo têm identidade MUITO
+    # forte (cabeçalho de órgão fiscalizador) — vêm cedo, antes de qualquer
+    # marcador fraco de documento cadastral.
+    ("auto_infracao", (
+        "auto de infracao", "auto de infração", "auto de constatacao",
+        "auto de constatação", "notificacao de autuacao", "notificação de autuação",
+    )),
+    ("certidao_embargo", (
+        "certidao de embargo", "certidão de embargo",
+        "certidao de existencia de embargo", "certidão de existência de embargo",
+        "termo de embargo",
+    )),
+    # Fase 1 (N1) — planta/memorial são peças TÉCNICAS de desenho/descrição de
+    # perímetro, não certificações. Precisam vir ANTES de ccir/sigef porque
+    # costumam CITAR esses sistemas em legenda/referência (ex.: "CCIR nº ..."
+    # dentro da planta) sem SER um CCIR ou uma certificação SIGEF — caso real
+    # caso 13 (doc 228/230): planta lida como `ccir` por essa menção fraca.
+    ("planta_topografica", (
+        "planta topografica", "planta topográfica", "planta de situacao",
+        "planta de situação", "planta cadastral", "levantamento topografico",
+        "levantamento topográfico", "norte magnetico", "norte magnético",
+        "escala grafica", "escala gráfica",
+    )),
+    ("memorial_descritivo", (
+        "memorial descritivo do imovel", "memorial descritivo do imóvel",
+        "memorial descritivo de imovel rural", "memorial descritivo de imóvel rural",
+        "perimetro do imovel denominado", "perímetro do imóvel denominado",
     )),
     ("matricula", (
         # Marcadores ÚNICOS da certidão de registro. NÃO incluir "registro de
