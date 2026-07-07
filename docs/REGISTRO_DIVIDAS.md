@@ -8,6 +8,12 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
+> **PRÓXIMO NÚMERO LIVRE: 61.** Todo PR que abrir dívida nova incrementa este número
+> (mata a classe de colisão que já aconteceu 2x — #21 e #44, ver nota na entrada 44a/44b
+> abaixo). **#59 e #60 estão reservados** pelo PR #98 (`chore/governanca-pos-94`, aberto,
+> ainda não mergeado — tipos planta/memorial no classificador e conceito
+> `registro_anterior` na Matricula); não reutilizar esses números mesmo que o PR demore.
+
 ## P0 — fecham o pipeline ponta a ponta
 
 *Nenhuma aberta nesta camada — as duas que estavam (#1 e #2) foram fechadas pelo PROMPT_4.
@@ -122,7 +128,12 @@ revisável pela sócia, por `doc_type`. **Sem urgência.** **Origem:** `fix/extr
 PR (fallback hardcoded) só vale onde não há prompt no banco — conferir/atualizar o prompt do
 banco em prod se existir.
 
-**44. OCR Gemini multipágina é sequencial (1 call/página) e sensível a 503.** O fix de
+**44a. OCR Gemini multipágina é sequencial (1 call/página) e sensível a 503.** *(Desambiguado
+de "#44" em 2026-07-06 — o número estava duplicado com a dívida abaixo, "chain não propaga
+uf"; ambas viraram 44a/44b em vez de renumerar uma delas, pois 9 arquivos fora deste
+registro já citam "#44" e renumerar quebraria essas referências. Convenção daqui pra
+frente: colisão de número vira sufixo `a`/`b` no registro, sem tocar citações externas.)*
+O fix de
 `fix/ocr-multipagina` resolveu a leitura só-da-1ª-página rasterizando e transcrevendo página a
 página, mas isso é serial: ~10s e ~$0.002-0.01 por página (doc de 6 págs ≈ 90s, $0.02). Sob 503
 sustentado do Gemini ("high demand") uma página pode cair mesmo com os 3 retries → texto parcial
@@ -191,7 +202,7 @@ por `json_parse` ("não foi possível extrair JSON da resposta LLM"), AIJob 124 
 explícito por chamada, parsing tolerante de JSON + retry, e/ou fallback de provider mais robusto.
 **Origem:** mergulho fluxo agêntico (01/06).
 
-**44. A chain não propaga `uf` ao `ctx.metadata` do diagnóstico (skill base só casa com `uf` presente).**
+**44b. A chain não propaga `uf` ao `ctx.metadata` do diagnóstico (skill base só casa com `uf` presente).** *(Desambiguado de "#44" em 2026-07-06 — ver nota completa na 44a acima.)*
 Descoberto ao fechar a #40: a skill `diagnostico/situacao_ambiental_imovel_rural` tem
 `applies_to: {uf: [GO, MS, MT]}`, então `matches_context` só a injeta no system prompt quando
 `ctx.metadata["uf"]` existe e está na lista. Provado rodando: com `uf="MS"` a skill é injetada
