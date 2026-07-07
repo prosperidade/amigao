@@ -449,7 +449,7 @@ class DiagnosticoAgent(BaseAgent):
                     matricula_proprietarios.extend(m.proprietarios or [])
 
         fatos: list[dict[str, Any]] = []
-        for doc_id, fato in fatos_by_doc.items():
+        for _doc_id, fato in fatos_by_doc.items():
             enriched = dict(fato)
             enriched["enquadramento_fontes"] = lookup_enquadramento(
                 fato.get("enquadramento_legal"),

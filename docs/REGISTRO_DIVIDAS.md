@@ -11,6 +11,7 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > **PRÓXIMO NÚMERO LIVRE: 62.** Todo PR que abrir dívida nova incrementa este número
 > (mata a classe de colisão que já aconteceu 2x — #21 e #44, ver nota na entrada 44a/44b
 > abaixo). #59/#60 (PR #98) já mergeados; #61 usado nesta rodada (Fase 1, ver abaixo).
+> Fase 1 (`feat/fase1-classificador-n1n2`) fecha #48 e #59; #60 e #61 seguem abertas.
 
 ## P0 — fecham o pipeline ponta a ponta
 
@@ -114,6 +115,14 @@ para `resolved_at IS NULL` — exige (a) desenhar `subject_ref`/chave estável (
 `descricao`, que varia com texto livre) e (b) **varredura table-wide** de duplicatas pré-existentes
 antes de criar o índice (senão a migration falha). Mesmo padrão recorrente do staging (#81) e ações
 (Ficha 07). **Origem:** diagnóstico dos alertas espaciais (30/06, ADR-020).
+**✅ FECHADA (06/07, `feat/fase1-classificador-n1n2`, N1 item 6):** colunas `tema`/`subject_ref`
+adicionadas a `RegulatoryIssue`; `_persist_issues` do `auditor_imovel` agora as popula
+(`subject_ref` = documentos cruzados, join `|`); índice `uq_regulatory_issues_chave_estavel_aberta`
+(UNIQUE parcial `WHERE resolved_at IS NULL`) criado via migration `b094ae9bee3d`. Varredura
+table-wide rodada em prod ANTES da migration (`GROUP BY tenant_id, property_id, codigo_alerta
+HAVING count(*) > 1` sobre linhas abertas) — **vazia**, prod estava limpo. NULL em `tema`/
+`subject_ref` não colide entre si (semântica Postgres de UNIQUE com NULL distinto) — linhas
+legadas não quebram. Testes em `tests/models/test_regulatory.py::TestRegulatoryIssueChaveEstavelUniqueParcial`.
 
 **45. Extrator de campos sem skill procedural.** O `ExtratorAgent.execute()` chama
 `extract_document_fields()` direto — **não** passa por `_compose_system_with_skills`. O
