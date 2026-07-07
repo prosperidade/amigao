@@ -31,10 +31,10 @@ from app.models.audit_log import AuditLog
 from app.models.checklist_template import ProcessChecklist
 from app.models.macroetapa import (
     DIAGNOSTIC_MACROETAPAS,
-    MACROETAPA_TRANSITIONS,
     Macroetapa,
     MacroetapaChecklist,
     can_advance_macroetapa,
+    resolve_next_macroetapa,
 )
 from app.models.process import Process
 from app.models.property import Property
@@ -58,7 +58,7 @@ from app.schemas.regulatory import (
 )
 from app.schemas.stage_output import validate_diagnostic_content
 from app.services.audit_hash import stamp_audit_hash
-from app.services.macroetapa_engine import advance_macroetapa
+from app.services.macroetapa_engine import advance_macroetapa, has_consolidated
 from app.services.regulatory_coherence import (
     StatusCoherenceError,
     assert_decisao_permitida,
@@ -400,19 +400,30 @@ def validate_diagnosis(
             for item in pc.items:
                 if item.get("required") and item.get("status") == "pending":
                     missing_docs += 1
+        # Fase 0 (gap-analysis Ficha 07, item 2) — mesmo sinal de consolidação
+        # usado no gate do avanço manual (processes.py).
+        consolidacao_executada = has_consolidated(db, process.tenant_id, process.id)
         can, _blockers = can_advance_macroetapa(
             checklist,
             documents_pending_required=missing_docs,
             current_macroetapa=current_etapa,
             diagnosis_validated=True,
+            consolidacao_executada=consolidacao_executada,
         )
         if can:
-            nexts = MACROETAPA_TRANSITIONS.get(current_etapa, [])
-            if nexts:
+            # Fase 0 (gap-analysis Ficha 07, item 1) — o auto-avanço por assinatura
+            # usava o sucessor linear cru (`MACROETAPA_TRANSITIONS[...][0]`), que
+            # para `diagnostico_preliminar` é sempre `coleta_documental` — ignorava
+            # o ramo condicional do ADR-019 (mesmo bug não existia no avanço manual,
+            # que já usa `resolve_next_macroetapa`). Alinhado aqui ao mesmo caminho.
+            next_etapa = resolve_next_macroetapa(
+                current_etapa, has_essential_pending=missing_docs > 0
+            )
+            if next_etapa:
                 advance_macroetapa(
                     db,
                     process,
-                    nexts[0],
+                    next_etapa,
                     user_id=current_user.id,
                     tenant_id=current_user.tenant_id,
                 )

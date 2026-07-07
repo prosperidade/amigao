@@ -167,6 +167,54 @@ def test_consolidacao_parcial_divergente_vira_acao(client: TestClient, db_sessio
     assert db_session.query(Acao).filter(Acao.process_id == proc.id).count() == 1
 
 
+def test_criar_acao_explicita_na_divergencia(client: TestClient, db_session):
+    """Fase 0 (gap-analysis Ficha 07, item 6) — 3º caminho EXPLÍCITO: o
+    consultor clica "criar ação" na divergência ANTES de consolidar. A ação
+    nasce na hora (mesmo gerador da consolidação); o campo continua
+    divergente_transcricao (decisão foi "virar trabalho", não "resolver
+    valor"); consolidar depois não duplica (dedupe_key idempotente)."""
+    from app.models.acao import Acao, AcaoOrigem
+
+    tenant, proc, cli, prop, ids = _setup(db_session, email="f4criaracao@example.com")
+    db_session.commit()
+    h = _login(client, "f4criaracao@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+    field_id = ids["area_declarada_ha:total_area_ha"]
+
+    r = client.post(
+        f"{base}/staging-fields/{field_id}/decidir",
+        headers=h, json={"acao": "criar_acao"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "divergente_transcricao"  # não "resolve" o valor
+
+    acoes = db_session.query(Acao).filter(Acao.process_id == proc.id).all()
+    assert len(acoes) == 1
+    assert acoes[0].origem == AcaoOrigem.consolidacao
+
+    # consolidar depois não duplica (mesma dedupe_key)
+    client.post(f"{base}/staging-fields/aceitar-consistentes", headers=h)
+    r2 = client.post(f"{base}/consolidar", headers=h)
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["acoes_criadas"] == 0
+    assert db_session.query(Acao).filter(Acao.process_id == proc.id).count() == 1
+
+
+def test_criar_acao_rejeita_fora_de_divergente_transcricao(client: TestClient, db_session):
+    """'criar_acao' só se aplica a divergente_transcricao — 422 nos demais status."""
+    tenant, proc, cli, prop, ids = _setup(db_session, email="f4criaracaoerr@example.com")
+    db_session.commit()
+    h = _login(client, "f4criaracaoerr@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+    consistente_field_id = ids["area_registrada_ha:4.698"]
+
+    r = client.post(
+        f"{base}/staging-fields/{consistente_field_id}/decidir",
+        headers=h, json={"acao": "criar_acao"},
+    )
+    assert r.status_code == 422
+
+
 def test_rl_bridge_matricula_para_imovel(client: TestClient, db_session):
     """Ponte matrícula→imóvel (Princípio 11): RL só chega como averbação na
     matrícula; o Hub lê prop.rl_status. Derivamos 'averbada' marcando a origem

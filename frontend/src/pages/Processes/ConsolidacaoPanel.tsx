@@ -13,9 +13,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import {
-  CheckCircle2, XCircle, Pencil, ListChecks, Database, Loader2, Layers,
+  CheckCircle2, XCircle, Pencil, ListChecks, Database, Loader2, Layers, ArrowRight,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { acoesKeys } from '@/lib/acoes/hooks';
 import { labelFor, humanizeValue } from '@/lib/labels/fieldLabels';
 
 /** Mensagem de erro legível a partir do AxiosError (detail do backend, senão genérica). */
@@ -89,7 +90,14 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
   const decide = useMutation({
     mutationFn: (p: { id: number; acao: string; valor?: string }) =>
       api.post(`/processes/${processId}/staging-fields/${p.id}/decidir`, { acao: p.acao, valor: p.valor }).then(r => r.data),
-    onSuccess: () => { setEditingId(null); invalidate(); },
+    onSuccess: (_data, variables) => {
+      setEditingId(null);
+      invalidate();
+      if (variables.acao === 'criar_acao') {
+        qc.invalidateQueries({ queryKey: acoesKeys.list(processId) });
+        toast.success('Ação criada na aba Ações a partir da divergência.');
+      }
+    },
     onError: (e) => toast.error(errDetail(e, 'Falha ao decidir o campo.')),
   });
   const acceptAll = useMutation({
@@ -180,11 +188,20 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                 ) : (
                   <div className="flex items-center gap-1">
                     {f.status === 'divergente_transcricao' ? (
-                      <button onClick={() => decide.mutate({ id: f.id, acao: 'escolher_fonte' })}
-                        title="Escolher esta fonte"
-                        className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white">
-                        <CheckCircle2 className="w-3 h-3" /> Escolher fonte
-                      </button>
+                      <>
+                        <button onClick={() => decide.mutate({ id: f.id, acao: 'escolher_fonte' })}
+                          title="Escolher esta fonte"
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white">
+                          <CheckCircle2 className="w-3 h-3" /> Escolher fonte
+                        </button>
+                        {/* Item 6 (Ficha 07 §3.3) — 3º caminho explícito: criar ação
+                            agora, sem esperar a Consolidação decidir por trás. */}
+                        <button onClick={() => decide.mutate({ id: f.id, acao: 'criar_acao' })}
+                          title="Criar uma ação na aba Ações a partir desta divergência"
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-purple-200 dark:border-purple-500/30 text-purple-600 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-500/10">
+                          <ArrowRight className="w-3 h-3" /> Criar ação
+                        </button>
+                      </>
                     ) : (
                       <button onClick={() => decide.mutate({ id: f.id, acao: 'aceitar' })}
                         title="Aceitar"

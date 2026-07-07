@@ -52,6 +52,11 @@ class Matricula(Base):
     # Cadastros rurais
     codigo_incra_sncr = Column(String, nullable=True)
     nirf_cib = Column(String, nullable=True)
+    # Fase 0 (gap-analysis Ficha 07, item 8) — exercício (ano) do CCIR mais
+    # recente lido para esta matrícula. CCIR é documento ANUAL — permite o
+    # auditor emitir CCIR_EXERCICIO_ANTERIOR (catálogo já tinha o código,
+    # faltava o emissor) quando `exercicio_ccir < ano corrente`.
+    exercicio_ccir = Column(Integer, nullable=True)
 
     # Área decidida/consolidada da matrícula (a soma compõe a área do imóvel)
     area_ha = Column(Float, nullable=True)

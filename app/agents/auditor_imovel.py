@@ -51,10 +51,13 @@ class AuditorImovelAgent(BaseAgent):
         extracted = self.ctx.chain_data.get("extrator", {}) if isinstance(self.ctx.chain_data, dict) else {}
 
         # Rodar a bateria determinística
+        from datetime import UTC, datetime  # noqa: PLC0415
+
         findings: list[AuditFinding] = audit_property(
             property_data=property_data,
             documents=documents,
             extracted_data=extracted,
+            ano_corrente=datetime.now(UTC).year,
         )
 
         # Persistir cada finding como RegulatoryIssue (quando há property_id real)
@@ -171,6 +174,18 @@ class AuditorImovelAgent(BaseAgent):
         if process.property_id:
             prop = self.ctx.session.query(Property).filter(Property.id == process.property_id).first()
             if prop:
+                # Fase 0 (gap-analysis Ficha 07, item 8) — exercício mais recente
+                # entre as matrículas do imóvel (CCIR é documento anual; várias
+                # matrículas podem ter exercícios diferentes, usa o mais novo).
+                from sqlalchemy import func as _sa_func  # noqa: PLC0415
+
+                from app.models.matricula import Matricula  # noqa: PLC0415
+
+                exercicio_ccir = (
+                    self.ctx.session.query(_sa_func.max(Matricula.exercicio_ccir))
+                    .filter(Matricula.property_id == prop.id)
+                    .scalar()
+                )
                 data["property"] = {
                     "id": prop.id,
                     "total_area_ha": prop.total_area_ha,
@@ -180,6 +195,7 @@ class AuditorImovelAgent(BaseAgent):
                     "car_status": prop.car_status,
                     "rl_status": prop.rl_status,
                     "geom": prop.geom,
+                    "exercicio_ccir": exercicio_ccir,
                     # campos opcionais que podem vir do extrator são consultados em chain_data
                 }
 

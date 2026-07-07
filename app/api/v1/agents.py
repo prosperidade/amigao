@@ -39,12 +39,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _derive_uf(db: Session, tenant_id: int, process_id: int | None) -> str | None:
+    """Fase 0 (gap-analysis Ficha 07, item 7 / dívida 44b): a skill jurídica de
+    UF (`applies_to: {uf: [...]}`) só é injetada no diagnóstico quando
+    `ctx.metadata["uf"]` está presente — sem isso, o diagnóstico roda SEM a
+    skill base, silenciosamente. Deriva do `Property.state` do processo, já
+    que nenhum caller externo confiável seta esse metadado hoje."""
+    if process_id is None:
+        return None
+    from app.models.process import Process  # noqa: PLC0415
+    from app.models.property import Property  # noqa: PLC0415
+
+    row = (
+        db.query(Property.state)
+        .join(Process, Process.property_id == Property.id)
+        .filter(Process.id == process_id, Process.tenant_id == tenant_id)
+        .first()
+    )
+    return (row[0] or None) if row else None
+
+
 def _build_context(
     db: DbDep,
     user: UserDep,
     process_id: int | None,
     metadata: dict,
 ) -> AgentContext:
+    metadata = dict(metadata or {})
+    if "uf" not in metadata:
+        uf = _derive_uf(db, user.tenant_id, process_id)
+        if uf:
+            metadata["uf"] = uf
     return AgentContext(
         tenant_id=user.tenant_id,
         user_id=user.id,

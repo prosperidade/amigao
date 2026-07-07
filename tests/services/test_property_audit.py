@@ -327,3 +327,36 @@ class TestAuditPropertySempreEmiteFinding:
         area = [f for f in findings if f.familia == "area"][0]
         assert "tolerance_pct_used" in area.evidencia
         assert area.evidencia["tolerance_pct_used"] == "0.01"  # default
+
+
+class TestCcirExercicioAnterior:
+    """Fase 0 (gap-analysis Ficha 07, item 8) — CCIR é documento ANUAL; o
+    catálogo já tinha o código CCIR_EXERCICIO_ANTERIOR (regulatory_catalog_seed),
+    faltava o emissor determinístico."""
+
+    def test_exercicio_defasado_emite_finding(self):
+        findings = audit_property(
+            property_data={"exercicio_ccir": 2024},
+            ano_corrente=2026,
+        )
+        ccir = [f for f in findings if f.codigo_alerta == "CCIR_EXERCICIO_ANTERIOR"]
+        assert len(ccir) == 1
+        assert ccir[0].familia == "fiscal"
+        assert ccir[0].grade == GRADE_ATENCAO
+        assert ccir[0].evidencia == {"exercicio_ccir": 2024, "ano_corrente": 2026}
+
+    def test_exercicio_vigente_nao_emite_finding(self):
+        findings = audit_property(
+            property_data={"exercicio_ccir": 2026},
+            ano_corrente=2026,
+        )
+        assert [f for f in findings if f.codigo_alerta == "CCIR_EXERCICIO_ANTERIOR"] == []
+
+    def test_sem_exercicio_ccir_nao_emite_finding(self):
+        findings = audit_property(property_data={}, ano_corrente=2026)
+        assert [f for f in findings if f.codigo_alerta == "CCIR_EXERCICIO_ANTERIOR"] == []
+
+    def test_sem_ano_corrente_nao_emite_finding(self):
+        """`ano_corrente` é explícito (função pura) — sem ele, nunca compara."""
+        findings = audit_property(property_data={"exercicio_ccir": 2020})
+        assert [f for f in findings if f.codigo_alerta == "CCIR_EXERCICIO_ANTERIOR"] == []

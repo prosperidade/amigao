@@ -215,6 +215,10 @@ automaticamente, e o `DiagnosticoAgent` não auto-enriquece o metadata. Logo, na
 `ctx.metadata` antes do diagnóstico. **Toca orquestração/propagação de contexto na chain → ligada à
 #38** (mesmo PR de chains sensíveis, com aval do André). **NÃO resolvido no PR #40** (escopo de lá era
 só validar os SKILL.md). **Origem:** validação E2E do PR #40 (01/06).
+**✅ FECHADA (06/07, `fix/fase0-gap-ficha07`, item 7 do gap-analysis Ficha 07):** `_build_context`
+(`app/api/v1/agents.py`) deriva `uf` do `Property.state` do processo quando o caller não passa o
+metadado explicitamente (callers que já setam `uf` não são sobrescritos). Testado com UF=AC (corpus
+Acre). Ver `tests/api/test_agents_uf_propagation.py`.
 
 **41. `create-case` não auto-dispara a chain de diagnóstico.** Ao finalizar o caso, só o
 `atendimento` roda; o consultor precisa acionar diagnóstico/legislação manualmente. Decisão de

@@ -1,4 +1,6 @@
-import { ArrowLeft, User, Building2, Clock } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, User, Building2, Clock, FileText, MapPin, Ruler, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { api } from '@/lib/api';
 import { Process, STATUS_CONFIG, DEMAND_LABELS, URGENCY_CONFIG } from './ProcessDetailTypes';
 
 interface ProcessHeaderProps {
@@ -7,11 +9,43 @@ interface ProcessHeaderProps {
   onBack: () => void;
 }
 
+// Ficha 07 §2 — cabeçalho do imóvel presente em todas as etapas (matrícula(s),
+// CAR, município, área, saúde). Mesma queryKey do ProcessDossier
+// (['dossier', processId]) — React Query dedupe evita fetch duplicado.
+interface HeaderDossierMatricula {
+  id: number;
+  numero_matricula: string | null;
+}
+interface HeaderDossierProperty {
+  car_code: string | null;
+  municipality: string | null;
+  state: string | null;
+  matriculas?: HeaderDossierMatricula[];
+  areas?: { area_total_matriculas_ha: number | null; area_total_nota: string | null };
+  has_embargo?: boolean;
+}
+interface HeaderDossierInconsistency {
+  severity: string;
+}
+interface HeaderDossier {
+  property?: HeaderDossierProperty;
+  inconsistencies?: HeaderDossierInconsistency[];
+}
+
 export default function ProcessHeader({ process, client, onBack }: ProcessHeaderProps) {
   const statusCfg = STATUS_CONFIG[process.status] ?? { label: process.status, dot: 'bg-gray-400', badge: 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-500/10 border-gray-300 dark:border-gray-500/20' };
   // Fallback p/ valores de urgency fora do enum (ex: "normal" no seed antigo).
   const urgencyCfg = URGENCY_CONFIG[process.urgency ?? 'media'] ?? URGENCY_CONFIG.media;
   const demandLabel = process.demand_type ? DEMAND_LABELS[process.demand_type] : null;
+
+  const { data: dossier } = useQuery<HeaderDossier>({
+    queryKey: ['dossier', process.id],
+    queryFn: async () => (await api.get(`/processes/${process.id}/dossier`)).data,
+  });
+  const property = dossier?.property;
+  const errors = dossier?.inconsistencies?.filter(i => i.severity === 'error').length ?? 0;
+  const matriculas = property?.matriculas?.map(m => m.numero_matricula).filter(Boolean).join(', ');
+  const saudeOk = errors === 0 && !property?.has_embargo;
 
   return (
     <div className="rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 overflow-hidden">
@@ -62,6 +96,52 @@ export default function ProcessHeader({ process, client, onBack }: ProcessHeader
             </span>
             <span className="text-xs font-mono text-gray-400 dark:text-slate-500">#{process.id}</span>
           </div>
+          {/* Cabeçalho do imóvel (Ficha 07 §2) — presente em todas as etapas */}
+          {property && (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-2 pt-2 border-t border-gray-100 dark:border-white/10 text-xs text-gray-500 dark:text-slate-400">
+              {matriculas && (
+                <span className="flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
+                  Matrícula{property.matriculas!.length > 1 ? 's' : ''}: <span className="text-gray-700 dark:text-slate-300 font-medium">{matriculas}</span>
+                </span>
+              )}
+              {property.car_code && (
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
+                  CAR: <span className="text-gray-700 dark:text-slate-300 font-medium">{property.car_code}</span>
+                </span>
+              )}
+              {property.municipality && (
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
+                  <span className="text-gray-700 dark:text-slate-300 font-medium">{property.municipality}{property.state ? `/${property.state}` : ''}</span>
+                </span>
+              )}
+              {property.areas?.area_total_matriculas_ha != null && (
+                <span className="flex items-center gap-1.5" title={property.areas.area_total_nota ?? undefined}>
+                  <Ruler className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
+                  <span className="text-gray-700 dark:text-slate-300 font-medium">
+                    {property.areas.area_total_matriculas_ha} ha
+                  </span>
+                  {property.areas.area_total_nota && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                      soma anotada
+                    </span>
+                  )}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                {saudeOk ? (
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                ) : (
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+                )}
+                Saúde: <span className={saudeOk ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-amber-600 dark:text-amber-400 font-medium'}>
+                  {saudeOk ? 'OK' : 'Atenção'}
+                </span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

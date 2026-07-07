@@ -82,6 +82,106 @@ def calculate_completion_pct(actions: list[dict]) -> float:
     return round((completed / len(actions)) * 100, 1)
 
 
+# ---------------------------------------------------------------------------
+# Fase 0 (gap-analysis Ficha 07, item 2) — detectar se a Consolidação já rodou
+# ---------------------------------------------------------------------------
+
+def has_consolidated(db: Session, tenant_id: int, process_id: int) -> bool:
+    """A Ficha 07 (§7) exige que a Consolidação (Ficha 05) tenha rodado antes
+    de sair da E2. O sinal mais confiável hoje é o `AuditLog(action="consolidar")`
+    que `consolidate_process` emite (Princípio 2 — tudo auditável).
+
+    Lacuna conhecida e aceita: `consolidate_process` só grava esse AuditLog
+    quando produz `writes`/`reconciliacoes`/`acoes_criadas`/`divergencias_devolvidas`
+    (staging_consolidation.py:520-528) — uma consolidação que roda sem nada
+    para gravar (staging vazio) não deixa rastro. Na prática isso não bloqueia
+    um caso real (sempre há campo a consolidar), mas é honesto declarar: este
+    helper detecta "consolidação produziu efeito" e não "consolidação foi
+    chamada"."""
+    from app.models.audit_log import AuditLog  # noqa: PLC0415
+
+    return (
+        db.query(AuditLog.id)
+        .filter(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.entity_type == "process",
+            AuditLog.entity_id == process_id,
+            AuditLog.action == "consolidar",
+        )
+        .first()
+        is not None
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fase 0 (gap-analysis Ficha 07, item 9) — os mesmos sinais para E5/E6/E7:
+# as entidades (Rota, Proposal, Contract) já existem e já têm o campo de
+# estado certo; o gate de macroetapa simplesmente não os lia. Espelham
+# `has_consolidated` acima: 1 query indexada, sinal "produziu o estado
+# esperado", não "foi chamado".
+# ---------------------------------------------------------------------------
+
+def has_rota_validada(db: Session, tenant_id: int, process_id: int) -> bool:
+    """Ficha 07 §7 — saída da E5 (`caminho_regulatorio`) exige a Rota fechada
+    (todos os passos validados + classificados, `RotaStatus.validada`).
+
+    Um processo pode ter mais de uma `Rota` (uma por `demand_type` — ver
+    `app/models/rota.py`); qualquer uma validada já satisfaz o gate — não é
+    papel deste helper arbitrar qual demanda é "a" rota do processo."""
+    from app.models.rota import Rota, RotaStatus  # noqa: PLC0415
+
+    return (
+        db.query(Rota.id)
+        .filter(
+            Rota.tenant_id == tenant_id,
+            Rota.process_id == process_id,
+            Rota.status == RotaStatus.validada,
+        )
+        .first()
+        is not None
+    )
+
+
+def has_proposal_accepted(db: Session, tenant_id: int, process_id: int) -> bool:
+    """Ficha 07 §7 — saída da E6 (`orcamento_negociacao`) exige proposta
+    gerada e aceita pelo cliente (`ProposalStatus.accepted`)."""
+    from app.models.proposal import Proposal, ProposalStatus  # noqa: PLC0415
+
+    return (
+        db.query(Proposal.id)
+        .filter(
+            Proposal.tenant_id == tenant_id,
+            Proposal.process_id == process_id,
+            Proposal.status == ProposalStatus.accepted,
+        )
+        .first()
+        is not None
+    )
+
+
+def has_contract_signed(db: Session, tenant_id: int, process_id: int) -> bool:
+    """Ficha 07 §7 — E7 (`contrato_formalizacao`) só "conclui" com o contrato
+    assinado (`Contract.signed_at` preenchido).
+
+    Lacuna conhecida e ACEITA (item 9 do adendo): nenhum fluxo escreve
+    `signed_at` hoje — a assinatura (upload/registro do documento assinado)
+    é o Sprint 5. Até lá este helper sempre retorna `False` em produção, e a
+    E7 honestamente nunca mostra "concluída" — comportamento correto, não bug:
+    o caso realmente não está concluído sem contrato assinado."""
+    from app.models.contract import Contract  # noqa: PLC0415
+
+    return (
+        db.query(Contract.id)
+        .filter(
+            Contract.tenant_id == tenant_id,
+            Contract.process_id == process_id,
+            Contract.signed_at.isnot(None),
+        )
+        .first()
+        is not None
+    )
+
+
 def recalculate_checklist(checklist: MacroetapaChecklist) -> None:
     """Recalcula completion_pct de um checklist existente."""
     checklist.completion_pct = calculate_completion_pct(checklist.actions)

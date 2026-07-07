@@ -177,6 +177,10 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("detentor", "detentor", "matricula", "proprietarios"),
         _FieldSpec("municipio", "municipio", "imovel", "municipality"),
         _FieldSpec("denominacao", "denominacao", "matricula", "denominacao_imovel"),
+        # Fase 0 (gap-analysis Ficha 07, item 8) — CCIR é documento ANUAL; o
+        # exercício alimenta o emissor determinístico CCIR_EXERCICIO_ANTERIOR
+        # (app/services/property_audit.py).
+        _FieldSpec("exercicio", "exercicio", "matricula", "exercicio_ccir"),
     ],
     "matricula": [
         _FieldSpec("numero_matricula", "numero_matricula", "matricula", "numero_matricula"),

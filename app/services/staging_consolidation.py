@@ -20,7 +20,7 @@ from datetime import UTC, date, datetime
 from typing import Any, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import Date, Float, Numeric, String
+from sqlalchemy import Date, Float, Integer, Numeric, String
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
@@ -113,6 +113,11 @@ def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = 
         return ha
     if isinstance(column_type, (Float, Numeric)):
         return _to_float_br(value)
+    if isinstance(column_type, Integer):
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
     if isinstance(column_type, Date):
         if isinstance(value, (date, datetime)):
             return value if isinstance(value, date) else value.date()
@@ -256,6 +261,45 @@ def decide_field(
         row.status = ExtractedFieldStatus.aceito
         row.decided_value = {"value": _raw_value(row)}
         irmaos = _reject_siblings(db, tenant_id, process_id, row)
+    elif acao == "criar_acao":
+        # Fase 0 (gap-analysis Ficha 07, item 6) — 3º caminho EXPLÍCITO da
+        # divergência (Ficha §3.3): o consultor escolhe "criar ação" agora,
+        # em vez de deixar a Consolidação decidir por trás. Reusa o mesmo
+        # gerador que já roda automaticamente na Consolidação — dedupe_key
+        # garante idempotência (rodar aqui não duplica se rodar de novo
+        # depois). O campo continua `divergente_transcricao`: a decisão do
+        # consultor não é "resolver o valor", é "virar trabalho rastreável".
+        if row.status != ExtractedFieldStatus.divergente_transcricao:
+            raise HTTPException(
+                status_code=422,
+                detail="'criar_acao' só se aplica a campo divergente (transcrição).",
+            )
+        from app.models.process import Process  # noqa: PLC0415
+        from app.services.acao_generator import (  # noqa: PLC0415
+            generate_acoes_from_divergencias,
+        )
+
+        process_obj = (
+            db.query(Process)
+            .filter(Process.id == process_id, Process.tenant_id == tenant_id)
+            .first()
+        )
+        if process_obj is None:
+            raise HTTPException(status_code=404, detail="Processo não encontrado.")
+        _acoes, acoes_criadas = generate_acoes_from_divergencias(
+            db, process=process_obj, tenant_id=tenant_id
+        )
+        row.decided_by_user_id = user_id
+        row.decided_at = datetime.now(UTC)
+        db.flush()
+        _audit(db, tenant_id, process_id, user_id, "staging_decidir", {
+            "field_id": row.id, "acao": acao, "status": row.status.value,
+            "target_entity": row.target_entity, "target_field": row.target_field,
+            "matricula_hint": row.matricula_hint, "acoes_criadas": acoes_criadas,
+            "staging_origin_ai_job_id": row.ai_job_id,
+        })
+        db.commit()
+        return row
     else:
         raise HTTPException(status_code=422, detail=f"Ação desconhecida: {acao}")
 

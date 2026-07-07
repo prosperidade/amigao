@@ -867,15 +867,63 @@ class TestValidateAdvancesMacroetapa:
         db_session.add(cl)
         db_session.flush()
 
-    def test_assinar_em_etapa_diagnostico_avanca_para_coleta_documental(
+    def _seed_consolidada(self, db_session, tenant, process):
+        """Fase 0 (item 2): marca a Consolidação como já executada para o
+        processo, via o mesmo sinal (`AuditLog(action="consolidar")`) que
+        `has_consolidated` consulta — sem isso o novo gate da E2 trava."""
+        log = AuditLog(
+            tenant_id=tenant.id, entity_type="process", entity_id=process.id,
+            action="consolidar", details="{}",
+        )
+        db_session.add(log)
+        db_session.flush()
+
+    def test_assinar_sem_doc_essencial_pendente_avanca_para_diagnostico_tecnico(
         self, client: TestClient, db_session
     ):
+        """Fase 0 (gap-analysis Ficha 07, item 1): sem documento essencial
+        pendente, o auto-avanço por assinatura pula a coleta e vai direto
+        para E4 — mesmo ramo do avanço manual (`resolve_next_macroetapa`).
+        Antes do fix, o auto-avanço ignorava o ramo e sempre forçava E3."""
         from app.models.macroetapa import Macroetapa
 
         tenant, _user = _seed_internal_user(db_session)
         _, _, process = _seed_client_property_process(db_session, tenant=tenant)
         self._seed_diagnostic_stage(db_session, process, completion_pct=100.0)
         self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        self._seed_consolidada(db_session, tenant, process)
+        db_session.commit()
+        process_id = process.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process_id}/diagnoses/1/validate", headers=headers,
+        )
+        assert r.status_code == 200
+
+        db_session.expire_all()
+        persisted = db_session.query(Process).get(process_id)
+        assert persisted.macroetapa == Macroetapa.diagnostico_tecnico.value
+
+    def test_assinar_com_doc_essencial_pendente_avanca_para_coleta_documental(
+        self, client: TestClient, db_session
+    ):
+        """Fase 0 (gap-analysis Ficha 07, item 1): com documento essencial
+        `required` pendente no `ProcessChecklist`, o auto-avanço por
+        assinatura vai para E3 (coleta), respeitando o ramo do ADR-019."""
+        from app.models.checklist_template import ProcessChecklist
+        from app.models.macroetapa import Macroetapa
+
+        tenant, _user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diagnostic_stage(db_session, process, completion_pct=100.0)
+        self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        self._seed_consolidada(db_session, tenant, process)
+        db_session.add(ProcessChecklist(
+            tenant_id=tenant.id,
+            process_id=process.id,
+            items=[{"doc_type": "car", "required": True, "status": "pending"}],
+        ))
         db_session.commit()
         process_id = process.id
 
@@ -932,6 +980,33 @@ class TestValidateAdvancesMacroetapa:
         _, _, process = _seed_client_property_process(db_session, tenant=tenant)
         self._seed_diagnostic_stage(db_session, process, completion_pct=50.0)
         self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        db_session.commit()
+        process_id = process.id
+
+        headers = _login(client, "consultor@example.com", "senha123")
+        r = client.patch(
+            f"/api/v1/processes/{process_id}/diagnoses/1/validate", headers=headers,
+        )
+        assert r.status_code == 200
+        assert r.json()["validated_at"] is not None
+
+        db_session.expire_all()
+        persisted = db_session.query(Process).get(process_id)
+        assert persisted.macroetapa == Macroetapa.diagnostico_preliminar.value
+
+    def test_assinar_sem_consolidacao_nao_avanca_da_e2(
+        self, client: TestClient, db_session
+    ):
+        """Fase 0 (gap-analysis Ficha 07, item 2): mesmo com checklist 100%
+        e diagnóstico assinado, sem a Consolidação ter rodado a E2 não
+        avança — `validated_at` é gravado, mas a etapa fica onde estava."""
+        from app.models.macroetapa import Macroetapa
+
+        tenant, _user = _seed_internal_user(db_session)
+        _, _, process = _seed_client_property_process(db_session, tenant=tenant)
+        self._seed_diagnostic_stage(db_session, process, completion_pct=100.0)
+        self._seed_diagnosis(db_session, tenant=tenant, process=process)
+        # Nenhum AuditLog(action="consolidar") — consolidação nunca rodou.
         db_session.commit()
         process_id = process.id
 

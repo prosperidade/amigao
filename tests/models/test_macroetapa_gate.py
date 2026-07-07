@@ -233,3 +233,166 @@ class TestRamoE2DocPendenteRoteiaNaoTrava:
         )
         assert ok is False
         assert any("pendente" in b.lower() for b in blockers)
+
+
+class TestConsolidacaoTravaE2:
+    """Fase 0 (gap-analysis Ficha 07, item 2) — a Ficha exige que a saída da
+    E2 dependa da Consolidação (Ficha 05) ter rodado. `consolidacao_executada`
+    default `True` preserva callers legados (regressão zero); só quem passa
+    `False` explicitamente sofre a trava nova."""
+
+    def test_e2_sem_consolidacao_bloqueia_mesmo_com_diagnostico_assinado(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.diagnostico_preliminar,
+            diagnosis_validated=True,
+            consolidacao_executada=False,
+        )
+        assert ok is False
+        assert any("consolidaç" in b.lower() for b in blockers)
+
+    def test_e2_com_consolidacao_libera(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.diagnostico_preliminar,
+            diagnosis_validated=True,
+            consolidacao_executada=True,
+        )
+        assert ok is True
+        assert blockers == []
+
+    def test_default_consolidacao_executada_preserva_callers_legados(self) -> None:
+        """Quem não passa o kwarg novo não é afetado — regressão zero."""
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.diagnostico_preliminar,
+            diagnosis_validated=True,
+        )
+        assert ok is True
+        assert blockers == []
+
+    def test_etapa_fora_da_e2_ignora_a_flag(self) -> None:
+        """A trava é específica da E2 (diagnostico_preliminar) — E4 (também
+        DIAGNOSTIC_MACROETAPAS) não é afetada pelo sinal de consolidação."""
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.diagnostico_tecnico,
+            diagnosis_validated=True,
+            consolidacao_executada=False,
+        )
+        assert ok is True
+        assert blockers == []
+
+
+class TestRotaTravaE5:
+    """Fase 0 (item 9 do adendo) — a saída da E5 (`caminho_regulatorio`)
+    exige a Rota fechada (`RotaStatus.validada`, todos os passos validados
+    e classificados, Ficha §8.1)."""
+
+    def test_e5_sem_rota_validada_bloqueia(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.caminho_regulatorio,
+            rota_validada=False,
+        )
+        assert ok is False
+        assert any("rota" in b.lower() for b in blockers)
+
+    def test_e5_com_rota_validada_libera(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.caminho_regulatorio,
+            rota_validada=True,
+        )
+        assert ok is True
+        assert blockers == []
+
+    def test_default_rota_validada_preserva_callers_legados(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.caminho_regulatorio,
+        )
+        assert ok is True
+        assert blockers == []
+
+    def test_etapa_fora_da_e5_ignora_a_flag(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.orcamento_negociacao,
+            rota_validada=False,
+        )
+        assert ok is True
+        assert blockers == []
+
+
+class TestPropostaTravaE6:
+    """Fase 0 (item 9 do adendo) — a saída da E6 (`orcamento_negociacao`)
+    exige proposta aceita pelo cliente (`ProposalStatus.accepted`)."""
+
+    def test_e6_sem_proposta_aceita_bloqueia(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.orcamento_negociacao,
+            proposta_aceita=False,
+        )
+        assert ok is False
+        assert any("proposta" in b.lower() for b in blockers)
+
+    def test_e6_com_proposta_aceita_libera(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.orcamento_negociacao,
+            proposta_aceita=True,
+        )
+        assert ok is True
+        assert blockers == []
+
+    def test_default_proposta_aceita_preserva_callers_legados(self) -> None:
+        ok, blockers = can_advance_macroetapa(
+            _checklist(completion_pct=100.0),
+            current_macroetapa=Macroetapa.orcamento_negociacao,
+        )
+        assert ok is True
+        assert blockers == []
+
+
+class TestContratoAssinadoConcluiE7:
+    """Fase 0 (item 9 do adendo) — E7 (`contrato_formalizacao`, terminal)
+    só é "concluída" com o contrato assinado (`Contract.signed_at`). Sem
+    fluxo de assinatura (Sprint 5), este estado nunca fica `concluida`/
+    `pronta_para_avancar` em produção hoje — honesto, não regressão."""
+
+    def test_e7_completo_sem_assinatura_fica_aguardando_validacao(self) -> None:
+        state = compute_macroetapa_state(
+            _checklist(completion_pct=100.0),
+            is_current=True,
+            current_macroetapa=Macroetapa.contrato_formalizacao,
+            contract_signed=False,
+        )
+        assert state == MacroetapaState.aguardando_validacao
+
+    def test_e7_completo_com_assinatura_fica_pronta(self) -> None:
+        state = compute_macroetapa_state(
+            _checklist(completion_pct=100.0),
+            is_current=True,
+            current_macroetapa=Macroetapa.contrato_formalizacao,
+            contract_signed=True,
+        )
+        assert state == MacroetapaState.pronta_para_avancar
+
+    def test_default_contract_signed_preserva_callers_legados(self) -> None:
+        state = compute_macroetapa_state(
+            _checklist(completion_pct=100.0),
+            is_current=True,
+            current_macroetapa=Macroetapa.contrato_formalizacao,
+        )
+        assert state == MacroetapaState.pronta_para_avancar
+
+    def test_outra_etapa_ignora_a_flag(self) -> None:
+        state = compute_macroetapa_state(
+            _checklist(completion_pct=100.0),
+            is_current=False,
+            current_macroetapa=Macroetapa.orcamento_negociacao,
+            contract_signed=False,
+        )
+        assert state == MacroetapaState.concluida
