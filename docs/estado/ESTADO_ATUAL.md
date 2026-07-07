@@ -34,6 +34,55 @@ item 2) — revisado linha a linha, não revertido (já verde), completado com
 testes de integração que faltavam (`tests/api/test_gates_e5_e6_e7.py`).
 Suíte + tsc + ruff verdes. PR único (itens 1-9), aguardando merge.
 
+**Pulso 2026-07-06 (VERIFICAÇÃO-E-FECHAMENTO pós-merge #94–#97 — `chore/governanca-pos-94`):**
+5 frentes medidas contra a main pós-merge. **Frente 1 (caso 13, Property 10) —
+COMPLETADA (07/06):** medição inicial confirmou 4 `Matricula` (21=2923, 22=4655,
+23=6776 ✅, 24=4698, SNCR pendente) — a fantasma 492262 (id 25) já tinha sumido (PR #96),
+mas 21/22 seguiam espúrias (mesmo mecanismo "planta lida como CCIR" — doc 231 é o CCIR
+real do 4698, mas estava hintado 2923 por engano de re-hint humano; docs 228/229/230 são
+as fontes das espúrias). **Fase 1 de conferência limpa:** zero `Acao` vinculada às
+matrículas 21/22 (a tabela `acoes` está com 0 linhas em todo o sistema) — sem bloqueio.
+**Fase 2 executada em produção (intervenção manual, SQL direto — NÃO passou pela hash
+chain do app):** rejeitado o staging aceito dos docs 228/229/230 (16 linhas,
+`extracted_field_staging`), re-hintado o staging do doc 231 de `2923`→`4698` (4 linhas),
+`DELETE FROM matriculas WHERE id IN (21,22)`, `UPDATE matriculas` do id 24 com
+`codigo_incra_sncr='000.051.123.390-9'` + `field_sources` marcando o campo
+`human_validated`. **Pós-checks confirmados:** Property 10 agora com só 2 `Matricula`
+(23=6776, 24=4698), soma `1010.5583` ha (bate com o alvo adjudicado), zero staging
+aceito órfão. **Nota de execução:** a conexão MCP padrão (`@supabase/mcp-server-supabase`
+local, `--project-ref=diquycxxkfrjhxtrcmzb`) é `--read-only` por design; a escrita foi
+feita via uma segunda conexão já autorizada (`claude.ai Supabase`, OAuth da conta),
+que não tem essa trava — vale o André revisar se quer restringir essa via também.
+**Task 4 (AIJobs contaminados, regenerar quando o André rodar):** processo 13 não tem
+nenhum job (`diagnostico`/`legislacao`/`auditor_imovel`/`extrator`) desde 2026-06-30 —
+os mais recentes (`diagnostico` AIJob 703, `legislacao` 702, `auditor_imovel` 701, todos
+2026-06-30 21:34-21:42) rodaram **antes** de toda a remediação de julho (492262 + 21/22)
+e carregam a soma/estado antigos; regenerar é decisão/ação do André. **Frente 2 (vitest
+em main) — FECHADA, sem PR:** `npm ci`
+limpo + suíte completa rodada na worktree isolada = **13 arquivos / 80 testes, 100%
+verde**. O suposto `ERR_REQUIRE_ESM` já tinha fix em main (`frontend/scripts/run-vitest.mjs`
+injeta `NODE_OPTIONS=--experimental-require-module`, commit `2e0f6cf`, PROMPT_9) — nada a
+corrigir. **Frente 3 (medição, sem ação):** `Property.matriculas_contiguas` (id 10) segue
+**NULL** (não declarado); nenhum agente rodou pós-remediação (ver Task 4 acima) — aceite
+vivo do #94 ainda não ocorreu. **Frente 4 (auditoria #93) — 5/5 confirmados:** guard
+`seen_this_run` em `app/services/acao_generator.py:281` com regressão dedicada
+(`tests/services/test_acao_generator_divergencias.py`); `POST /processes/{pid}/field-selo`
+grava `AuditLog` com hash chain (`stamp_audit_hash`, mesmo padrão do resto do código);
+`validate-fields` do Hub segue sem automatismo novo (só ganhou o valor
+`pendente_oficializacao` no allowlist, com comentário explícito de que o disparo é
+exclusivo do endpoint de processo); `Matricula.field_sources` confirmado JSONB. **Frente 5
+(governança/housekeeping):** novo playbook em `TROUBLESHOOTING.md` ("planta lida como CCIR")
+com query de detecção reutilizável; dívidas **#59** (tipos planta/memorial no classificador)
+e **#60** (conceito `registro_anterior` na Matricula) abertas. Branches remotas dos PRs
+#96/#97 já haviam sido auto-deletadas pelo GitHub; nenhum worktree órfão encontrado;
+`frontend/CLAUDE.md` **não existe** em lugar nenhum do repo (disco, índice ou histórico —
+não é resíduo de rename). Dívida #54 confirmada inequívoca (WorkflowTemplate para
+demand_types, não o dup do #21 em si). **Achado à parte (não corrigido, fora do escopo
+pedido):** o número **#44 está duplicado** no `REGISTRO_DIVIDAS.md` (OCR multipágina ×
+propagação de `uf` na chain) — renumerar tocaria 9 arquivos que citam `#44`; deixado para
+o André decidir. **Nota pós-merge:** desambiguado para 44a/44b no PR #100 (mergeado); a
+divida 44b (uf) foi FECHADA no PR #101 (Fase 0, pulso acima).
+
 **Pulso 2026-07-04 (GRANULARIDADE MATRÍCULA×IMÓVEL + INTEGRIDADE DA CONSOLIDAÇÃO — `feat/granularidade-matricula-sprint4`, ADR-023):** Ficha 07 §9 implementada — o sistema PERGUNTA "matrículas contíguas (e do mesmo titular)?" em vez de pressupor. **Campo:** `Property.matriculas_contiguas` Boolean NULLABLE (tri-state; NULL = legado sem backfill; migration `b7c9d1e3f5a7`); declarar via `PATCH /properties/{id}` grava selo `human_validated` (ADR-022) + AuditLog hash chain. **Honestidade:** com False/NULL e >1 matrícula, a soma derivada é ANOTADA (nunca suprimida) — `nota_soma_matriculas()` viaja no dossiê, no fallback do Hub, no resultado da consolidação e nos contextos de prompt de diagnóstico/legislação. **Lacunas:** "área total não informada" agora considera a soma derivada (fim do falso positivo pós-consolidação); lacuna informativa de contiguidade (>1 matrícula, NULL) em dossiê+can-advance; False → aviso orientando separação. NUNCA trava. **Integridade (caso 13):** (i) FIX DO BUCKET — `_group_sources`/`_collect_areas` separam sources por (doc_type, document_id): 2 CCIRs conflitantes viram divergência REAL, não last-write-wins; (ii) coerência matriz×consolidação — conflito de docs distintos no mesmo destino volta a `divergente_transcricao` e vira Ação (Ficha §3.3), `_pick_winner` só desempata proveniência; (iii) GUARD FANTASMA — só matricula/ccir/itr/car criam Matricula (sigef atualiza existente; era o vetor da "matrícula" 492262 = nº de certidão de embargo). **Re-home mínimo:** `PATCH /properties/{pid}/matriculas/{mid}` move matrícula entre imóveis do tenant (auditado) — torna acionável o "tratadas separadamente". **UI:** tri-state no PropertyHub InfoTab + espelho (badge+ressalva) no bloco Áreas do ProcessDossier. **Contrato intocado** (nota na ADR — caveat em peça jurídica é decisão de produto). **Prod pós-merge (FECHADO 06/07):** alembic `b7c9d1e3f5a7` já aplicada via preDeployCommand do Render; dry-run confirmou 0 FK apontando pra `matriculas.id=25` (492262) em `acoes`/`documents`/`regulatory_issues` — matrícula fantasma removida da property 10 (caso 13) com `AuditLog` hash chain (`sanear_matricula_fantasma`, id 970, tenant 1); área derivada da property 10 agora soma só as 4 matrículas reais (2923/4655/6776/4698). Follow-ons #55 (grupos por matrícula), #56 (N CARs), #57 (split-wizard UI) seguem abertos. Doc `docs/adr/023-matriculas-contiguas-integridade-consolidacao.md`.
 
 **Pulso 2026-07-03 (SELO DE 3 ESTADOS + AUTOMATISMO — `feat/selo-oficializacao-sprint3`, ADR-022):** Ficha 07 §3.4/§9 implementada. **Selo = vocabulário de `field_sources`** (sem enum novo): `human_validated` ("Validado") · `pendente_oficializacao` ("Correto, pendente de oficialização" — rótulo COMPLETO na UI) · não-validado = default por construção. `matriculas.field_sources` (migration `f2a4c6e8b0d2` + backfill) fecha o ponto cego; a consolidação **aposenta o fallback `old is not None`** — proveniência explícita nas 3 entidades, `pendente_oficializacao` protege contra sobrescrita (vira reconciliação). **Automatismo (§9):** selar "pendente de oficialização" no `POST /processes/{pid}/field-selo` cria sozinho a ação "Atualização de arquivos oficiais — {campo}" (origem=`oficializacao`, migration `a3b5d7f9c1e3`; triagem `pendente` — o consultor edita/dispensa). Dedupe por DESTINO (`p{pid}:ofic:{sha1(entity|entity_id|field)[:24]}`): oscilação não duplica, **dispensada não recria**, voltar a VALIDADO não remove a ação. **Hub NÃO dispara** (grava selo apenas); IDOR guard 404; AuditLog hash chain. Dossiê estendido (selos + campos-chave SIGEF/INCRA-SNCR/NIRF copiáveis + áreas documental × gráfica × total derivada) e UI `ProcessDossier` com seletor de 3 estados. De passagem: gap `seen_this_run` em `generate_acoes_from_divergencias` fechado (+ regressão); dívida #21 duplicada renumerada → #54. **Validação:** testes oscilação/dispensada/hub×endpoint/IDOR verdes; frontend 80/80. Doc `docs/adr/022-selo-oficializacao-field-sources.md`.
