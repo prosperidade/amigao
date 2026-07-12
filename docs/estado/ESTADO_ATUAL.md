@@ -4,6 +4,27 @@
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
+**Pulso 2026-07-12 (FASE 2 — ferramenta de reset de casos de teste —
+`feat/fase2-reset-tool`, PR a abrir, NÃO MERGEAR; wipe real é rito separado com
+aprovação do André):** entregue a FERRAMENTA, não a execução. `scripts/reset_casos_teste.py`
+(CLI fino) sobre `app/services/reset_casos_teste.py` (lógica testável). **DRY-RUN é o
+default**; `--execute` exige `--backup-confirmada` + frase digitada. Escopo sempre
+explícito (`--process-id`, repetível), nunca "tudo"; imóvel/cliente só entram se ficarem
+ÓRFÃOS (orphan-guard mede referências fora do escopo). **Allowlist hard-coded** (o plano
+assevera em runtime que nenhum passo mira tabela protegida). **Duas decisões com evidência
+medida:** (1) `audit_logs` é PRESERVADO, não apagado — a hash chain é por-tenant e apagar
+no meio a quebra (`verify_audit_chain`); o reset se registra como novo `AuditLog`
+(`action=reset_casos_teste`) carimbado por último, então nunca é invisível (diverge do
+"APAGA audit_logs" literal da missão, de propósito). (2) `legislation_alerts` (allowlist,
+mas FK `process_id CASCADE`) é DESVINCULADO (`process_id→NULL`) antes de apagar o processo,
+preservando a linha. R2: chave lida direto de `Document.storage_key`; deleção via
+`delete_objects` em lotes (só no `--execute`). **15 testes verdes** (Testcontainers): caso
+sintético → dry-run conta certo e não grava → execute apaga o escopo → allowlist intacta →
+alerts preservados → hash chain íntegra + reset registrado → idempotência → orphan-guard →
+recusa do CLI sem backup/confirmação. RUNBOOK_OPS ganhou a seção "Reset de casos de teste"
+(pré-req backup pg_dump/PITR, comando, verificação). **Carona:** dívida #62 aberta —
+`_rules_based_diagnosis` (fallback sem IA) fica cego ao passivo do auto de infração (gap
+declarado na Fase 1, agora com causa raiz + fix proposto em `REGISTRO_DIVIDAS.md`).
 **Pulso 2026-07-06 (FASE 1 — classificador honesto (N1) + auto de infração como
 passivo (N2) — `feat/fase1-classificador-n1n2`, PR a abrir, NÃO MERGEAR):**
 **Item 0 (gate obrigatório, reportado e pausado antes de prosseguir):**

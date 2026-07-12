@@ -8,9 +8,10 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 62.** Todo PR que abrir dívida nova incrementa este número
+> **PRÓXIMO NÚMERO LIVRE: 63.** Todo PR que abrir dívida nova incrementa este número
 > (mata a classe de colisão que já aconteceu 2x — #21 e #44, ver nota na entrada 44a/44b
-> abaixo). #59/#60 (PR #98) já mergeados; #61 usado nesta rodada (Fase 1, ver abaixo).
+> abaixo). #59/#60 (PR #98) já mergeados; #61 usado na Fase 1 (ver abaixo). #62 aberta
+> pela Fase 2 (`feat/fase2-reset-tool`, ver abaixo).
 > Fase 1 (`feat/fase1-classificador-n1n2`) fecha #48 e #59; #60 e #61 seguem abertas.
 
 ## P0 — fecham o pipeline ponta a ponta
@@ -347,6 +348,26 @@ cadeia manualmente quando souber, sem exigir que o sistema infira automaticament
 **Sem urgência** — mitigação atual é o consultor validar o SNCR/área manualmente (selo
 de oficialização, ADR-022). **Origem:** verificação pós-merge #94–#97 (2026-07-06),
 diagnóstico da remediação do caso 13.
+
+**62. Fallback `_rules_based_diagnosis` fica cego ao passivo do auto de infração.** A Fase 1
+(N2, item 10) fez o `DiagnosticoAgent` carregar os fatos do auto de infração
+(`_load_auto_infracao_fatos`) e transformá-los em `Afirmacao` determinística
+(`_build_afirmacoes_auto_infracao`) — **mas só no caminho com LLM**. Causa raiz medida em
+`app/agents/diagnostico.py`: os autos são carregados em `run()` (linha ~175) e guardados em
+`process_data["process"]["autos_infracao"]`; quando `settings.ai_configured` é falso, `run()`
+retorna `self._rules_based_diagnosis(process_data)` (linha ~181), e esse método (linha ~679)
+monta passivos/ações a partir de campos cadastrais e dos findings do auditor, **mas nunca lê
+`process_data["process"]["autos_infracao"]` nem chama `_build_afirmacoes_auto_infracao`**. Efeito:
+no modo degradado (IA indisponível), um imóvel com auto de infração real (ex.: caso 13, doc 240
+IBAMA nº 484341) não gera Afirmação nem passivo do auto — o diagnóstico de fallback silencia o
+passivo mais grave, violando "degradar com elegância, nunca ficar cego" (Princípio do radar).
+**Fix proposto (pequeno e seguro):** em `_rules_based_diagnosis`, ler
+`autos = process_data.get("process", {}).get("autos_infracao", [])` e passar
+`afirmacoes=self._build_afirmacoes_auto_infracao(autos)` para `_build_payload` (que já aceita
+`afirmacoes=`, linha ~966), espelhando o path com LLM; opcionalmente somar um passivo
+determinístico por auto. **O que destrava:** paridade de honestidade entre os dois caminhos do
+diagnóstico. **Origem:** Fase 2 (`feat/fase2-reset-tool`, 2026-07-12) — gap declarado na Fase 1,
+registrado como carona da ferramenta de reset.
 
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
