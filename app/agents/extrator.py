@@ -57,6 +57,7 @@ class ExtratorAgent(BaseAgent):
             if docs:
                 aggregated: dict[str, Any] = {}
                 per_doc: list[dict[str, Any]] = []
+                auto_infracao_fatos: list[dict[str, Any]] = []
                 for d in docs:
                     f, _ = extract_document_fields(
                         text=d.extracted_text or "",
@@ -71,16 +72,18 @@ class ExtratorAgent(BaseAgent):
                     )
                     # Ficha 01 / FASE 2 — gravação ADICIONAL no staging (não toca
                     # o extracted_fields acima nem a base real).
-                    self._stage_ficha01(
+                    fato = self._stage_ficha01(
                         text=d.extracted_text or "",
                         doc_type=d.document_type or "outro",
                         document_id=d.id,
                         process_id=self.ctx.process_id,
                     )
+                    if fato is not None:
+                        auto_infracao_fatos.append({"document_id": d.id, **fato})
                     for k, v in (f or {}).items():
                         if k not in aggregated and v not in (None, "", {}, []):
                             aggregated[k] = v
-                return {
+                out: dict[str, Any] = {
                     "extracted_fields": aggregated,
                     "doc_type": "multiplos",
                     "document_id": None,
@@ -88,6 +91,12 @@ class ExtratorAgent(BaseAgent):
                     "fields_count": len(aggregated),
                     "resolved_from_process": self.ctx.process_id,
                 }
+                # Fase 1 (N2) — fatos de auto de infração (podem vir de vários
+                # documentos do processo); DiagnosticoAgent também pode ler
+                # por AIJob individual do documento (item 10).
+                if auto_infracao_fatos:
+                    out["auto_infracao_fatos"] = auto_infracao_fatos
+                return out
             # Sem documento NOVO com OCR: em vez de devolver "0 campos, tipo outro"
             # (enganoso — a UI ficava como se nada tivesse sido extraído), REUTILIZA
             # a extração já gravada no staging do processo e a repassa à chain.
@@ -156,19 +165,25 @@ class ExtratorAgent(BaseAgent):
         )
 
         # Ficha 01 / FASE 2 — gravação ADICIONAL no staging.
-        self._stage_ficha01(
+        auto_infracao_fato = self._stage_ficha01(
             text=text,
             doc_type=doc_type,
             document_id=document_id,
             process_id=(doc.process_id if doc is not None else self.ctx.process_id),
         )
 
-        return {
+        out: dict[str, Any] = {
             "extracted_fields": fields,
             "doc_type": doc_type,
             "document_id": document_id,
             "fields_count": len(fields),
         }
+        # Fase 1 (N2) — fato do auto de infração vai no result do AIJob (não
+        # há coluna nova nesta fase); o DiagnosticoAgent lê por AIJob do
+        # documento, não por chain_data (item 10).
+        if auto_infracao_fato is not None:
+            out["auto_infracao_fato"] = auto_infracao_fato
+        return out
 
     def _stage_ficha01(
         self,
@@ -177,12 +192,17 @@ class ExtratorAgent(BaseAgent):
         doc_type: str,
         document_id: int | None,
         process_id: int | None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         """Ficha 01 / FASE 2 — extração estruturada por tipo → ExtractedFieldStaging.
 
         Best-effort e ADICIONAL: nunca derruba a extração principal
         (``extracted_fields``) nem grava na base real. Classifica o doc_type por
         conteúdo (quando o tipo do Document é genérico) e delega ao serviço.
+
+        Retorna o fato de auto de infração (N2) quando o doc_type classificado
+        for ``auto_infracao`` — o CALLER (``execute()``) inclui no dict de
+        retorno do agente, pra virar `AIJob.result["auto_infracao_fato"]`
+        naturalmente (``_complete_job`` grava ``result.data`` no job).
         """
         from app.services.ficha01_extraction import (  # noqa: PLC0415
             classify_doc_type,
@@ -190,11 +210,18 @@ class ExtratorAgent(BaseAgent):
         )
 
         if not (text or "").strip():
-            return
+            return None
         try:
             effective_type = classify_doc_type(text, doc_type)
+
+            # Fase 1 (N2) — auto de infração é FATO DE PASSIVO, não campo
+            # cadastral: NÃO passa por `extract_and_stage` (staging), vai
+            # direto pro pipeline de fatos do diagnóstico.
+            if effective_type == "auto_infracao":
+                return self._extract_auto_infracao_fato(text=text, document_id=document_id)
+
             ai_job_id = self._current_job.id if self._current_job is not None else None
-            extract_and_stage(
+            result = extract_and_stage(
                 text=text,
                 doc_type=effective_type,
                 tenant_id=self.ctx.tenant_id,
@@ -204,12 +231,70 @@ class ExtratorAgent(BaseAgent):
                 ai_job_id=ai_job_id,
                 created_by_agent="extrator",
             )
+            # Fase 1 (N1, item 3) — P12 na prática: nenhum documento mudo. O
+            # skipped_reason já existia (StagingResult) mas nunca era lido nem
+            # gravado — o documento ficava silenciosamente sem staging cadastral.
+            # `Document.extraction_status` (coluna já existente, nunca usada)
+            # vira a nota visível — mesmo padrão de "linha discreta" da nota
+            # derivada espacial (ADR-020), só que aqui é fato de processamento,
+            # não achado regulatório, e por isso É gravado (não recomputado).
+            if document_id is not None:
+                if result.skipped_reason:
+                    self._record_extraction_note(document_id, effective_type, result.skipped_reason)
+                elif result.rows_written > 0:
+                    self._clear_extraction_note(document_id)
+            return None
         except Exception as exc:  # pragma: no cover - blindagem; staging é adicional
             import logging  # noqa: PLC0415
 
             logging.getLogger(__name__).warning(
                 "extrator: staging Ficha 01 falhou (ignorado) doc=%s: %s", document_id, exc
             )
+            return None
+
+    def _extract_auto_infracao_fato(
+        self, *, text: str, document_id: int | None
+    ) -> dict[str, Any] | None:
+        """Fase 1 (N2) — extrai o fato do auto de infração (spec da Isis).
+
+        Retorna o fato (dict) pro caller incluir no resultado do agente — vira
+        `AIJob.result["auto_infracao_fato"]` naturalmente via `_complete_job`
+        (sem coluna nova — Fase 1 só migra a dívida #48). O DiagnosticoAgent lê
+        esses fatos por AIJob do documento na hora de montar o contexto (item 10).
+        """
+        from app.services.auto_infracao_extraction import (  # noqa: PLC0415
+            extract_auto_infracao_fato,
+        )
+
+        fato = extract_auto_infracao_fato(text)
+        if fato is None:
+            if document_id is not None:
+                self._record_extraction_note(
+                    document_id, "auto_infracao", "extração de fato falhou/vazia"
+                )
+            return None
+        if document_id is not None:
+            self._clear_extraction_note(document_id)
+        return fato
+
+    def _record_extraction_note(self, document_id: int, doc_type: str, reason: str) -> None:
+        """Grava a nota de processamento no `Document` (best-effort)."""
+        from app.models.document import Document  # noqa: PLC0415
+
+        doc = self.ctx.session.query(Document).filter(Document.id == document_id).first()
+        if doc is None:
+            return
+        doc.extraction_status = f"recebido, não processado ({doc_type}) — revisar: {reason}"
+        self.ctx.session.flush()
+
+    def _clear_extraction_note(self, document_id: int) -> None:
+        """Limpa a nota quando um reprocessamento posterior grava staging com sucesso."""
+        from app.models.document import Document  # noqa: PLC0415
+
+        doc = self.ctx.session.query(Document).filter(Document.id == document_id).first()
+        if doc is not None and doc.extraction_status is not None:
+            doc.extraction_status = None
+            self.ctx.session.flush()
 
     def _reuse_staging_fields(self, process_id: int | None) -> dict[str, Any] | None:
         """Reúsa a extração já gravada no staging do processo (chain sem doc novo).

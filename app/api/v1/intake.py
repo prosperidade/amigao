@@ -160,7 +160,11 @@ def create_case(
                 municipality=np.municipality,
                 state=np.state,
                 car_code=np.car_number,
-                ccir=np.ccir_number,
+                # Fase 1 (N1 item 5) — Property.ccir DEPRECIADO (não-gravável):
+                # campo ambíguo entre 3 números (SNCR permanente, nº anual do
+                # CCIR, autenticidade). `np.ccir_number` continua aceito no
+                # payload (compat de schema) mas não é mais persistido — o
+                # campo-chave é Matricula.codigo_incra_sncr. Ver MODELO_DE_DADOS.md.
                 total_area_ha=np.area_hectares,
             )
             db.add(prop)
@@ -664,8 +668,13 @@ def enrich_base(
     # Aplica campos do imóvel
     if prop and payload.property_fields:
         pf = payload.property_fields.model_dump(exclude_unset=True, exclude_none=True)
-        field_map = {"car_number": "car_code", "ccir_number": "ccir", "area_hectares": "total_area_ha"}
+        # Fase 1 (N1 item 5) — "ccir_number" removido do mapa: Property.ccir
+        # está DEPRECIADO (não-gravável). O campo continua aceito no schema
+        # (compat), mas não persiste mais — ver MODELO_DE_DADOS.md.
+        field_map = {"car_number": "car_code", "area_hectares": "total_area_ha"}
         for key, value in pf.items():
+            if key == "ccir_number":
+                continue
             col = field_map.get(key, key)
             if getattr(prop, col, None) != value:
                 setattr(prop, col, value)

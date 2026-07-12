@@ -170,6 +170,12 @@ class DiagnosticoAgent(BaseAgent):
         if isinstance(matriz, dict) and matriz.get("linhas"):
             process_data["process"]["matriz_inconsistencias"] = matriz
 
+        # Fase 1 (N2, item 10) — fatos de auto de infração no contexto do
+        # diagnóstico (spec da Isis: fato de passivo, não campo cadastral).
+        autos_infracao = self._load_auto_infracao_fatos(process_data)
+        if autos_infracao:
+            process_data["process"]["autos_infracao"] = autos_infracao
+
         # 3. Se IA nao configurada, retorna diagnostico baseado em regras
         if not settings.ai_configured:
             return self._rules_based_diagnosis(process_data)
@@ -238,6 +244,10 @@ class DiagnosticoAgent(BaseAgent):
 
         # Rastreabilidade (06/06): cada passivo/ação com fonte; sem fonte → marcado.
         afirmacoes = self._build_afirmacoes(parsed, passivos, acoes)
+        # Fase 1 (N2, item 7) — fatos de auto de infração viram Afirmacao
+        # DETERMINÍSTICA (não fuzzy-match com a prosa do LLM): são fato
+        # estruturado, não interpretação.
+        afirmacoes.extend(self._build_afirmacoes_auto_infracao(autos_infracao))
 
         return self._build_payload(
             situacao_geral=situacao_geral,
@@ -368,6 +378,93 @@ class DiagnosticoAgent(BaseAgent):
         if isinstance(inner, dict):
             return inner
         return {k: v for k, v in result.items() if k not in self._EXTRACTION_META_KEYS}
+
+    def _load_auto_infracao_fatos(self, process_data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Fase 1 (N2, item 10) — carrega os fatos de auto de infração
+        (extraídos pelo ExtratorAgent em `AIJob.result`) dos documentos do
+        processo, enriquece com lookup de enquadramento legal (item 8) e
+        cruzamento autuado×titular (item 9, nunca bloqueia), e devolve pra
+        injetar no contexto + virar Afirmacao (item 7 — NÃO passa pelo
+        staging cadastral, sem hint de matrícula)."""
+        from app.models.ai_job import AIJob, AIJobStatus, AIJobType  # noqa: PLC0415
+        from app.models.client import Client  # noqa: PLC0415
+        from app.models.process import Process  # noqa: PLC0415
+        from app.models.property import Property  # noqa: PLC0415
+        from app.services.auto_infracao_extraction import (  # noqa: PLC0415
+            check_autuado_diverge_titular,
+            lookup_enquadramento,
+        )
+
+        doc_ids = [
+            d.get("id")
+            for d in process_data.get("documents", [])
+            if isinstance(d, dict) and d.get("id") is not None
+        ]
+        if not doc_ids:
+            return []
+
+        jobs = (
+            self.ctx.session.query(AIJob)
+            .filter(
+                AIJob.tenant_id == self.ctx.tenant_id,
+                AIJob.job_type == AIJobType.extract_document,
+                AIJob.status == AIJobStatus.completed,
+                AIJob.agent_name == "extrator",
+            )
+            .order_by(AIJob.id.desc())
+            .all()
+        )
+        fatos_by_doc: dict[int, dict[str, Any]] = {}
+        for job in jobs:
+            result = job.result if isinstance(job.result, dict) else {}
+            single = result.get("auto_infracao_fato")
+            if single is not None:
+                doc_id = result.get("document_id")
+                if doc_id in doc_ids and doc_id not in fatos_by_doc:
+                    fatos_by_doc[doc_id] = {"document_id": doc_id, **single}
+            for item in (result.get("auto_infracao_fatos") or []):
+                doc_id = item.get("document_id") if isinstance(item, dict) else None
+                if doc_id in doc_ids and doc_id not in fatos_by_doc:
+                    fatos_by_doc[doc_id] = item
+
+        if not fatos_by_doc:
+            return []
+
+        # Titular atual (item 9): Client do processo + proprietários da Matrícula.
+        titular_nome = titular_cpf = None
+        matricula_proprietarios: list[dict[str, Any]] = []
+        process = (
+            self.ctx.session.query(Process)
+            .filter(Process.id == self.ctx.process_id, Process.tenant_id == self.ctx.tenant_id)
+            .first()
+        )
+        if process and process.client_id:
+            client = self.ctx.session.query(Client).filter(Client.id == process.client_id).first()
+            if client:
+                titular_nome, titular_cpf = client.full_name, client.cpf_cnpj
+        if process and process.property_id:
+            prop = self.ctx.session.query(Property).filter(Property.id == process.property_id).first()
+            if prop:
+                for m in prop.matriculas or []:
+                    matricula_proprietarios.extend(m.proprietarios or [])
+
+        fatos: list[dict[str, Any]] = []
+        for _doc_id, fato in fatos_by_doc.items():
+            enriched = dict(fato)
+            enriched["enquadramento_fontes"] = lookup_enquadramento(
+                fato.get("enquadramento_legal"),
+                db_session=self.ctx.session,
+                tenant_id=self.ctx.tenant_id,
+            )
+            enriched["nota_titular_divergente"] = check_autuado_diverge_titular(
+                fato.get("autuado_nome"),
+                fato.get("autuado_cpf"),
+                titular_nome=titular_nome,
+                titular_cpf=titular_cpf,
+                matricula_proprietarios=matricula_proprietarios,
+            )
+            fatos.append(enriched)
+        return fatos
 
     def _load_persisted_extraction(self, process_data: dict[str, Any]) -> dict[str, Any] | None:
         """Busca os campos extraídos persistidos nos ``AIJob`` do extrator quando
@@ -742,6 +839,50 @@ class DiagnosticoAgent(BaseAgent):
         import re as _re  # noqa: PLC0415
         toks = _re.findall(r"[0-9a-zà-ÿ]+", str(texto).lower())
         return {t for t in toks if t not in cls._AFIRMACAO_STOPWORDS and len(t) > 1}
+
+    def _build_afirmacoes_auto_infracao(self, autos_infracao: list[dict[str, Any]]) -> list[Any]:
+        """Fase 1 (N2, item 7) — cada auto de infração vira UMA Afirmacao
+        determinística (fato de passivo, não interpretação do LLM). Fontes:
+        o próprio documento + as normas de enquadramento ACHADAS no corpus
+        (item 8; não achada é marcada honesta, nunca inventada). Divergência
+        autuado×titular (item 9) vira uma 2ª Afirmacao informativa — nunca
+        bloqueia."""
+        from app.schemas.stage_output import Afirmacao, SourceRef  # noqa: PLC0415
+
+        out: list[Any] = []
+        for fato in autos_infracao or []:
+            numero = fato.get("numero_auto") or "s/número"
+            orgao = fato.get("orgao_autuante") or "órgão não identificado"
+            descricao = fato.get("descricao_infracao") or "infração sem descrição extraída"
+            texto = f"Auto de infração {numero} ({orgao}): {descricao}"
+
+            fontes: list[Any] = [SourceRef(
+                tipo="documento", ref=str(fato.get("document_id")) if fato.get("document_id") else None,
+                descricao=f"Auto de infração {numero}",
+            )]
+            for enq in fato.get("enquadramento_fontes") or []:
+                if enq.get("localizada"):
+                    fontes.append(SourceRef(
+                        tipo="legislacao", ref=str(enq.get("chunk_id")) if enq.get("chunk_id") else None,
+                        descricao=enq.get("citacao"),
+                    ))
+                else:
+                    fontes.append(SourceRef(
+                        tipo="sem_fonte", sem_fonte=True,
+                        descricao=f"{enq.get('citacao')} — não localizada no corpus",
+                    ))
+            out.append(Afirmacao(texto=texto, categoria="passivo", fontes=fontes))
+
+            nota = fato.get("nota_titular_divergente")
+            if nota:
+                out.append(Afirmacao(
+                    texto=nota, categoria="passivo",
+                    fontes=[SourceRef(
+                        tipo="documento", ref=str(fato.get("document_id")) if fato.get("document_id") else None,
+                        descricao=f"Auto de infração {numero} × titular atual",
+                    )],
+                ))
+        return out
 
     def _build_afirmacoes(self, parsed: dict[str, Any], passivos: list, acoes: list) -> list[Any]:
         """Cada passivo e cada ação vira UMA Afirmacao(texto, fontes), com

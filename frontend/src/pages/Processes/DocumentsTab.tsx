@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { FileText, Download, Sparkles, Trash2 } from 'lucide-react';
+import { FileText, Download, Sparkles, Trash2, Info } from 'lucide-react';
 import { Document } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
 import ProcessChecklist from './ProcessChecklist';
@@ -124,6 +124,15 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                         </span>
                       )}
                     </div>
+                    {/* Fase 1 (N1, item 3) — nota de processamento (P12: nenhum
+                        documento mudo). Linha discreta, sem botões — mesmo
+                        padrão visual da nota derivada espacial (ADR-020). */}
+                    {doc.extraction_status && (
+                      <p className="flex items-start gap-1.5 mt-1 text-xs text-gray-400 dark:text-slate-500">
+                        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>{doc.extraction_status}</span>
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button

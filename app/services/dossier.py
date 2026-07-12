@@ -372,13 +372,21 @@ def validate_technical_consistency(
                 field="documents",
             ))
 
-    if demand in ("car", "regularizacao_fundiaria") and prop and not prop.ccir:
+    # Fase 1 (N1 item 5) — Property.ccir depreciado (não-gravável daqui pra
+    # frente; ambíguo entre 3 números diferentes, ver MODELO_DE_DADOS.md). O
+    # sinal real de "CCIR cadastrado" agora é alguma Matricula do imóvel ter
+    # `codigo_incra_sncr` preenchido (campo-chave único, sem ambiguidade).
+    if (
+        demand in ("car", "regularizacao_fundiaria")
+        and prop
+        and not any((m.codigo_incra_sncr or "").strip() for m in (prop.matriculas or []))
+    ):
         issues.append(Inconsistency(
             code="MISSING_CCIR",
             severity="warning",
             title="CCIR não cadastrado",
             description="O Certificado de Cadastro de Imóvel Rural (CCIR) não está informado.",
-            field="property.ccir",
+            field="matricula.codigo_incra_sncr",
         ))
 
     if demand == "outorga" and prop and not prop.municipality:

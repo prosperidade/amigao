@@ -4,6 +4,44 @@
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
+**Pulso 2026-07-06 (FASE 1 — classificador honesto (N1) + auto de infração como
+passivo (N2) — `feat/fase1-classificador-n1n2`, PR a abrir, NÃO MERGEAR):**
+**Item 0 (gate obrigatório, reportado e pausado antes de prosseguir):**
+`SELECT uf, source_type, count(*) FROM knowledge_catalog GROUP BY uf, source_type`
+em prod confirmou dívida #47/#61 — corpus AC **ausente** (0 linhas `uf='AC'`),
+total 24.233 (não ~27k esperado); André autorizou seguir com N1/N2 registrando
+o achado (dívida #61 já fechada no ciclo anterior desta mesma missão). **N1 item 1:**
+classificador ganha 4 tipos (`planta_topografica`, `memorial_descritivo`,
+`auto_infracao` reusando o tipo legado, `certidao_embargo`) com precedência ANTES
+de `ccir`/`sigef` — a menção fraca de "CCIR" na legenda de uma planta não sequestra
+mais a classificação (fixture do shape real do doc 228/caso 13). **Item 2:**
+planta/memorial sem `_FIELD_SPECS` — não alimentam staging cadastral nem entram
+no allowlist de criação de `Matricula` (guard fantasma do Sprint 4, intocado).
+**Item 3 (P12 "nenhum documento mudo"):** `skipped_reason` do `extract_and_stage`
+(já calculado, nunca lido) agora vira nota visível em `Document.extraction_status`
+("recebido, não processado — revisar"), exibida em `DocumentsTab`. **Item 4:**
+fecha dívidas #59 e #60 (nota: #60 permanece OPEN de propósito — `registro_anterior`
+não é escopo desta fase). **Item 5:** `Property.ccir` deprecado — não é mais gravado
+em nenhum caminho de escrita (`intake_enrichment`, `intake.py`); `dossier.py`
+(`MISSING_CCIR`) passa a checar `Matricula.codigo_incra_sncr` em vez de
+`Property.ccir`; **sem migração de dados** (decisão explícita, curadoria caso a
+caso) — documentado como "trigger" em `MODELO_DE_DADOS.md`. **Item 6 (fecha dívida
+#48):** `RegulatoryIssue` ganha colunas `tema`/`subject_ref` + índice UNIQUE parcial
+`(tenant_id, property_id, codigo_alerta, tema, subject_ref) WHERE resolved_at IS NULL`
+(migration `b094ae9bee3d`) — varredura table-wide em prod ANTES da migration confirmou
+zero duplicatas abertas; NULL não colide com NULL (linhas legadas intocadas).
+**N2 (spec da Isis, itens 7-10) — auto de infração como fato de passivo:** skill de
+extração (`app/services/auto_infracao_extraction.py`) com os 11 campos fechados
+(sem situação processual/CADIN); fatos NÃO passam pelo staging cadastral, vão pro
+`AIJob.result` do extrator; `lookup_enquadramento` casa citação × `knowledge_catalog`
+(mesmo caminho do `citation_evaluator`) — não localizado é honestamente marcado, nunca
+inventado (Princípio 11); `check_autuado_diverge_titular` compara autuado × titular
+atual (Client/Matricula.proprietarios) — divergência é nota informativa, NUNCA bloqueia;
+`DiagnosticoAgent._load_auto_infracao_fatos` consome os fatos do AIJob e gera
+`Afirmacao(categoria="passivo")` com `SourceRef` por citação (legislação encontrada ou
+`sem_fonte=True`). **Gap conhecido, aceito:** `_rules_based_diagnosis` (fallback sem IA)
+não recebe as Afirmacoes de auto de infração — caminho de borda, fora do prazo desta
+fase. Suíte completa + tsc + ruff verdes (ver relatório da missão para números exatos).
 **Pulso 2026-07-06 (FASE 0 — fixes pontuais do gap-analysis Ficha 07 —
 `fix/fase0-gap-ficha07`):** 8 itens do relatório de gap-analysis (06/07),
 todos sem trava, implementados com testes. **Item 1:** auto-avanço por

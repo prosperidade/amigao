@@ -292,6 +292,10 @@ class AuditorImovelAgent(BaseAgent):
                 muda_rota_regulatoria=f.muda_rota_regulatoria,
                 muda_escopo_preco_prazo=f.muda_escopo_preco_prazo,
                 documentos_cruzados=f.documentos_cruzados,
+                # Fase 1 (N1 item 6, dívida #48) — chave estável do UNIQUE
+                # parcial (colunas reais, não mais só dentro do payload JSONB).
+                tema=f.tema,
+                subject_ref="|".join(sorted(f.documentos_cruzados)) if f.documentos_cruzados else None,
                 # type legado fica nullable em registros novos (deprecated).
                 type=None,
                 payload={

@@ -42,6 +42,7 @@ class DocumentResponse(BaseModel):
     document_type: Optional[str] = None
     document_category: Optional[str] = None
     ocr_status: Optional[str] = None
+    extraction_status: Optional[str] = None
     review_required: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
