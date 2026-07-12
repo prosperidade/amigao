@@ -359,6 +359,74 @@ em `/api/v1/messaging/whatsapp/webhook`.
 
 Periodicamente (mensal recomendado): restaurar backup em ambiente isolado e validar que aplicação sobe.
 
+## Reset de casos de teste
+
+Ferramenta para **apagar todo o rastro de casos de teste** (processos) de um tenant e
+poder resubir do zero: staging, ações, rotas, diagnóstico, issues regulatórias, checklists,
+propostas, contratos, documentos (linha + objeto no R2), AIJobs, drafts, e — quando ficam
+órfãos — imóvel, matrículas e cliente.
+
+- Código: `scripts/reset_casos_teste.py` (CLI) sobre `app/services/reset_casos_teste.py`.
+- **Escopo sempre explícito** (`--process-id`, repetível). Nunca opera em "tudo".
+- **DRY-RUN é o default.** Sem `--execute`, nada é escrito — só imprime a lista de contagens.
+- **Preserva** (allowlist hard-coded, o script recusa mirar): `knowledge_catalog`,
+  `legislation_documents`, `legislation_alerts`, `regulatory_issue_catalog`, `users`,
+  `tenants`, `pre_cadastros`, `prompt_templates`, `workflow_templates`, `contract_templates`,
+  `checklist_templates`, **e `audit_logs`**.
+- **`audit_logs` NÃO é apagado** (a hash chain é por-tenant e apagar no meio a quebra):
+  o reset se registra como um **novo** `AuditLog` (`action=reset_casos_teste`) carimbado por
+  último. A operação nunca é invisível.
+- `legislation_alerts` do caso são **desvinculados** (`process_id → NULL`), não apagados.
+
+### Pré-requisito OBRIGATÓRIO: backup
+
+O `--execute` exige a flag `--backup-confirmada` (asserção de que o dump foi feito) **e** a
+digitação de uma frase de confirmação. Faça o backup ANTES:
+
+```bash
+# Opção A — Supabase (prod): PITR. Anote o timestamp atual como ponto de restauração
+#   (Dashboard → Database → Backups → Point in Time). Nenhum comando local necessário;
+#   confirme que o PITR está habilitado e anote a hora UTC antes do reset.
+
+# Opção B — pg_dump cheio do escopo do tenant (dev ou prod), antes do reset:
+pg_dump "$DATABASE_URL" -Fc -f "backup_pre_reset_$(date -u +%Y%m%dT%H%M%SZ).dump"
+#   Restaurar (se precisar): pg_restore -d "$DATABASE_URL" --clean backup_pre_reset_*.dump
+```
+
+### Comando
+
+```bash
+# 1) DRY-RUN (default) — SEMPRE rode primeiro e leia a lista:
+python scripts/reset_casos_teste.py --process-id 13
+python scripts/reset_casos_teste.py --process-id 13 --process-id 14   # vários casos
+
+# 2) EXECUÇÃO real — exige backup confirmado + frase digitada:
+python scripts/reset_casos_teste.py --process-id 13 --execute --backup-confirmada
+#    → o script imprime a frase exata (ex.: "apagar 1 caso(s) do tenant 1") e pede que
+#      você a digite. Frase errada ou EOF = recusa, nada é gravado.
+
+# 3) Não-interativo (CI): a frase vai em --confirm (precisa bater exatamente):
+python scripts/reset_casos_teste.py --process-id 13 --execute \
+    --backup-confirmada --confirm "apagar 1 caso(s) do tenant 1"
+```
+
+Dentro do container: `docker compose exec api python scripts/reset_casos_teste.py ...`.
+Do venv host: aponte o `.env` para o ambiente-alvo (ver porta do Postgres no `CLAUDE.md`).
+
+### Verificação pós-reset
+
+- Saída do `--execute` mostra as contagens apagadas por tabela + objetos R2 + alerts
+  desvinculados. Confira contra o dry-run.
+- No banco: `SELECT count(*) FROM processes WHERE id = <id>` → 0.
+- Auditoria: `SELECT action, created_at FROM audit_logs WHERE tenant_id = <t>
+  ORDER BY id DESC LIMIT 1` → deve ser `reset_casos_teste`. A hash chain do tenant segue
+  íntegra (`verify_audit_chain`).
+- Se algo saiu errado: restaure o backup (pg_restore) ou o PITR do timestamp anotado.
+
+> **Nota de saúde:** a sessão do banco tem `statement_timeout=30000` (30 s). O reset é
+> por-caso (poucas linhas) e não deve estourar; se um dia o escopo for grande, rode caso a
+> caso ou aumente o timeout na sessão.
+
 ## Updates de dependências
 
 ### Python
