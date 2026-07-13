@@ -156,20 +156,30 @@ export interface TabDef {
   min_stage_index?: number;
 }
 
+// Sprint 6 (Ficha 07 §3) — ordem do fluxo de trabalho:
+//   Visão geral · Documentos · Conferência · Dados · Ações · Saídas.
+// A visibilidade é decidida pelo flag `isTabVisible` (ver lib/tabFlags.ts) — o
+// eixo ortogonal ao `min_stage_index`. As abas ocultas NÃO são removidas daqui:
+// continuam declaradas (componente, rota, dados vivem por baixo), só somem da
+// barra. OCULTAR ≠ APAGAR. Ver ADR-024.
 export const TABS: TabDef[] = [
+  // ── As 6 abas do MVP, na ordem da Ficha ─────────────────────────────────
   { key: 'diagnosis',  label: 'Visão geral', icon: Stethoscope,  block_type: 'permanent' },
+  { key: 'documents',  label: 'Documentos',  icon: FolderOpen,   block_type: 'permanent' },
   { key: 'alertas',    label: 'Conferência', icon: AlertTriangle, block_type: 'active'   },
+  { key: 'dossier',    label: 'Dados',       icon: LayoutGrid,   block_type: 'permanent' },
   // Ficha 07 — Aba Ações: o diagnóstico vira trabalho triável (com fonte).
   { key: 'acoes',      label: 'Ações',       icon: ListChecks,   block_type: 'active'    },
+  { key: 'saidas',     label: 'Saídas',      icon: PackageCheck, block_type: 'active'    },
+  // Comercial — visível por ora (flag true) e gated por etapa (min_stage_index=5):
+  // único acesso a Proposta/Contrato até o Sprint 5 convergir tudo em Saídas.
+  { key: 'commercial', label: 'Comercial',   icon: Briefcase,    block_type: 'conditional', min_stage_index: 5 },
+
+  // ── Ocultas no MVP (flag isTabVisible=false) — vivas por baixo ───────────
   // Tarefas genéricas (Task) — kanban operacional, distinto das Ações de remediação.
   { key: 'tasks',      label: 'Tarefas',     icon: ListTodo,     block_type: 'active'    },
-  { key: 'documents',  label: 'Documentos',       icon: FolderOpen,   block_type: 'permanent' },
-  { key: 'messages',   label: 'Comunicação',      icon: MessageCircle, block_type: 'permanent' },
-  { key: 'dossier',    label: 'Dados',            icon: LayoutGrid,   block_type: 'permanent' },
-  { key: 'ai',         label: 'IA',               icon: Bot,          block_type: 'active'    },
-  { key: 'timeline',   label: 'Histórico',      icon: CalendarDays, block_type: 'permanent' },
-  { key: 'decisions',  label: 'Decisões',       icon: Scale,        block_type: 'permanent' },
-  { key: 'saidas',     label: 'Saídas',          icon: PackageCheck, block_type: 'active'    },
-  // Comercial — proposta/contrato aparecem só nas etapas 6 (orcamento_negociacao) e 7 (contrato_formalizacao).
-  { key: 'commercial', label: 'Comercial',        icon: Briefcase,    block_type: 'conditional', min_stage_index: 5 },
+  { key: 'messages',   label: 'Comunicação', icon: MessageCircle, block_type: 'permanent' },
+  { key: 'ai',         label: 'IA',          icon: Bot,          block_type: 'active'    },
+  { key: 'timeline',   label: 'Histórico',   icon: CalendarDays, block_type: 'permanent' },
+  { key: 'decisions',  label: 'Decisões',    icon: Scale,        block_type: 'permanent' },
 ];
