@@ -4,6 +4,19 @@
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
+**Pulso 2026-07-13 (Corpus Acre INGERIDO EM PROD — `fix/reindex-syspath-e-corpus-acre-done`,
+PR a abrir, NÃO MERGEAR):** executada a ingestão real do corpus legislativo do Acre em
+produção (Supabase `diquycxxkfrjhxtrcmzb`), fechando o último gap conhecido da dívida #47.
+`knowledge_catalog`: 24.233 → **28.891 chunks** (+4.658, idêntico ao dev); `uf='AC'` de
+**0 → 4.634** + referência nacional +24 (federal 761→785); 11 `LegislationDocument` novos
+(ids 54–64). Rodado via `ingest_legislacao_acre.py` (passo 1) + `reindex_legislation_by_uf.py
+--uf AC` (passo 2, ~15 min de embed OpenAI) + `index_legislation_document(64)` p/ a ref.
+nacional (`uf=NULL`, que o `--uf AC` não pega). **Dois bugs corrigidos nesta branch:**
+(1) `reindex_legislation_by_uf.py` sem `sys.path.insert` (dava `ModuleNotFoundError` rodado
+como script — a forma do runbook); (2) runbook não mencionava a ref. nacional separada.
+`DATABASE_URL` de prod usada só em arquivo temp fora do repo, apagado ao fim; `.env` intocado.
+**Segurança:** a connection string de prod e o `SUPABASE_ACCESS_TOKEN` apareceram no chat da
+sessão — recomendado rotacionar ambos. Doc atualizado: `docs/trabalhos/corpus_acre_prod.md`.
 **Pulso 2026-07-12 (FASE 2 — ferramenta de reset de casos de teste —
 `feat/fase2-reset-tool`, PR a abrir, NÃO MERGEAR; wipe real é rito separado com
 aprovação do André):** entregue a FERRAMENTA, não a execução. `scripts/reset_casos_teste.py`

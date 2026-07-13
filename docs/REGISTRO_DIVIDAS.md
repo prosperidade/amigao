@@ -456,6 +456,12 @@ prioridade — sem o corpus, o diferencial regulatório/RAG está morto em prod.
 **Observabilidade já adicionada** em `fix/llm-consistencia`: log `legislacao.rag
 0 trechos …` quando a busca volta vazia. **Origem:** Item 4 da PR
 `fix/llm-consistencia` (07/06). Doc: `docs/trabalhos/llm_consistencia.md`.
+> **Atualização 2026-07-13:** a premissa "0 linhas" ficou desatualizada — prod já
+> tinha 24.233 chunks (MT/GO/MS/Federal). O último gap conhecido era a fatia **Acre**
+> (0 linhas `uf='AC'`), agora **ingerida em prod** (28.891 chunks totais, +4.658;
+> ver `docs/trabalhos/corpus_acre_prod.md`). #47 permanece aberta como guarda-chuva de
+> cobertura das demais UFs (meta 27 UFs), mas os corpora hoje presentes em dev estão
+> todos em prod.
 
 ## Backlog de produto (já versionado em ADR)
 
