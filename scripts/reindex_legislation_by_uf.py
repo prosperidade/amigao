@@ -12,7 +12,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
+
+# Rodado como `python scripts/reindex_legislation_by_uf.py`, sys.path[0] é a pasta
+# do script; adiciona a raiz para que `from app.X import Y` funcione (mesmo padrão
+# de sanear_staging.py). Sem isto, ModuleNotFoundError: No module named 'app'.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 logger = logging.getLogger("reindex_legislation_by_uf")
 
