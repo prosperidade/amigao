@@ -17,6 +17,7 @@ import { api } from '@/lib/api';
 import { AlertCircle, Zap, X } from 'lucide-react';
 
 import { Process, TABS } from './ProcessDetailTypes';
+import { isTabVisible, resolveActiveTab } from '@/lib/tabFlags';
 import { MACROETAPA_LABELS } from './quadro-types';
 import ProcessHeader from './ProcessHeader';
 import DiagnosisTab from './DiagnosisTab';
@@ -52,7 +53,14 @@ export default function ProcessDetail() {
   const queryClient = useQueryClient();
   const processId = parseInt(id ?? '0', 10);
 
-  const [activeTab, setActiveTab] = useState<TabKey>('diagnosis');
+  // Sprint 6 — aba inicial pode vir de deep-link (?tab=). Se apontar p/ uma aba
+  // oculta (flag) ou desconhecida, `resolveActiveTab` cai suave na Visão geral.
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    resolveActiveTab(new URLSearchParams(location.search).get('tab')) as TabKey,
+  );
+  // Guarda de renderização: nunca renderiza o conteúdo de uma aba oculta, mesmo
+  // que o estado aponte pra ela (deep-link/estado herdado). Redirect suave, sem crash.
+  const effectiveTab = resolveActiveTab(activeTab) as TabKey;
   // CAM3WS-008 (Sprint J) — etapa que o consultor está "visualizando" via stepper.
   // null = segue a etapa atual do processo. Clicar em outra etapa do stepper filtra
   // tabs relevantes (IA/Decisões/Saídas) para o contexto dessa etapa.
@@ -243,13 +251,18 @@ export default function ProcessDetail() {
       <div className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 px-2 py-2">
         <nav className="flex gap-1 overflow-x-auto">
           {TABS.map(tab => {
+            // Sprint 6 — flag de visibilidade (fonte única: lib/tabFlags.ts).
+            // Aba oculta some da barra; o componente/rota/dados seguem vivos.
+            if (!isTabVisible(tab.key)) {
+              return null;
+            }
             if (tab.block_type === 'conditional' &&
                 typeof tab.min_stage_index === 'number' &&
                 currentIndex < tab.min_stage_index) {
               return null;
             }
             const Icon = tab.icon;
-            const active = activeTab === tab.key;
+            const active = effectiveTab === tab.key;
             const viewingIdx = viewingStage
               ? STAGE_ORDER.indexOf(viewingStage as typeof STAGE_ORDER[number])
               : -1;
@@ -294,7 +307,7 @@ export default function ProcessDetail() {
 
         {/* Área 4 — Área central de trabalho */}
         <main className="bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/10 p-5 min-w-0">
-          {activeTab === 'diagnosis' && (
+          {effectiveTab === 'diagnosis' && (
             <DiagnosisTab
               process={process}
               // Sprint 0 — os alertas regulatórios passaram a viver NA própria
@@ -310,17 +323,17 @@ export default function ProcessDetail() {
               }}
             />
           )}
-          {activeTab === 'alertas' && <ConferenciaTab processId={processId} />}
-          {activeTab === 'acoes' && <AcoesTab processId={processId} currentStage={viewingStage ?? currentStage} />}
-          {activeTab === 'dossier' && <ProcessDossier processId={processId} />}
-          {activeTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}
-          {activeTab === 'commercial' && <ProcessCommercial processId={processId} />}
-          {activeTab === 'tasks' && <TasksTab processId={processId} />}
-          {activeTab === 'documents' && <DocumentsTab processId={processId} />}
-          {activeTab === 'messages' && <MessagesTab processId={processId} />}
-          {activeTab === 'timeline' && <TimelineTab processId={processId} />}
-          {activeTab === 'saidas' && <SaidasTab processId={processId} viewingStage={viewingStage} />}
-          {activeTab === 'ai' && (
+          {effectiveTab === 'alertas' && <ConferenciaTab processId={processId} />}
+          {effectiveTab === 'acoes' && <AcoesTab processId={processId} currentStage={viewingStage ?? currentStage} />}
+          {effectiveTab === 'dossier' && <ProcessDossier processId={processId} />}
+          {effectiveTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}
+          {effectiveTab === 'commercial' && <ProcessCommercial processId={processId} />}
+          {effectiveTab === 'tasks' && <TasksTab processId={processId} />}
+          {effectiveTab === 'documents' && <DocumentsTab processId={processId} />}
+          {effectiveTab === 'messages' && <MessagesTab processId={processId} />}
+          {effectiveTab === 'timeline' && <TimelineTab processId={processId} />}
+          {effectiveTab === 'saidas' && <SaidasTab processId={processId} viewingStage={viewingStage} />}
+          {effectiveTab === 'ai' && (
             <AIPanel
               processId={processId}
               processDemandType={process?.demand_type}
