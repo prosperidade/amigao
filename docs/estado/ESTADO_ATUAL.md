@@ -4,6 +4,21 @@
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
+**Pulso 2026-07-13 (SPRINT 6 — limpeza das abas do workspace — `feat/sprint6-limpeza-abas`,
+PR a abrir, NÃO MERGEAR):** o detalhe do caso mostrava ~10 abas; a Ficha 07 §3 define **6**
+(Visão geral · Documentos · Conferência · Dados · Ações · Saídas). Entregue: (1) flag de
+visibilidade reusável `frontend/src/lib/tabFlags.ts` (mapa `key→visível`, `isTabVisible`,
+eixo ortogonal ao `min_stage_index`; assinatura já preparada p/ por-tenant + override por env
+`VITE_TAB_FLAGS`, **sem** admin de flags); (2) 5 abas OCULTAS (Tarefas, Comunicação, Histórico,
+Decisões, IA) — **OCULTAR ≠ APAGAR**: componente/rota/dados vivem por baixo, só a superfície
+some; (3) deep-link de aba oculta → redirect suave p/ Visão geral (`resolveActiveTab`),
+sem crash nem área em branco; (4) ordem das abas alinhada à Ficha; **Comercial permanece
+visível por ora** (único acesso a Proposta/Contrato até o Sprint 5 convergir em Saídas — aí
+entra no flag). Escopo cirúrgico: só as TABS internas do detalhe (`ProcessDetail.tsx` +
+`ProcessDetailTypes.ts`) — sidebar global, `QuadroAcoes`, `WorkspaceRightPanel` intocados.
+ADR-024. **16 vitest novos** (visível/oculto/redirect/merge/parse) — suite **96/96 verde**,
+tsc limpo. Backend intocado (mudança 100% frontend). **Dívidas abertas:** #63 (fusão
+Tarefas→Ações pós-MVP) e #64 (aba IA não dispara a cadeia — ocultar trata o sintoma).
 **Pulso 2026-07-13 (Corpus Acre INGERIDO EM PROD — `fix/reindex-syspath-e-corpus-acre-done`,
 PR a abrir, NÃO MERGEAR):** executada a ingestão real do corpus legislativo do Acre em
 produção (Supabase `diquycxxkfrjhxtrcmzb`), fechando o último gap conhecido da dívida #47.

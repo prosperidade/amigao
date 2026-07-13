@@ -8,10 +8,11 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 63.** Todo PR que abrir dívida nova incrementa este número
+> **PRÓXIMO NÚMERO LIVRE: 65.** Todo PR que abrir dívida nova incrementa este número
 > (mata a classe de colisão que já aconteceu 2x — #21 e #44, ver nota na entrada 44a/44b
 > abaixo). #59/#60 (PR #98) já mergeados; #61 usado na Fase 1 (ver abaixo). #62 aberta
-> pela Fase 2 (`feat/fase2-reset-tool`, ver abaixo).
+> pela Fase 2 (`feat/fase2-reset-tool`, ver abaixo). #63/#64 abertas pelo Sprint 6
+> (`feat/sprint6-limpeza-abas`, abas do workspace — ver abaixo).
 > Fase 1 (`feat/fase1-classificador-n1n2`) fecha #48 e #59; #60 e #61 seguem abertas.
 
 ## P0 — fecham o pipeline ponta a ponta
@@ -368,6 +369,23 @@ passivo mais grave, violando "degradar com elegância, nunca ficar cego" (Princ�
 determinístico por auto. **O que destrava:** paridade de honestidade entre os dois caminhos do
 diagnóstico. **Origem:** Fase 2 (`feat/fase2-reset-tool`, 2026-07-12) — gap declarado na Fase 1,
 registrado como carona da ferramenta de reset.
+
+**63. Fusão Tarefas→Ações no workspace (pós-MVP).** O Sprint 6 ocultou a aba **Tarefas** do
+detalhe do caso (flag `isTabVisible`, ver ADR-024), mas **não fundiu** `Task` em `Acao`. As
+duas entidades são deliberadamente distintas (`app/models/acao.py:20-26`): a fusão seria 1:N,
+não 1:1, e perderia o grafo de dependências + o kanban operacional das `Task`. Por ora `Task`
+segue viva por baixo (só a superfície some). **O que destrava:** se algum dia o consultor
+precisar operar tarefas genéricas dentro do caso sem sair para outra superfície, decidir
+conscientemente se elas viram Ações, ganham aba própria de volta, ou migram para outro lugar —
+com o desenho do grafo preservado. **Origem:** Sprint 6 (`feat/sprint6-limpeza-abas`, 2026-07-13).
+
+**64. Aba IA do workspace não dispara a cadeia de agentes.** A aba **IA** (`ai`) do detalhe do
+caso (`AIPanel`) estava quebrada — não aciona a cadeia de agentes da etapa. O Sprint 6 a
+**ocultou** (flag `isTabVisible=false`, ADR-024), o que resolve a dor imediata (tela morta na
+frente do consultor) mas **não conserta** o disparo. **O que destrava:** religar o flag depois
+de fazer o painel efetivamente orquestrar a cadeia (ou redirecionar o "Rodar agentes" para o
+mesmo caminho do `WorkspaceRightPanel`, que já dispara). Enquanto não consertar, manter oculta.
+**Origem:** Sprint 6 (`feat/sprint6-limpeza-abas`, 2026-07-13).
 
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 

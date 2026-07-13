@@ -1919,3 +1919,20 @@ declarar-e-avisar (nunca automação); soma anotada nunca suprimida; contrato
 intocado; caso 13/2923 em prod gated na Isis. **Validação:** matriz 13/13 (4 novos
 multi-doc), suíte de consolidação/selo/staging + `test_sprint4_contiguidade.py`
 (15 novos). Ver `docs/adr/023-matriculas-contiguas-integridade-consolidacao.md`.
+
+---
+
+## Sprint 6 — Limpeza das abas do workspace (2026-07-13)
+
+Sprint de superfície (UI), não de IA — registrado no pulso pelo toque na **aba IA**.
+
+### O que toca IA
+
+- **Aba IA do workspace OCULTADA** (flag `isTabVisible=false`, ver
+  `frontend/src/lib/tabFlags.ts` + ADR-024). A aba (`AIPanel`) estava quebrada — não
+  dispara a cadeia de agentes da etapa. Ocultar resolve a dor imediata (tela morta na
+  frente do consultor) sem apagar nada: componente/rota/dados seguem vivos por baixo.
+  O disparo real da cadeia continua pelo `WorkspaceRightPanel` ("Rodar agentes"), que
+  **não** foi tocado. Conserto do painel = **dívida #64** (religar o flag depois).
+- **Sem mudança de gateway/agentes/prompts/custos** — nenhuma chamada LLM nova; a
+  orquestração de agentes é idêntica.
