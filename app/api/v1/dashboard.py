@@ -15,6 +15,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import and_, exists, or_
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
@@ -254,6 +255,27 @@ def _recent_activities(db: Session, tenant_id: int, *, entity_type_filter: str |
         q = q.filter(AuditLog.entity_type.notin_(_SYSTEM_ENTITY_TYPES))
         # Evento de agente sem processo (entity_id == 0): vigia diário, jobs internos.
         q = q.filter(~((AuditLog.entity_type == "agent") & (AuditLog.entity_id == 0)))
+
+    # Caso já apagado (reset/wipe) deixa linhas ÓRFÃS no audit_logs — a trilha é
+    # preservada de propósito (hash chain SHA-256; apagar quebraria o
+    # verify_audit_chain). Mas a VITRINE do consultor não deve mostrar fantasma de
+    # caso que não existe mais: evento ligado a um Process (process/agent) só
+    # aparece se aquele Process ainda existe. As linhas continuam em /audit e no
+    # banco — só somem da tela. No QUERY (antes do limit) p/ o feed encher com
+    # eventos vivos. Ver ADR-026.
+    process_exists = exists().where(
+        and_(
+            Process.id == AuditLog.entity_id,
+            Process.tenant_id == tenant_id,
+            Process.deleted_at.is_(None),
+        )
+    )
+    q = q.filter(
+        or_(
+            AuditLog.entity_type.notin_(_PROCESS_LINKED_ENTITY_TYPES),
+            process_exists,
+        )
+    )
     rows = q.order_by(AuditLog.created_at.desc()).limit(8).all()
 
     # Resolve o nome do caso (Process.title) numa única query — sem N+1.

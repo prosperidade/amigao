@@ -4,6 +4,16 @@
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
+**Pulso 2026-07-13 (FEED SÓ MOSTRA CASOS VIVOS — `fix/feed-somente-casos-vivos`, PR a abrir,
+NÃO MERGEAR):** follow-on do ADR-025. Após limpar casos de teste (reset/wipe 8/13), o feed
+seguia mostrando atividade deles — card "caso #13" com clique em 404. Causa: o feed lê
+`audit_logs`, que é preservado de propósito na limpeza (hash chain SHA-256; apagar quebra
+`verify_audit_chain` + viola Princípio 2). Fix (ADR-026, 100% read-path): `_recent_activities`
+ganha filtro de existência — evento ligado a Process (`process`/`agent`) só aparece se o
+Process ainda existe (`EXISTS ... deleted_at IS NULL`, cobre hard e soft delete), no QUERY
+antes do `limit(8)`. `audit_logs` INTOCADO — as órfãs seguem em `/audit`, só somem da vitrine.
+2 testes novos (caso apagado some / soft-delete some / linha órfã segue no banco). Decisão do
+André: vitrine só de casos vivos, auditoria preservada. Mudança 100% backend.
 **Pulso 2026-07-13 (LINGUAGEM DE CONSULTOR no feed + Leitura da IA — `fix/dashboard-linguagem-consultor`,
 PR a abrir, NÃO MERGEAR):** o feed "Atividades Recentes" mostrava evento cru (`agent.vigia.completed`
 + JSON) e eventos de sistema sem caso. Corrigido 100% na CAMADA DE APRESENTAÇÃO (gravação do

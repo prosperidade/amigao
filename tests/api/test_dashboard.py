@@ -159,3 +159,52 @@ def test_feed_sistema_permanece_auditado(client: TestClient, db_session):
         .count()
         == 1
     )
+
+
+# ── Feed só mostra casos VIVOS (linhas órfãs de caso apagado somem) · ADR-026 ─
+
+def test_feed_esconde_evento_de_caso_apagado(client: TestClient, db_session):
+    """Caso apagado deixa linha órfã no audit_logs — some da vitrine, fica no banco."""
+    from app.models.audit_log import AuditLog
+
+    tenant, user, cl, proc = _seed(db_session)
+    proc_id = proc.id
+
+    # Um evento no caso VIVO e outro num caso que será apagado.
+    _add_audit(db_session, tenant.id, entity_type="process", entity_id=proc_id, action="created")
+    _add_audit(db_session, tenant.id, entity_type="agent", entity_id=999, action="agent.diagnostico.completed")
+    db_session.flush()
+
+    # Simula o wipe: o Process 999 nunca existiu / foi apagado (aqui não há Process 999).
+    db_session.commit()
+
+    headers = _login(client, "dash@example.com", "dash1234")
+    resp = client.get("/api/v1/dashboard/summary", headers=headers, params={"view": "executivo"})
+    activities = resp.json()["recent_activities"]
+    entity_ids = {(a["entity_type"], a["entity_id"]) for a in activities}
+
+    assert ("process", proc_id) in entity_ids            # caso vivo aparece
+    assert ("agent", 999) not in entity_ids              # caso inexistente (órfão) some
+
+    # A linha órfã continua gravada — só não aparece na vitrine.
+    assert (
+        db_session.query(AuditLog)
+        .filter(AuditLog.tenant_id == tenant.id, AuditLog.entity_id == 999)
+        .count()
+        == 1
+    )
+
+
+def test_feed_esconde_evento_de_processo_soft_deleted(client: TestClient, db_session):
+    """Process soft-deleted (deleted_at) também some da vitrine."""
+    from datetime import UTC, datetime
+
+    tenant, user, cl, proc = _seed(db_session)
+    _add_audit(db_session, tenant.id, entity_type="process", entity_id=proc.id, action="status_changed")
+    proc.deleted_at = datetime.now(UTC)  # soft delete
+    db_session.commit()
+
+    headers = _login(client, "dash@example.com", "dash1234")
+    resp = client.get("/api/v1/dashboard/summary", headers=headers, params={"view": "executivo"})
+    entity_ids = {(a["entity_type"], a["entity_id"]) for a in resp.json()["recent_activities"]}
+    assert ("process", proc.id) not in entity_ids
