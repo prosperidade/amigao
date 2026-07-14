@@ -8,11 +8,12 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 65.** Todo PR que abrir dívida nova incrementa este número
+> **PRÓXIMO NÚMERO LIVRE: 66.** Todo PR que abrir dívida nova incrementa este número
 > (mata a classe de colisão que já aconteceu 2x — #21 e #44, ver nota na entrada 44a/44b
 > abaixo). #59/#60 (PR #98) já mergeados; #61 usado na Fase 1 (ver abaixo). #62 aberta
 > pela Fase 2 (`feat/fase2-reset-tool`, ver abaixo). #63/#64 abertas pelo Sprint 6
-> (`feat/sprint6-limpeza-abas`, abas do workspace — ver abaixo).
+> (`feat/sprint6-limpeza-abas`, abas do workspace — ver abaixo). #65 aberta pela
+> linguagem de consultor (`fix/dashboard-linguagem-consultor` — ver abaixo).
 > Fase 1 (`feat/fase1-classificador-n1n2`) fecha #48 e #59; #60 e #61 seguem abertas.
 
 ## P0 — fecham o pipeline ponta a ponta
@@ -386,6 +387,17 @@ frente do consultor) mas **não conserta** o disparo. **O que destrava:** religa
 de fazer o painel efetivamente orquestrar a cadeia (ou redirecionar o "Rodar agentes" para o
 mesmo caminho do `WorkspaceRightPanel`, que já dispara). Enquanto não consertar, manter oculta.
 **Origem:** Sprint 6 (`feat/sprint6-limpeza-abas`, 2026-07-13).
+
+**65. Humanizador da timeline do workspace não traduz eventos de agente.** Achado da varredura
+de linguagem (ADR-025). `frontend/src/pages/Processes/historicoEventos.ts::describeEvento` cobre
+`staging_decidir`, `consolidar`, `status_changed`, etc., mas **não** tem ramo para
+`agent.{nome}.{status}` — esses caem em `descreverGenerico`, que faz `humanizar(action)` →
+"Agent vigia completed" (semi-técnico) e pode expor escalares do payload não listados em
+`META_OCULTO`. Baixa urgência hoje: é a aba **Histórico**, oculta no Sprint 6 (ADR-024). **O que
+destrava:** se a aba for religada, o Histórico do caso volta a mostrar linguagem de máquina em
+eventos de agente. **Fix proposto (S):** adicionar ramo `agent.*` em `describeEvento` reusando
+`agentLabel`/`translateActivity` de `lib/activityLabels.ts` (fonte única criada neste PR).
+**Origem:** varredura da linguagem de consultor (`fix/dashboard-linguagem-consultor`, 2026-07-13).
 
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
