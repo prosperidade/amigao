@@ -16,6 +16,7 @@ import {
   AlertTriangle, Clock, Plus, Sparkles, Folder, RefreshCw, CheckCircle2, Send,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { translateActivity } from '@/lib/activityLabels';
 import CredentialsTab from '@/components/Clients/CredentialsTab';
 import { MACROETAPA_LABELS, MACROETAPA_STATE_BADGE } from '@/pages/Processes/quadro-types';
 
@@ -713,15 +714,21 @@ function DocumentsTab({ clientId, navigate }: { clientId: number; navigate: (p: 
 }
 
 function TimelineRow({ t }: { t: TimelineItem }) {
+  // Linguagem de consultor: evento cru → frase PT-BR. Sem entity_type/action
+  // técnicos na tela; o detalhe técnico vai no tooltip. Ver ADR-025.
+  const tr = translateActivity({
+    action: t.action,
+    entity_type: t.entity_type,
+    entity_id: t.entity_id ?? 0,
+    details: null,
+  });
   return (
     <li className="text-xs flex gap-2 items-start py-1.5 border-b border-gray-50 dark:border-white/5 last:border-0">
       <span className="text-[10px] text-gray-400 shrink-0 w-20">{formatRelative(t.when)}</span>
       <span className="text-gray-400 shrink-0">·</span>
-      <span className="text-gray-700 dark:text-slate-200 flex-1">
-        <strong className="text-gray-900 dark:text-white">{t.entity_type}</strong>
-        {' '}
-        <span className="text-gray-500">{t.action}</span>
-        {t.description && <> — {t.description}</>}
+      <span className="text-gray-700 dark:text-slate-200 flex-1" title={tr.technical}>
+        <span className="text-gray-900 dark:text-white">{tr.title}</span>
+        {t.description && <span className="text-gray-500"> — {t.description}</span>}
       </span>
     </li>
   );
