@@ -88,3 +88,74 @@ def test_dashboard_unauthenticated_returns_401(client: TestClient):
     """Sem token retorna 401."""
     resp = client.get("/api/v1/dashboard/summary")
     assert resp.status_code == 401
+
+
+# ── Filtro de audiência do feed (linguagem de consultor · ADR-025) ───────────
+
+def _add_audit(db_session, tenant_id, *, entity_type, entity_id, action, user_id=None):
+    from app.models.audit_log import AuditLog
+
+    log = AuditLog(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        action=action,
+        details="{}",
+    )
+    db_session.add(log)
+    db_session.flush()
+    return log
+
+
+def test_feed_esconde_eventos_de_sistema_sem_caso(client: TestClient, db_session):
+    """Vigia diário (agent, entity_id=0) e reset não aparecem na vitrine do consultor."""
+    tenant, user, cl, proc = _seed(db_session)
+    # Evento DE CASO (deve aparecer)
+    _add_audit(db_session, tenant.id, entity_type="process", entity_id=proc.id, action="created")
+    # Eventos de SISTEMA (não devem aparecer)
+    _add_audit(db_session, tenant.id, entity_type="agent", entity_id=0, action="agent.vigia.completed")
+    _add_audit(db_session, tenant.id, entity_type="reset", entity_id=0, action="reset_casos_teste")
+    _add_audit(db_session, tenant.id, entity_type="user", entity_id=user.id, action="ai_key_used")
+    db_session.commit()
+
+    headers = _login(client, "dash@example.com", "dash1234")
+    resp = client.get("/api/v1/dashboard/summary", headers=headers, params={"view": "executivo"})
+    assert resp.status_code == 200
+
+    actions = {a["action"] for a in resp.json()["recent_activities"]}
+    assert "created" in actions
+    assert "agent.vigia.completed" not in actions
+    assert "reset_casos_teste" not in actions
+    assert "ai_key_used" not in actions
+
+
+def test_feed_mostra_agente_rodado_sobre_um_caso_com_nome(client: TestClient, db_session):
+    """Evento de agente COM processo (entity_id>0) aparece e resolve o nome do caso."""
+    tenant, user, cl, proc = _seed(db_session)
+    _add_audit(db_session, tenant.id, entity_type="agent", entity_id=proc.id, action="agent.diagnostico.completed")
+    db_session.commit()
+
+    headers = _login(client, "dash@example.com", "dash1234")
+    resp = client.get("/api/v1/dashboard/summary", headers=headers, params={"view": "executivo"})
+    activities = resp.json()["recent_activities"]
+
+    diag = next(a for a in activities if a["action"] == "agent.diagnostico.completed")
+    assert diag["entity_label"] == "Processo Dash"  # título do Process resolvido, sem N+1
+
+
+def test_feed_sistema_permanece_auditado(client: TestClient, db_session):
+    """O evento de sistema some da VITRINE, mas continua gravado (auditoria intocada)."""
+    from app.models.audit_log import AuditLog
+
+    tenant, user, cl, proc = _seed(db_session)
+    _add_audit(db_session, tenant.id, entity_type="reset", entity_id=0, action="reset_casos_teste")
+    db_session.commit()
+
+    # A linha existe no banco — só não aparece no feed.
+    assert (
+        db_session.query(AuditLog)
+        .filter(AuditLog.tenant_id == tenant.id, AuditLog.action == "reset_casos_teste")
+        .count()
+        == 1
+    )
