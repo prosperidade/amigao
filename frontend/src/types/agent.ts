@@ -66,18 +66,23 @@ export interface AIJob {
   finished_at: string | null;
 }
 
+// Fonte ÚNICA dos rótulos de produto dos agentes. Usar em TODA superfície que
+// exiba nome de agente — nunca o identificador interno. Rótulos revistos no
+// Sprint da linguagem de consultor (ADR-025): mais curtos e diretos ao papel.
 export const AGENT_LABELS: Record<string, string> = {
   atendimento: 'Atendimento',
-  extrator: 'Extrator de Documentos',
-  diagnostico: 'Diagnóstico Ambiental',
-  auditor_imovel: 'Auditoria do Imóvel',
-  legislacao: 'Legislação',
-  redator: 'Redator de Documentos',
+  extrator: 'Leitura de documentos',
+  diagnostico: 'Diagnóstico',
+  auditor_imovel: 'Auditoria do imóvel',
+  legislacao: 'Análise legal',
+  redator: 'Redator',
   orcamento: 'Orçamento',
-  financeiro: 'Análise Financeira',
+  financeiro: 'Análise financeira',
   acompanhamento: 'Acompanhamento',
-  vigia: 'Monitoramento',
+  vigia: 'Vigia normativo',
   marketing: 'Marketing',
+  // Não é um dos 11 agentes, mas emite eventos (roda a cadeia da etapa).
+  orchestrator: 'Equipe de agentes',
 };
 
 export const CHAIN_LABELS: Record<string, string> = {
