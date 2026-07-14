@@ -1936,3 +1936,27 @@ Sprint de superfície (UI), não de IA — registrado no pulso pelo toque na **a
   **não** foi tocado. Conserto do painel = **dívida #64** (religar o flag depois).
 - **Sem mudança de gateway/agentes/prompts/custos** — nenhuma chamada LLM nova; a
   orquestração de agentes é idêntica.
+
+---
+
+## Linguagem de consultor no feed + rótulos de agente (2026-07-13)
+
+Sprint de apresentação — toca IA nos rótulos e na tradução de eventos de agente.
+
+### O que toca IA
+
+- **Rótulos de produto dos agentes — fonte única.** `@/types/agent.ts::AGENT_LABELS`
+  passa a ser a única fonte usada em toda superfície (feed, `AIPanel`, `AgentsPage`,
+  `WorkspaceRightPanel`, `ClientHub`). Rótulos revistos p/ o papel do agente:
+  `vigia`→"Vigia normativo", `auditor_imovel`→"Auditoria do imóvel",
+  `legislacao`→"Análise legal", `extrator`→"Leitura de documentos",
+  `redator`→"Redator", `financeiro`→"Análise financeira" + `orchestrator`→"Equipe
+  de agentes". Nunca mais o identificador interno na tela.
+- **Tradução de eventos de agente** (`agent.{nome}.{status}`) → frase de consultor
+  em `lib/activityLabels.ts` (`translateActivity`). `completed`/`failed`/`started`
+  viram frases humanas; o JSON do payload (trace_id, confidence, duration_ms) vai
+  só no tooltip técnico, nunca na tela. Fallback obrigatório p/ event type novo.
+- **Sem mudança de gateway/cadeia/prompts/custos.** A orquestração dos agentes é
+  idêntica; nenhuma chamada LLM nova. O card "Leitura da IA" do kanban
+  (`/kanban-insights`) é determinístico (COUNT/GROUP BY) — corrigido só o cache
+  (24h→5min) p/ refletir o sistema. Ver ADR-025.

@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { translateActivity, taskPriorityLabel } from '@/lib/activityLabels';
 import DashboardRegente from './DashboardRegente';
 import DashboardOperacionalRegente from './DashboardOperacionalRegente';
 
@@ -24,6 +25,7 @@ interface RecentActivity {
   details: string | null;
   actor_name: string | null;
   created_at: string;
+  entity_label?: string | null;
 }
 
 interface PendingTask {
@@ -150,13 +152,6 @@ function timeAgo(dateStr: string): string {
   return `Há ${Math.floor(diff / 86400)} dia(s)`;
 }
 
-function actionLabel(action: string, entity_type: string): string {
-  if (action === 'created') return `${entity_type === 'process' ? 'Processo' : 'Item'} criado`;
-  if (action === 'status_changed') return 'Status alterado';
-  if (action === 'updated') return `${entity_type === 'process' ? 'Processo' : 'Item'} atualizado`;
-  return action;
-}
-
 const PRIORITY_COLORS: Record<string, string> = {
   critical: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   high: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
@@ -256,26 +251,38 @@ function ActivitiesSection({ activities, loading, navigate }: {
       )}
       {!loading && !!activities.length && (
         <div className="space-y-1">
-          {activities.map(a => (
-            <button
-              type="button"
-              key={a.id}
-              className="flex gap-4 items-start p-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 rounded-lg transition-colors border border-transparent hover:border-gray-100 dark:hover:border-zinc-800 cursor-pointer text-left w-full"
-              onClick={() => a.entity_type === 'process' && navigate(`/processes/${a.entity_id}`)}
-            >
-              <div className="bg-gray-100 dark:bg-zinc-800 p-2 rounded-full mt-0.5 shrink-0">
-                <FileText className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                  {actionLabel(a.action, a.entity_type)}{a.details ? ` — ${a.details}` : ''}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {timeAgo(a.created_at)}{a.actor_name ? ` • ${a.actor_name}` : ''}
-                </p>
-              </div>
-            </button>
-          ))}
+          {activities.map(a => {
+            // Camada de apresentação: evento cru → frase de consultor. O detalhe
+            // técnico vai só no `title` (tooltip nativo), nunca renderiza JSON.
+            const t = translateActivity(a);
+            // Navega quando o evento resolve para um caso (process, ou agente
+            // rodado sobre um processo → entity_id é o process_id).
+            const processId =
+              (a.entity_type === 'process' || a.entity_type === 'agent') && a.entity_id > 0
+                ? a.entity_id
+                : null;
+            return (
+              <button
+                type="button"
+                key={a.id}
+                title={t.technical}
+                className="flex gap-4 items-start p-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 rounded-lg transition-colors border border-transparent hover:border-gray-100 dark:hover:border-zinc-800 cursor-pointer text-left w-full"
+                onClick={() => processId && navigate(`/processes/${processId}`)}
+              >
+                <div className="bg-gray-100 dark:bg-zinc-800 p-2 rounded-full mt-0.5 shrink-0">
+                  <FileText className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {t.title}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {timeAgo(a.created_at)}{a.actor_name ? ` • ${a.actor_name}` : ''}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -311,7 +318,7 @@ function TasksSection({ tasks, loading, navigate }: {
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug line-clamp-2">{task.title}</p>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${PRIORITY_COLORS[task.priority] ?? PRIORITY_COLORS.low}`}>
-                  {task.priority}
+                  {taskPriorityLabel(task.priority)}
                 </span>
               </div>
               {task.due_date && (
@@ -572,7 +579,7 @@ function AgentMetricsCard() {
       </h2>
       <div className="grid grid-cols-2 gap-3">
         <div className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Execucoes</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Execuções</p>
           <p className="text-xl font-bold text-gray-900 dark:text-white">{todayJobs.length}</p>
         </div>
         <div className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50">
@@ -586,7 +593,7 @@ function AgentMetricsCard() {
           <p className="text-xl font-bold text-gray-900 dark:text-white">${totalCost.toFixed(4)}</p>
         </div>
         <div className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Revisao Pendente</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Revisão Pendente</p>
           <p className={`text-xl font-bold ${needsReview > 0 ? 'text-amber-600' : 'text-gray-900 dark:text-white'}`}>
             {needsReview}
           </p>
@@ -595,7 +602,7 @@ function AgentMetricsCard() {
       {failed > 0 && (
         <div className="mt-3 p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/20">
           <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" /> {failed} execucao(oes) falharam hoje
+            <AlertCircle className="w-3 h-3" /> {failed} execução(ões) falharam hoje
           </p>
         </div>
       )}

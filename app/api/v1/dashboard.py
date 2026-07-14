@@ -35,8 +35,13 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Regente Cam3 / QA-008 — Leitura da IA do Quadro de Ações cacheada 1x/dia.
-# Decisão da sócia em 2026-04-19: atualizar 1x/dia para controlar custo.
-KANBAN_INSIGHTS_CACHE_TTL = 24 * 60 * 60  # 24h em segundos
+# Leitura da IA do kanban (/kanban-insights): a decisão da sócia de "1x/dia para
+# controlar custo" (2026-04-19) valia para a Leitura executiva que CHAMA o LLM
+# (DASHBOARD_AI_SUMMARY_CACHE_TTL, abaixo). Este endpoint é DETERMINÍSTICO — só
+# COUNT/GROUP BY em Process, custo zero de IA. Cache de 24h aqui não economiza
+# nada e congela o card ("Hoje o maior acúmulo…") por um dia, sem refletir o
+# sistema. TTL curto (5 min) só amortece cargas repetidas do kanban. Ver ADR-025.
+KANBAN_INSIGHTS_CACHE_TTL = 5 * 60  # 5 min em segundos
 
 # CAM2D-004 (Sprint M) — cache da Leitura executiva da IA do Dashboard.
 # Mesmo TTL do kanban-insights; refresh explícito via query param.
@@ -80,6 +85,10 @@ class RecentActivity(BaseModel):
     details: Optional[str]
     actor_name: Optional[str]
     created_at: datetime
+    # Nome legível do caso vinculado (título do Process), quando o evento resolve
+    # para um processo — insumo p/ a tradução do feed ("Diagnóstico concluído — {caso}").
+    # None quando o evento não tem caso resolvível. Camada de apresentação.
+    entity_label: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -221,6 +230,15 @@ def _base_counts(db: Session, tenant_id: int, now: datetime) -> dict:
     }
 
 
+# Eventos de SISTEMA (sem vínculo com um caso) — auditados e consultáveis via
+# /audit, mas fora da VITRINE do consultor. Filtro de audiência é camada de
+# apresentação (read-path): a gravação do AuditLog permanece intocada. Ver ADR-025.
+_SYSTEM_ENTITY_TYPES = frozenset({"reset", "user"})  # reset_casos_teste, ai_key_used
+
+# entity_types cujo entity_id É o id do Process (permite resolver o nome do caso).
+_PROCESS_LINKED_ENTITY_TYPES = frozenset({"process", "agent"})
+
+
 def _recent_activities(db: Session, tenant_id: int, *, entity_type_filter: str | None = None) -> list[RecentActivity]:
     q = (
         db.query(AuditLog, User)
@@ -229,7 +247,28 @@ def _recent_activities(db: Session, tenant_id: int, *, entity_type_filter: str |
     )
     if entity_type_filter:
         q = q.filter(AuditLog.entity_type == entity_type_filter)
+    else:
+        # Vitrine do consultor (view executivo, "todas as entidades"): esconde os
+        # eventos de sistema sem caso. Precisa ser no QUERY (não no frontend) porque
+        # o limit(8) é aplicado antes — filtrar depois deixaria o feed quase vazio.
+        q = q.filter(AuditLog.entity_type.notin_(_SYSTEM_ENTITY_TYPES))
+        # Evento de agente sem processo (entity_id == 0): vigia diário, jobs internos.
+        q = q.filter(~((AuditLog.entity_type == "agent") & (AuditLog.entity_id == 0)))
     rows = q.order_by(AuditLog.created_at.desc()).limit(8).all()
+
+    # Resolve o nome do caso (Process.title) numa única query — sem N+1.
+    process_ids = {
+        log.entity_id
+        for log, _ in rows
+        if log.entity_type in _PROCESS_LINKED_ENTITY_TYPES and log.entity_id
+    }
+    titles: dict[int, str] = {}
+    if process_ids:
+        titles = dict(
+            db.query(Process.id, Process.title)
+            .filter(Process.tenant_id == tenant_id, Process.id.in_(process_ids))
+            .all()
+        )
 
     return [
         RecentActivity(
@@ -240,6 +279,9 @@ def _recent_activities(db: Session, tenant_id: int, *, entity_type_filter: str |
             details=log.details,
             actor_name=user.full_name if user else None,
             created_at=log.created_at,
+            entity_label=titles.get(log.entity_id)
+            if log.entity_type in _PROCESS_LINKED_ENTITY_TYPES
+            else None,
         )
         for log, user in rows
     ]

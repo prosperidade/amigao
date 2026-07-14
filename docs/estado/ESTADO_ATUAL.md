@@ -4,6 +4,26 @@
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint
 **Frente em revisão:** `fix/diagnostico-propaga-estado` (PR a abrir — assinatura propaga macroetapa, gate cobra `validated_at`, badge espelha). `fix/extrator-por-processo` (PR #15) já em main.
+**Pulso 2026-07-13 (LINGUAGEM DE CONSULTOR no feed + Leitura da IA — `fix/dashboard-linguagem-consultor`,
+PR a abrir, NÃO MERGEAR):** o feed "Atividades Recentes" mostrava evento cru (`agent.vigia.completed`
++ JSON) e eventos de sistema sem caso. Corrigido 100% na CAMADA DE APRESENTAÇÃO (gravação do
+AuditLog intocada — ADR-025): (1) **filtro de audiência** no read-path (`_recent_activities`):
+eventos de sistema sem caso (`entity_type in {reset,user}`, agente com `entity_id=0` = vigia
+diário) somem da vitrine — no QUERY porque o `limit(8)` vem antes; continuam em `/audit`;
+(2) **dicionário de tradução** `frontend/src/lib/activityLabels.ts` — `translateActivity` →
+frase PT-BR com `{nome do caso}` (backend passa `entity_label` = Process.title, sem N+1),
+`{n passos}` da rota etc.; **fallback obrigatório** ("Atividade registrada no sistema") + técnico
+só em tooltip, JSON nunca renderiza; (3) **AGENT_LABELS** virou fonte única (`@/types/agent`),
+rótulos revistos (vigia→"Vigia normativo", legislacao→"Análise legal", extrator→"Leitura de
+documentos"…) e aplicados em toda superfície; (4) **varredura:** prioridade de tarefa em inglês
+("high"→"Alta"), acentos ("Execuções"), e `ClientHub` mostrando `{entity_type} {action}` crus →
+traduzidos. **+ Leitura da IA (/processes):** o card `/kanban-insights` é DETERMINÍSTICO (só
+COUNT/GROUP BY, custo zero de IA) mas estava com cache de **24h** — congelava "Hoje o maior
+acúmulo…" por um dia. TTL → **5 min** (a decisão da sócia "1x/dia p/ custo" vale só p/ a Leitura
+executiva que chama o LLM). **112 vitest** (16 novos) + tsc limpos; **6 testes backend** de
+dashboard verdes (3 novos: filtro esconde sistema / agente-sobre-caso resolve nome / sistema
+segue auditado). **Dívida #65:** humanizador da timeline do workspace não traduz `agent.*` (aba
+Histórico, hoje oculta).
 **Pulso 2026-07-13 (SPRINT 6 — limpeza das abas do workspace — `feat/sprint6-limpeza-abas`,
 PR a abrir, NÃO MERGEAR):** o detalhe do caso mostrava ~10 abas; a Ficha 07 §3 define **6**
 (Visão geral · Documentos · Conferência · Dados · Ações · Saídas). Entregue: (1) flag de
