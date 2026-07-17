@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
 from app.models.checklist_template import ProcessChecklist
+from app.models.document import Document
 from app.models.macroetapa import (
     DIAGNOSTIC_MACROETAPAS,
     Macroetapa,
@@ -478,7 +479,7 @@ def list_property_diagnosis_notes(
     `Property.geom IS NULL`. Quando D1 popular geom, o auditor passa a emitir
     achados ESPACIAIS REAIS (persistidos) e esta nota deixa de aparecer.
     """
-    _get_property_or_404(db, property_id, current_user.tenant_id)
+    prop = _get_property_or_404(db, property_id, current_user.tenant_id)
     # Checa presença de geom SEM carregar a geometria (blob) — só o id.
     geom_present = (
         db.query(Property.id)
@@ -492,17 +493,66 @@ def list_property_diagnosis_notes(
     )
     notes: list[DiagnosisNoteOut] = []
     if not geom_present:
-        notes.append(
-            DiagnosisNoteOut(
-                codigo="VERIFICACAO_ESPACIAL_PENDENTE",
-                titulo="Verificação espacial pendente",
-                texto=(
-                    "geom indisponível (D1) — a análise espacial (APP, RL, UC, "
-                    "sobreposição com terceiros) ainda não pôde ser executada."
-                ),
+        # NOTA GEO honesta (forense caso Isis): se HÁ georreferenciamento nos
+        # documentos (SIGEF/KML, planta, memorial, certidão georreferenciada, ou
+        # a matrícula já traz certificação SIGEF) mas o `geom` ainda não foi
+        # ingerido, NÃO dizer "não tem geo" — o dado existe, só a análise espacial
+        # automática ainda não roda. Dois textos conforme a evidência documental.
+        if _georreferenciamento_nos_documentos(db, prop, current_user.tenant_id):
+            notes.append(
+                DiagnosisNoteOut(
+                    codigo="VERIFICACAO_ESPACIAL_PENDENTE",
+                    titulo="Georreferenciamento presente — análise espacial pendente",
+                    texto=(
+                        "georreferenciamento presente nos documentos; análise "
+                        "espacial automática ainda não disponível."
+                    ),
+                )
             )
-        )
+        else:
+            notes.append(
+                DiagnosisNoteOut(
+                    codigo="VERIFICACAO_ESPACIAL_PENDENTE",
+                    titulo="Verificação espacial pendente",
+                    texto=(
+                        "geom indisponível (D1) — a análise espacial (APP, RL, UC, "
+                        "sobreposição com terceiros) ainda não pôde ser executada."
+                    ),
+                )
+            )
     return notes
+
+
+# Tipos de documento que CARREGAM georreferenciamento (planta/memorial/SIGEF/
+# certidão georreferenciada). O `kml_sigef` é o vetor real do caso Isis.
+_GEOREF_DOC_TYPES: frozenset[str] = frozenset({
+    "sigef", "kml_sigef", "kml", "shapefile", "planta", "planta_georreferenciada",
+    "memorial", "memorial_descritivo", "certidao_georreferenciada",
+    "georreferenciamento",
+})
+
+
+def _georreferenciamento_nos_documentos(db: Session, prop: Property, tenant_id: int) -> bool:
+    """True se existir georreferenciamento nos documentos do imóvel.
+
+    Sinais: (a) matrícula com certificação SIGEF (código/status geo já lidos na
+    consolidação); (b) documento do imóvel com `document_type` georreferenciado.
+    """
+    if any(
+        (m.geo_certificacao_codigo or "").strip() or (m.geo_certificacao_status or "").strip()
+        for m in (prop.matriculas or [])
+    ):
+        return True
+    doc = (
+        db.query(Document.id)
+        .filter(
+            Document.property_id == prop.id,
+            Document.tenant_id == tenant_id,
+            Document.document_type.in_(_GEOREF_DOC_TYPES),
+        )
+        .first()
+    )
+    return doc is not None
 
 
 @property_router.patch(
