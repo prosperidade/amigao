@@ -280,7 +280,15 @@ def validate_technical_consistency(
         ))
 
     if prop:
-        if not prop.registry_number:
+        # Uma matrícula materializada (Ficha 01: N matrículas por imóvel) COM
+        # número CONTA como matrícula presente — antes o flag disparava mesmo com
+        # a matrícula do doc consolidada, porque a consolidação grava
+        # `Matricula.numero_matricula`, nunca o escalar legado `registry_number`
+        # (falso "matrícula ausente" com o documento enviado — forense caso Isis).
+        tem_matricula = any(
+            (m.numero_matricula or "").strip() for m in (prop.matriculas or [])
+        )
+        if not prop.registry_number and not tem_matricula:
             issues.append(Inconsistency(
                 code="MISSING_MATRICULA",
                 severity="error",
@@ -363,7 +371,10 @@ def validate_technical_consistency(
     # ── Regras por tipo de demanda ────────────────────────────────────────────
 
     if demand == "car":
-        if "matricula" not in doc_types and prop and not prop.registry_number:
+        tem_matricula = bool(prop) and any(
+            (m.numero_matricula or "").strip() for m in (prop.matriculas or [])
+        )
+        if "matricula" not in doc_types and prop and not prop.registry_number and not tem_matricula:
             issues.append(Inconsistency(
                 code="CAR_NO_MATRICULA_DOC",
                 severity="warning",
