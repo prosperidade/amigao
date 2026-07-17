@@ -181,6 +181,63 @@ def test_run_stage_agents_dispatches_current_chain(client: TestClient, db_sessio
     assert len(audits) == 1
 
 
+def test_run_stage_agents_passa_description_da_demanda(client: TestClient, db_session, monkeypatch):
+    """Forense caso Isis: a chain 'intake' (atendimento) exige 'description' em
+    metadata — o endpoint deriva do processo e passa, senão o agente falhava
+    silenciosamente ("Campo 'description' obrigatorio")."""
+    tenant, _, process = _seed(db_session)
+    process.description = "Cliente quer regularizar CAR da Fazenda São Jorge"
+    initialize_macroetapa_checklists(db_session, process, tenant.id)
+    db_session.commit()
+    headers = _login(client, "consultor@example.com", "senha123")
+
+    import app.workers.agent_tasks as at
+    fake_delay = MagicMock()
+    monkeypatch.setattr(at.run_agent_chain, "delay", fake_delay)
+
+    r = client.post(f"/api/v1/processes/{process.id}/macroetapa/run-agents", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["dispatched"] is True
+    md = fake_delay.call_args.kwargs["metadata"]
+    assert md["description"] == "Cliente quer regularizar CAR da Fazenda São Jorge"
+    assert md["macroetapa"] == "entrada_demanda"
+
+
+def test_run_stage_agents_intake_sem_descricao_explica_em_vez_de_falhar(
+    client: TestClient, db_session, monkeypatch
+):
+    """Sem descrição derivável, a classificação não roda — mensagem honesta na
+    tela (dispatched=False), NUNCA disparo pra falha invisível."""
+    tenant = Tenant(name="Tenant SemDesc")
+    db_session.add(tenant)
+    db_session.flush()
+    user = User(email="semdesc@example.com", full_name="C",
+                hashed_password=get_password_hash("senha123"), tenant_id=tenant.id, is_active=True)
+    cli = Client(tenant_id=tenant.id, full_name="Cli", email="semdesc.c@example.com",
+                 client_type=ClientType.pf, status=ClientStatus.active)
+    db_session.add_all([user, cli])
+    db_session.flush()
+    # título/descrição vazios → nada pra classificar
+    process = Process(tenant_id=tenant.id, client_id=cli.id, title="",
+                      process_type="car", status=ProcessStatus.triagem,
+                      macroetapa="entrada_demanda")
+    db_session.add(process)
+    db_session.commit()
+    headers = _login(client, "semdesc@example.com", "senha123")
+
+    import app.workers.agent_tasks as at
+    fake_delay = MagicMock()
+    monkeypatch.setattr(at.run_agent_chain, "delay", fake_delay)
+
+    r = client.post(f"/api/v1/processes/{process.id}/macroetapa/run-agents", headers=headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["dispatched"] is False
+    assert body["chain_name"] == "intake"
+    assert "descrição" in body["detail"].lower()
+    fake_delay.assert_not_called()
+
+
 def test_run_stage_agents_manual_stage_not_dispatched(client: TestClient, db_session, monkeypatch):
     """Etapa sem chain (coleta_documental) é manual — não dispara."""
     tenant, _, process = _seed(db_session, macroetapa="coleta_documental")
