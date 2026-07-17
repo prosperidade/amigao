@@ -1,12 +1,17 @@
 /**
  * AcaoCard — card de uma ação no workspace do caso (aba Ações, Ficha 07).
  *
- * Mostra: título, origem com fonte (#70), prioridade, prazo, status (editável),
- * e os botões de triagem (tarefa/escopo/dispensar — Princípio 1). Responsável
+ * Mostra: título (em linguagem de consultor — ver `humanizeAcaoTitulo`), origem
+ * com fonte (#70), prioridade, prazo, status (editável), e os botões de triagem
+ * (tarefa/escopo/dispensar — Princípio 1). Título e descrição são editáveis
+ * inline (item 1): o consultor ajusta o texto e o PATCH grava. Responsável
  * aparece "—" no MVP (Bloco 0 não iniciado). Concluir NÃO altera o passivo.
  */
-import { Link2, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import toast from 'react-hot-toast';
+import { Check, Link2, Loader2, Pencil, X } from 'lucide-react';
 import { useUpdateAcao, useTriarAcao } from '@/lib/acoes/hooks';
+import { humanizeAcaoTitulo } from '@/lib/acoes/titulo';
 import {
   ACAO_PRIORIDADE_LABELS,
   ACAO_STATUS_LABELS,
@@ -54,6 +59,37 @@ export default function AcaoCard({ acao, processId }: AcaoCardProps) {
   const busy = updateMut.isPending || triarMut.isPending;
 
   const isDispensada = acao.tipo_triagem === 'dispensada';
+  const tituloLegivel = humanizeAcaoTitulo(acao);
+
+  // Item 1 — edição inline de título/descrição. O título abre com a versão
+  // legível (item 2): confirmar "promove" o texto humanizado ao dado gravado.
+  const [editing, setEditing] = useState(false);
+  const [tituloDraft, setTituloDraft] = useState(tituloLegivel);
+  const [descricaoDraft, setDescricaoDraft] = useState(acao.descricao ?? '');
+
+  const startEdit = () => {
+    setTituloDraft(tituloLegivel);
+    setDescricaoDraft(acao.descricao ?? '');
+    setEditing(true);
+  };
+
+  const saveEdit = () => {
+    const titulo = tituloDraft.trim();
+    if (!titulo) {
+      toast.error('O título não pode ficar vazio.');
+      return;
+    }
+    updateMut.mutate(
+      { acaoId: acao.id, payload: { titulo, descricao: descricaoDraft.trim() || null } },
+      {
+        onSuccess: () => {
+          setEditing(false);
+          toast.success('Ação atualizada.');
+        },
+        onError: () => toast.error('Falha ao salvar a ação.'),
+      },
+    );
+  };
 
   return (
     <div
@@ -63,20 +99,76 @@ export default function AcaoCard({ acao, processId }: AcaoCardProps) {
           : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10'
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">{acao.titulo}</p>
-          {acao.origem_descricao && (
-            <p className="mt-1 flex items-start gap-1 text-xs text-gray-500 dark:text-slate-400">
-              <Link2 className="w-3 h-3 mt-0.5 shrink-0" />
-              <span className="min-w-0">Passivo de origem: {acao.origem_descricao}</span>
-            </p>
-          )}
+      {editing ? (
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={tituloDraft}
+            onChange={e => setTituloDraft(e.target.value)}
+            disabled={busy}
+            aria-label="Título da ação"
+            className="w-full rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white px-3 py-2 text-sm font-semibold focus:outline-none focus:border-emerald-500 transition-colors"
+          />
+          <textarea
+            value={descricaoDraft}
+            onChange={e => setDescricaoDraft(e.target.value)}
+            disabled={busy}
+            rows={3}
+            placeholder="Descrição (opcional) — detalhe o que fazer…"
+            aria-label="Descrição da ação"
+            className="w-full rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-200 placeholder-gray-400 dark:placeholder-slate-500 px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors resize-y"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={saveEdit}
+              disabled={busy || !tituloDraft.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+            >
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Salvar
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-50 text-gray-600 dark:text-slate-300 text-xs font-medium transition-colors"
+            >
+              <X className="w-3.5 h-3.5" /> Cancelar
+            </button>
+          </div>
         </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${TRIAGEM_BADGE[acao.tipo_triagem]}`}>
-          {acao.tipo_triagem === 'pendente' ? 'pendente' : acao.tipo_triagem}
-        </span>
-      </div>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">{tituloLegivel}</p>
+            {acao.descricao && (
+              <p className="mt-1 text-xs text-gray-600 dark:text-slate-300 whitespace-pre-wrap">{acao.descricao}</p>
+            )}
+            {acao.origem_descricao && (
+              <p className="mt-1 flex items-start gap-1 text-xs text-gray-500 dark:text-slate-400">
+                <Link2 className="w-3 h-3 mt-0.5 shrink-0" />
+                <span className="min-w-0">Passivo de origem: {acao.origem_descricao}</span>
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={startEdit}
+              disabled={busy}
+              aria-label="Editar ação"
+              title="Editar título e descrição"
+              className="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TRIAGEM_BADGE[acao.tipo_triagem]}`}>
+              {acao.tipo_triagem === 'pendente' ? 'pendente' : acao.tipo_triagem}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Fontes (#70) */}
       {acao.origem_fontes.length > 0 && (

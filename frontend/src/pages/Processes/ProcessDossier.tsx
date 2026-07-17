@@ -7,11 +7,20 @@ import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import { AlertTriangle, CheckCircle2, Copy, Info, KeyRound, MapPin, Ruler, User, FileText, RefreshCw } from 'lucide-react';
 import { acoesKeys } from '@/lib/acoes/hooks';
+import ContiguidadeDeclararLink from './ContiguidadeDeclararLink';
 
 interface Inconsistency {
   severity: string;
   title: string;
   description: string;
+  // Backend emite `code`/`field` (dossier.py); guardamos p/ deep-links por alerta.
+  code?: string;
+  field?: string;
+}
+
+/** True quando o alerta é o de contiguidade não declarada (item 4). */
+function isContiguidadeAlert(issue: Inconsistency): boolean {
+  return issue.code === 'CONTIGUIDADE_NAO_DECLARADA' || issue.field === 'property.matriculas_contiguas';
 }
 
 // ─── Selo de 3 estados (Ficha 07 §3.4) ───────────────────────────────────────
@@ -186,6 +195,10 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
                 <div>
                   <p className="text-sm font-medium">{issue.title}</p>
                   <p className="text-xs opacity-75 mt-0.5">{issue.description}</p>
+                  {/* Item 4 — leva direto ao controle onde se declara a contiguidade */}
+                  {isContiguidadeAlert(issue) && property?.id != null && (
+                    <ContiguidadeDeclararLink propertyId={property.id} />
+                  )}
                 </div>
               </div>
             );
@@ -259,8 +272,11 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
               </span>
             )}
             {property.matriculas_contiguas == null && (property.matriculas?.length ?? 0) > 1 && (
-              <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-slate-400">
-                Contiguidade não declarada
+              <span className="ml-auto flex items-center gap-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-slate-400">
+                  Contiguidade não declarada
+                </span>
+                {property.id != null && <ContiguidadeDeclararLink propertyId={property.id} />}
               </span>
             )}
           </div>

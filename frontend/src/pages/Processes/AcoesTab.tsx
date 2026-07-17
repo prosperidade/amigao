@@ -8,7 +8,7 @@
  */
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ListChecks, Plus, Sparkles, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, ListChecks, Plus, Sparkles, Loader2 } from 'lucide-react';
 import { useAcoes, useCreateAcao, useGenerateAcoes } from '@/lib/acoes/hooks';
 import {
   ACAO_STATUS_LABELS,
@@ -45,17 +45,24 @@ function AcoesList({ processId }: { processId: number }) {
   const [newTitle, setNewTitle] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [triagemFilter, setTriagemFilter] = useState<TriagemFilter>('all');
+  // Item 3 — dispensadas somem da visão default (nada é excluído; auditável via toggle).
+  const [showDispensadas, setShowDispensadas] = useState(false);
 
   const filtered = useMemo(() => {
     const list = acoes ?? [];
     return list.filter(a => {
+      const isDispensada = a.tipo_triagem === 'dispensada';
+      // Dispensada fica oculta por padrão. Exceção: o consultor pediu explicitamente
+      // (toggle ligado, ou filtro de triagem apontando para "dispensada").
+      if (isDispensada && !showDispensadas && triagemFilter !== 'dispensada') return false;
       if (statusFilter !== 'all' && a.status !== statusFilter) return false;
       if (triagemFilter !== 'all' && a.tipo_triagem !== triagemFilter) return false;
       return true;
     });
-  }, [acoes, statusFilter, triagemFilter]);
+  }, [acoes, statusFilter, triagemFilter, showDispensadas]);
 
   const pendentesCount = (acoes ?? []).filter(a => a.tipo_triagem === 'pendente').length;
+  const dispensadasCount = (acoes ?? []).filter(a => a.tipo_triagem === 'dispensada').length;
 
   const handleGenerate = () => {
     generateMut.mutate(undefined, {
@@ -152,6 +159,22 @@ function AcoesList({ processId }: { processId: number }) {
             <option key={t} value={t}>{ACAO_TRIAGEM_LABELS[t]}</option>
           ))}
         </select>
+        {/* Item 3 — mostrar/ocultar dispensadas (auditoria; nada é excluído) */}
+        {dispensadasCount > 0 && triagemFilter !== 'dispensada' && (
+          <button
+            type="button"
+            onClick={() => setShowDispensadas(v => !v)}
+            aria-pressed={showDispensadas}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors ${
+              showDispensadas
+                ? 'border-gray-300 dark:border-white/20 bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-slate-200'
+                : 'border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
+            }`}
+          >
+            {showDispensadas ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {showDispensadas ? 'Ocultar dispensadas' : 'Mostrar dispensadas'} ({dispensadasCount})
+          </button>
+        )}
       </div>
 
       {/* Lista */}
