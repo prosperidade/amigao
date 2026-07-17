@@ -34,6 +34,7 @@ export const FIELD_LABELS: Record<string, string> = {
   numero_matricula: 'Número da matrícula',
   registry_number: 'Matrícula',
   titular_matricula: 'Titular da matrícula',
+  denominacao: 'Denominação do imóvel',
   denominacao_imovel: 'Denominação do imóvel',
   property_name: 'Nome do imóvel',
   comarca: 'Comarca',

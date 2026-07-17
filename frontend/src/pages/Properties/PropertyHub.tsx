@@ -8,8 +8,8 @@
  *  Painel lateral — Leitura da IA (Bloco 4)
  *  5 Abas: Informações / Documentos / Análises / Histórico / Casos
  */
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -166,7 +166,10 @@ export default function PropertyHub() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const propertyId = parseInt(id ?? '0', 10);
+  const location = useLocation();
   const [tab, setTab] = useState<TabKey>('info');
+  // Item 4 — deep-link `#contiguidade` (vindo do dossiê) rola até o tri-state e o destaca.
+  const [highlightContiguidade, setHighlightContiguidade] = useState(false);
 
   // CAM2IH-007 — validar campos
   const validateFields = useMutation({
@@ -195,6 +198,22 @@ export default function PropertyHub() {
     queryFn: () => api.get<PropertyHubSummary>(`/properties/${propertyId}/summary`).then(r => r.data),
     enabled: !!propertyId,
   });
+
+  // Item 4 — quando chega com `#contiguidade`, garante a aba Informações,
+  // rola até o controle e destaca por ~2,5s. Espera o summary p/ o DOM existir.
+  useEffect(() => {
+    if (location.hash !== '#contiguidade' || !summary) return;
+    const scrollT = setTimeout(() => {
+      setTab('info');
+      document.getElementById('contiguidade')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightContiguidade(true);
+    }, 60);
+    const clearT = setTimeout(() => setHighlightContiguidade(false), 2600);
+    return () => {
+      clearTimeout(scrollT);
+      clearTimeout(clearT);
+    };
+  }, [location.hash, summary]);
 
   const { data: cases = [] } = useQuery({
     queryKey: ['property-hub-cases', propertyId],
@@ -383,6 +402,7 @@ export default function PropertyHub() {
                 onValidate={(fields) => validateFields.mutate(fields)}
                 onDeclareContiguidade={(v) => declareContiguidade.mutate(v)}
                 declaringContiguidade={declareContiguidade.isPending}
+                highlightContiguidade={highlightContiguidade}
               />
             )}
             {tab === 'documents' && <DocumentsTab propertyId={propertyId} />}
@@ -540,12 +560,13 @@ function AIPanel({ summary }: { summary: PropertyAISummary | undefined }) {
   );
 }
 
-function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringContiguidade }: {
+function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringContiguidade, highlightContiguidade }: {
   header: PropertyHubHeader;
   kpis: PropertyHubKpis;
   onValidate?: (fields: string[]) => void;
   onDeclareContiguidade?: (value: boolean) => void;
   declaringContiguidade?: boolean;
+  highlightContiguidade?: boolean;
 }) {
   const src = header.field_sources;
   return (
@@ -577,7 +598,14 @@ function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringCon
           <InfoField label="Embargo" value={header.has_embargo ? 'Sim' : 'Não'} />
         </div>
         {/* Sprint 4 (Ficha 07 §9) — declaração de contiguidade (tri-state) */}
-        <div className="mt-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-3">
+        <div
+          id="contiguidade"
+          className={`mt-3 rounded-xl bg-gray-50 dark:bg-white/5 border p-3 scroll-mt-24 transition-shadow ${
+            highlightContiguidade
+              ? 'border-emerald-400 ring-2 ring-emerald-400/60'
+              : 'border-gray-100 dark:border-white/10'
+          }`}
+        >
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
               Matrículas contíguas?
