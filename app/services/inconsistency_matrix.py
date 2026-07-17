@@ -333,6 +333,55 @@ def _norm_text(value: Any) -> str:
     return re.sub(r"\s+", " ", s)
 
 
+# ---------------------------------------------------------------------------
+# Normalização para COMPARAÇÃO de divergências (skill da Isis)
+# ---------------------------------------------------------------------------
+# Confrontar dois valores textuais como se fossem strings cruas gera divergência
+# FALSA: "SÃO JOÃO D'ALIANÇA" ≡ "São João d'Aliança" ≡ "São João D'aliança-GO" é o
+# MESMO município — não é trabalho pro consultor. `norm_compare` normaliza antes
+# de comparar: casefold, acentos, apóstrofos, pontuação, espaços, abreviações de
+# logradouro comuns; e, para município, o sufixo de UF ("-GO"). É usado SÓ nos
+# pontos de detecção de divergência (matriz + consolidação) — não altera o que é
+# gravado, só se uma divergência é (ou não) levantada.
+
+# 27 UFs — para descolar o sufixo de estado do nome do município ("… go").
+_UF_SET: frozenset[str] = frozenset(
+    "ac al ap am ba ce df es go ma mt ms mg pa pb pr pe pi rj rn rs ro rr sc sp se to".split()
+)
+# Abreviações de logradouro comuns → forma canônica (casadas por TOKEN).
+_LOGRADOURO_ABBR: dict[str, str] = {
+    "r": "rua", "av": "avenida", "avn": "avenida", "al": "alameda",
+    "tv": "travessa", "trav": "travessa", "pc": "praca", "pca": "praca",
+    "rod": "rodovia", "estr": "estrada", "vl": "vila", "jd": "jardim",
+    "lgo": "largo", "pq": "parque",
+}
+# Campos tratados como MUNICÍPIO/localidade (descola UF do fim).
+_MUNICIPIO_FIELDS: frozenset[str] = frozenset(
+    {"municipality", "municipio", "municipio_imovel", "cidade", "localidade"}
+)
+
+
+def norm_compare(value: Any, *, field: Optional[str] = None) -> str:
+    """Normaliza um valor textual para COMPARAÇÃO de igualdade/divergência.
+
+    Passos: casefold + remoção de acentos (via `_norm_text`) → remove apóstrofos
+    ('/’/`/´) → pontuação vira espaço → expande abreviações de logradouro →
+    colapsa espaços. Para campos de município, descola o sufixo de UF final.
+    Determinístico e idempotente. Não-texto (número/dict) devolve `_norm_text`.
+    """
+    base = _norm_text(value)
+    if not base:
+        return base
+    # apóstrofos somem (d'aliança → dalianca); demais pontuação vira espaço
+    base = re.sub(r"['’`´]", "", base)
+    base = re.sub(r"[^0-9a-z]+", " ", base)
+    tokens = [_LOGRADOURO_ABBR.get(t, t) for t in base.split()]
+    if field and _norm_text(field) in _MUNICIPIO_FIELDS:
+        while len(tokens) > 1 and tokens[-1] in _UF_SET:
+            tokens.pop()
+    return " ".join(tokens).strip()
+
+
 def _fmt_ha(value: float) -> str:
     """Formata em PT-BR com até 4 casas, sem zeros à direita ('0,153')."""
     s = f"{value:.4f}".rstrip("0").rstrip(".")
@@ -751,7 +800,10 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
         if r is not None:
             denom_rows.append(r)
     if denom_fontes:
-        distintas = {_norm_text(v) for v in denom_fontes.values()}
+        # Divergência real ignora só diferença de grafia (caso/acento/apóstrofo/
+        # pontuação) — "Fazenda São Jorge" ≡ "FAZENDA SAO JORGE"; "Lote 1 B" vs
+        # "Gleba 01 B" continuam distintos (divergência legítima).
+        distintas = {norm_compare(v, field="denominacao") for v in denom_fontes.values()}
         if len(distintas) > 1:
             linhas.append(MatrixRow(
                 "denominacao_imovel", "Denominação do imóvel", denom_fontes,

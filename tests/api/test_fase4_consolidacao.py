@@ -369,6 +369,94 @@ def test_reconciliacao_nao_sobrescreve_valor_ja_consolidado(client: TestClient, 
     assert mat.area_ha == 349.9022                # NÃO sobrescrito
 
 
+def test_rejeitar_staging_desativa_matricula_e_sai_da_soma(client: TestClient, db_session):
+    """Forense caso Isis (contrato da Conferência): REJEITAR a staging que
+    materializou uma matrícula DESFAZ o efeito — a matrícula é desativada e SAI
+    da soma da área (soma-anotada). Reaceitar reativa. Reproduz a sequência dela
+    com a matrícula 4655 (área aceita → materializa → depois rejeitada)."""
+    tenant, proc, cli, prop = _setup_min(db_session, "f4desativa@example.com")
+    C = ExtractedFieldStatus
+    # 4655 (ficha anterior, docs próprios) + 6776 (ficha vigente) — as duas somam.
+    db_session.add_all([
+        _st(tenant.id, proc.id, "ccir", "area_ha", "349,9022", C.aceito,
+            entity="matricula", target="area_ha", hint="4655"),
+        _st(tenant.id, proc.id, "ccir", "denominacao", "Fazenda Shangri-lá", C.aceito,
+            entity="matricula", target="denominacao_imovel", hint="4655"),
+        _st(tenant.id, proc.id, "matricula", "area_registrada_ha", "349,9022", C.aceito,
+            entity="matricula", target="area_ha", hint="6776"),
+    ])
+    db_session.commit()
+    h = _login(client, "f4desativa@example.com")
+    base = f"/api/v1/processes/{proc.id}"
+
+    # 1) consolida: cria 4655 e 6776; a soma conta as duas.
+    r = client.post(f"{base}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["matriculas_criadas"] == 2
+    db_session.refresh(prop)
+    assert prop.area_total_matriculas() == round(349.9022 * 2, 4)
+    m4655 = db_session.query(Matricula).filter(Matricula.numero_matricula == "4655").first()
+    assert m4655 is not None and m4655.deactivated_at is None
+
+    # 2) rejeita TODA a staging da 4655 (área + denominação).
+    rows_4655 = (
+        db_session.query(ExtractedFieldStaging)
+        .filter(ExtractedFieldStaging.process_id == proc.id,
+                ExtractedFieldStaging.matricula_hint == "4655")
+        .all()
+    )
+    for row in rows_4655:
+        rr = client.post(f"{base}/staging-fields/{row.id}/decidir", headers=h,
+                         json={"acao": "rejeitar"})
+        assert rr.status_code == 200, rr.text
+
+    # 3) re-consolida: 4655 desativada e FORA da soma; 6776 permanece.
+    r = client.post(f"{base}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    res = r.json()
+    assert any(d["numero"] == "4655" for d in res["matriculas_desativadas"])
+    assert res["area_total_matriculas"] == 349.9022
+    db_session.refresh(m4655)
+    assert m4655.deactivated_at is not None
+    assert m4655.deactivation_reason == "rejeitado_na_conferencia"
+    db_session.refresh(prop)
+    assert prop.area_total_matriculas() == 349.9022  # só a 6776
+    assert m4655 not in prop.matriculas_ativas()
+
+    # 4) reaceitar a área da 4655 REATIVA (idempotente, reversível).
+    area_4655 = next(rw for rw in rows_4655 if rw.target_field == "area_ha")
+    ra = client.post(f"{base}/staging-fields/{area_4655.id}/decidir", headers=h,
+                     json={"acao": "aceitar"})
+    assert ra.status_code == 200, ra.text
+    r = client.post(f"{base}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    assert any(d["numero"] == "4655" for d in r.json()["matriculas_reativadas"])
+    db_session.refresh(m4655)
+    assert m4655.deactivated_at is None
+    db_session.refresh(prop)
+    assert prop.area_total_matriculas() == round(349.9022 * 2, 4)
+
+
+def test_matricula_manual_sem_staging_nao_e_desativada(client: TestClient, db_session):
+    """Guard: matrícula cadastrada à mão (sem hint na staging do processo) NUNCA
+    é desativada pela consolidação — o contrato só desfaz o que a staging fez."""
+    tenant, proc, cli, prop = _setup_min(db_session, "f4manual@example.com")
+    # matrícula manual, sem nenhuma staging correspondente
+    mat = Matricula(tenant_id=tenant.id, property_id=prop.id, numero_matricula="9999",
+                    area_ha=100.0, field_sources={"numero_matricula": "human_validated"})
+    db_session.add(mat)
+    # uma staging de OUTRA matrícula, aceita, só pra consolidação ter o que fazer
+    db_session.add(_st(tenant.id, proc.id, "ccir", "area_ha", "50,0", ExtractedFieldStatus.aceito,
+                       entity="matricula", target="area_ha", hint="1234"))
+    db_session.commit()
+    h = _login(client, "f4manual@example.com")
+    r = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["matriculas_desativadas"] == []
+    db_session.refresh(mat)
+    assert mat.deactivated_at is None  # intacta
+
+
 def test_divergente_fundo_aceito_como_achado_nao_grava(client: TestClient, db_session):
     """divergente_fundo 'aceito' é achado (decided_value None) — NÃO grava valor."""
     tenant, proc, cli, prop = _setup_min(db_session, "f4fundo@example.com")

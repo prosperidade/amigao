@@ -30,8 +30,10 @@ from app.models.extracted_field_staging import (
 )
 from app.services.audit_hash import stamp_audit_hash
 from app.services.inconsistency_matrix import (
+    _clean_matricula_hint,
     _to_float_br,
     is_area_plausible,
+    norm_compare,
     parse_area_ha,
 )
 
@@ -200,7 +202,10 @@ def _group_conflict_values(rows: list[ExtractedFieldStaging], target_field: str)
         elif isinstance(v, (dict, list)):
             key = json.dumps(v, sort_keys=True, ensure_ascii=False, default=str)
         else:
-            key = f"s:{_norm_cmp(v)}"
+            # Divergência de TEXTO usa a normalização da skill da Isis (casefold,
+            # acentos, apóstrofos, pontuação, UF de município): "SÃO JOÃO
+            # D'ALIANÇA" ≡ "São João D'aliança-GO" NÃO vira divergência/ação.
+            key = f"s:{norm_compare(v, field=target_field)}"
         seen.setdefault(key, v)
     return list(seen.values())
 
@@ -559,12 +564,23 @@ def consolidate_process(
             imovel_tocado = True
             db.flush()
 
+    # ── Contrato da Conferência: rejeitar staging DESFAZ o efeito (forense Isis)
+    # Matrícula materializada de staging depois rejeitada por completo é desativada
+    # e SAI da soma; reaceitar reativa. Roda depois dos writes (a soma abaixo já
+    # reflete). Só toca matrículas com hint na staging deste processo.
+    mat_desativadas, mat_reativadas = _reconcile_matricula_activation(
+        db, tenant_id, process_id, prop, accepted
+    )
+
     area_total = prop.area_total_matriculas() if prop is not None else None
 
-    if writes or reconciliacoes or acoes_criadas or divergencias_devolvidas:
+    if (writes or reconciliacoes or acoes_criadas or divergencias_devolvidas
+            or mat_desativadas or mat_reativadas):
         _audit(db, tenant_id, process_id, user_id, "consolidar", {
             "process_id": process_id, "campos_gravados": len(writes),
             "matriculas_criadas": mat_criadas, "matriculas_atualizadas": mat_atualizadas,
+            "matriculas_desativadas": mat_desativadas,
+            "matriculas_reativadas": mat_reativadas,
             "acoes_criadas": acoes_criadas,
             "acoes": [{"id": a.id, "titulo": a.titulo} for a in acoes],
             "writes": writes, "reconciliacoes": reconciliacoes,
@@ -582,6 +598,8 @@ def consolidate_process(
         "area_total_matriculas": area_total,
         "area_total_nota": prop.nota_soma_matriculas() if prop is not None else None,
         "acoes_criadas": acoes_criadas,
+        "matriculas_desativadas": mat_desativadas,
+        "matriculas_reativadas": mat_reativadas,
         "writes": writes,
         "ignorados": ignorados,
         "reconciliacoes": reconciliacoes,
@@ -653,6 +671,74 @@ def _write_entity(
 def _ser(value: Any) -> Any:
     """Serializa valor p/ o audit (date → ISO)."""
     return value.isoformat() if isinstance(value, date) else value
+
+
+def _reconcile_matricula_activation(
+    db: Session, tenant_id: int, process_id: int, prop: Any,
+    accepted: list[ExtractedFieldStaging],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Contrato da Conferência (forense caso Isis): REJEITAR staging DESFAZ o efeito.
+
+    Uma matrícula materializada a partir de staging que DEPOIS foi rejeitada por
+    completo (zero linhas aceitas para o seu hint) é DESATIVADA — sai da soma da
+    área (``Property.area_total_matriculas``) sem ser apagada (reversível,
+    auditável). Reaceitar a staging REATIVA (idempotente: a consolidação roda de
+    novo a cada decisão). Só toca matrículas cujo número aparece como hint na
+    staging DESTE processo — matrícula cadastrada à mão (sem staging) fica intata.
+    """
+    from app.models.matricula import Matricula  # noqa: PLC0415
+
+    if prop is None:
+        return [], []
+
+    # Hints com ≥1 linha ACEITA agora (matrícula ainda tem dado consolidável).
+    accepted_hints = {
+        _clean_matricula_hint(r.matricula_hint)
+        for r in accepted
+        if (r.target_entity or "").lower() == "matricula" and r.matricula_hint
+    }
+    accepted_hints.discard(None)
+
+    # Hints que EXISTEM na staging do processo (qualquer status) — só estes são
+    # "derivados de staging"; distinguem matrícula de doc da cadastrada à mão.
+    staging_hint_rows = (
+        db.query(ExtractedFieldStaging.matricula_hint)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+            ExtractedFieldStaging.matricula_hint.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    staging_hints = {_clean_matricula_hint(h[0]) for h in staging_hint_rows}
+    staging_hints.discard(None)
+
+    desativadas: list[dict[str, Any]] = []
+    reativadas: list[dict[str, Any]] = []
+    mats = (
+        db.query(Matricula)
+        .filter(Matricula.tenant_id == tenant_id, Matricula.property_id == prop.id)
+        .all()
+    )
+    for mat in mats:
+        hint = _clean_matricula_hint(mat.numero_matricula)
+        if hint is None or hint not in staging_hints:
+            continue  # cadastro manual (sem staging) — não mexe
+        tem_aceito = hint in accepted_hints
+        if not tem_aceito and mat.deactivated_at is None:
+            mat.deactivated_at = datetime.now(UTC)
+            mat.deactivation_reason = "rejeitado_na_conferencia"
+            desativadas.append({"matricula_id": mat.id, "numero": mat.numero_matricula,
+                                 "area_ha": mat.area_ha})
+        elif tem_aceito and mat.deactivated_at is not None:
+            mat.deactivated_at = None
+            mat.deactivation_reason = None
+            reativadas.append({"matricula_id": mat.id, "numero": mat.numero_matricula,
+                               "area_ha": mat.area_ha})
+    if desativadas or reativadas:
+        db.flush()
+    return desativadas, reativadas
 
 
 def _upsert_matricula(
