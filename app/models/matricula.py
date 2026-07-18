@@ -80,8 +80,20 @@ class Matricula(Base):
     # Fecha o ponto cego que obrigava a consolidação ao fallback `old is not None`.
     field_sources = Column(PortableJSON, nullable=True, default=dict)
 
+    # Desativação REVERSÍVEL (forense caso Isis) — REJEITAR na Conferência a
+    # staging que materializou a matrícula a tira da soma sem hard-delete. NULL =
+    # ativa; preenchido = fora da soma (`Property.area_total_matriculas`). A
+    # consolidação reativa (deactivated_at=None) se a staging voltar a ser aceita.
+    deactivated_at = Column(DateTime(timezone=True), nullable=True)
+    deactivation_reason = Column(String, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    @property
+    def is_active(self) -> bool:
+        """Matrícula entra na soma da área só se ativa (deactivated_at NULL)."""
+        return self.deactivated_at is None
 
     property = relationship("Property", back_populates="matriculas")
     tenant = relationship("Tenant")

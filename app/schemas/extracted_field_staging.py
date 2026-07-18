@@ -117,6 +117,10 @@ class ConsolidationResult(BaseModel):
     # declaradas contíguas — anotada, nunca suprimida.
     area_total_nota: Optional[str] = None
     acoes_criadas: int = 0   # divergências não resolvidas que viraram Ação (opção b)
+    # Forense caso Isis: matrículas desativadas/reativadas na Conferência (rejeitar
+    # staging desfaz a materialização e tira da soma; reaceitar reativa).
+    matriculas_desativadas: list[dict[str, Any]] = []
+    matriculas_reativadas: list[dict[str, Any]] = []
     writes: list[ConsolidationWrite] = []
     ignorados: list[str] = []   # campos aceitos sem coluna correspondente
     reconciliacoes: list[ConsolidationReconciliation] = []

@@ -8,7 +8,10 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 66.** Todo PR que abrir dívida nova incrementa este número
+> **PRÓXIMO NÚMERO LIVRE: 67.** (#66 aberta pelo forense caso Isis, `fix/forense-caso-isis`,
+> 2026-07-18 — drift de mapa macroetapa→chain; ver abaixo. O forense também atualizou #60
+> com o critério de domínio da Isis e #64 com mitigação parcial de backend.)
+> Todo PR que abrir dívida nova incrementa este número
 > (mata a classe de colisão que já aconteceu 2x — #21 e #44, ver nota na entrada 44a/44b
 > abaixo). #59/#60 (PR #98) já mergeados; #61 usado na Fase 1 (ver abaixo). #62 aberta
 > pela Fase 2 (`feat/fase2-reset-tool`, ver abaixo). #63/#64 abertas pelo Sprint 6
@@ -350,6 +353,16 @@ cadeia manualmente quando souber, sem exigir que o sistema infira automaticament
 **Sem urgência** — mitigação atual é o consultor validar o SNCR/área manualmente (selo
 de oficialização, ADR-022). **Origem:** verificação pós-merge #94–#97 (2026-07-06),
 diagnóstico da remediação do caso 13.
+> **Critério de domínio da Isis (registrado no forense do teste dela, 2026-07-18 — NÃO
+> implementado aqui):** a matrícula **vigente é a da ÚLTIMA averbação**; a ficha anterior
+> (mesma terra, número/proprietário antigos) NÃO deve compor a soma de área do imóvel.
+> Evidência viva: processo 14 (Fazenda São Jorge) — a matrícula **4655** (Fazenda
+> Shangri-lá, proprietário antigo) é a ficha anterior da **6776** (Lote 01-C vigente,
+> mesma área 349,9022 ha); ambas materializadas somaram a área em dobro. Idem lote 1B:
+> CCIR **2923** ↔ matrícula **4698**. Quando #60 for implementada, `registro_anterior`
+> (ou equivalente) deve marcar a ficha anterior como fora-da-soma automaticamente. Até
+> lá, a mitigação nova (fix forense: desativar matrícula na Conferência) permite ao
+> consultor **rejeitar** a ficha anterior e tirá-la da soma manualmente.
 
 **62. Fallback `_rules_based_diagnosis` fica cego ao passivo do auto de infração.** A Fase 1
 (N2, item 10) fez o `DiagnosticoAgent` carregar os fatos do auto de infração
@@ -387,6 +400,13 @@ frente do consultor) mas **não conserta** o disparo. **O que destrava:** religa
 de fazer o painel efetivamente orquestrar a cadeia (ou redirecionar o "Rodar agentes" para o
 mesmo caminho do `WorkspaceRightPanel`, que já dispara). Enquanto não consertar, manter oculta.
 **Origem:** Sprint 6 (`feat/sprint6-limpeza-abas`, 2026-07-13).
+> **Mitigação parcial (forense caso Isis, 2026-07-18, `fix/forense-caso-isis`):** o
+> `WorkspaceRightPanel` já dispara, mas a chain `intake` FALHAVA silenciosamente porque o
+> endpoint `POST /macroetapa/run-agents` passava só `{macroetapa}` e o agente `atendimento`
+> exige `metadata['description']` ("Campo 'description' obrigatorio…" — 3× no processo 14).
+> O fix passa a derivar a descrição do processo e, sem descrição, retorna mensagem honesta
+> (`dispatched=False`) em vez de disparar pra falha invisível. **Falta** a superfície de
+> resultado (aba IA religada / surface no workspace) — parte frontend desta dívida.
 
 **65. Humanizador da timeline do workspace não traduz eventos de agente.** Achado da varredura
 de linguagem (ADR-025). `frontend/src/pages/Processes/historicoEventos.ts::describeEvento` cobre
@@ -398,6 +418,17 @@ destrava:** se a aba for religada, o Histórico do caso volta a mostrar linguage
 eventos de agente. **Fix proposto (S):** adicionar ramo `agent.*` em `describeEvento` reusando
 `agentLabel`/`translateActivity` de `lib/activityLabels.ts` (fonte única criada neste PR).
 **Origem:** varredura da linguagem de consultor (`fix/dashboard-linguagem-consultor`, 2026-07-13).
+
+**66. Dois mapas macroetapa→chain divergentes (drift).** Achado do forense caso Isis
+(2026-07-18). Existem DOIS mapas de macroetapa para nome de chain: `MACROETAPA_AGENT_CHAIN`
+(`app/models/macroetapa.py:233`, usado pelo botão "Rodar agentes" em `run_stage_agents`) e
+`MACROETAPA_CHAINS` (`app/agents/orchestrator.py:92`, não usado pelo botão). Eles DIVERGEM
+em `caminho_regulatorio`: o primeiro mapeia para `"analise_regulatoria"`, o segundo para
+`"enquadramento_regulatorio"`. Não foi a causa do bug da Isis (a etapa dela era
+`entrada_demanda`), mas é uma fonte latente de comportamento inconsistente conforme quem lê
+o mapa. **O que destrava:** unificar numa fonte única (ou documentar por que são dois) e
+testar que ambos os nomes de chain existem no registry `CHAINS`. **Origem:** forense caso
+Isis (`fix/forense-caso-isis`, 2026-07-18).
 
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 

@@ -929,6 +929,38 @@ def run_stage_agents(
             detail="Esta etapa não tem agentes automáticos — é conduzida manualmente.",
         )
 
+    # Contexto real do processo pra chain (forense caso Isis): a chain 'intake'
+    # (atendimento) exige uma descrição da demanda; passar só {macroetapa} fazia
+    # o agente FALHAR silenciosamente ("Campo 'description' obrigatorio") e o
+    # consultor via "não gerou resultado". Deriva a descrição do que houver.
+    descricao = (
+        (process.description or "").strip()
+        or (getattr(process, "initial_summary", "") or "").strip()
+        or (getattr(process, "intake_notes", "") or "").strip()
+        or (process.title or "").strip()
+    )
+    # Guard honesto: sem descrição, a classificação não roda — explica na tela em
+    # vez de disparar pra falha invisível (nunca silêncio).
+    if chain_name == "intake" and not descricao:
+        return RunStageAgentsResponse(
+            dispatched=False,
+            macroetapa=current.value,
+            chain_name=chain_name,
+            detail=(
+                "Esta etapa classifica a demanda a partir da descrição do caso, "
+                "que ainda está vazia. Preencha a descrição/resumo do caso e rode "
+                "os agentes novamente."
+            ),
+        )
+
+    metadata: dict[str, Any] = {"macroetapa": current.value}
+    if descricao:
+        metadata["description"] = descricao
+    if process.process_type:
+        metadata["process_type"] = process.process_type
+    if process.urgency:
+        metadata["urgency"] = process.urgency
+
     try:
         from app.workers.agent_tasks import run_agent_chain  # noqa: PLC0415
         run_agent_chain.delay(
@@ -936,7 +968,7 @@ def run_stage_agents(
             tenant_id=current_user.tenant_id,
             user_id=current_user.id,
             process_id=process_id,
-            metadata={"macroetapa": current.value},
+            metadata=metadata,
             stop_on_review=True,
         )
     except Exception as exc:

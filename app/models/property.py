@@ -70,13 +70,21 @@ class Property(Base):
         passive_deletes=True,
     )
 
-    def area_total_matriculas(self) -> float:
-        """Área total do imóvel = SOMA das áreas das matrículas (Ficha 01).
+    def matriculas_ativas(self) -> list:
+        """Matrículas que contam para a soma — exclui as desativadas (forense
+        caso Isis): matrícula cuja staging foi REJEITADA na Conferência sai da
+        soma sem ser apagada (`deactivated_at` preenchido). Tolerante a modelos
+        legados/mocks sem a coluna (getattr → None → ativa)."""
+        return [m for m in (self.matriculas or []) if getattr(m, "deactivated_at", None) is None]
 
-        Matrícula sem área conta como 0. Arredonda a 4 casas (precisão cartorial
-        INCRA). Valor DERIVADO — não digitado.
+    def area_total_matriculas(self) -> float:
+        """Área total do imóvel = SOMA das áreas das matrículas ATIVAS (Ficha 01).
+
+        Matrícula sem área conta como 0. Matrícula desativada (rejeitada na
+        Conferência) NÃO soma. Arredonda a 4 casas (precisão cartorial INCRA).
+        Valor DERIVADO — não digitado.
         """
-        total = sum((m.area_ha or 0.0) for m in self.matriculas)
+        total = sum((m.area_ha or 0.0) for m in self.matriculas_ativas())
         return round(total, 4)
 
     def nota_soma_matriculas(self) -> "str | None":
@@ -86,7 +94,7 @@ class Property(Base):
         a soma única pode não corresponder a um imóvel rural — quem exibe ou
         raciocina sobre ela recebe a ressalva junto. None = nada a ressalvar.
         """
-        if len(self.matriculas or []) <= 1 or self.matriculas_contiguas is True:
+        if len(self.matriculas_ativas()) <= 1 or self.matriculas_contiguas is True:
             return None
         if self.matriculas_contiguas is False:
             return (

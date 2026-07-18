@@ -121,6 +121,56 @@ class TestDiagnosisNotesDerived:
         )
         assert count == 0
 
+    def test_geom_null_sem_georref_mantem_texto_pendente(self, client: TestClient, db_session):
+        """Sem evidência de georref nos documentos: texto técnico de pendência."""
+        tenant, user = _seed_internal_user(db_session, email="notas.semgeo@example.com")
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        headers = _login(client, user.email, "senha123")
+        r = client.get(f"/api/v1/properties/{prop.id}/diagnosis-notes", headers=headers)
+        assert r.status_code == 200
+        nota = r.json()[0]
+        assert nota["codigo"] == "VERIFICACAO_ESPACIAL_PENDENTE"
+        assert "geom indisponível" in nota["texto"]
+
+    def test_geom_null_com_matricula_georref_texto_honesto(self, client: TestClient, db_session):
+        """Forense caso Isis: matrícula com certificação SIGEF + geom vazio →
+        NÃO dizer 'não tem geo'; dizer que o georref está nos documentos."""
+        from app.models.matricula import Matricula
+        tenant, user = _seed_internal_user(db_session, email="notas.geodoc@example.com")
+        _, prop, _ = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.add(Matricula(
+            tenant_id=tenant.id, property_id=prop.id, numero_matricula="4655",
+            geo_certificacao_codigo="340dbe7b-dc78-417e-992a-18a6c944c36f",
+            geo_certificacao_status="Certificada - Sem Confirmação de Registro em Cartório",
+        ))
+        db_session.commit()
+        headers = _login(client, user.email, "senha123")
+        r = client.get(f"/api/v1/properties/{prop.id}/diagnosis-notes", headers=headers)
+        assert r.status_code == 200
+        nota = r.json()[0]
+        assert nota["texto"] == (
+            "georreferenciamento presente nos documentos; análise espacial "
+            "automática ainda não disponível."
+        )
+        assert "não tem geo" not in nota["texto"]
+
+    def test_geom_null_com_documento_kml_sigef_texto_honesto(self, client: TestClient, db_session):
+        """O vetor real do caso: documento kml_sigef vinculado ao imóvel."""
+        from app.models.document import Document
+        tenant, user = _seed_internal_user(db_session, email="notas.kml@example.com")
+        _, prop, process = _seed_client_property_process(db_session, tenant=tenant)
+        db_session.add(Document(
+            tenant_id=tenant.id, process_id=process.id, property_id=prop.id,
+            document_type="kml_sigef", original_file_name="perimetro.kml",
+            filename="perimetro.kml", content_type="application/vnd.google-earth.kml+xml",
+            storage_key=f"t{tenant.id}/perimetro-{prop.id}.kml",
+        ))
+        db_session.commit()
+        headers = _login(client, user.email, "senha123")
+        r = client.get(f"/api/v1/properties/{prop.id}/diagnosis-notes", headers=headers)
+        assert r.status_code == 200
+        assert "georreferenciamento presente nos documentos" in r.json()[0]["texto"]
+
 
 # ---------------------------------------------------------------------------
 # /processes/{id}/diagnoses
