@@ -62,6 +62,16 @@ class Matricula(Base):
     area_ha = Column(Float, nullable=True)
     denominacao_imovel = Column(String, nullable=True)
 
+    # Cadeia de fichas (Dívida #60) — sinais registrais que ligam esta matrícula
+    # à ANTERIOR na linhagem. `registro_anterior` é o registro/matrícula de origem
+    # citado na certidão (ex.: "R01-Mat. 2.923" na abertura da 4.698);
+    # `denominacao_anterior` é o nome ANTERIOR do imóvel ("anteriormente denominada
+    # X"). Ambos já entram como fonte/página no staging. São a evidência da
+    # detecção de cadeia (ver app/services/matricula_chain.py) — nunca decidem
+    # sozinhos: a proposta de cadeia é confirmada pelo consultor (1 clique).
+    registro_anterior = Column(String, nullable=True)
+    denominacao_anterior = Column(String, nullable=True)
+
     # Georreferenciamento (SIGEF)
     geo_certificacao_codigo = Column(String, nullable=True)
     geo_certificacao_status = Column(String, nullable=True)
@@ -87,6 +97,22 @@ class Matricula(Base):
     deactivated_at = Column(DateTime(timezone=True), nullable=True)
     deactivation_reason = Column(String, nullable=True)
 
+    # Vigência da ficha (Dívida #60) — critério de domínio da Isis: "vigente =
+    # matrícula da última averbação; a ficha anterior vira HISTÓRICO — não soma,
+    # não gera lacuna, permanece visível como linhagem". ORTOGONAL a
+    # `deactivated_at`: histórica é documento VÁLIDO (só não vigente); rejeitada é
+    # desativação por rejeição na Conferência. Uma ficha pode ser histórica sem
+    # nunca ter sido rejeitada. Default 'vigente' (backfill sem custo). A
+    # transição vigente→histórica é PROPOSTA pela detecção de cadeia e CONFIRMADA
+    # pelo consultor (IA propõe, humano decide) — reversível em Dados.
+    vigencia = Column(String, nullable=False, server_default="vigente")
+    # Aponta para a matrícula VIGENTE que substituiu esta (a "ficha atual" da
+    # cadeia). NULL numa vigente; preenchido numa histórica. SET NULL preserva a
+    # histórica se a vigente for removida (a linhagem sobrevive ao encadeamento).
+    superseded_by_id = Column(
+        Integer, ForeignKey("matriculas.id", ondelete="SET NULL"), nullable=True
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -95,8 +121,33 @@ class Matricula(Base):
         """Matrícula entra na soma da área só se ativa (deactivated_at NULL)."""
         return self.deactivated_at is None
 
+    @property
+    def is_vigente(self) -> bool:
+        """Vigente = ativa (não rejeitada) E não marcada como histórica.
+
+        Só matrícula vigente soma a área e gera lacunas/checklists (Dívida #60).
+        Tolerante a modelos legados/mocks sem a coluna (getattr → 'vigente')."""
+        return self.deactivated_at is None and (
+            getattr(self, "vigencia", "vigente") or "vigente"
+        ) != "historica"
+
     property = relationship("Property", back_populates="matriculas")
     tenant = relationship("Tenant")
+
+    # Cadeia navegável (auto-referência): `supersedes` = fichas anteriores que
+    # esta matrícula substituiu; `superseded_by` = a ficha vigente que a
+    # substituiu. Mínimo 1 nível, expansível (o lote 1B tem 3: 2609→2923→4698).
+    superseded_by = relationship(
+        "Matricula",
+        remote_side=[id],
+        back_populates="supersedes",
+        foreign_keys=[superseded_by_id],
+    )
+    supersedes = relationship(
+        "Matricula",
+        back_populates="superseded_by",
+        foreign_keys=[superseded_by_id],
+    )
 
     __table_args__ = (
         Index("ix_matriculas_tenant_property", "tenant_id", "property_id"),

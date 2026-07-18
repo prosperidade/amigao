@@ -77,14 +77,36 @@ class Property(Base):
         legados/mocks sem a coluna (getattr → None → ativa)."""
         return [m for m in (self.matriculas or []) if getattr(m, "deactivated_at", None) is None]
 
+    def matriculas_vigentes(self) -> list:
+        """Matrículas VIGENTES (Dívida #60) — ativas E não marcadas como histórica.
+
+        Só estas somam a área e contam para lacunas/contiguidade. A ficha
+        histórica (anterior na cadeia) é documento VÁLIDO mas não vigente: fica
+        de fora da soma sem ser apagada (linhagem preservada). Tolerante a
+        modelos legados/mocks sem a coluna `vigencia` (getattr → 'vigente')."""
+        return [
+            m for m in self.matriculas_ativas()
+            if (getattr(m, "vigencia", "vigente") or "vigente") != "historica"
+        ]
+
+    def matriculas_historicas(self) -> list:
+        """Fichas anteriores da cadeia (Dívida #60) — não somam, não geram lacuna,
+        permanecem visíveis como linhagem. Exclui as rejeitadas (essas saíram por
+        outro motivo — desativação, não vigência)."""
+        return [
+            m for m in self.matriculas_ativas()
+            if (getattr(m, "vigencia", "vigente") or "vigente") == "historica"
+        ]
+
     def area_total_matriculas(self) -> float:
-        """Área total do imóvel = SOMA das áreas das matrículas ATIVAS (Ficha 01).
+        """Área total do imóvel = SOMA das áreas das matrículas VIGENTES (Ficha 01
+        + Dívida #60).
 
         Matrícula sem área conta como 0. Matrícula desativada (rejeitada na
-        Conferência) NÃO soma. Arredonda a 4 casas (precisão cartorial INCRA).
-        Valor DERIVADO — não digitado.
+        Conferência) OU histórica (ficha anterior da cadeia) NÃO soma. Arredonda
+        a 4 casas (precisão cartorial INCRA). Valor DERIVADO — não digitado.
         """
-        total = sum((m.area_ha or 0.0) for m in self.matriculas_ativas())
+        total = sum((m.area_ha or 0.0) for m in self.matriculas_vigentes())
         return round(total, 4)
 
     def nota_soma_matriculas(self) -> "str | None":
@@ -94,7 +116,7 @@ class Property(Base):
         a soma única pode não corresponder a um imóvel rural — quem exibe ou
         raciocina sobre ela recebe a ressalva junto. None = nada a ressalvar.
         """
-        if len(self.matriculas_ativas()) <= 1 or self.matriculas_contiguas is True:
+        if len(self.matriculas_vigentes()) <= 1 or self.matriculas_contiguas is True:
             return None
         if self.matriculas_contiguas is False:
             return (
