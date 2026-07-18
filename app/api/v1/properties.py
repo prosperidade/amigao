@@ -23,7 +23,12 @@ from app.models.property import Property as PropertyModel
 from app.models.stage_output import StageOutput
 from app.models.user import User
 from app.repositories import MatriculaRepository, PropertyRepository
-from app.schemas.matricula import Matricula, MatriculaCreate, MatriculaMoveRequest
+from app.schemas.matricula import (
+    Matricula,
+    MatriculaCreate,
+    MatriculaMoveRequest,
+    VigenciaRequest,
+)
 from app.schemas.property import Property, PropertyCreate, PropertyUpdate
 from app.schemas.property_hub import (
     PropertyAISummary,
@@ -222,6 +227,33 @@ def move_property_matricula(
     db.commit()
     db.refresh(mat)
     return mat
+
+
+@router.patch("/{property_id}/matriculas/{matricula_id}/vigencia", response_model=Matricula)
+def set_matricula_vigencia(
+    *,
+    property_id: int,
+    matricula_id: int,
+    body: VigenciaRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_internal_user),
+):
+    """Ajuste/reversão de vigência de uma matrícula (Dívida #60).
+
+    Reverte uma ficha marcada como histórica de volta a vigente (volta a somar),
+    ou marca manualmente uma histórica encadeada a outra vigente. Auditado com
+    hash chain (Princípio 2). A curadoria em lote (1 clique) fica na Conferência
+    (``POST /processes/{id}/chain-proposals/aplicar``)."""
+    from app.services.matricula_chain import set_vigencia  # noqa: PLC0415
+
+    PropertyRepository(db, current_user.tenant_id).get_or_404(
+        property_id, detail="Property not found"
+    )
+    return set_vigencia(
+        db, tenant_id=current_user.tenant_id, property_id=property_id,
+        matricula_id=matricula_id, vigencia=body.vigencia,
+        superseded_by_id=body.superseded_by_id, user_id=current_user.id,
+    )
 
 
 @router.get("/{property_id}/delete-preview")

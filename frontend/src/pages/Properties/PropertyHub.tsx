@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, FileText, BarChart3, Briefcase,
-  AlertTriangle, Plus, Sparkles, Shield, Loader2,
+  AlertTriangle, Plus, Sparkles, Shield, Loader2, GitBranch, RotateCcw,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MACROETAPA_STATE_BADGE } from '@/pages/Processes/quadro-types';
@@ -723,6 +723,10 @@ function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringCon
         )}
       </section>
 
+      {/* Dívida #60 — Matrículas & Linhagem (vigentes somam/primeiro; históricas
+          em seção discreta, reversível) */}
+      <MatriculasLinhagem propertyId={header.id} />
+
       <section>
         <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-2">Atividade</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
@@ -732,6 +736,109 @@ function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringCon
         </div>
       </section>
     </div>
+  );
+}
+
+// ─── Matrículas & Linhagem (Dívida #60) ─────────────────────────────────────
+
+interface MatriculaRow {
+  id: number;
+  numero_matricula: string | null;
+  area_ha: number | null;
+  denominacao_imovel: string | null;
+  vigencia: string;
+  superseded_by_id: number | null;
+}
+
+/**
+ * Lista as matrículas do imóvel separando VIGENTES (somam, aparecem primeiro) de
+ * HISTÓRICAS (fichas anteriores da cadeia, seção discreta "Linhagem"). A ficha
+ * histórica é documento válido — só não vigente; pode ser revertida a vigente
+ * aqui (1 clique), o que a devolve à soma. Só aparece com ≥1 matrícula.
+ */
+function MatriculasLinhagem({ propertyId }: { propertyId: number }) {
+  const qc = useQueryClient();
+  const { data: mats = [], isLoading } = useQuery<MatriculaRow[]>({
+    queryKey: ['property-matriculas', propertyId],
+    queryFn: () => api.get(`/properties/${propertyId}/matriculas`).then(r => r.data),
+  });
+
+  const reverter = useMutation({
+    mutationFn: (matriculaId: number) =>
+      api.patch(`/properties/${propertyId}/matriculas/${matriculaId}/vigencia`, { vigencia: 'vigente' })
+        .then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['property-matriculas', propertyId] });
+      qc.invalidateQueries({ queryKey: ['property-hub-summary', propertyId] });
+      toast.success('Matrícula reativada — volta a compor a área do imóvel.');
+    },
+    onError: () => toast.error('Falha ao reverter a vigência.'),
+  });
+
+  if (isLoading || mats.length === 0) return null;
+
+  const vigentes = mats.filter(m => m.vigencia !== 'historica');
+  const historicas = mats.filter(m => m.vigencia === 'historica');
+  const numeroById = new Map(mats.map(m => [m.id, m.numero_matricula]));
+  const soma = vigentes.reduce((acc, m) => acc + (m.area_ha ?? 0), 0);
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+        Matrículas
+        <span className="text-[10px] font-normal text-gray-400">
+          {vigentes.length} vigente(s) · soma {Number(soma.toFixed(4))} ha
+        </span>
+      </h3>
+      <div className="space-y-1.5">
+        {vigentes.map(m => (
+          <div key={m.id} className="flex items-center gap-3 flex-wrap p-2.5 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5">
+            <div className="flex-1 min-w-[160px]">
+              <p className="text-sm text-gray-800 dark:text-slate-200">
+                Matrícula <strong>{m.numero_matricula ?? '—'}</strong>
+              </p>
+              <p className="text-xs text-gray-400 dark:text-slate-500">
+                {m.denominacao_imovel ?? '—'} · {m.area_ha != null ? `${m.area_ha} ha` : 'área —'}
+              </p>
+            </div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30">
+              vigente
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {historicas.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-slate-500 font-medium mb-1.5 flex items-center gap-1">
+            <GitBranch className="w-3 h-3" /> Linhagem / fichas anteriores ({historicas.length})
+          </p>
+          <div className="space-y-1.5">
+            {historicas.map(m => (
+              <div key={m.id} className="flex items-center gap-3 flex-wrap p-2.5 rounded-lg bg-gray-50/60 dark:bg-white/[0.03] border border-dashed border-gray-200 dark:border-white/10">
+                <div className="flex-1 min-w-[160px]">
+                  <p className="text-sm text-gray-500 dark:text-slate-400 line-through decoration-gray-300">
+                    Matrícula {m.numero_matricula ?? '—'}
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-slate-500">
+                    Ficha anterior de {m.superseded_by_id ? (numeroById.get(m.superseded_by_id) ?? '—') : '—'}
+                    {m.area_ha != null && ` · ${m.area_ha} ha (não soma)`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => reverter.mutate(m.id)}
+                  disabled={reverter.isPending}
+                  title="Reverter para vigente (volta a somar)"
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40"
+                >
+                  <RotateCcw className="w-3 h-3" /> Reverter
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

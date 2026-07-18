@@ -285,8 +285,11 @@ def validate_technical_consistency(
         # a matrícula do doc consolidada, porque a consolidação grava
         # `Matricula.numero_matricula`, nunca o escalar legado `registry_number`
         # (falso "matrícula ausente" com o documento enviado — forense caso Isis).
+        # Cadeia (#60): só matrícula VIGENTE conta como "matrícula presente" — a
+        # ficha histórica (anterior da cadeia) é documento válido mas não vigente,
+        # não supre a exigência de matrícula atual nem gera lacuna própria.
         tem_matricula = any(
-            (m.numero_matricula or "").strip() for m in (prop.matriculas or [])
+            (m.numero_matricula or "").strip() for m in prop.matriculas_vigentes()
         )
         if not prop.registry_number and not tem_matricula:
             issues.append(Inconsistency(
@@ -340,7 +343,10 @@ def validate_technical_consistency(
         # Sprint 4 (Ficha 07 §9) — contiguidade: lacuna informativa com >1
         # matrícula e declaração ausente; aviso de orientação quando negada.
         # NUNCA trava (radar-não-cancela) — gaps/inconsistências são informativos.
-        mats_count = len(prop.matriculas or [])
+        # Cadeia (#60): conta só VIGENTES — uma linhagem 4655→6776 é 1 matrícula
+        # vigente, não dispara contiguidade (a histórica é a mesma terra, não
+        # um segundo imóvel).
+        mats_count = len(prop.matriculas_vigentes())
         if mats_count > 1 and prop.matriculas_contiguas is None:
             issues.append(Inconsistency(
                 code="CONTIGUIDADE_NAO_DECLARADA",
