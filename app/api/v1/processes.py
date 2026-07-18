@@ -47,6 +47,11 @@ from app.schemas.macroetapa import (
     StageOutputCreate,
     StageOutputResponse,
 )
+from app.schemas.matricula import (
+    ChainApplyRequest,
+    ChainApplyResult,
+    ChainProposalOut,
+)
 from app.schemas.process import (
     Process,
     ProcessCreate,
@@ -1274,3 +1279,64 @@ def consolidate_process_endpoint(
         db, tenant_id=current_user.tenant_id, process_id=process_id, user_id=current_user.id
     )
     return ConsolidationResult(**result)
+
+
+# ---------------------------------------------------------------------------
+# Dívida #60 — cadeia de fichas / vigência (proposta na Conferência + 1 clique)
+# ---------------------------------------------------------------------------
+
+def _load_process_property(db: Session, tenant_id: int, process_id: int):
+    """Processo (tenant-scoped) + seu imóvel — base das propostas de cadeia."""
+    from app.models.property import Property  # noqa: PLC0415
+
+    process = ProcessRepository(db, tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+    prop = None
+    if process.property_id:
+        prop = (
+            db.query(Property)
+            .filter(Property.id == process.property_id, Property.tenant_id == tenant_id)
+            .first()
+        )
+    return process, prop
+
+
+@router.get("/{process_id}/chain-proposals", response_model=list[ChainProposalOut])
+def list_chain_proposals(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Propõe cadeias entre as matrículas VIGENTES do imóvel do processo (#60).
+
+    A Conferência exibe pré-marcadas; nada muda sem o clique do consultor
+    (IA propõe, humano decide). Sem imóvel/sem cadeia → lista vazia."""
+    from app.services.matricula_chain import detect_chain_proposals  # noqa: PLC0415
+
+    _process, prop = _load_process_property(db, current_user.tenant_id, process_id)
+    if prop is None:
+        return []
+    return [ChainProposalOut(**p.__dict__) for p in detect_chain_proposals(prop)]
+
+
+@router.post("/{process_id}/chain-proposals/aplicar", response_model=ChainApplyResult)
+def apply_chain_proposals(
+    process_id: int,
+    body: ChainApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """1 clique confirma a cadeia: cada anterior vira histórica, encadeada à
+    vigente (#60). Substitui N rejeições campo-a-campo. Auditado, reversível."""
+    from app.services.matricula_chain import apply_chain  # noqa: PLC0415
+
+    _process, prop = _load_process_property(db, current_user.tenant_id, process_id)
+    if prop is None:
+        return ChainApplyResult(aplicadas=[], count=0)
+    result = apply_chain(
+        db, tenant_id=current_user.tenant_id, property_id=prop.id,
+        pairs=[(p.anterior_id, p.vigente_id) for p in body.pairs],
+        user_id=current_user.id,
+    )
+    return ChainApplyResult(**result)

@@ -20,6 +20,9 @@ class MatriculaBase(BaseModel):
     averbacao_rl: Optional[str] = None
     onus_gravames: Optional[str] = None
     proprietarios: Optional[list[dict[str, Any]]] = None
+    # Cadeia de fichas (#60) — sinais registrais da linhagem (opcionais no cadastro).
+    registro_anterior: Optional[str] = None
+    denominacao_anterior: Optional[str] = None
 
 
 class MatriculaCreate(MatriculaBase):
@@ -48,7 +51,57 @@ class Matricula(MatriculaBase):
     id: int
     tenant_id: int
     property_id: int
+    # Vigência da cadeia (#60): 'vigente' soma/gera lacuna; 'historica' é linhagem.
+    vigencia: str = "vigente"
+    superseded_by_id: Optional[int] = None
+    deactivated_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# Cadeia de fichas (Dívida #60) — detecção + curadoria de vigência
+# ---------------------------------------------------------------------------
+
+class ChainProposalOut(BaseModel):
+    """Proposta de cadeia: ``anterior`` é ficha anterior de ``vigente`` (#60).
+
+    Exibida PRÉ-MARCADA na Conferência; 1 clique confirma. Nada muda sem o
+    aceite do consultor (IA propõe, humano decide)."""
+
+    anterior_id: int
+    anterior_numero: Optional[str] = None
+    vigente_id: int
+    vigente_numero: Optional[str] = None
+    sinal: str            # registro_anterior | denominacao_area | lote_area
+    confianca: str        # alta | media | baixa
+    evidencia: str
+
+
+class ChainPair(BaseModel):
+    anterior_id: int
+    vigente_id: int
+
+
+class ChainApplyRequest(BaseModel):
+    """1 clique confirma a cadeia inteira: cada par (anterior→vigente) marca a
+    anterior como histórica, encadeada à vigente."""
+
+    pairs: list[ChainPair]
+
+
+class ChainApplyResult(BaseModel):
+    aplicadas: list[dict[str, Any]] = []
+    count: int = 0
+
+
+class VigenciaRequest(BaseModel):
+    """Ajuste manual/reversão de vigência de UMA matrícula (em Dados).
+
+    ``vigente`` volta a somar (limpa o encadeamento); ``historica`` exige a
+    vigente que a substitui (``superseded_by_id``)."""
+
+    vigencia: str                                # vigente | historica
+    superseded_by_id: Optional[int] = None
