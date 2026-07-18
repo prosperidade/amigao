@@ -66,7 +66,9 @@ _IMOVEL_ALIAS: dict[str, Optional[str]] = {}
 _MATRICULA_FIELDS = {"numero_matricula", "cartorio", "registro_livro_folha_ficha",
                      "codigo_incra_sncr", "nirf_cib", "area_ha", "denominacao_imovel",
                      "geo_certificacao_codigo", "geo_certificacao_status",
-                     "averbacao_app", "averbacao_rl", "onus_gravames", "proprietarios"}
+                     "averbacao_app", "averbacao_rl", "onus_gravames", "proprietarios",
+                     # Cadeia (#60): sinais registrais da linhagem gravam na matrícula.
+                     "registro_anterior", "denominacao_anterior"}
 _MATRICULA_ALIAS: dict[str, Optional[str]] = {}
 
 # Guard fantasma (Sprint 4): só documentos que legitimamente DECLARAM matrícula

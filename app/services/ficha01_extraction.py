@@ -243,7 +243,11 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("cartorio", "cartorio", "matricula", "cartorio"),
         _FieldSpec("area_registrada_ha", "area_registrada_ha", "matricula", "area_ha", "ha"),
         _FieldSpec("denominacao", "denominacao", "matricula", "denominacao_imovel"),
-        _FieldSpec("denominacao_anterior", "denominacao_anterior", "matricula", "denominacao_imovel"),
+        # Cadeia (#60): nome ANTERIOR e registro de ORIGEM ganham coluna própria —
+        # antes `denominacao_anterior` caía em `denominacao_imovel` e competia com
+        # a denominação atual (poluição). São sinais da detecção de cadeia.
+        _FieldSpec("denominacao_anterior", "denominacao_anterior", "matricula", "denominacao_anterior"),
+        _FieldSpec("registro_anterior", "registro_anterior", "matricula", "registro_anterior"),
         _FieldSpec("averbacao_app", "averbacao_app", "matricula", "averbacao_app"),
         _FieldSpec("averbacao_rl", "averbacao_rl", "matricula", "averbacao_rl"),
         _FieldSpec("numero_geo", "numero_geo", "matricula", "geo_certificacao_codigo"),
@@ -330,6 +334,11 @@ Instruções de completude:
 - "denominacao": o nome ATUAL do imóvel. Se a matrícula menciona nome ANTERIOR/
   histórico (ex.: "anteriormente denominada X", outra denominação na cadeia),
   inclua-o em "denominacao_anterior".
+- "registro_anterior": o registro/matrícula de ORIGEM citado na abertura ou na
+  cadeia desta matrícula (ex.: "havido por... R-01 da matrícula 2.923",
+  "transcrição anterior nº 4.655", "oriunda da matrícula 2609"). Copie o número
+  da matrícula/transcrição anterior, sem o "R-01/AV-" (ex.: "2.923"). Se não
+  houver menção a registro anterior, null.
 - "proprietarios": cadeia de titulares (lista [{"nome","cpf"}]).
 - "onus": descreva CADA gravame (hipoteca/penhor/alienação) com TIPO, CREDOR e
   VALOR quando constarem (ex.: "Hipoteca (R.05) - credor Banco X - R$ 1.000.000").
@@ -344,6 +353,7 @@ Instruções de completude:
   "area_registrada_ha": null,
   "denominacao": null,
   "denominacao_anterior": null,
+  "registro_anterior": null,
   "proprietarios": [{"nome": null, "cpf": null}],
   "averbacao_app": null,
   "averbacao_rl": null,
