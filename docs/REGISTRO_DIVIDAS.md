@@ -17,7 +17,8 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > pela Fase 2 (`feat/fase2-reset-tool`, ver abaixo). #63/#64 abertas pelo Sprint 6
 > (`feat/sprint6-limpeza-abas`, abas do workspace — ver abaixo). #65 aberta pela
 > linguagem de consultor (`fix/dashboard-linguagem-consultor` — ver abaixo).
-> Fase 1 (`feat/fase1-classificador-n1n2`) fecha #48 e #59; #60 e #61 seguem abertas.
+> Fase 1 (`feat/fase1-classificador-n1n2`) fecha #48 e #59; **#60 FECHADA** pela cadeia
+> de fichas/vigência (`feat/60-vigencia-cadeia-matriculas`, ADR-027, 2026-07-18); #61 aberta.
 
 ## P0 — fecham o pipeline ponta a ponta
 
@@ -342,7 +343,16 @@ criação de `Matricula` (guard já existia, Sprint 4). Item 3 (mesma rodada): o
 `skipped_reason` que já existia e nunca era lido agora vira nota visível em
 `Document.extraction_status` ("recebido, não processado — revisar").
 
-**60. Conceito `registro_anterior` na `Matricula` (linhagem de matrícula).** Quando um
+**60. Conceito `registro_anterior` na `Matricula` (linhagem de matrícula). — FECHADA
+(PR #60-cadeia, 2026-07-18, ADR-027).** Implementada além do conceito inicial: a
+linhagem virou VIGÊNCIA. `Matricula.vigencia` (`vigente`/`historica`) + `superseded_by_id`
+(cadeia navegável) + `registro_anterior`/`denominacao_anterior` extraídos com fonte.
+Detecção por 3 sinais PROPÕE, consultor confirma em 1 clique na Conferência (substitui as
+12 rejeições), reversível em Dados. Histórica sai da soma e das lacunas, permanece como
+linhagem. Caso da Isis validado (processo 14): 4698+6776 = 1.010,5583 (não em dobro).
+Detalhe abaixo (mantido para histórico da origem).
+
+
 imóvel rural muda de número de matrícula por reabertura/desmembramento cartorial, o
 sistema hoje não modela a linhagem — cada matrícula é um registro independente sem
 referência à anterior. Evidência real: caso 13, linhagem 2609→2923→4698 (mesma área,

@@ -689,3 +689,20 @@ em `docs/agentes/` são a fonte de verdade verificada.
   (preserva `status_achado`; reporta decisões conflitantes sem apagar). Caso 13 tem 22 confirmada × 23
   descartada → pendência de decisão do André. Doc: `docs/trabalhos/alertas_duplicados.md`. Lição: agente
   que persiste precisa ser idempotente (LICOES_APRENDIDAS).
+
+- **2026-07-18 — #60 CADEIA DE FICHAS E VIGÊNCIA (`feat/60-vigencia-cadeia-matriculas`, ADR-027).**
+  Critério de domínio da Isis: "vigente = matrícula da última averbação; a ficha anterior vira
+  HISTÓRICO — não soma, não gera lacuna, permanece como linhagem". **Medido:** `registro_anterior`
+  não era extraído (elo faltante); `denominacao_anterior` colidia com `denominacao_imovel`;
+  soft-delete do forense (`deactivated_at`) é ortogonal — rejeição ≠ histórico. **Impl:** `Matricula`
+  ganha `vigencia`/`superseded_by_id`/`registro_anterior`/`denominacao_anterior` (migration
+  `c7d3e1a9f0b2` encadeada no forense); só vigentes somam (`Property.matriculas_vigentes`);
+  extração de `registro_anterior` + coluna própria p/ `denominacao_anterior`;
+  `matricula_chain.py` detecta cadeia por 3 sinais (registro_anterior/denominação+área/lote+área) e
+  PROPÕE (nunca aplica); Conferência mostra pré-marcado → **1 clique** confirma a cadeia inteira
+  (substitui ~12 rejeições); reversível em Dados (aba "Linhagem"); histórica sai de
+  MISSING_MATRICULA/contiguidade. **Validação:** caso da Isis (processo 14) 4698+6776 = 1.010,5583
+  (não em dobro); `test_matricula_chain_vigencia.py` 13 casos; suíte 1186 verde (cov 71,48%); tsc +
+  vitest (79) verdes; migration up→down→up limpa. ADR-027; #60 fechada no REGISTRO. Lição: modelar a
+  linhagem como VIGÊNCIA (não só ponteiro) fecha o problema na origem — a soma nunca dobra e a decisão
+  é 1 clique, não 12.
