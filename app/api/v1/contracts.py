@@ -8,20 +8,23 @@ Contracts API — Sprint 4
   GET  /contracts/{id}/download              — URL de download do PDF
 """
 
+import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.contract import Contract
+from app.models.audit_log import AuditLog
+from app.models.contract import Contract, ContractStatus
 from app.models.process import Process
 from app.models.proposal import Proposal
 from app.models.stage_output import StageOutput
 from app.models.user import User
+from app.services.audit_hash import stamp_audit_hash
 from app.services.contract_generator import (
     fill_contract_template,
     find_template_for_demand,
@@ -86,10 +89,29 @@ def _serialize(c: Contract) -> dict:
         "pdf_storage_key": c.pdf_storage_key,
         "signed_at": c.signed_at,
         "signed_by_client": c.signed_by_client,
+        "signed_registered_by_user_id": c.signed_registered_by_user_id,
+        "has_signed_pdf": bool(c.signed_pdf_storage_key),
         "sent_at": c.sent_at,
         "created_at": c.created_at,
         "updated_at": c.updated_at,
     }
+
+
+def _audit_contract(db: Session, c: Contract, user_id: Optional[int], action: str,
+                    extra: Optional[dict] = None) -> None:
+    """Transição auditada (quem/quando) com hash chain (Princípio 2) — espelha o
+    padrão do S5-A para propostas."""
+    details = {"contract_id": c.id, "status": c.status.value}
+    if extra:
+        details.update(extra)
+    log = AuditLog(
+        tenant_id=c.tenant_id, user_id=user_id, entity_type="contract",
+        entity_id=c.id, action=action,
+        details=json.dumps(details, ensure_ascii=False, default=str),
+    )
+    db.add(log)
+    db.flush()
+    stamp_audit_hash(db, log)
 
 
 def _resolve_demand_type(db: Session, contract: Contract) -> Optional[str]:
@@ -384,4 +406,135 @@ def download_contract(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar URL: {exc}")
 
+    return {"download_url": url, "expires_in": 3600}
+
+
+# ---------------------------------------------------------------------------
+# Ciclo de assinatura MANUAL (S5-C) — rascunho → ENVIADO → ASSINADO
+# ---------------------------------------------------------------------------
+
+@router.post("/{contract_id}/aprovar-enviar")
+def aprovar_enviar_contrato(
+    contract_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Consultor aprova a minuta (rascunho) e a marca como ENVIADA ao cliente.
+    Transição auditada. Só um rascunho pode ser aprovado/enviado."""
+    contract = _get_contract_or_404(db, contract_id, current_user.tenant_id)
+    if contract.status != ContractStatus.draft:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Só um contrato em rascunho pode ser aprovado/enviado (estado atual: '{contract.status.value}').",
+        )
+    contract.status = ContractStatus.sent
+    contract.sent_at = datetime.now(UTC)
+    db.add(contract)
+    _audit_contract(db, contract, current_user.id, "contract_sent")
+    db.commit()
+    db.refresh(contract)
+    logger.info("Contrato %s aprovado e enviado por user=%s", contract_id, current_user.id)
+    return _serialize(contract)
+
+
+def _parse_signed_at(raw: str) -> datetime:
+    """Aceita 'YYYY-MM-DD' ou ISO completo; devolve datetime tz-aware (UTC)."""
+    raw = (raw or "").strip()
+    try:
+        if len(raw) == 10:  # data pura
+            d = date.fromisoformat(raw)
+            return datetime(d.year, d.month, d.day, tzinfo=UTC)
+        dt = datetime.fromisoformat(raw)
+        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Data de assinatura inválida — use o formato AAAA-MM-DD.",
+        ) from exc
+
+
+@router.post("/{contract_id}/assinar")
+async def assinar_contrato(
+    contract_id: int,
+    signed_at: str = Form(...),
+    signed_pdf: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Registra a assinatura MANUAL do contrato (MVP, sem integração externa).
+
+    Exige contrato ENVIADO (aprove/envie antes). Grava `signed_at` (data
+    informada), quem registrou e — se enviado — o PDF assinado (upload OPCIONAL).
+    Preencher `signed_at` satisfaz o gate E7 (`has_contract_signed`) e, sendo a
+    E7 a etapa terminal, CONCLUI o caso (marca `Process.closed_at`). Transição
+    auditada. Assinatura eletrônica externa (gov.br/Clicksign) = dívida pós-MVP."""
+    contract = _get_contract_or_404(db, contract_id, current_user.tenant_id)
+    if contract.status != ContractStatus.sent:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Só um contrato ENVIADO pode ser assinado — aprove e envie a minuta "
+                f"antes (estado atual: '{contract.status.value}')."
+            ),
+        )
+    dt = _parse_signed_at(signed_at)
+
+    # Upload OPCIONAL do PDF assinado (não-fatal: registra a assinatura mesmo se o
+    # storage falhar — degrada com elegância).
+    storage_warning: Optional[str] = None
+    if signed_pdf is not None:
+        try:
+            data = await signed_pdf.read()
+            filename = f"contrato_{contract_id}_assinado_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.pdf"
+            result = get_storage_service().upload_bytes(
+                content=data, filename=filename,
+                content_type=signed_pdf.content_type or "application/pdf",
+                tenant_id=current_user.tenant_id, process_id=contract.process_id or 0,
+            )
+            contract.signed_pdf_storage_key = result["storage_key"]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("PDF assinado do contrato %s não armazenado: %s", contract_id, exc)
+            storage_warning = f"Assinatura registrada; PDF assinado não armazenado ({exc})."
+
+    contract.status = ContractStatus.signed
+    contract.signed_at = dt
+    contract.signed_registered_by_user_id = current_user.id
+    db.add(contract)
+
+    # Caso CONCLUI: a E7 é terminal; contrato assinado marca o fecho do caso.
+    concluido_em = None
+    if contract.process_id:
+        proc = db.query(Process).filter(Process.id == contract.process_id).first()
+        if proc and proc.closed_at is None:
+            proc.closed_at = datetime.now(UTC)
+            db.add(proc)
+            concluido_em = proc.closed_at
+
+    _audit_contract(db, contract, current_user.id, "contract_signed",
+                    extra={"signed_at": dt.isoformat(), "has_signed_pdf": bool(contract.signed_pdf_storage_key)})
+    db.commit()
+    db.refresh(contract)
+    logger.info("Contrato %s ASSINADO (signed_at=%s) por user=%s", contract_id, dt.date(), current_user.id)
+    return {
+        "message": "Contrato assinado — caso concluído." if not storage_warning else "Contrato assinado.",
+        "warning": storage_warning,
+        "concluido_em": concluido_em,
+        "contract": _serialize(contract),
+    }
+
+
+@router.get("/{contract_id}/download-assinado")
+def download_contrato_assinado(
+    contract_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """URL pré-assinada do PDF ASSINADO (quando houve upload na assinatura)."""
+    contract = _get_contract_or_404(db, contract_id, current_user.tenant_id)
+    if not contract.signed_pdf_storage_key:
+        raise HTTPException(status_code=404, detail="Nenhum PDF assinado foi anexado a este contrato.")
+    try:
+        url = get_storage_service().generate_presigned_get_url(contract.signed_pdf_storage_key, expires_in=3600)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar URL: {exc}")
     return {"download_url": url, "expires_in": 3600}
