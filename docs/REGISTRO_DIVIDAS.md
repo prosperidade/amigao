@@ -8,7 +8,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 67.** (#66 aberta pelo forense caso Isis, `fix/forense-caso-isis`,
+> **PRÓXIMO NÚMERO LIVRE: 68.** (#67 aberta pelo S5-A, `feat/s5a-rota-proposta-estados` —
+> proposta/contrato multi-bloco/multi-titular; ver entrada abaixo.)
+> (#66 aberta pelo forense caso Isis, `fix/forense-caso-isis`,
 > 2026-07-18 — drift de mapa macroetapa→chain; ver abaixo. O forense também atualizou #60
 > com o critério de domínio da Isis e #64 com mitigação parcial de backend.)
 > Todo PR que abrir dívida nova incrementa este número
@@ -613,6 +615,17 @@ isolamento por tenant, 403 para não-superuser. Agora a auditabilidade tem verif
 cerimônia.
 
 ---
+
+**67. Proposta/contrato multi-bloco e multi-titular.** O S5-A gera a proposta a
+partir da(s) Rota(s) validada(s) do processo, mas o caso real da Mirante às vezes
+tem BLOCOS de serviço distintos (imóveis/matrículas diferentes) e/ou mais de um
+titular no mesmo instrumento. Hoje: quando há mais de uma Rota validada, o S5-A
+agrega os passos numa proposta só e soma as faixas (o `rota_id` no nível da
+proposta fica nulo; a rastreabilidade fina permanece em `scope_items[].rota_passo_id`).
+O CONTRATO (S5-B) trata bloco único do processo corrente. **O que destrava:**
+modelar blocos de serviço (imóvel+matrículas por bloco) e contratante multi-titular
+na proposta e no contrato. **Origem:** S5-A (2026-07-18), decisão registrada na
+missão ("multi-bloco/multi-titular = dívida pós-MVP, registrar"). Ver ADR-028.
 
 ## Fechadas (histórico — não revoga, só comprova fechamento)
 
