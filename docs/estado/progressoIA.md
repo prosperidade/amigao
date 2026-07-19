@@ -1960,3 +1960,31 @@ Sprint de apresentação — toca IA nos rótulos e na tradução de eventos de 
   idêntica; nenhuma chamada LLM nova. O card "Leitura da IA" do kanban
   (`/kanban-insights`) é determinístico (COUNT/GROUP BY) — corrigido só o cache
   (24h→5min) p/ refletir o sistema. Ver ADR-025.
+
+---
+
+## S5-B — Proposta e contrato nos moldes Mirante (2026-07-19)
+
+Sprint de peça comercial. Toca IA pela DECISÃO de tirar a geração de proposta/
+contrato do caminho LLM (`RedatorAgent`, templates `proposta`/`contrato`) e fixá-la
+numa fonte DETERMINÍSTICA — as validações de consistência precisam bloquear com
+certeza, e um LLM não garante que "a soma das parcelas fecha".
+
+### O que toca IA
+
+- **RedatorAgent NÃO é a fonte da proposta/contrato.** Confirmado o que o log de
+  aviso do agente já media (`redator.py`: "template com fluxo dedicado"): a peça
+  nasce de `app/services/mirante_documents.py` (determinístico, `build_proposta` /
+  `build_contrato`), não do LLM. Os paths `proposta`/`contrato` do RedatorAgent
+  seguem como caminho paralelo a aposentar (dívida #68).
+- **Proposta nasce da Rota (S5-A) → contrato nasce da proposta ACEITA.** Seção 3 da
+  proposta = passos da Rota, rastreáveis via `rota_passo_id`; cláusula 1ª do
+  contrato espelha o escopo aceito (mesmo `rota_passo_id`); cláusula 2ª os valores.
+- **3 validações determinísticas BLOQUEIAM (não é conselho de IA):** soma serviços
+  == total; soma parcelas == bloco; matrículas VIGENTES (ADR-027). Guard de
+  placeholder impede `{{...}}`/`[12]` no documento final.
+- **Perfil emissor do tenant** (`tenant.settings["issuer"]`) — nunca mais CNPJ/conta
+  hardcoded; perfil incompleto = geração bloqueada nomeando o que falta.
+- **Sem mudança de gateway/custos** — sprint determinístico, zero chamada LLM nova.
+  A peça gerada é RASCUNHO (`needs_human_validation=True`) — IA propõe, humano
+  decide; assinatura fica no S5-C. Ver ADR-029 e dívida #68.

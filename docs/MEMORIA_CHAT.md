@@ -727,3 +727,20 @@ em `docs/agentes/` são a fonte de verdade verificada.
   a Rota, a geração é bloqueada com a razão. **Validação:** 21 testes S5-A + suíte
   completa; migration up→down→up limpa. Dívida #67 (multi-bloco/multi-titular). Gate E6
   intocado. Lição: caracterizar ANTES de mudar (o snapshot antigo vira prova do delta).
+
+- **2026-07-19 — S5-B: proposta e contrato nos moldes Mirante (`feat/s5b-proposta-contrato-mirante`, ADR-029).**
+  A peça comercial ganhou fonte ÚNICA e DETERMINÍSTICA (`app/services/mirante_documents.py`):
+  `build_proposta` (6 seções) + `build_contrato` (8 cláusulas). O contrato **nasce da
+  proposta ACEITA** — cláusula 1ª espelha o escopo aceito (mesmo `rota_passo_id` do S5-A),
+  cláusula 2ª os valores; bloco único (multi-bloco = #67). **3 validações BLOQUEIAM (422):**
+  soma serviços==total; soma parcelas==bloco (cl.2ª==cl.1ª); matrículas VIGENTES (ADR-027).
+  Guard de placeholder impede `{{...}}`/`[12]` na peça. **Perfil emissor do tenant**
+  (`tenant.settings["issuer"]`) — nada de CNPJ/conta hardcoded; incompleto = bloqueio
+  nomeando o que falta. Parcelas viraram estruturadas (`proposals.payment_installments`)
+  p/ a validação poder falhar. RedatorAgent NÃO é a fonte (determinismo é requisito das
+  validações). Templates versionados em `docs/templates/*.md` (exemplos FICTÍCIOS, zero
+  PII). Saída PDF+Saídas (StageOutput), RASCUNHO (`needs_human_validation`) — IA propõe,
+  humano decide; assinatura no S5-C. Migration `f1a7c2d9e4b6` (aditiva). 15 testes S5-B +
+  suíte completa; tsc+vitest verdes. Dívida #68 (aposentar legado avulso + entregável
+  explícito por passo + UI do perfil/parcelas). Lição: onde o erro precisa BLOQUEAR com
+  certeza (dinheiro que fecha), a fonte é determinística — LLM propõe texto, não garante soma.

@@ -9,6 +9,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
+from app.models.types import PortableJSON
 
 
 class ProposalStatus(str, enum.Enum):
@@ -47,6 +48,12 @@ class Proposal(Base):
     total_value = Column(Float, nullable=True)
     validity_days = Column(Integer, default=30)
     payment_terms = Column(Text, nullable=True)
+    # S5-B — parcelas ESTRUTURADAS: [{numero, vencimento, valor}]. Alimentam a
+    # cláusula 2ª do contrato e a validação de consistência "soma das parcelas ==
+    # total do bloco" (classe de erro real dos contratos manuais da Mirante).
+    # Vazio = o gerador sintetiza uma parcela única à vista (soma trivial confere);
+    # o consultor pode editar via PATCH. Ver app/services/mirante_documents.py.
+    payment_installments = Column(PortableJSON, nullable=False, default=list, server_default="[]")
     notes = Column(Text, nullable=True)
 
     # Complexidade usada na geração automática

@@ -1,0 +1,61 @@
+CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE CONSULTORIA AMBIENTAL
+
+CONTRATADA: Mirante Consultoria Ambiental Ltda., inscrita no CNPJ sob o nº 00.000.000/0001-00, com sede em Rua Exemplo, 000 — Município Exemplo/UF, doravante denominada CONTRATADA;
+CONTRATANTE: Cliente Exemplo (pessoa física), inscrito(a) sob o nº 000.000.000-00, doravante denominado(a) CONTRATANTE.
+
+CLÁUSULA 1ª — DO OBJETO
+Imóvel: Fazenda Exemplo — Matrícula(s): 0.000.
+Serviços contratados:
+  1. Diagnóstico ambiental do imóvel — R$ 600,00
+  2. Regularização do Cadastro Ambiental Rural (CAR) — R$ 600,00
+Total do bloco: R$ 1.200,00
+
+CLÁUSULA 2ª — DO VALOR E DA FORMA DE PAGAMENTO
+O valor total dos serviços é de R$ 1.200,00, pago da seguinte forma:
+  Parcela 1 (Na assinatura): R$ 600,00
+  Parcela 2 (Na entrega): R$ 600,00
+Dados para pagamento (CONTRATADA):
+  Banco: Banco Exemplo (000) | Agência: 0000 | Conta: 00000-0
+  Titular: Mirante Consultoria Ambiental Ltda. | PIX: 00.000.000/0001-00
+
+CLÁUSULA 3ª — DAS OBRIGAÇÕES DO CONTRATANTE
+a) Fornecer documentos, informações e acessos necessários à execução;
+b) Efetuar os pagamentos nas condições da Cláusula 2ª;
+c) Comunicar alterações relevantes na situação do imóvel;
+d) Arcar com taxas e custas de órgãos e cartórios, salvo previsão em contrário.
+
+CLÁUSULA 4ª — DAS OBRIGAÇÕES DA CONTRATADA
+a) Executar os serviços com zelo técnico e observância da legislação ambiental;
+b) Manter o CONTRATANTE informado sobre o andamento;
+c) Guardar sigilo sobre as informações do contrato;
+d) Entregar os produtos nos prazos acordados, ressalvado atraso de terceiros.
+
+CLÁUSULA 5ª — DA RESCISÃO
+a) Por acordo entre as partes, a qualquer tempo;
+b) Por inadimplemento, mediante notificação prévia de 30 dias;
+c) Na rescisão por culpa do CONTRATANTE, remuneração proporcional aos serviços executados, acrescida de multa de 10% sobre o saldo.
+
+CLÁUSULA 6ª — DA VIGÊNCIA E DO PRAZO
+Vigora a partir da assinatura e permanece até o integral cumprimento do objeto. Prazo estimado de execução: 15 dias corridos, contado do recebimento da 1ª parcela e da documentação.
+
+CLÁUSULA 7ª — DAS DISPOSIÇÕES GERAIS
+a) Este contrato representa o acordo integral entre as partes;
+b) Alterações só valem por escrito e assinadas por ambas as partes;
+c) A tolerância a descumprimento não implica novação nem renúncia;
+d) As partes reconhecem a validade da assinatura eletrônica.
+
+CLÁUSULA 8ª — DO FORO
+Fica eleito o foro da Comarca de Município Exemplo/UF para dirimir controvérsias deste contrato.
+
+Local e data: 19/07/2026.
+
+_______________________________________________
+CONTRATADA — Mirante Consultoria Ambiental Ltda.
+Eng. Fictícia de Exemplo — Engenheira Agrônoma — CREA-XX 000000/D
+
+_______________________________________________
+CONTRATANTE — Cliente Exemplo
+
+Testemunhas:
+1. _______________________________  Nome:
+2. _______________________________  Nome:
