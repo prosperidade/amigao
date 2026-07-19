@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.process import DemandType, Process, ProcessStatus
-from app.models.proposal import Proposal, ProposalStatus
 from app.models.property import Property
+from app.models.proposal import Proposal, ProposalStatus
 from app.models.rota import (
     Rota,
     RotaPasso,
