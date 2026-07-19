@@ -8,7 +8,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 68.** (#67 aberta pelo S5-A, `feat/s5a-rota-proposta-estados` —
+> **PRÓXIMO NÚMERO LIVRE: 69.** (#68 aberta pelo S5-B, `feat/s5b-proposta-contrato-mirante` —
+> follow-ons da consolidação da peça Mirante; ver entrada abaixo.)
+> (#67 aberta pelo S5-A, `feat/s5a-rota-proposta-estados` —
 > proposta/contrato multi-bloco/multi-titular; ver entrada abaixo.)
 > (#66 aberta pelo forense caso Isis, `fix/forense-caso-isis`,
 > 2026-07-18 — drift de mapa macroetapa→chain; ver abaixo. O forense também atualizou #60
@@ -626,6 +628,22 @@ O CONTRATO (S5-B) trata bloco único do processo corrente. **O que destrava:**
 modelar blocos de serviço (imóvel+matrículas por bloco) e contratante multi-titular
 na proposta e no contrato. **Origem:** S5-A (2026-07-18), decisão registrada na
 missão ("multi-bloco/multi-titular = dívida pós-MVP, registrar"). Ver ADR-028.
+
+**68. Follow-ons da consolidação da peça Mirante (S5-B).** A geração de proposta/
+contrato virou determinística e canônica (`app/services/mirante_documents.py`,
+ADR-029), mas a consolidação com o legado ficou pela metade e há arestas nomeadas:
+**(a)** o `contract_generator.fill_contract_template` (template-fill genérico) e o
+`scope_base` residual do `PRICE_TABLE` (`proposal_generator.py`, já morto desde o
+S5-A) seguem no código para o caminho AVULSO (contrato sem proposta) e os paths
+`proposta`/`contrato` do `RedatorAgent` continuam como caminho paralelo — aposentar
+tudo de vez quando o avulso migrar (conecta com #34, duas trilhas de orçamento, e
+#49, RedatorAgent sem template de peça). **(b)** A seção 4 da proposta (entregáveis)
+reusa a descrição do passo — falta um campo `entregavel` explícito por `RotaPasso`
+para o produto de cada etapa. **(c)** Não há UI neste PR para editar o perfil emissor
+do tenant (`tenant.settings["issuer"]`) nem as parcelas estruturadas
+(`proposals.payment_installments`) — hoje via API/seed; o consultor precisa da tela.
+**(d)** A migration `f1a7c2d9e4b6` (tenant.settings + proposals.payment_installments)
+é aditiva e precisa rodar em prod no deploy. **Origem:** S5-B (2026-07-19). Ver ADR-029.
 
 ## Fechadas (histórico — não revoga, só comprova fechamento)
 
