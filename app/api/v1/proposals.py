@@ -27,10 +27,17 @@ from app.models.proposal import Proposal, ProposalStatus
 from app.models.user import User
 from app.services.audit_hash import stamp_audit_hash
 from app.services.email import EmailService
+from app.services.mirante_documents import (
+    DocumentGenerationError,
+    build_proposta,
+    render_pdf,
+    render_proposta_text,
+)
 from app.services.proposal_generator import (
     ProposalGenerationError,
     generate_proposal_from_rota,
 )
+from app.services.storage import get_storage_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -83,6 +90,7 @@ class ProposalCreate(BaseModel):
     total_value: Optional[float] = None
     validity_days: int = 30
     payment_terms: Optional[str] = None
+    payment_installments: list[dict] = []   # S5-B — [{numero, vencimento, valor}]
     notes: Optional[str] = None
     complexity: Optional[str] = None
     rota_id: Optional[int] = None       # S5-A — Rota validada de origem
@@ -94,6 +102,7 @@ class ProposalUpdate(BaseModel):
     total_value: Optional[float] = None
     validity_days: Optional[int] = None
     payment_terms: Optional[str] = None
+    payment_installments: Optional[list[dict]] = None   # S5-B — parcelas estruturadas
     notes: Optional[str] = None
 
 
@@ -128,6 +137,7 @@ def _serialize(p: Proposal) -> dict:
         "total_value": p.total_value,
         "validity_days": p.validity_days,
         "payment_terms": p.payment_terms,
+        "payment_installments": p.payment_installments or [],
         "notes": p.notes,
         "complexity": p.complexity,
         "sent_at": p.sent_at,
@@ -222,6 +232,7 @@ def create_proposal(
         total_value=body.total_value,
         validity_days=body.validity_days,
         payment_terms=body.payment_terms,
+        payment_installments=body.payment_installments,
         notes=body.notes,
         complexity=body.complexity,
         rota_id=body.rota_id,
@@ -246,6 +257,84 @@ def get_proposal(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     return _serialize(_get_proposal_or_404(db, proposal_id, current_user.tenant_id))
+
+
+# ---------------------------------------------------------------------------
+# POST /proposals/{id}/documento — gera a peça (PDF + Saída) nos moldes Mirante
+# ---------------------------------------------------------------------------
+
+@router.post("/{proposal_id}/documento")
+def gerar_documento_proposta(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Gera a PROPOSTA formal (6 seções Mirante) a partir do escopo da Rota +
+    precificação (S5-B). Determinístico. RASCUNHO — o consultor revisa/edita e
+    assina (IA propõe, humano decide).
+
+    Bloqueia (422) com mensagem honesta se: perfil do tenant incompleto,
+    inconsistência de valores, ou placeholder não resolvido. Registra a peça em
+    Saídas (StageOutput, output_type='proposta') e devolve URL de download."""
+    from app.models.stage_output import StageOutput  # noqa: PLC0415
+
+    proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
+    try:
+        doc = build_proposta(db, proposal)
+        corpo = render_proposta_text(doc)
+    except DocumentGenerationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    pdf_key: Optional[str] = None
+    storage_warning: Optional[str] = None
+    try:
+        pdf_bytes = render_pdf(f"Proposta {doc.numero}", corpo)
+        filename = f"proposta_{proposal_id}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.pdf"
+        storage = get_storage_service()
+        result = storage.upload_bytes(
+            content=pdf_bytes, filename=filename, content_type="application/pdf",
+            tenant_id=current_user.tenant_id, process_id=proposal.process_id or 0,
+        )
+        pdf_key = result["storage_key"]
+    except Exception as exc:  # storage/PDF não-fatal: a Saída textual é registrada
+        logger.warning("PDF da proposta %s não armazenado: %s", proposal_id, exc)
+        storage_warning = f"Peça gerada; PDF não armazenado ({exc})."
+
+    content_data = doc.to_content_data()
+    content_data["pdf_storage_key"] = pdf_key
+    artifact = None
+    if proposal.process_id:
+        artifact = StageOutput(
+            tenant_id=current_user.tenant_id,
+            process_id=proposal.process_id,
+            macroetapa="orcamento_negociacao",
+            output_type="proposta",
+            title=f"Proposta {doc.numero}",
+            content=corpo,
+            content_data=content_data,
+            produced_by_user_id=current_user.id,
+            needs_human_validation=True,  # RASCUNHO — humano decide
+        )
+        db.add(artifact)
+        db.commit()
+        db.refresh(artifact)
+
+    download_url = None
+    if pdf_key:
+        try:
+            download_url = get_storage_service().generate_presigned_get_url(pdf_key, expires_in=3600)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("URL de download da proposta %s indisponível: %s", proposal_id, exc)
+
+    return {
+        "message": "Proposta gerada como rascunho." if not storage_warning else "Proposta gerada.",
+        "warning": storage_warning,
+        "artifact_id": artifact.id if artifact else None,
+        "numero": doc.numero,
+        "content": corpo,
+        "content_data": content_data,
+        "download_url": download_url,
+    }
 
 
 # ---------------------------------------------------------------------------

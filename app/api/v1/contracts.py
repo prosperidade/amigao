@@ -20,12 +20,19 @@ from app.api.deps import get_current_internal_user, get_db
 from app.models.contract import Contract
 from app.models.process import Process
 from app.models.proposal import Proposal
+from app.models.stage_output import StageOutput
 from app.models.user import User
 from app.services.contract_generator import (
     fill_contract_template,
     find_template_for_demand,
     render_pdf,
 )
+from app.services.mirante_documents import (
+    DocumentGenerationError,
+    build_contrato,
+    render_contrato_text,
+)
+from app.services.mirante_documents import render_pdf as render_mirante_pdf
 from app.services.storage import get_storage_service
 
 router = APIRouter()
@@ -42,6 +49,13 @@ class ContractCreate(BaseModel):
     process_id: Optional[int] = None
     template_id: Optional[int] = None
     title: str
+
+
+class ContractFromProposal(BaseModel):
+    """S5-B — contrato nasce da proposta ACEITA (moldes Mirante)."""
+
+    proposal_id: int
+    bonus_malus_ativo: Optional[bool] = None   # OPCIONAL; None = default do tenant (desligado)
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +163,101 @@ def create_contract(
     db.refresh(contract)
     logger.info("Contrato criado: id=%s proposal=%s", contract.id, body.proposal_id)
     return _serialize(contract)
+
+
+# ---------------------------------------------------------------------------
+# POST /contracts/gerar — contrato nasce da proposta ACEITA (moldes Mirante, S5-B)
+# ---------------------------------------------------------------------------
+
+@router.post("/gerar", status_code=status.HTTP_201_CREATED)
+def gerar_contrato_de_proposta(
+    body: ContractFromProposal,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Gera a MINUTA de contrato (8 cláusulas Mirante) a partir de uma proposta
+    ACEITA (S5-B). Bloco único do processo corrente (multi-bloco = dívida #67).
+
+    Validações de consistência ANTES de emitir (422 com mensagem clara):
+      1. soma dos serviços == total declarado da proposta;
+      2. soma das parcelas == total do bloco (cláusula 2ª == cláusula 1ª);
+      3. matrículas citadas existem e são VIGENTES.
+    Também bloqueia se a proposta não estiver ACEITA, se o perfil do tenant
+    estiver incompleto, ou se sobrar placeholder não resolvido.
+
+    RASCUNHO (minuta) — o consultor revisa/edita e assina (IA propõe, humano
+    decide); a assinatura em si segue o fluxo do S5-C."""
+    proposal = db.query(Proposal).filter(
+        Proposal.id == body.proposal_id,
+        Proposal.tenant_id == current_user.tenant_id,
+    ).first()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposta não encontrada.")
+
+    try:
+        doc = build_contrato(db, proposal, bonus_malus_ativo=body.bonus_malus_ativo)
+        corpo = render_contrato_text(doc)
+    except DocumentGenerationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    title = f"Contrato — {doc.bloco['imovel']}"
+    contract = Contract(
+        tenant_id=current_user.tenant_id,
+        client_id=proposal.client_id,
+        proposal_id=proposal.id,
+        process_id=proposal.process_id,
+        title=title,
+        content=corpo,
+        created_by_user_id=current_user.id,
+    )
+    db.add(contract)
+    db.flush()  # id p/ nome do arquivo
+
+    pdf_key: Optional[str] = None
+    storage_warning: Optional[str] = None
+    try:
+        pdf_bytes = render_mirante_pdf(title, corpo)
+        filename = f"contrato_{contract.id}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.pdf"
+        result = get_storage_service().upload_bytes(
+            content=pdf_bytes, filename=filename, content_type="application/pdf",
+            tenant_id=current_user.tenant_id, process_id=proposal.process_id or 0,
+        )
+        pdf_key = result["storage_key"]
+        contract.pdf_storage_key = pdf_key
+    except Exception as exc:  # não-fatal: minuta textual persiste
+        logger.warning("PDF do contrato %s não armazenado: %s", contract.id, exc)
+        storage_warning = f"Minuta gerada; PDF não armazenado ({exc})."
+
+    # Registra a minuta em Saídas (E7)
+    artifact = None
+    if proposal.process_id:
+        content_data = doc.to_content_data()
+        content_data["pdf_storage_key"] = pdf_key
+        content_data["contract_id"] = contract.id
+        artifact = StageOutput(
+            tenant_id=current_user.tenant_id,
+            process_id=proposal.process_id,
+            macroetapa="contrato_formalizacao",
+            output_type="minuta",
+            title=title,
+            content=corpo,
+            content_data=content_data,
+            produced_by_user_id=current_user.id,
+            needs_human_validation=True,  # RASCUNHO — humano decide
+        )
+        db.add(artifact)
+
+    db.commit()
+    db.refresh(contract)
+
+    logger.info("Contrato %s gerado da proposta %s (aceita). pdf=%s", contract.id, proposal.id, pdf_key)
+    return {
+        "message": "Minuta de contrato gerada como rascunho." if not storage_warning else "Minuta gerada.",
+        "warning": storage_warning,
+        "contract": _serialize(contract),
+        "artifact_id": artifact.id if artifact else None,
+        "content": corpo,
+    }
 
 
 # ---------------------------------------------------------------------------
