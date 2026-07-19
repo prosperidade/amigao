@@ -55,6 +55,7 @@ export default function ProposalEditor() {
     suggested_value_max: number | null;
     estimated_days: number | null;
   } | null>(null);
+  const [rotaId, setRotaId] = useState<number | null>(null);   // S5-A — Rota de origem
   const [saved, setSaved] = useState(false);
 
   // Buscar lista de clientes para dropdown
@@ -110,14 +111,18 @@ export default function ProposalEditor() {
   }, [proposalKey]);
 
   // Auto-draft ao montar se process_id passado na URL
-  const { data: draftData, isLoading: draftLoading } = useQuery({
+  const { data: draftData, isLoading: draftLoading, error: draftError } = useQuery({
     queryKey: ['proposal-draft', processId],
     queryFn: async () => {
       const res = await api.get(`/proposals/generate-draft?process_id=${processId}`);
       return res.data;
     },
     enabled: isNew && !!processId,
+    retry: false,   // S5-A: 422 "sem Rota validada" é resposta honesta, não erro a repetir
   });
+  // S5-A — mensagem honesta quando a geração é bloqueada (ex.: Rota não validada).
+  const draftBlockedMsg =
+    (draftError as { response?: { data?: { detail?: string } } } | null)?.response?.data?.detail ?? null;
 
   const draftDataKey = draftData ? JSON.stringify(draftData) : null;
   useMemo(() => {
@@ -128,6 +133,7 @@ export default function ProposalEditor() {
       setValidityDays(String(30));
       setPaymentTerms(draftData.payment_terms ?? '');
       setNotes(draftData.notes ?? '');
+      setRotaId(typeof draftData.rota_id === 'number' ? draftData.rota_id : null);
       const d = draftData as Record<string, unknown>;
       setDraftBanner({
         complexity: String(d.complexity ?? ''),
@@ -151,6 +157,7 @@ export default function ProposalEditor() {
         validity_days: parseInt(validityDays),
         payment_terms: paymentTerms,
         notes,
+        rota_id: rotaId ?? undefined,
       };
       if (isNew) return api.post('/proposals/', body);
       return api.patch(`/proposals/${id}`, body);
@@ -284,6 +291,19 @@ export default function ProposalEditor() {
           </button>
         )}
       </div>
+
+      {/* S5-A — geração bloqueada (ex.: Rota não validada): mensagem honesta */}
+      {isNew && processId && draftBlockedMsg && (
+        <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/25 p-4 flex items-start gap-3">
+          <Zap className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+              Proposta ainda não pode ser gerada
+            </p>
+            <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">{draftBlockedMsg}</p>
+          </div>
+        </div>
+      )}
 
       {/* Banner rascunho automático */}
       {draftBanner && (

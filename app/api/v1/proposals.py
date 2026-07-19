@@ -11,6 +11,7 @@ Proposals API — Sprint 4
   GET    /proposals/generate-draft          — gera rascunho automático
 """
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
@@ -20,14 +21,54 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
+from app.models.audit_log import AuditLog
 from app.models.process import Process
 from app.models.proposal import Proposal, ProposalStatus
 from app.models.user import User
+from app.services.audit_hash import stamp_audit_hash
 from app.services.email import EmailService
-from app.services.proposal_generator import generate_proposal_draft
+from app.services.proposal_generator import (
+    ProposalGenerationError,
+    generate_proposal_from_rota,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """Garante datetime tz-aware (Postgres devolve aware; SQLite/mocks, naive)."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+def _effective_status(p: Proposal, now: Optional[datetime] = None) -> ProposalStatus:
+    """Estado EFETIVO da proposta (S5-A) — 'expirada' é DERIVADO no read (sem cron):
+    proposta enviada cuja validade venceu vale como expirada. Os demais estados
+    são os persistidos."""
+    now = now or datetime.now(UTC)
+    exp = _aware(p.expires_at)
+    if p.status == ProposalStatus.sent and exp is not None and exp < now:
+        return ProposalStatus.expired
+    return p.status
+
+
+def _audit_proposal(db: Session, p: Proposal, user_id: Optional[int], action: str,
+                    extra: Optional[dict] = None) -> None:
+    """Transição auditada (quem/quando) com hash chain (Princípio 2)."""
+    details = {"proposal_id": p.id, "status": p.status.value,
+               "version_number": p.version_number}
+    if extra:
+        details.update(extra)
+    log = AuditLog(
+        tenant_id=p.tenant_id, user_id=user_id, entity_type="proposal",
+        entity_id=p.id, action=action,
+        details=json.dumps(details, ensure_ascii=False, default=str),
+    )
+    db.add(log)
+    db.flush()
+    stamp_audit_hash(db, log)
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +85,7 @@ class ProposalCreate(BaseModel):
     payment_terms: Optional[str] = None
     notes: Optional[str] = None
     complexity: Optional[str] = None
+    rota_id: Optional[int] = None       # S5-A — Rota validada de origem
 
 
 class ProposalUpdate(BaseModel):
@@ -76,7 +118,11 @@ def _serialize(p: Proposal) -> dict:
         "process_id": p.process_id,
         "client_id": p.client_id,
         "status": p.status.value,
+        # S5-A: 'expirada' é derivada no read (validade vencida numa enviada).
+        "effective_status": _effective_status(p).value,
         "version_number": p.version_number,
+        "rota_id": p.rota_id,
+        "previous_version_id": p.previous_version_id,
         "title": p.title,
         "scope_items": p.scope_items,
         "total_value": p.total_value,
@@ -103,7 +149,11 @@ def generate_draft(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
-    """Gera rascunho automático de proposta baseado no processo."""
+    """Gera rascunho de proposta A PARTIR da Rota validada (S5-A).
+
+    Sem Rota validada (ou sem passo faturável) → 422 com mensagem honesta,
+    coerente com o gate E5→E6. O escopo nasce dos passos ``item_proposta`` da
+    Rota (rastreável); a PRICE_TABLE só precifica."""
     process = db.query(Process).filter(
         Process.id == process_id,
         Process.tenant_id == current_user.tenant_id,
@@ -111,7 +161,10 @@ def generate_draft(
     if not process:
         raise HTTPException(status_code=404, detail="Processo não encontrado.")
 
-    draft = generate_proposal_draft(db, process_id, current_user.tenant_id)
+    try:
+        draft = generate_proposal_from_rota(db, process_id, current_user.tenant_id)
+    except ProposalGenerationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "title": draft.title,
         "demand_type": draft.demand_type,
@@ -123,6 +176,7 @@ def generate_draft(
         "estimated_days": draft.estimated_days,
         "payment_terms": draft.payment_terms,
         "notes": draft.notes,
+        "rota_id": draft.rota_id,
     }
 
 
@@ -170,6 +224,7 @@ def create_proposal(
         payment_terms=body.payment_terms,
         notes=body.notes,
         complexity=body.complexity,
+        rota_id=body.rota_id,
         created_by_user_id=current_user.id,
         expires_at=expires,
     )
@@ -234,7 +289,10 @@ def send_proposal(
 
     proposal.status = ProposalStatus.sent
     proposal.sent_at = datetime.now(UTC)
+    # Validade conta a partir do ENVIO (renova o relógio da expiração derivada).
+    proposal.expires_at = datetime.now(UTC) + timedelta(days=proposal.validity_days or 30)
     db.add(proposal)
+    _audit_proposal(db, proposal, current_user.id, "proposal_enviada")
     db.commit()
     db.refresh(proposal)
 
@@ -265,11 +323,23 @@ def accept_proposal(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
-    if proposal.status not in (ProposalStatus.sent, ProposalStatus.draft):
-        raise HTTPException(status_code=422, detail="Proposta não pode ser aceita neste estado.")
+    eff = _effective_status(proposal)
+    # S5-A — máquina estrita: só aceita uma proposta ENVIADA e não expirada.
+    if eff == ProposalStatus.expired:
+        raise HTTPException(
+            status_code=422,
+            detail="Proposta expirada — gere uma nova versão para renegociar.",
+        )
+    if eff != ProposalStatus.sent:
+        raise HTTPException(
+            status_code=422,
+            detail="Só é possível aceitar uma proposta enviada (estado atual: "
+            f"{eff.value}).",
+        )
     proposal.status = ProposalStatus.accepted
     proposal.accepted_at = datetime.now(UTC)
     db.add(proposal)
+    _audit_proposal(db, proposal, current_user.id, "proposal_aceita")
     db.commit()
     db.refresh(proposal)
     return _serialize(proposal)
@@ -287,16 +357,72 @@ def reject_proposal(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
-    if proposal.status not in (ProposalStatus.sent, ProposalStatus.draft):
-        raise HTTPException(status_code=422, detail="Proposta não pode ser recusada neste estado.")
+    eff = _effective_status(proposal)
+    # Recusa vale para enviada OU expirada (o cliente pode recusar após vencer).
+    if eff not in (ProposalStatus.sent, ProposalStatus.expired):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Só é possível recusar uma proposta enviada (estado atual: {eff.value}).",
+        )
     proposal.status = ProposalStatus.rejected
     proposal.rejected_at = datetime.now(UTC)
     if reason:
         proposal.notes = f"{proposal.notes or ''}\n\nMotivo da recusa: {reason}".strip()
     db.add(proposal)
+    _audit_proposal(db, proposal, current_user.id, "proposal_recusada",
+                    {"reason": reason} if reason else None)
     db.commit()
     db.refresh(proposal)
     return _serialize(proposal)
+
+
+# ---------------------------------------------------------------------------
+# POST /proposals/{id}/nova-versao  — renegociação (S5-A)
+# ---------------------------------------------------------------------------
+
+@router.post("/{proposal_id}/nova-versao", status_code=status.HTTP_201_CREATED)
+def new_version(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Renegociação (S5-A): gera a versão N+1 a partir de uma proposta recusada
+    ou expirada. A anterior é PRESERVADA (histórico); a nova nasce em rascunho,
+    linkada à anterior (``previous_version_id``), com a validade renovada."""
+    prev = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
+    eff = _effective_status(prev)
+    if eff not in (ProposalStatus.rejected, ProposalStatus.expired):
+        raise HTTPException(
+            status_code=422,
+            detail="Nova versão só a partir de proposta recusada ou expirada "
+            f"(estado atual: {eff.value}).",
+        )
+    nova = Proposal(
+        tenant_id=prev.tenant_id,
+        client_id=prev.client_id,
+        process_id=prev.process_id,
+        rota_id=prev.rota_id,
+        previous_version_id=prev.id,
+        version_number=(prev.version_number or 1) + 1,
+        status=ProposalStatus.draft,
+        title=prev.title,
+        scope_items=prev.scope_items,
+        total_value=prev.total_value,
+        validity_days=prev.validity_days,
+        payment_terms=prev.payment_terms,
+        notes=prev.notes,
+        complexity=prev.complexity,
+        created_by_user_id=current_user.id,
+        expires_at=datetime.now(UTC) + timedelta(days=prev.validity_days or 30),
+    )
+    db.add(nova)
+    db.flush()
+    _audit_proposal(db, nova, current_user.id, "proposal_nova_versao",
+                    {"previous_version_id": prev.id, "version_number": nova.version_number})
+    db.commit()
+    db.refresh(nova)
+    logger.info("Nova versão de proposta: %s → %s (v%s)", prev.id, nova.id, nova.version_number)
+    return _serialize(nova)
 
 
 # ---------------------------------------------------------------------------

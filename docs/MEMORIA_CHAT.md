@@ -706,3 +706,24 @@ em `docs/agentes/` são a fonte de verdade verificada.
   vitest (79) verdes; migration up→down→up limpa. ADR-027; #60 fechada no REGISTRO. Lição: modelar a
   linhagem como VIGÊNCIA (não só ponteiro) fecha o problema na origem — a soma nunca dobra e a decisão
   é 1 clique, não 12.
+
+- **2026-07-18 — S5-A: a proposta nasce da Rota (`feat/s5a-rota-proposta-estados`, ADR-028).**
+  Caracterização primeiro (cobertura de proposal era ZERO; commit a7ea04e congelou o
+  comportamento antigo). **Medição:** escopo nascia da PRICE_TABLE (`scope_base` por
+  demand_type, `proposal_generator.py`); Rota validada mora em `Rota/RotaPasso` (E5,
+  `classificacao` item_proposta|direcao); gate E6 consome só `ProposalStatus.accepted`
+  (`macroetapa_engine.has_proposal_accepted`) — mudar a fonte do escopo não toca o gate.
+  **Impl:** `generate_proposal_from_rota` (passo item_proposta → item rastreável via
+  `rota_passo_id`; direção não fatura); PRICE_TABLE vira PRECIFICAÇÃO (faixa
+  demanda×complexidade distribuída, editável); sem Rota validada/sem passo faturável →
+  422 honesto. Máquina de estados estrita (aceitar/recusar exigem 'enviada'; antes
+  aceitava rascunho), transições auditadas; **expiração DERIVADA no read**
+  (`effective_status`, sem cron); renegociação `POST /{id}/nova-versao` → versão N+1
+  linkada (histórico preservado). Modelo: `rota_id` + `previous_version_id` (migration
+  `d4b8e2f1a6c9`). UI Comercial: badge pelo estado efetivo + ações inline
+  (enviar/aceitar/recusar/nova versão); ProposalEditor mostra o bloqueio honesto sem Rota.
+  **O que muda na E6 vista pelo consultor:** a proposta passa a listar os passos que ELE
+  validou na Rota (não itens genéricos de tabela), cada um com preço editável; sem fechar
+  a Rota, a geração é bloqueada com a razão. **Validação:** 21 testes S5-A + suíte
+  completa; migration up→down→up limpa. Dívida #67 (multi-bloco/multi-titular). Gate E6
+  intocado. Lição: caracterizar ANTES de mudar (o snapshot antigo vira prova do delta).

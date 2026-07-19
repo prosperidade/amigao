@@ -30,6 +30,17 @@ class Proposal(Base):
     status = Column(Enum(ProposalStatus), default=ProposalStatus.draft, nullable=False)
     version_number = Column(Integer, default=1, nullable=False)
 
+    # S5-A — a proposta NASCE da Rota validada (não da tabela de preços). `rota_id`
+    # é a proveniência no nível da proposta (rastreabilidade fina fica em cada
+    # scope_item via `rota_passo_id`). SET NULL: a proposta sobrevive se a Rota
+    # for removida (o snapshot do escopo já está materializado em scope_items).
+    rota_id = Column(Integer, ForeignKey("rotas.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Renegociação: uma recusa/expiração pode gerar a versão N+1, linkada à
+    # anterior (histórico preservado — nunca se sobrescreve a versão recusada).
+    previous_version_id = Column(
+        Integer, ForeignKey("proposals.id", ondelete="SET NULL"), nullable=True
+    )
+
     # Conteúdo
     title = Column(String, nullable=False)
     scope_items = Column(JSON, nullable=False, default=list)  # [{description, unit, qty, unit_price, total}]
@@ -56,3 +67,13 @@ class Proposal(Base):
     client = relationship("Client")
     creator = relationship("User", foreign_keys=[created_by_user_id])
     contracts = relationship("Contract", back_populates="proposal")
+    rota = relationship("Rota", foreign_keys=[rota_id])
+    # Cadeia de versões (renegociação): `previous_version` = a versão recusada que
+    # originou esta; `next_versions` = as renegociações geradas a partir desta.
+    previous_version = relationship(
+        "Proposal", remote_side=[id], foreign_keys=[previous_version_id],
+        back_populates="next_versions",
+    )
+    next_versions = relationship(
+        "Proposal", foreign_keys=[previous_version_id], back_populates="previous_version",
+    )

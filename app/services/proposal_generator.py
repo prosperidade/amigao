@@ -1,24 +1,37 @@
 """
-Proposal Generator — Sprint 4
+Proposal Generator — S5-A (escopo nasce da Rota; ADR-028)
 
-Geração automática de rascunho de proposta comercial com base em:
-- Tipo de demanda (demand_type)
-- Complexidade estimada (nº de documentos pendentes, nº de etapas da trilha)
-- Urgência do processo
+A proposta comercial **nasce da Rota validada** (E5): cada passo classificado
+como ``item_proposta`` (faturável) vira um item de escopo RASTREÁVEL (o item
+aponta o passo de origem via ``rota_passo_id``). Passos ``direcao`` (orientação)
+NÃO entram no escopo faturável.
 
-Implementação: regras estáticas (sem LLM — Wave 2).
+A ``PRICE_TABLE`` **mudou de papel** (ADR-028): deixou de ser a FONTE do escopo
+(antes o ``scope_base`` fixo por demand_type gerava os itens) e passou a ser
+PRECIFICAÇÃO — a faixa (min/max/prazo) por demanda × complexidade sugere o valor,
+distribuído entre os itens faturáveis como preço unitário default (editável).
+
+Sem Rota validada (ou sem passo faturável), a geração é BLOQUEADA com mensagem
+honesta — coerente com o gate E5→E6 (``has_rota_validada``). Determinístico
+(sem LLM).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.checklist_template import ProcessChecklist
 from app.models.process import Process
+from app.models.rota import Rota, RotaPassoClassificacao, RotaStatus
 from app.models.task import Task
+
+
+class ProposalGenerationError(Exception):
+    """Geração bloqueada — carrega mensagem honesta para o consultor (ex.: sem
+    Rota validada). O endpoint traduz em HTTP 422."""
 
 # ---------------------------------------------------------------------------
 # Tabela de preços base por tipo de demanda (valores em R$)
@@ -148,6 +161,11 @@ class ScopeItem:
     qty: float = 1.0
     unit_price: float = 0.0
     total: float = 0.0
+    # S5-A — rastreabilidade: o item aponta o passo da Rota que o originou.
+    rota_passo_id: Optional[int] = None
+    detail: Optional[str] = None
+    norma_ref: Optional[str] = None
+    prazo_dias: Optional[int] = None
 
 
 @dataclass
@@ -162,74 +180,120 @@ class ProposalDraft:
     estimated_days: int
     payment_terms: str
     notes: str
+    # S5-A — Rota validada de origem (proveniência no nível da proposta).
+    rota_id: Optional[int] = field(default=None)
 
 
 # ---------------------------------------------------------------------------
 # Função principal
 # ---------------------------------------------------------------------------
 
-def generate_proposal_draft(
+def generate_proposal_from_rota(
     db: Session,
     process_id: int,
     tenant_id: int,
 ) -> ProposalDraft:
-    """
-    Gera um rascunho de proposta com base nos dados do processo.
-    Usa regras estáticas de precificação por tipo de demanda.
+    """Gera o rascunho da proposta A PARTIR da(s) Rota(s) validada(s) (S5-A).
+
+    Cada passo ``item_proposta`` vira um item de escopo rastreável (aponta o
+    ``rota_passo_id``). A ``PRICE_TABLE`` precifica: a faixa da demanda ×
+    complexidade sugere o valor da rota, distribuído entre seus itens faturáveis
+    como preço unitário default (editável pelo consultor).
+
+    Bloqueia (``ProposalGenerationError``) se não houver Rota validada ou se
+    nenhuma tiver passo faturável — mensagem honesta, coerente com o gate E5→E6.
     """
     process = db.query(Process).filter(
         Process.id == process_id,
         Process.tenant_id == tenant_id,
     ).first()
+    if process is None:
+        raise ProposalGenerationError("Processo não encontrado.")
 
-    demand_type = process.demand_type.value if process and process.demand_type else None
+    rotas = (
+        db.query(Rota)
+        .filter(
+            Rota.tenant_id == tenant_id,
+            Rota.process_id == process_id,
+            Rota.status == RotaStatus.validada,
+        )
+        .order_by(Rota.id.asc())
+        .all()
+    )
+    if not rotas:
+        raise ProposalGenerationError(
+            "A proposta nasce da Rota: feche (valide) a Rota Regulatória na etapa "
+            "'Caminho Regulatório' (E5) antes de gerar a proposta."
+        )
+
     urgency = process.urgency if process else "media"
-
-    # Determinar complexidade
     complexity = _estimate_complexity(db, process_id, tenant_id, urgency)
 
-    price_info = PRICE_TABLE.get(demand_type or "", DEFAULT_PRICE)
-    price_band = price_info[complexity]
+    scope_items: list[dict] = []
+    value_min = 0.0
+    value_max = 0.0
+    value_suggested = 0.0
+    estimated_days = 0
 
-    # Escopo base
-    scope_items = [
-        {
-            "description": desc,
-            "unit": "serv.",
-            "qty": 1.0,
-            "unit_price": 0.0,
-            "total": 0.0,
-        }
-        for desc in price_info["scope_base"]
-    ]
+    for rota in rotas:
+        billable = [
+            p for p in rota.passos
+            if p.classificacao == RotaPassoClassificacao.item_proposta
+        ]
+        if not billable:
+            continue
+        price_info = PRICE_TABLE.get(rota.demand_type or "", DEFAULT_PRICE)
+        band = price_info[complexity]
+        rota_min, rota_max = float(band["min"]), float(band["max"])
+        rota_suggested = round((rota_min + rota_max) / 2, -2)
+        # Distribui o valor sugerido da rota entre seus itens faturáveis (default
+        # editável). Ajuste de arredondamento no último item para fechar a soma.
+        per_item = round(rota_suggested / len(billable), 2)
+        value_min += rota_min
+        value_max += rota_max
+        value_suggested += rota_suggested
+        estimated_days = max(estimated_days, int(band["prazo"]))
+        acc = 0.0
+        for idx, passo in enumerate(billable):
+            unit_price = round(rota_suggested - acc, 2) if idx == len(billable) - 1 else per_item
+            acc += unit_price
+            scope_items.append({
+                "description": passo.titulo,
+                "detail": passo.descricao or None,
+                "unit": "serv.",
+                "qty": 1.0,
+                "unit_price": unit_price,
+                "total": unit_price,
+                "rota_passo_id": passo.id,
+                "norma_ref": passo.norma_ref,
+                "prazo_dias": passo.prazo_estimado_dias,
+            })
 
-    # Valor sugerido = média da faixa
-    value_min = float(price_band["min"])
-    value_max = float(price_band["max"])
-    value_suggested = round((value_min + value_max) / 2, -2)  # arredonda para centena
+    if not scope_items:
+        raise ProposalGenerationError(
+            "A Rota validada não tem passos faturáveis: classifique ao menos um "
+            "passo como 'item de proposta' (os passos de 'direção' orientam, mas "
+            "não entram no escopo cobrável)."
+        )
 
-    demand_label = price_info["name"]
-    title = f"Proposta — {demand_label}"
-    if process and process.title:
-        title = f"Proposta — {process.title}"
-
+    title = f"Proposta — {process.title}" if process.title else "Proposta Comercial"
+    demand_type = process.demand_type.value if process.demand_type else None
     payment_terms = "50% na assinatura do contrato e 50% na entrega do serviço."
     if complexity == "alta":
         payment_terms = "30% na assinatura, 40% na conclusão do protocolo, 30% na entrega final."
-
-    notes = _build_notes(demand_type, complexity)
 
     return ProposalDraft(
         title=title,
         demand_type=demand_type,
         complexity=complexity,
         scope_items=scope_items,
-        suggested_value_min=value_min,
-        suggested_value_max=value_max,
-        suggested_value=value_suggested,
-        estimated_days=price_band["prazo"],
+        suggested_value_min=round(value_min, 2),
+        suggested_value_max=round(value_max, 2),
+        suggested_value=round(value_suggested, 2),
+        estimated_days=estimated_days,
         payment_terms=payment_terms,
-        notes=notes,
+        notes=_build_notes(demand_type, complexity),
+        rota_id=rotas[0].id if len(rotas) == 1 else None,
     )
 
 
