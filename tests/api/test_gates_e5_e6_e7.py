@@ -113,7 +113,9 @@ class TestGateE7ContratoAssinado:
         ca = client.get(f"/api/v1/processes/{process.id}/can-advance", headers=headers).json()
         assert ca["current_state"] == "aguardando_validacao"
 
-    def test_com_assinatura_estado_fica_pronta_para_avancar(self, client: TestClient, db_session):
+    def test_com_assinatura_estado_fica_concluida(self, client: TestClient, db_session):
+        # S5-C — a E7 é TERMINAL: contrato assinado CONCLUI o caso (antes o
+        # placeholder era `pronta_para_avancar`; não há "avançar" numa terminal).
         tenant, _user, process = _seed_process_at(
             db_session, email="e7comassinatura@example.com", macroetapa=Macroetapa.contrato_formalizacao,
         )
@@ -125,4 +127,4 @@ class TestGateE7ContratoAssinado:
         db_session.commit()
         headers = _login(client, "e7comassinatura@example.com")
         ca = client.get(f"/api/v1/processes/{process.id}/can-advance", headers=headers).json()
-        assert ca["current_state"] == "pronta_para_avancar"
+        assert ca["current_state"] == "concluida"
