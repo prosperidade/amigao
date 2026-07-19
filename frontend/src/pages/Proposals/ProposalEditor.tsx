@@ -184,14 +184,28 @@ export default function ProposalEditor() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
   });
 
+  const [contractError, setContractError] = useState('');
+
+  // S5-B/S5-C — gera o contrato nos moldes Mirante a partir da proposta ACEITA
+  // (POST /contracts/gerar). Registra a minuta em Saídas e leva ao ContractEditor,
+  // onde o consultor aprova/envia e registra a assinatura. 422 = bloqueio honesto
+  // (perfil do tenant incompleto, valores inconsistentes, matrícula não vigente).
   const createContractMutation = useMutation({
-    mutationFn: () => api.post('/contracts/', {
-      client_id: parseInt(clientId),
-      proposal_id: parseInt(id!),
-      process_id: processId ? parseInt(processId) : undefined,
-      title: `Contrato — ${title}`,
-    }),
-    onSuccess: (res) => navigate(`/contracts/${res.data.id}`),
+    mutationFn: () => api.post('/contracts/gerar', { proposal_id: parseInt(id!) }),
+    onSuccess: (res) => {
+      setContractError('');
+      navigate(`/contracts/${res.data.contract.id}`);
+    },
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      setContractError(axiosErr?.response?.data?.detail ?? 'Erro ao gerar contrato.');
+    },
+  });
+
+  // S5-C — renegociação: recusada/expirada gera a versão N+1 (histórico preservado).
+  const novaVersaoMutation = useMutation({
+    mutationFn: () => api.post(`/proposals/${id}/nova-versao`),
+    onSuccess: (res) => navigate(`/proposals/${res.data.id}`),
   });
 
   const updateScopeItem = (idx: number, field: keyof ScopeItem, value: string | number) => {
@@ -290,7 +304,28 @@ export default function ProposalEditor() {
             Gerar Contrato
           </button>
         )}
+        {proposal && (proposal.status === 'rejected' || proposal.effective_status === 'expired') && (
+          <button
+            onClick={() => novaVersaoMutation.mutate()}
+            disabled={novaVersaoMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-medium transition-all disabled:opacity-50"
+          >
+            {novaVersaoMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Nova versão
+          </button>
+        )}
       </div>
+
+      {/* S5-B/S5-C — bloqueio honesto ao gerar o contrato (perfil do tenant, valores, matrícula) */}
+      {contractError && (
+        <div className="rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/25 p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-700 dark:text-red-300">Contrato não pôde ser gerado</p>
+            <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">{contractError}</p>
+          </div>
+        </div>
+      )}
 
       {/* S5-A — geração bloqueada (ex.: Rota não validada): mensagem honesta */}
       {isNew && processId && draftBlockedMsg && (

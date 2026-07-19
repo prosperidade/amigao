@@ -5,7 +5,10 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { ArrowLeft, FileText, Download, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowLeft, FileText, Download, Loader2, AlertCircle, CheckCircle2,
+  Send, FileSignature,
+} from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   draft:     { label: 'Rascunho',  cls: 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-500/10 border-slate-300 dark:border-slate-500/20' },
@@ -20,6 +23,9 @@ export default function ContractEditor() {
   const queryClient = useQueryClient();
   const [pdfError, setPdfError] = useState('');
   const [pdfWarning, setPdfWarning] = useState('');
+  const [signError, setSignError] = useState('');
+  const [signedAt, setSignedAt] = useState('');   // YYYY-MM-DD
+  const [signedFile, setSignedFile] = useState<File | null>(null);
 
   const { data: contract, isLoading } = useQuery({
     queryKey: ['contract', id],
@@ -28,6 +34,36 @@ export default function ContractEditor() {
       return res.data;
     },
     enabled: !!id,
+  });
+
+  // S5-C — ciclo de assinatura MANUAL: rascunho → ENVIADO → ASSINADO (caso conclui).
+  const aprovarEnviarMutation = useMutation({
+    mutationFn: () => api.post(`/contracts/${id}/aprovar-enviar`),
+    onSuccess: () => {
+      setSignError('');
+      queryClient.invalidateQueries({ queryKey: ['contract', id] });
+    },
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      setSignError(axiosErr?.response?.data?.detail ?? 'Erro ao aprovar/enviar o contrato.');
+    },
+  });
+
+  const assinarMutation = useMutation({
+    mutationFn: () => {
+      const form = new FormData();
+      form.append('signed_at', signedAt);
+      if (signedFile) form.append('signed_pdf', signedFile);
+      return api.post(`/contracts/${id}/assinar`, form);
+    },
+    onSuccess: () => {
+      setSignError('');
+      queryClient.invalidateQueries({ queryKey: ['contract', id] });
+    },
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      setSignError(axiosErr?.response?.data?.detail ?? 'Erro ao registrar a assinatura.');
+    },
   });
 
   const generatePdfMutation = useMutation({
@@ -167,6 +203,92 @@ export default function ContractEditor() {
             <p className="text-sm font-medium text-gray-900 dark:text-white">{m.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* S5-C — ciclo de assinatura MANUAL */}
+      <div className="rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-3 flex items-center gap-2">
+          <FileSignature className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+          Assinatura
+        </h2>
+
+        {contract.status === 'draft' && (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              Revise a minuta e, quando estiver pronta, aprove e envie ao cliente.
+            </p>
+            <button
+              onClick={() => aprovarEnviarMutation.mutate()}
+              disabled={aprovarEnviarMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-medium transition-all disabled:opacity-50"
+            >
+              {aprovarEnviarMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Aprovar e enviar
+            </button>
+          </div>
+        )}
+
+        {contract.status === 'sent' && (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              Contrato enviado. Após a assinatura, registre a data — e, opcionalmente,
+              anexe o PDF assinado. Isso conclui o caso (E7).
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-[11px] text-gray-500 dark:text-slate-400 mb-1">Data da assinatura</label>
+                <input
+                  type="date"
+                  value={signedAt}
+                  onChange={e => setSignedAt(e.target.value)}
+                  className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-500 dark:text-slate-400 mb-1">PDF assinado (opcional)</label>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={e => setSignedFile(e.target.files?.[0] ?? null)}
+                  className="text-xs text-gray-600 dark:text-slate-300 file:mr-2 file:rounded-lg file:border-0 file:bg-gray-100 dark:file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:text-gray-700 dark:file:text-slate-200"
+                />
+              </div>
+              <button
+                onClick={() => assinarMutation.mutate()}
+                disabled={assinarMutation.isPending || !signedAt}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-medium transition-all disabled:opacity-40"
+              >
+                {assinarMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Registrar assinatura
+              </button>
+            </div>
+          </div>
+        )}
+
+        {contract.status === 'signed' && (
+          <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="w-4 h-4" />
+            Contrato assinado{contract.signed_at ? ` em ${new Date(contract.signed_at).toLocaleDateString('pt-BR')}` : ''} — caso concluído.
+            {contract.has_signed_pdf && (
+              <button
+                onClick={async () => {
+                  const res = await api.get(`/contracts/${id}/download-assinado`);
+                  window.open(res.data.download_url as string, '_blank');
+                }}
+                className="ml-2 flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-slate-200"
+              >
+                <Download className="w-3 h-3" /> PDF assinado
+              </button>
+            )}
+          </div>
+        )}
+
+        {signError && (
+          <div className="mt-3 flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <p>{signError}</p>
+          </div>
+        )}
       </div>
 
       {/* Preview do conteúdo */}
