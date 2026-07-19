@@ -1183,6 +1183,42 @@ def validate_process_artifact(
     return artifact
 
 
+@router.get("/{process_id}/artifacts/{artifact_id}/download")
+def download_process_artifact(
+    process_id: int,
+    artifact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """S5-C — URL de download do PDF de um artefato/Saída.
+
+    Os geradores de proposta/minuta (S5-B) gravam o `pdf_storage_key` em
+    `StageOutput.content_data`; este endpoint devolve a URL pré-assinada,
+    fazendo a aba Saídas convergir (proposta/contrato baixáveis num só lugar)."""
+    from app.models.stage_output import StageOutput  # noqa: PLC0415
+    from app.services.storage import get_storage_service  # noqa: PLC0415
+
+    artifact = (
+        db.query(StageOutput)
+        .filter(
+            StageOutput.id == artifact_id,
+            StageOutput.process_id == process_id,
+            StageOutput.tenant_id == current_user.tenant_id,
+        )
+        .first()
+    )
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artefato não encontrado.")
+    key = (artifact.content_data or {}).get("pdf_storage_key")
+    if not key:
+        raise HTTPException(status_code=404, detail="Este artefato não tem PDF armazenado.")
+    try:
+        url = get_storage_service().generate_presigned_get_url(key, expires_in=3600)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar URL: {exc}") from exc
+    return {"download_url": url, "expires_in": 3600}
+
+
 # ---------------------------------------------------------------------------
 # Staging de campos extraídos (Ficha 01, FASE 1) — leitura
 # ---------------------------------------------------------------------------
