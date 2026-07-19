@@ -1988,3 +1988,25 @@ certeza, e um LLM não garante que "a soma das parcelas fecha".
 - **Sem mudança de gateway/custos** — sprint determinístico, zero chamada LLM nova.
   A peça gerada é RASCUNHO (`needs_human_validation=True`) — IA propõe, humano
   decide; assinatura fica no S5-C. Ver ADR-029 e dívida #68.
+
+---
+
+## S5-C — Assinatura manual + Saídas converge + Comercial oculta (2026-07-19)
+
+Fechamento da Ficha 07. Sprint de fluxo/superfície — toca IA no que o consultor
+VALIDA (o rascunho gerado pela IA vira peça assinada) e na convergência das Saídas.
+
+### O que toca IA
+
+- **A peça da IA fecha o ciclo com o humano (Princípio 1 completo).** O contrato que
+  o S5-B gera é RASCUNHO; o S5-C dá o caminho de aprovação/assinatura: rascunho →
+  ENVIADO → ASSINADO. A IA propôs, o consultor decidiu e assinou — o gate E7
+  (`has_contract_signed`) enfim fecha, e a E7 mostra CONCLUÍDA (`compute_macroetapa_state`).
+- **Saídas converge as peças da IA.** A aba Saídas (StageOutputs de proposta/minuta,
+  gerados no S5-B) ganhou download do PDF e atalho ao contrato. As saídas que os
+  geradores registram num só lugar, com estado/validação/data.
+- **Comercial oculta** (isTabVisible=false): sem perda de capacidade — as ações da
+  proposta (incl. renegociação) vivem no ProposalEditor; "Gerar Contrato" passou a
+  chamar o gerador Mirante (S5-B), registrando a minuta em Saídas.
+- **Sem mudança de gateway/cadeia/prompts/custos** — assinatura MANUAL (MVP), zero
+  chamada LLM nova. Assinatura eletrônica externa = dívida #69. Ver ADR-030.

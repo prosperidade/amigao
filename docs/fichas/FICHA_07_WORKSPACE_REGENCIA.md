@@ -171,6 +171,18 @@ O Redator monta o arquivo por encaixe: preenche os blocos variáveis da base/Aç
 
 Estados do contrato: gerado → aguardando retorno do cliente → concluído (assinado). Assinatura manual/externa no MVP. Caso concluído vira "concluído" no hub do imóvel (pronto para futura execução).
 
+> **✅ ENTREGUE (S5-A · S5-B · S5-C — 2026-07):** E5→E7 fechados ponta a ponta.
+> A **proposta nasce da Rota** validada (S5-A, ADR-028); o **contrato nasce da
+> proposta ACEITA** nos moldes reais da Mirante, determinístico, com 3 validações
+> de consistência (S5-B, ADR-029); a **assinatura MANUAL** (rascunho → enviado →
+> assinado, com upload opcional do PDF) fecha o gate E7 e CONCLUI o caso, e as
+> **Saídas convergem** proposta/minuta/contrato com download (S5-C, ADR-030). A
+> **Comercial** foi ocultada (convergiu em Saídas + /proposals). Teste de integração
+> **E1→E7 completo** cobrindo a Ficha inteira. **Falta no MVP: NADA.** Fora do MVP:
+> assinatura eletrônica externa (gov.br/Clicksign — dívida #69), multi-bloco/
+> multi-titular (#67), tradução serviço→produto editável e contrato de 13 blocos
+> ricos (backlog).
+
 **PROMPT (Redator — contrato):** "Monte o contrato por encaixe (bloco único no MVP). Preencha os blocos variáveis: PARTES (base), IMÓVEL E MATRÍCULAS (base), OBJETO (intenção), ESCOPO/SERVIÇOS (Ações), VALOR/PRAZO/PAGAMENTO (Orçamento). TRADUZA os serviços em PRODUTOS (entregáveis na linguagem do cliente) e deixe o consultor editar em Saídas antes de emitir. Inclua o RESPONSÁVEL TÉCNICO/ART só se o escopo tiver peça que o exija. Cole os blocos de TEXTO-MODELO FIXO (cabeçalho, obrigações de cada parte, limites do escopo com custos fora do contrato, cláusulas padrão, assinaturas). Gere a partir da proposta ACEITA E VIGENTE — se a proposta mudou, regenere antes. Estado: gerado → aguardando retorno do cliente → concluído."
 
 ## 9. Regras de negócio consolidadas
