@@ -2160,3 +2160,47 @@ extrações **antes** do commit do caso nasceram órfãs; as de depois, não.
 - **`field_value` nunca é tocado no reparo** — o bug dict→text que derrubou a
   consolidação (#81) nasceu de reserializar `averbacao_app`/`averbacao_rl`. Há
   teste guardando que o dict sobrevive à adoção.
+
+## #78 — extração em lote com escopo + dedupe de autos (20/07/2026)
+
+`feat/78-extracao-lote`
+
+### Por que não usar a rota que já existe
+
+`POST /processes/{id}/extract` processa TODOS os documentos do processo. No caso
+15 isso cobraria LLM em 42 documentos sendo que 10 já estavam lidos. O script
+novo roda só no escopo escolhido, com `--sem-staging` como recorte padrão para
+não re-pagar pelo que já foi extraído.
+
+Execução **síncrona** de propósito: um documento por vez, custo real de cada
+`AIJob` impresso na hora, e `--teto-usd` abortando o lote se o acumulado passar
+do limite. Ver o gasto acontecendo vale mais que disparar 20 tasks no escuro.
+
+### Dedupe de autos de infração
+
+`_load_auto_infracao_fatos` indexava por DOCUMENTO: N documentos viravam N
+fatos. Mas N documentos raramente são N autos — são páginas, vias e anexos.
+No caso 15 são 19 documentos; sem agrupar, o consultor veria 19 passivos
+idênticos.
+
+Agrupa por **(órgão, dígitos do número)**, guardando todos os `document_ids`
+como fonte (Princípio 11). Duas decisões que a medição impôs:
+
+- **só os dígitos** — o primeiro normalizador usava `isalnum()`, e `'º'` é
+  alfanumérico em Unicode: `"AI nº 123.456/2024"` e `"ai-123456-2024"` não
+  casavam. Pego em teste antes de rodar.
+- **o órgão na chave** — IBAMA e SEMAD podem emitir autos com a mesma
+  numeração; fundi-los criaria um passivo inexistente.
+
+Fato sem número não é agrupado: sem identificador, juntar seria adivinhar.
+
+### O achado que reordena a sequência
+
+O prompt partia de "o diagnóstico deste caso já rodou". Medição em prod:
+**processo 15 está na `entrada_demanda` (E1) e tem ZERO diagnósticos.** A chain
+da E1 é `intake`; `diagnostico_completo` só roda na E2.
+
+Consequência: os fatos dos 19 autos são extraídos e ficam prontos nos AIJobs,
+mas **não aparecem na Visão geral** até o caso avançar E1→E2 — o que depende do
+gate do checklist da etapa (item 1 da validação de 20/07). Nada se perde; só não
+há efeito visível imediato.
