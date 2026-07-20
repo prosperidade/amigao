@@ -2114,3 +2114,49 @@ aplicada num lugar e os irmãos esquecidos.
   pode ser correção manual do consultor; divergência entre conteúdo e tipo
   gravado vira **achado no relatório**, candidato a alerta futuro — nunca escrita
   silenciosa.
+
+## Staging órfão — o dado lido que não tinha dono (20/07/2026)
+
+`fix/staging-orfao-process-id` · achado na verificação do backfill do #70
+
+### O que estava acontecendo
+
+46 linhas de `extracted_field_staging` do caso 15, em 7 documentos, com
+`process_id` NULL. Campos extraídos por LLM, gravados no banco, e **invisíveis**
+para a Conferência, a matriz de inconsistências e a fonte única de requisitos —
+todas filtram por processo. Entre eles, a **única leitura da `averbacao_rl`** da
+matrícula 6.776.
+
+### Causa raiz
+
+`extrator.py:172` testava a EXISTÊNCIA do documento, não o VALOR do campo:
+
+```python
+process_id=(doc.process_id if doc is not None else self.ctx.process_id)
+```
+
+Documento carregado ainda no rascunho (`process_id` NULL) passava `None`, e o
+fallback para o contexto ficava inalcançável.
+
+### A hipótese foi refutada pela medição
+
+A suspeita inicial era o re-disparo do fix #70. Os timestamps derrubaram: as
+órfãs são de 13:30–13:31 e o backfill rodou 5h depois — e ele nem chama
+`extract_and_stage`. A causa verdadeira apareceu na timeline do mesmo rascunho:
+extrações **antes** do commit do caso nasceram órfãs; as de depois, não.
+
+### O que toca IA
+
+- **Extração cara sendo jogada fora.** Cada linha órfã custou tokens de LLM e não
+  chegava a lugar nenhum. Não era só higiene: era gasto sem retorno e, pior,
+  leitura correta que o consultor nunca via.
+- **A cura é na nascente, não no sintoma.** Camada 1 (`extrator`) impede o órfão
+  novo; camada 2 (migração draft→processo em `intake.py`) adota o staging dos
+  documentos migrados — antes ela levava os documentos e esquecia o que já tinha
+  sido lido deles.
+- **Reparo com informação preservada.** Decisão híbrida: 44 redundantes apagadas,
+  2 exclusivas adotadas. Adotar tudo despejaria pares duplicados na Conferência;
+  apagar tudo perderia a `averbacao_rl`.
+- **`field_value` nunca é tocado no reparo** — o bug dict→text que derrubou a
+  consolidação (#81) nasceu de reserializar `averbacao_app`/`averbacao_rl`. Há
+  teste guardando que o dict sobrevive à adoção.

@@ -104,7 +104,7 @@ regulatória (`LegislationDocument` com 0 documentos): `exigencia_bancaria`,
 as revelou está em `docs/auditoria/AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md`;
 as regras de domínio, na Ficha 08 (`docs/fichas/FICHA_08_BASE_DADOS_CONFERENCIA.md`).*
 
-**70. Vínculo doc↔requisito é evento no upload, nunca reprocessado.** → **FATIA ESTRUTURAL FECHADA** por `fix/70-classificacao-persistida` (20/07): o extrator passa a persistir o tipo classificado (só onde é NULL) e a re-disparar o vínculo, e `scripts/backfill_document_type.py` repara o retroativo com custo zero de IA. **Permanece aberta a fatia de dados**: o backfill em prod ainda não foi executado (dry-run reportado: 28 dos 36 documentos seriam classificados). Descrição original abaixo.  `auto_link_document`
+**70. Vínculo doc↔requisito é evento no upload, nunca reprocessado.** → **FATIA ESTRUTURAL FECHADA** por `fix/70-classificacao-persistida` (20/07): o extrator passa a persistir o tipo classificado (só onde é NULL) e a re-disparar o vínculo, e `scripts/backfill_document_type.py` repara o retroativo com custo zero de IA. **FATIA DE DADOS TAMBÉM FECHADA** (20/07, ~18h50): backfill executado em prod pelo rito — **28 documentos** classificados (19 `auto_infracao`, 2 `itr`, 2 `rat`, 2 `sigef`, 1 `ccir`, 1 `planta_topografica`, 1 `certidao_embargo`), 8 preservados em NULL por não terem tipo específico, doc 355 (`outro`) intocado. O item `auto_infracao` do checklist foi marcado como recebido e **persistiu** — prova em produção do fix de `flag_modified`. Requisitos do caso 15 depois: Matrícula, CCIR, ITR e Planta/Memorial satisfeitos; pendência real de coleta caiu de 4 para **1** (só o CAR). Descrição original abaixo.  `auto_link_document`
 roda uma vez, com o `document_type` do instante do upload. A classificação por conteúdo
 (`classify_doc_type`) roda depois, no OCR/extração, e nada repara o vínculo. Medido no
 processo 15: **36 dos 42 documentos têm `document_type = NULL`** — o `elif body.document_type:`
@@ -181,6 +181,40 @@ tinha curado exatamente isto no campo `actions` com `flag_modified`; os quatro
 pontos de `items` ficaram sem o remédio. Corrigido com `_persistir_items`
 (cópia dos dicts + `flag_modified`) e travado por testes que expiram a sessão e
 releem do banco — o que o consultor vê depois do F5.
+
+## Staging órfão — CORRIGIDO (20/07)
+
+**Achado durante a verificação do backfill do #70.** 46 linhas de
+`extracted_field_staging` do caso 15, em 7 documentos, com `process_id` NULL: campos
+lidos, gravados no banco e **invisíveis** para a Conferência, a matriz e a fonte única
+— todas filtram por processo.
+
+**Causa raiz** (`extrator.py:172`): `process_id=(doc.process_id if doc is not None else
+ctx.process_id)` testava a EXISTÊNCIA do documento, não o VALOR do campo. Documento
+carregado ainda no rascunho (`process_id` NULL) passava None, e o fallback para o
+contexto ficava inalcançável.
+
+**Evidência (timeline do caso 15, mesmo rascunho 58):** extrações de 13:30:12 a
+13:31:52 (docs 314-321) nasceram órfãs; as de 13:32:07 em diante (322, 324, 329) não.
+Entre os dois momentos, o rascunho virou caso. Mesma rota, mesmo agente — só mudou se
+o commit do caso já tinha acontecido. A hipótese inicial (re-disparo do fix #70) foi
+**refutada pelos timestamps**: o backfill rodou 5h depois e nem chama `extract_and_stage`.
+
+**Fix em duas camadas:** (1) `extrator.py` resolve `doc.process_id or ctx.process_id`;
+(2) a migração draft→processo em `intake.py` passa a **adotar o staging** dos documentos
+migrados — antes ela levava os documentos e esquecia o que já tinha sido lido deles.
+A camada 2 é a cura na nascente.
+
+**Reparo das 46 existentes** (`scripts/reparar_staging_orfao.py`, dry-run default):
+decisão híbrida do André — 44 redundantes APAGADAS, 2 exclusivas ADOTADAS. As duas
+exclusivas são `averbacao_rl` do doc 317 (a Reserva Legal averbada da matrícula 6.776)
+e `municipio` do doc 320; apagá-las perderia leitura única. A adoção **não toca
+`field_value`** — o bug dict→text do #81 nasceu de reserializar exatamente
+`averbacao_app`/`averbacao_rl`, e há teste guardando isso.
+
+**Carona:** o dry-run do backfill dizia "seriam gravados: 0" quando gravaria 28 —
+`gravados` filtra pelo que foi escrito e zera no dry-run. Corrigido com `a_gravar`,
+agora fonte única do relatório e da frase de confirmação.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
