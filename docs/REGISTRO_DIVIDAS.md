@@ -8,7 +8,10 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 70.** (#69 aberta pelo S5-C, `feat/s5c-assinatura-saidas` —
+> **PRÓXIMO NÚMERO LIVRE: 78.** (#70 a #77 abertas pela fonte única de requisitos
+> documentais, `fix/fonte-unica-requisitos-documentais`, 2026-07-20 — ver bloco
+> próprio abaixo.)
+> (#69 aberta pelo S5-C, `feat/s5c-assinatura-saidas` —
 > assinatura eletrônica externa (gov.br/Clicksign); ver entrada abaixo.)
 > (#68 aberta pelo S5-B, `feat/s5b-proposta-contrato-mirante` —
 > follow-ons da consolidação da peça Mirante; ver entrada abaixo.)
@@ -92,6 +95,65 @@ reproduziu exatamente esses 8 gaps de template. Adicionalmente, mediu os gaps de
 regulatória (`LegislationDocument` com 0 documentos): `exigencia_bancaria`,
 `sobreposicao`, `supressao`, `due_diligence`, `arrendamento`, `condicionantes_antigas`,
 `misto`, `nao_identificado` — os 8 sem template (exceto `prad`, que tem 2 docs) + `exigencia_bancaria`.
+
+## Reveladas pela fonte única de requisitos documentais (20/07)
+
+*Abertas por `fix/fonte-unica-requisitos-documentais` (ADR-031). A auditoria que
+as revelou está em `docs/auditoria/AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md`;
+as regras de domínio, na Ficha 08 (`docs/fichas/FICHA_08_BASE_DADOS_CONFERENCIA.md`).*
+
+**70. Vínculo doc↔requisito é evento no upload, nunca reprocessado.** `auto_link_document`
+roda uma vez, com o `document_type` do instante do upload. A classificação por conteúdo
+(`classify_doc_type`) roda depois, no OCR/extração, e nada repara o vínculo. Medido no
+processo 15: **36 dos 42 documentos têm `document_type = NULL`** — o `elif body.document_type:`
+de `documents.py` nem chega a chamar o matching, e esses 36 nunca serão vinculados a
+requisito nenhum. A fonte única (ADR-031) lê o tipo persistido, então herda a cegueira.
+**Fix:** ao concluir a extração, reclassificar e re-vincular; backfill dos NULL existentes.
+**Impacto:** alto — é o que mantém o processo 15 com documentos invisíveis para a base.
+
+**71. Vínculo doc↔item gravado só de um lado.** `Document.checklist_item_id` é **NULL em
+100% dos 42 documentos** do processo 15, inclusive no doc 317 que o checklist declara
+`received` — o estado vive só no JSON do checklist. Qualquer consumidor que parta do
+documento enxerga o requisito como não atendido. **Fix:** gravar `checklist_item_id` no
+mesmo commit que marca o item recebido (bidirecional).
+
+**72. Ficha 08 §3.2 — chave composta comarca + matrícula.** O número da matrícula sozinho
+não é identificador único (só é exclusivo dentro do cartório emissor). A base usa o número
+isolado. **Fix:** identificador `comarca/cartório :: número`. **Precede** qualquer cruzamento.
+
+**73. Ficha 08 §3.1 — titular único do caso.** Um único titular por caso; nome/CPF do
+cadastro devem bater com o documento de identidade, e qualquer outro nome (cônjuge,
+coobrigado, herdeiro) é *parte relacionada*, nunca cotitular — mesmo com "proprietários"
+no plural. Não implementado. **Fix:** resolver titular antes do cruzamento.
+
+**74. Ficha 08 §4 — campos-âncora registrais novos.** Livro, Folha, Ficha, NIRF/CIB,
+Módulo Fiscal e Número do CCIR entram na base como campos próprios (alguns sem par de
+cruzamento, §4.1). O extrator hoje não os emite. **Fix:** ampliar `_FIELD_SPECS`.
+
+**75. Ficha 08 §5 — duas cadeias de prioridade, não uma.** A arbitragem de divergência
+segue cadeia **jurídica** (Matrícula → SNCR/CCIR → Cafir/CIB → ITR → CAR) para
+titularidade/INCRA/RL averbada, e cadeia **técnica** (Memorial/SIGEF → Matrícula → CAR)
+para área/perímetro/coordenadas. O código usa hierarquia genérica única. **Fix:** aplicar
+a cadeia correspondente ao campo.
+
+**76. Ficha 08 §8 — normalização antes do cruzamento.** Três falsos positivos medidos em
+simulação: coordenadas UTM (Matrícula) × geodésicas (SIGEF) comparadas sem conversão;
+código de vértice `CWQ-M-0087` × `CWQ-M-087` (zero à esquerda); Gleba × Lote entre cadeia
+jurídica e fiscal. **Fix:** normalizar antes de comparar (o terceiro já é alerta, não erro).
+
+**77. Oportunidade de produto (Ficha 08 §8).** Quando o RAT do CAR aponta pendência e
+solicita "certidão de matrícula atualizada" / "certificado de georreferenciamento", esses
+documentos frequentemente **já estão na base**. A Conferência poderia responder com o que
+já tem, em vez de o consultor recoletar. Não é dívida — é feature nomeada pela Isis.
+
+**Vitest local: 9 workers falham com `ERR_REQUIRE_ESM`.** `@asamuzakjp/css-color` (CJS,
+dependência transitiva do jsdom) faz `require()` de `@csstools/css-calc`, que virou
+ESM-only. Os 79 testes que rodam passam; 9 arquivos não chegam a iniciar. **Verificado
+idêntico na `main`** — não introduzido por este PR — e o CI **não roda vitest** (só ESLint,
+tsc e build), por isso está verde. **Fix proposto:** `server.deps.inline:
+['@asamuzakjp/css-color']` no `vitest.config`, ou `overrides` fixando `@csstools/css-calc`
+numa versão CJS. Provável origem do `frontend/package-lock.json` que aparece modificado
+sem diff de conteúdo no repo local.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 

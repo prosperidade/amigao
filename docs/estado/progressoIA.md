@@ -2010,3 +2010,58 @@ VALIDA (o rascunho gerado pela IA vira peça assinada) e na convergência das Sa
   chamar o gerador Mirante (S5-B), registrando a minuta em Saídas.
 - **Sem mudança de gateway/cadeia/prompts/custos** — assinatura MANUAL (MVP), zero
   chamada LLM nova. Assinatura eletrônica externa = dívida #69. Ver ADR-030.
+
+## Fonte única de requisitos documentais + Ficha 08 (20/07/2026)
+
+`fix/fonte-unica-requisitos-documentais` · ADR-031 · dívidas #70–#77
+
+### O gatilho
+
+O consultor viu "4 documentos pendentes" e "Matrícula do imóvel ausente" num caso
+onde a certidão de inteiro teor tinha sido enviada. Mesmo sintoma que o forense
+caso Isis já havia corrigido no emissor `MISSING_MATRICULA` — reapareceu em outra
+superfície.
+
+### O que a auditoria achou (processo 15, prod)
+
+Não era um bug: era a ausência de um conceito. **Nove** pontos do código
+respondiam "o requisito documental está satisfeito?", cada um com fonte da verdade
+própria. Três discordavam sobre a mesma matrícula no mesmo instante — checklist
+dizia SATISFEITO, dossiê dizia AUSENTE (severity `error`), e a verdade era
+RECEBIDO, EM PROCESSAMENTO (staging com `numero_matricula` = "6.776" e "4698",
+zero `Matricula` materializada).
+
+Achados que o relato original não continha:
+
+- os "4 pendentes" **não** incluíam matrícula — a acusação vinha de outra tela
+- **36 dos 42 documentos com `document_type = NULL`** → nunca vinculados
+- `checklist_item_id` **NULL em 100%** dos documentos (vínculo só de um lado)
+- `doc_proprietario` pendente **com a CNH anexada** (`cpf_cnpj` ≠ `doc_pessoal`)
+- o teste do forense passa `documents=[]` nas duas asserções — o caso caía no
+  buraco entre elas
+- uma **terceira** cópia do laço de contagem, que a auditoria não tinha achado,
+  alimentando justamente o gate que TRAVA o avanço da macroetapa
+
+### O que toca IA
+
+- **Sprint determinístico — zero chamada LLM nova.** A fonte única é regra pura
+  sobre dados já extraídos; não há custo de gateway nesta rodada.
+- **A extração continua sendo o sinal de "o sistema leu".** `requisito_documental`
+  lê `ExtractedFieldStaging` (o que o extrator produziu), não o texto bruto do
+  OCR — presença de campo é o que distingue "recebido" de "recebido e lido".
+- **Presença do documento ≠ consolidação do dado.** Colapsar os dois eixos foi a
+  causa raiz. A consolidação (Ficha 05) segue sendo cobrada, agora com o nome
+  certo: `MATRICULA_EM_PROCESSAMENTO` (severity `info`), não "ausente" (`error`).
+- **Ficha 08 versionada** (`docs/fichas/FICHA_08_BASE_DADOS_CONFERENCIA.md`) — a
+  lista dos 6 obrigatórios e as regras de completude passam a ser fonte no repo.
+  Licença Ambiental fica EM ABERTO (§6.4): são 6, não 7.
+- **P12 aplicado a requisitos:** a frase da tela vem pronta do backend
+  (`detalhe`). A UI não reescreve a semântica — foi a redação duplicada em cada
+  superfície que produziu as três respostas divergentes.
+
+### Suíte
+
+Backend verde (piso 1221 + 30 testes novos). `tsc`, ESLint e build do frontend
+limpos. Vitest local tem 9 workers que não iniciam por `ERR_REQUIRE_ESM` numa
+dependência transitiva do jsdom — **verificado idêntico na `main`**, não
+introduzido aqui, e o CI não roda vitest. Registrado com fix proposto.
