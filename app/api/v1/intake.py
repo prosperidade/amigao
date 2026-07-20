@@ -19,6 +19,7 @@ from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
 from app.models.checklist_template import ChecklistTemplate, ProcessChecklist
 from app.models.client import Client as ClientModel
+from app.models.extracted_field_staging import ExtractedFieldStaging
 from app.models.intake_draft import IntakeDraft, IntakeDraftState, has_minimal_base
 from app.models.macroetapa import Macroetapa
 from app.models.process import DemandType, EntryType, IntakeSource
@@ -355,6 +356,37 @@ def create_case(
                 if doc.document_type:
                     auto_link_document(db, checklist, doc.id, doc.document_type)
             db.flush()
+
+            # Camada 2 do fix de staging órfão — a cura na NASCENTE.
+            # A migração levava os documentos e esquecia o que já tinha sido LIDO
+            # deles: quem extraiu enquanto o rascunho ainda era rascunho gravou
+            # staging com `process_id` NULL, e esse dado não migrava junto. Ficava
+            # no banco, invisível para a Conferência, a matriz e a fonte única.
+            # Caso 15: 46 linhas de 7 documentos, entre elas a ÚNICA leitura da
+            # `averbacao_rl` da matrícula 6.776.
+            # Só o dono muda — `field_value` não é tocado (o bug dict→text do #81
+            # nasceu de reserializar valor; aqui não há motivo para chegar perto).
+            if migrated_docs:
+                adotadas = (
+                    db.query(ExtractedFieldStaging)
+                    .filter(
+                        ExtractedFieldStaging.document_id.in_(
+                            [d.id for d in migrated_docs]
+                        ),
+                        ExtractedFieldStaging.process_id.is_(None),
+                    )
+                    .update(
+                        {ExtractedFieldStaging.process_id: process.id},
+                        synchronize_session=False,
+                    )
+                )
+                if adotadas:
+                    logger.info(
+                        "intake: %s linha(s) de staging adotadas do rascunho %s "
+                        "para o processo %s",
+                        adotadas, draft.id, process.id,
+                    )
+                db.flush()
 
             draft.state = IntakeDraftState.card_criado
             draft.linked_process_id = process.id

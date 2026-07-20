@@ -169,7 +169,16 @@ class ExtratorAgent(BaseAgent):
             text=text,
             doc_type=doc_type,
             document_id=document_id,
-            process_id=(doc.process_id if doc is not None else self.ctx.process_id),
+            # Camada 1 do fix de staging órfão: o teste era sobre a EXISTÊNCIA do
+            # doc, não sobre o VALOR do process_id — documento carregado ainda no
+            # rascunho do intake (`process_id` NULL) passava None, e o fallback
+            # para o contexto ficava inalcançável. O staging nascia sem dono e
+            # some da Conferência, da matriz e da fonte única, que filtram por
+            # processo. Medido no caso 15: 46 linhas órfãs de 7 documentos
+            # extraídos às 13:30-13:31, minutos ANTES de o rascunho virar caso.
+            process_id=(
+                (doc.process_id if doc is not None else None) or self.ctx.process_id
+            ),
         )
 
         out: dict[str, Any] = {
