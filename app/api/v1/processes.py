@@ -62,6 +62,10 @@ from app.schemas.process import (
     ProcessStatusUpdate,
     ProcessUpdate,
 )
+from app.schemas.requisito_documental import (
+    RequisitoDocumentalOut,
+    RequisitosDocumentaisResponse,
+)
 from app.services.macroetapa_engine import (
     advance_macroetapa,
     ensure_macroetapa_checklists,
@@ -73,6 +77,12 @@ from app.services.macroetapa_engine import (
     initialize_macroetapa_checklists,
     toggle_action,
     validate_action,
+)
+from app.services.requisito_documental import (
+    REQUISITOS_BASE,
+    avaliar_requisitos,
+    contar_pendentes,
+    contar_pendentes_checklist,
 )
 
 router = APIRouter()
@@ -223,9 +233,9 @@ def get_kanban_view(
         missing_docs = 0
         pc = pc_map.get(proc.id)
         if pc and pc.items:
-            for item in pc.items:
-                if item.get("required") and item.get("status") == "pending":
-                    missing_docs += 1
+            missing_docs = contar_pendentes_checklist(
+                db, proc.id, tenant_id, pc.items
+            )
 
         try:
             current_macroetapa_enum = Macroetapa(etapa) if etapa else None
@@ -298,6 +308,44 @@ def get_kanban_view(
     )
 
 
+@router.get("/{process_id}/requisitos", response_model=RequisitosDocumentaisResponse)
+def get_requisitos_documentais(
+    process_id: int,
+    db: Session = Depends(get_db),
+    access_context: AccessContext = Depends(get_access_context),
+) -> Any:
+    """Os 6 requisitos documentais da Ficha 08 §2, pela fonte única.
+
+    Endpoint de LEITURA da mesma função que alimenta o dossiê, o checklist e os
+    gates — para a tela não reimplementar a pergunta pela nona vez. Ver
+    ``docs/auditoria/AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md``.
+    """
+    repo = ProcessRepository(db, access_context.tenant_id)
+    process = repo.get_scoped_or_404(process_id, client_id=access_context.client_id)
+
+    resultados = avaliar_requisitos(db, process.id, access_context.tenant_id)
+    ordem = [r.key for r in REQUISITOS_BASE]
+
+    return RequisitosDocumentaisResponse(
+        process_id=process.id,
+        requisitos=[
+            RequisitoDocumentalOut(
+                requisito=resultados[k].requisito,
+                label=resultados[k].label,
+                status=resultados[k].status.value,
+                detalhe=resultados[k].detalhe,
+                document_ids=resultados[k].document_ids,
+                gaps=resultados[k].gaps,
+                alertas=resultados[k].alertas,
+                satisfeito_por=resultados[k].satisfeito_por,
+                pendente=resultados[k].pendente,
+            )
+            for k in ordem
+        ],
+        pendentes=contar_pendentes(resultados),
+    )
+
+
 @router.get("/{process_id}", response_model=ProcessDetail)
 def get_process(
     process_id: int,
@@ -348,9 +396,11 @@ def get_process(
         .first()
     )
     if pc and pc.items:
-        for item in pc.items:
-            if item.get("required") and item.get("status") == "pending":
-                missing_docs += 1
+        missing_docs = contar_pendentes_checklist(
+            db, process.id, access_context.tenant_id, pc.items
+        )
+
+    # (contagem via fonte única — ver `contar_pendentes_checklist`)
 
     # Pydantic converte ORM -> dict via from_attributes; adicionamos os gates computados.
     detail = ProcessDetail.model_validate(process)
@@ -718,11 +768,12 @@ def _compute_can_advance(
         .filter(ProcessChecklist.process_id == process.id)
         .first()
     )
-    missing_docs = 0
-    if pc and pc.items:
-        for item in pc.items:
-            if item.get("required") and item.get("status") == "pending":
-                missing_docs += 1
+    # Terceira cópia do mesmo laço (a auditoria mapeou duas) — a mais crítica
+    # das três: esta alimenta o gate que TRAVA o avanço da macroetapa. Um
+    # requisito falso-pendente aqui bloqueava o caso com o documento na base.
+    missing_docs = contar_pendentes_checklist(
+        db, process.id, process.tenant_id, pc.items if pc else None
+    )
 
     # fix/diagnostico-propaga-estado: gate de saída de etapa de diagnóstico
     # exige assinatura humana do RegulatoryDiagnosis. Consulta única por
