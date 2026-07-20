@@ -2065,3 +2065,52 @@ Backend verde (piso 1221 + 30 testes novos). `tsc`, ESLint e build do frontend
 limpos. Vitest local tem 9 workers que não iniciam por `ERR_REQUIRE_ESM` numa
 dependência transitiva do jsdom — **verificado idêntico na `main`**, não
 introduzido aqui, e o CI não roda vitest. Registrado com fix proposto.
+
+## Dívida #70 — classificação persistida + backfill (20/07/2026)
+
+`fix/70-classificacao-persistida` · fecha a fatia estrutural do #70
+
+### A linha que jogava fora o que descobria
+
+`extrator.py:215` chamava `classify_doc_type(text, doc_type)`, usava o resultado
+para escolher os campos do staging — e nunca gravava o tipo de volta. Documento
+que subia sem tipo ficava `document_type = NULL` para sempre: invisível para o
+vínculo com o checklist e para a fonte única de requisitos (ADR-031), que lê o
+tipo persistido. Medido no processo 15: **36 de 42 documentos** nessa condição.
+
+### O achado maior (fora do escopo previsto, dentro da mesma classe)
+
+Ao testar o re-vínculo, a marcação não sobrevivia ao reload. Causa:
+`ProcessChecklist.items` é `Column(JSON)` **sem `MutableList`**, e o padrão dos
+helpers (`items = list(...)` → mutar os dicts → reatribuir) **nunca deixava o
+objeto dirty** — os dicts são compartilhados, então no instante da atribuição
+"antigo" já era igual a "novo" e o SQLAlchemy não gerava history. O flush não
+emitia UPDATE.
+
+Passava despercebido porque, quando o checklist é criado na MESMA transação
+(fluxo do intake), o INSERT grava o estado final já mutado. Só falhava em
+checklist **já persistido** — ou seja, em todo upload posterior, e em toda
+marcação manual do consultor.
+
+`macroetapa_engine.py:418-434` **já havia descoberto e curado exatamente isto**
+no campo `actions`, com `flag_modified`. Os quatro pontos de `items` no
+`checklist_engine` ficaram sem o remédio. Mesma classe do ADR-031: a cura
+aplicada num lugar e os irmãos esquecidos.
+
+### O que toca IA
+
+- **Backfill de custo ZERO.** `classify_doc_type` é rule-based (palavras-chave
+  sobre o texto já salvo). Sem re-OCR, sem provider. O que paga é a extração de
+  campos, que o script **não** dispara.
+- **Orçamento da extração (medido, NÃO executado):** 32 documentos sem staging,
+  dos quais 21 seriam extraíveis (9 ficam em `outro`, sem tipo → sem spec).
+  ~39,4k tokens de input de texto (141.875 chars só de autos de infração).
+  Em `gemini-2.5-flash`, ordem de **centavos de dólar** — coerente com os
+  $0,085/caso medidos no pipeline OCR. Decisão do André pendente.
+- **19 dos 36 são autos de infração** — o passivo do caso, que hoje não chega ao
+  diagnóstico porque o documento não tem tipo. Classificá-los alimenta o
+  pipeline de fatos N2 (`extract_auto_infracao_fato`).
+- **Sem sobrescrita.** Decisão do André: preencher só onde é NULL. Tipo gravado
+  pode ser correção manual do consultor; divergência entre conteúdo e tipo
+  gravado vira **achado no relatório**, candidato a alerta futuro — nunca escrita
+  silenciosa.

@@ -8,7 +8,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 78.** (#70 a #77 abertas pela fonte única de requisitos
+> **PRÓXIMO NÚMERO LIVRE: 79.** (#78 aberta pela dívida #70,
+> `fix/70-classificacao-persistida`, 2026-07-20 — extração dos documentos sem
+> staging, medida e orçada, aguardando decisão; ver abaixo.) (#70 a #77 abertas pela fonte única de requisitos
 > documentais, `fix/fonte-unica-requisitos-documentais`, 2026-07-20 — ver bloco
 > próprio abaixo.)
 > (#69 aberta pelo S5-C, `feat/s5c-assinatura-saidas` —
@@ -102,7 +104,7 @@ regulatória (`LegislationDocument` com 0 documentos): `exigencia_bancaria`,
 as revelou está em `docs/auditoria/AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md`;
 as regras de domínio, na Ficha 08 (`docs/fichas/FICHA_08_BASE_DADOS_CONFERENCIA.md`).*
 
-**70. Vínculo doc↔requisito é evento no upload, nunca reprocessado.** `auto_link_document`
+**70. Vínculo doc↔requisito é evento no upload, nunca reprocessado.** → **FATIA ESTRUTURAL FECHADA** por `fix/70-classificacao-persistida` (20/07): o extrator passa a persistir o tipo classificado (só onde é NULL) e a re-disparar o vínculo, e `scripts/backfill_document_type.py` repara o retroativo com custo zero de IA. **Permanece aberta a fatia de dados**: o backfill em prod ainda não foi executado (dry-run reportado: 28 dos 36 documentos seriam classificados). Descrição original abaixo.  `auto_link_document`
 roda uma vez, com o `document_type` do instante do upload. A classificação por conteúdo
 (`classify_doc_type`) roda depois, no OCR/extração, e nada repara o vínculo. Medido no
 processo 15: **36 dos 42 documentos têm `document_type = NULL`** — o `elif body.document_type:`
@@ -154,6 +156,31 @@ tsc e build), por isso está verde. **Fix proposto:** `server.deps.inline:
 ['@asamuzakjp/css-color']` no `vitest.config`, ou `overrides` fixando `@csstools/css-calc`
 numa versão CJS. Provável origem do `frontend/package-lock.json` que aparece modificado
 sem diff de conteúdo no repo local.
+
+## Reveladas pela dívida #70 (20/07)
+
+**78. Extração de campos dos documentos sem staging — medida, não executada.**
+Depois do backfill de tipo, 32 documentos do processo 15 seguem sem staging; 21
+deles seriam extraíveis (9 caem em `outro`, sem tipo específico → sem spec de
+campos). Volume medido: **~39,4k tokens de input** de texto já salvo — 141.875
+chars só dos 19 autos de infração, 13.136 do RAT, 2.458 do CCIR. Em
+`gemini-2.5-flash` isso é ordem de **centavos de dólar**, coerente com os
+$0,085/caso do pipeline OCR. **Não rodado por decisão:** o prompt do #70 pediu
+medir e orçar para o André decidir. **Fix:** disparar `extract_and_stage` nos
+documentos com tipo e sem staging, em lote, com teto de custo.
+
+**Achado: mutação de JSON não persistia no checklist — CORRIGIDO neste PR.**
+`ProcessChecklist.items` é `Column(JSON)` sem `MutableList`. Os quatro helpers do
+`checklist_engine` faziam `items = list(...)` → mutavam os dicts (compartilhados
+com o atributo) → reatribuíam; no instante da atribuição "antigo" já era igual a
+"novo", o objeto nunca ficava dirty e o flush não emitia UPDATE. **Marcar item de
+checklist não persistia** em checklist já gravado — isto é, em todo upload
+posterior e em toda marcação manual do consultor. Só não aparecia no fluxo do
+intake, onde o INSERT grava o estado final. `macroetapa_engine.py:418-434` já
+tinha curado exatamente isto no campo `actions` com `flag_modified`; os quatro
+pontos de `items` ficaram sem o remédio. Corrigido com `_persistir_items`
+(cópia dos dicts + `flag_modified`) e travado por testes que expiram a sessão e
+releem do banco — o que o consultor vê depois do F5.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 

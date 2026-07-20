@@ -214,6 +214,17 @@ class ExtratorAgent(BaseAgent):
         try:
             effective_type = classify_doc_type(text, doc_type)
 
+            # Dívida #70 — aqui o tipo descoberto pelo conteúdo morria no escopo
+            # da função: era usado para escolher os campos do staging e nunca
+            # gravado de volta. Documento que sobe sem tipo (`document_type` NULL)
+            # ficava NULL para sempre, invisível para o vínculo com o checklist e
+            # para a fonte única de requisitos (ADR-031), que lê o tipo persistido.
+            # Medido no processo 15: 36 de 42 documentos nessa condição.
+            # A regra de "posso gravar?" mora em `document_classification` —
+            # compartilhada com o backfill, para não recriar duas lógicas da
+            # mesma pergunta (a classe que o ADR-031 acabou de matar).
+            self._persistir_tipo_classificado(document_id, effective_type)
+
             # Fase 1 (N2) — auto de infração é FATO DE PASSIVO, não campo
             # cadastral: NÃO passa por `extract_and_stage` (staging), vai
             # direto pro pipeline de fatos do diagnóstico.
@@ -276,6 +287,35 @@ class ExtratorAgent(BaseAgent):
         if document_id is not None:
             self._clear_extraction_note(document_id)
         return fato
+
+    def _persistir_tipo_classificado(
+        self, document_id: int | None, effective_type: str
+    ) -> None:
+        """Grava o tipo classificado e re-dispara o vínculo com o checklist (#70).
+
+        Best-effort, como todo o `_stage_ficha01`: se falhar, a extração segue.
+        Só grava onde `document_type` está vazio — nunca sobrescreve valor já
+        gravado (decisão do André, 2026-07-20).
+        """
+        if document_id is None:
+            return
+        from app.models.document import Document  # noqa: PLC0415
+        from app.services.document_classification import (  # noqa: PLC0415
+            aplicar_classificacao,
+        )
+
+        doc = self.ctx.session.query(Document).filter(Document.id == document_id).first()
+        if doc is None:
+            return
+
+        res = aplicar_classificacao(self.ctx.session, doc, effective_type)
+        if res.gravado:
+            import logging  # noqa: PLC0415
+
+            logging.getLogger(__name__).info(
+                "extrator: document_type gravado por conteúdo doc=%s tipo=%s item=%s",
+                document_id, res.tipo_proposto, res.item_vinculado,
+            )
 
     def _record_extraction_note(self, document_id: int, doc_type: str, reason: str) -> None:
         """Grava a nota de processamento no `Document` (best-effort)."""
