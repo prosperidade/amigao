@@ -44,6 +44,14 @@ blindar o Extrator contra eles.
 | **Documento de identidade do titular (RG/CNH)** | Fonte de verdade do titular único do caso — ver seção 3. |
 | **Planta / Memorial descritivo (SIGEF)** | Documento-mãe técnico de perímetro — coordenadas, confrontações. Nem todo imóvel possui; ver regra de coordenadas na seção 5. |
 
+> ⚑ **RAT não substitui o CAR** (decisão da Isis, 2026-07-20). O Relatório de
+> Análise Técnica *só existe quando já foi feita uma análise do CAR* — é o parecer
+> do órgão sobre o cadastro, não o cadastro. O sistema deve ler o RAT como **"não
+> serve"** para o requisito CAR, mesmo quando ele traz o número do CAR no corpo.
+>
+> Implementado: `rat` fica fora do vocabulário do requisito `car` em
+> `requisito_documental.py`, com teste travando (`test_vocabulario_tipo_fora_dos_seis`).
+
 > ⚑ **CAR é dado único do imóvel como um todo**, independente de quantas matrículas o
 > compõem. Ele é anexado uma única vez no Imóvel Hub e referenciado por todos os
 > cards/matrículas daquele imóvel — nunca duplicado ou re-solicitado.
