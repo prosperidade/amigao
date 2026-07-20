@@ -11,7 +11,6 @@ from types import SimpleNamespace
 from app.services.inconsistency_matrix import build_matrix, norm_compare
 from app.services.staging_consolidation import _group_conflict_values
 
-
 # ── norm_compare (unidade) ────────────────────────────────────────────────
 
 def test_municipio_variantes_do_relatorio_da_isis_colapsam():

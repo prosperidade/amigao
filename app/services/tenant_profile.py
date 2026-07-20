@@ -21,7 +21,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-
 # Defaults das condições comerciais (não bloqueiam a geração — o consultor ajusta).
 DEFAULT_VALIDADE_PROPOSTA_DIAS = 30
 DEFAULT_MULTA_PERCENTUAL = "10%"

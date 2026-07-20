@@ -13,8 +13,14 @@ from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
+# Reaproveita os helpers de setup do S5-B (mesmo pacote tests/api).
+from tests.api.test_mirante_documents_s5b import (
+    _login,
+    _proposta_da_rota,
+    _setup,
+)
+
 from app.models.audit_log import AuditLog
-from app.models.contract import Contract, ContractStatus
 from app.models.macroetapa import (
     Macroetapa,
     MacroetapaChecklist,
@@ -27,14 +33,6 @@ from app.services.macroetapa_engine import (
     ensure_macroetapa_checklists,
     has_contract_signed,
 )
-
-# Reaproveita os helpers de setup do S5-B (mesmo pacote tests/api).
-from tests.api.test_mirante_documents_s5b import (
-    _login,
-    _proposta_da_rota,
-    _setup,
-)
-
 
 # ---------------------------------------------------------------------------
 # Helpers de fluxo

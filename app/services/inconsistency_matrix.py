@@ -346,7 +346,7 @@ def _norm_text(value: Any) -> str:
 
 # 27 UFs — para descolar o sufixo de estado do nome do município ("… go").
 _UF_SET: frozenset[str] = frozenset(
-    "ac al ap am ba ce df es go ma mt ms mg pa pb pr pe pi rj rn rs ro rr sc sp se to".split()
+    ["ac", "al", "ap", "am", "ba", "ce", "df", "es", "go", "ma", "mt", "ms", "mg", "pa", "pb", "pr", "pe", "pi", "rj", "rn", "rs", "ro", "rr", "sc", "sp", "se", "to"]
 )
 # Abreviações de logradouro comuns → forma canônica (casadas por TOKEN).
 _LOGRADOURO_ABBR: dict[str, str] = {
