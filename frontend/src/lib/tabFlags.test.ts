@@ -8,21 +8,26 @@ import {
   FALLBACK_TAB,
 } from './tabFlags';
 
-// Sprint 6 (Ficha 07 §3) — as 6 abas do MVP + Comercial (temporária).
-const AbasVisiveis = ['diagnosis', 'documents', 'alertas', 'dossier', 'acoes', 'saidas', 'commercial'];
-const AbasOcultas = ['tasks', 'messages', 'ai', 'timeline', 'decisions'];
+// S5-C (Ficha 07 §3) — as 6 abas do MVP. A Comercial foi OCULTADA no S5-C
+// (convergiu em Saídas + /proposals + ContractEditor); segue viva por baixo.
+const AbasVisiveis = ['diagnosis', 'documents', 'alertas', 'dossier', 'acoes', 'saidas'];
+const AbasOcultas = ['commercial', 'tasks', 'messages', 'ai', 'timeline', 'decisions'];
 
 describe('isTabVisible', () => {
-  it('as 6 abas do MVP + Comercial ficam visíveis', () => {
+  it('as 6 abas do MVP ficam visíveis', () => {
     for (const key of AbasVisiveis) {
       expect(isTabVisible(key), `${key} deveria estar visível`).toBe(true);
     }
   });
 
-  it('as 5 abas do Sprint 6 ficam ocultas', () => {
+  it('Comercial + as 5 abas do Sprint 6 ficam ocultas', () => {
     for (const key of AbasOcultas) {
       expect(isTabVisible(key), `${key} deveria estar oculta`).toBe(false);
     }
+  });
+
+  it('a Comercial (E6/E7) foi ocultada no S5-C — convergiu em Saídas', () => {
+    expect(isTabVisible('commercial')).toBe(false);
   });
 
   it('chave desconhecida é fail-open (visível) — nunca esconde aba nova por engano', () => {

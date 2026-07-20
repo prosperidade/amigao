@@ -8,7 +8,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 69.** (#68 aberta pelo S5-B, `feat/s5b-proposta-contrato-mirante` —
+> **PRÓXIMO NÚMERO LIVRE: 70.** (#69 aberta pelo S5-C, `feat/s5c-assinatura-saidas` —
+> assinatura eletrônica externa (gov.br/Clicksign); ver entrada abaixo.)
+> (#68 aberta pelo S5-B, `feat/s5b-proposta-contrato-mirante` —
 > follow-ons da consolidação da peça Mirante; ver entrada abaixo.)
 > (#67 aberta pelo S5-A, `feat/s5a-rota-proposta-estados` —
 > proposta/contrato multi-bloco/multi-titular; ver entrada abaixo.)
@@ -644,6 +646,20 @@ do tenant (`tenant.settings["issuer"]`) nem as parcelas estruturadas
 (`proposals.payment_installments`) — hoje via API/seed; o consultor precisa da tela.
 **(d)** A migration `f1a7c2d9e4b6` (tenant.settings + proposals.payment_installments)
 é aditiva e precisa rodar em prod no deploy. **Origem:** S5-B (2026-07-19). Ver ADR-029.
+
+**69. Assinatura eletrônica externa do contrato (gov.br / Clicksign / DocuSign).** O
+S5-C fechou a Ficha 07 com assinatura MANUAL (MVP): o consultor registra "assinado em
+<data>" com upload opcional do PDF já assinado (`app/api/v1/contracts.py:/assinar`,
+ADR-030). Falta a integração externa que colhe a assinatura DENTRO do fluxo — envio ao
+signatário, coleta da assinatura eletrônica com validade jurídica (ICP-Brasil/gov.br),
+webhook de retorno marcando `signed_at` automaticamente. **O que destrava:** provider de
+assinatura plugável (mesmo padrão do `WhatsAppProvider`/#35), estado `awaiting_signature`
+entre `sent` e `signed`, e webhook. **Correlato:** a migration `c3e9b1d7f4a2`
+(`signed_registered_by_user_id` + `signed_pdf_storage_key` em `contracts`) é aditiva e
+precisa rodar em prod no deploy; e o `Process.closed_at` marca o fecho da Ficha, mas
+`ProcessStatus.concluido` (eixo operacional pós-contrato/MVP2) não é setado
+automaticamente por decisão consciente (eixos desacoplados). **Origem:** S5-C
+(2026-07-19). Ver ADR-030.
 
 ## Fechadas (histórico — não revoga, só comprova fechamento)
 

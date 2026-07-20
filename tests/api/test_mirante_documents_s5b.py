@@ -40,7 +40,6 @@ from app.services.mirante_documents import (
 )
 from app.services.proposal_generator import generate_proposal_from_rota
 
-
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------

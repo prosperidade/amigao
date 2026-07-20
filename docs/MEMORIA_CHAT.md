@@ -744,3 +744,23 @@ em `docs/agentes/` são a fonte de verdade verificada.
   suíte completa; tsc+vitest verdes. Dívida #68 (aposentar legado avulso + entregável
   explícito por passo + UI do perfil/parcelas). Lição: onde o erro precisa BLOQUEAR com
   certeza (dinheiro que fecha), a fonte é determinística — LLM propõe texto, não garante soma.
+
+- **2026-07-19 — S5-C: assinatura manual + Saídas converge + Comercial oculta (`feat/s5c-assinatura-saidas`, ADR-030).**
+  Fechamento da Ficha 07. **Assinatura MANUAL (MVP):** contrato rascunho → ENVIADO
+  (`/aprovar-enviar`) → ASSINADO (`/assinar`: `signed_at` + quem registrou + upload
+  OPCIONAL do PDF assinado), tudo auditado (hash chain). Preencher `signed_at` satisfaz
+  o gate E7 (`has_contract_signed`, que já lia o campo — só faltava quem escrevesse). A
+  E7 é TERMINAL: `compute_macroetapa_state` passa a devolver `concluida` (não
+  pronta_para_avancar) quando 100% + assinado; o `/assinar` marca `Process.closed_at`
+  (fecho tangível). `ProcessStatus.concluido` NÃO é tocado (eixo pós-contrato/MVP2,
+  desacoplado). **Saídas converge:** novo `GET /processes/{id}/artifacts/{id}/download`
+  (lê `content_data.pdf_storage_key`) + atalho ao contrato; SaidasTab baixa PDF e abre
+  contrato. **Comercial OCULTA** (isTabVisible=false) sem botão morto: ações da proposta
+  já no ProposalEditor, `nova-versao` migrada pra lá, "Gerar Contrato" religado ao gerador
+  Mirante (`/contracts/gerar`, S5-B), assinatura no ContractEditor (alcançável pela
+  Saídas). **Teste E1→E7 completo** (o que nunca existiu): dirige a Ficha inteira pela
+  API, gate real barra cada etapa, caso conclui com `closed_at` + `has_contract_signed`.
+  Migration `c3e9b1d7f4a2` (aditiva). 9 testes S5-C + suíte completa; tsc + vitest (124).
+  Dívida #69 (assinatura eletrônica externa). Ficha 07 marcada ENTREGUE (falta no MVP:
+  NADA). Lição: quando o gate já lê o estado certo, "implementar o fluxo" é só escrever
+  o estado com honestidade — não reinventar o gate.

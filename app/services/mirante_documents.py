@@ -32,7 +32,7 @@ IA propõe, humano decide: o gerado é RASCUNHO (``needs_human_validation=True``
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -49,7 +49,6 @@ from app.services.tenant_profile import (
     load_issuer_profile,
     missing_issuer_fields,
 )
-
 
 # ---------------------------------------------------------------------------
 # Exceções — todas viram HTTP 422 no endpoint (bloqueio honesto)

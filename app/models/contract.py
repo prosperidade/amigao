@@ -37,9 +37,19 @@ class Contract(Base):
     # PDF armazenado no MinIO
     pdf_storage_key = Column(String, nullable=True)
 
-    # Assinatura (Wave 2 — campos reservados)
+    # Assinatura MANUAL (S5-C, MVP sem integração externa). `signed_at` é a data em
+    # que o contrato foi assinado (informada pelo consultor); preenchê-lo satisfaz o
+    # gate E7 (`has_contract_signed`). `signed_by_client` (Wave 2, assinatura do
+    # cliente pelo portal) permanece reservado.
     signed_at = Column(DateTime(timezone=True), nullable=True)
     signed_by_client = Column(Boolean, default=False)
+    # Quem REGISTROU a assinatura no sistema (consultor) — auditoria de quem/quando.
+    signed_registered_by_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # Upload OPCIONAL do PDF do contrato já assinado (MinIO). Assinatura eletrônica
+    # externa (gov.br/Clicksign) é dívida pós-MVP.
+    signed_pdf_storage_key = Column(String, nullable=True)
 
     created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)

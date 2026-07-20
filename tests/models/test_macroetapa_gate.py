@@ -357,10 +357,11 @@ class TestPropostaTravaE6:
 
 
 class TestContratoAssinadoConcluiE7:
-    """Fase 0 (item 9 do adendo) — E7 (`contrato_formalizacao`, terminal)
-    só é "concluída" com o contrato assinado (`Contract.signed_at`). Sem
-    fluxo de assinatura (Sprint 5), este estado nunca fica `concluida`/
-    `pronta_para_avancar` em produção hoje — honesto, não regressão."""
+    """E7 (`contrato_formalizacao`, terminal) só é "concluída" com o contrato
+    assinado (`Contract.signed_at`). Sem assinatura → `aguardando_validacao`
+    (o caso não está concluído). COM assinatura → `concluida` mesmo sendo a
+    corrente: a E7 é TERMINAL, não existe `pronta_para_avancar` (nada a avançar).
+    O fluxo de assinatura do S5-C fecha o gate; ADR-030."""
 
     def test_e7_completo_sem_assinatura_fica_aguardando_validacao(self) -> None:
         state = compute_macroetapa_state(
@@ -371,22 +372,25 @@ class TestContratoAssinadoConcluiE7:
         )
         assert state == MacroetapaState.aguardando_validacao
 
-    def test_e7_completo_com_assinatura_fica_pronta(self) -> None:
+    def test_e7_completo_com_assinatura_fica_concluida(self) -> None:
+        # S5-C: a E7 terminal assinada CONCLUI o caso (antes: pronta_para_avancar,
+        # placeholder — não há "avançar" numa etapa terminal).
         state = compute_macroetapa_state(
             _checklist(completion_pct=100.0),
             is_current=True,
             current_macroetapa=Macroetapa.contrato_formalizacao,
             contract_signed=True,
         )
-        assert state == MacroetapaState.pronta_para_avancar
+        assert state == MacroetapaState.concluida
 
-    def test_default_contract_signed_preserva_callers_legados(self) -> None:
+    def test_default_contract_signed_conclui_terminal(self) -> None:
+        # Default contract_signed=True: terminal E7 a 100% → concluida.
         state = compute_macroetapa_state(
             _checklist(completion_pct=100.0),
             is_current=True,
             current_macroetapa=Macroetapa.contrato_formalizacao,
         )
-        assert state == MacroetapaState.pronta_para_avancar
+        assert state == MacroetapaState.concluida
 
     def test_outra_etapa_ignora_a_flag(self) -> None:
         state = compute_macroetapa_state(

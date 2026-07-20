@@ -446,12 +446,14 @@ def compute_macroetapa_state(
         # "diagnóstico assinado".
         return MacroetapaState.aguardando_validacao
 
-    if (
-        current_macroetapa == Macroetapa.contrato_formalizacao
-        and pct >= COMPLETE_PCT
-        and not contract_signed
-    ):
-        return MacroetapaState.aguardando_validacao
+    if current_macroetapa == Macroetapa.contrato_formalizacao and pct >= COMPLETE_PCT:
+        # E7 é TERMINAL: não há "avançar". Sem contrato assinado, a etapa fica
+        # honestamente aguardando (o caso não está concluído); COM o contrato
+        # assinado (S5-C), o caso CONCLUI — `concluida` mesmo sendo a corrente
+        # (não existe pronta_para_avancar para a etapa terminal).
+        if not contract_signed:
+            return MacroetapaState.aguardando_validacao
+        return MacroetapaState.concluida
 
     if pct >= COMPLETE_PCT:
         return MacroetapaState.pronta_para_avancar if is_current else MacroetapaState.concluida

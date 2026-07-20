@@ -7,8 +7,9 @@
  * da sócia (Camada 3 — Workspace).
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { PackageCheck, CheckCircle2, Clock, User, Bot } from 'lucide-react';
+import { PackageCheck, CheckCircle2, Clock, User, Bot, Download, FileSignature } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MACROETAPA_LABELS } from './quadro-types';
 
@@ -19,6 +20,7 @@ interface StageOutput {
   output_type: string;
   title: string;
   content: string | null;
+  content_data: { pdf_storage_key?: string | null; contract_id?: number | null } | null;
   produced_by_agent: string | null;
   produced_by_user_id: number | null;
   needs_human_validation: boolean;
@@ -34,6 +36,17 @@ interface Props {
 
 export default function SaidasTab({ processId, viewingStage }: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  // S5-C — download do PDF de um artefato (proposta/minuta) direto da Saída.
+  const downloadMutation = useMutation({
+    mutationFn: async (artifactId: number) => {
+      const res = await api.get(`/processes/${processId}/artifacts/${artifactId}/download`);
+      return res.data.download_url as string;
+    },
+    onSuccess: (url) => window.open(url, '_blank'),
+    onError: () => toast.error('PDF ainda não disponível para download'),
+  });
   const { data: outputs = [], isLoading } = useQuery({
     queryKey: ['process-artifacts', processId, viewingStage ?? 'all'],
     queryFn: () => {
@@ -129,15 +142,36 @@ export default function SaidasTab({ processId, viewingStage }: Props) {
                       {o.created_at && ` · ${new Date(o.created_at).toLocaleDateString('pt-BR')}`}
                     </p>
                   </div>
-                  {pendingValidation && (
-                    <button
-                      onClick={() => validateMutation.mutate(o.id)}
-                      disabled={validateMutation.isPending}
-                      className="shrink-0 text-xs px-2.5 py-1 rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-medium"
-                    >
-                      {validateMutation.isPending && validateMutation.variables === o.id ? '...' : 'Validar'}
-                    </button>
-                  )}
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    {o.content_data?.pdf_storage_key && (
+                      <button
+                        onClick={() => downloadMutation.mutate(o.id)}
+                        disabled={downloadMutation.isPending}
+                        title="Baixar PDF"
+                        className="text-xs px-2 py-1 rounded-md bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-slate-200 font-medium flex items-center gap-1"
+                      >
+                        <Download className="w-3 h-3" /> PDF
+                      </button>
+                    )}
+                    {o.content_data?.contract_id && (
+                      <button
+                        onClick={() => navigate(`/contracts/${o.content_data!.contract_id}`)}
+                        title="Abrir contrato (aprovar/assinar)"
+                        className="text-xs px-2 py-1 rounded-md bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/30 text-indigo-600 dark:text-indigo-300 font-medium flex items-center gap-1"
+                      >
+                        <FileSignature className="w-3 h-3" /> Contrato
+                      </button>
+                    )}
+                    {pendingValidation && (
+                      <button
+                        onClick={() => validateMutation.mutate(o.id)}
+                        disabled={validateMutation.isPending}
+                        className="text-xs px-2.5 py-1 rounded-md bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-medium"
+                      >
+                        {validateMutation.isPending && validateMutation.variables === o.id ? '...' : 'Validar'}
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}
