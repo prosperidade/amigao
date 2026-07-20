@@ -1,0 +1,258 @@
+"""Lineage, âncora por INCRA e varredura de aceites perdidos.
+
+Nasce da investigação do caso 15 (20/07), onde três coisas se somaram:
+
+* a matrícula materializada foi a **2923** (número defasado que o CCIR declarava)
+  em vez da **4698** (número atual, na certidão) — e ninguém conseguia dizer de
+  onde o 2923 tinha vindo sem cruzar timestamps na mão;
+* o **NIRF** foi aceito, a coluna existe, e o valor não chegou: as linhas do ITR
+  ficam com `matricula_hint` NULL, porque o ITR não declara número de matrícula
+  (identifica o imóvel por NIRF/CIB e código INCRA — Ficha 08 §4);
+* o **VTN** foi aceito e não tem coluna nenhuma: perdido em silêncio.
+
+Aqui moram as três respostas: certidão de nascimento do registro, âncora do ITR
+pelo código INCRA normalizado, e a varredura que transforma aceite perdido em
+pendência visível (P12 — nada some sem dizer).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+from sqlalchemy.orm import Session
+
+from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
+from app.models.matricula import Matricula
+
+# ---------------------------------------------------------------------------
+# Normalização de código (Ficha 08 §8)
+# ---------------------------------------------------------------------------
+
+def norm_incra(valor: Any) -> str:
+    """Só os dígitos do código INCRA/SNCR.
+
+    `norm_compare` NÃO serve aqui: ela colapsa pontuação em ESPAÇO, então
+    ``000.051.123.390-9`` vira ``000 051 123 390 9`` e ``000051.123390-9`` vira
+    ``000051 123390 9`` — o mesmo código em dois agrupamentos diferentes, que
+    não casam. Foi assim que o ITR do caso 15 ficou órfão de matrícula.
+
+    O código é numérico e a formatação varia por documento (o CCIR pontua, o ITR
+    agrupa diferente). Comparar por dígitos é o único critério estável.
+    """
+    if valor is None:
+        return ""
+    if isinstance(valor, dict):
+        valor = valor.get("value", "")
+    return "".join(ch for ch in str(valor) if ch.isdigit())
+
+
+# ---------------------------------------------------------------------------
+# Lineage — certidão de nascimento do registro
+# ---------------------------------------------------------------------------
+
+def registrar_lineage_criacao(
+    mat: Matricula,
+    *,
+    staging: Optional[ExtractedFieldStaging],
+    motivo: str = "hint_staging_aceito",
+) -> None:
+    """Carimba de qual staging/decisão a matrícula nasceu.
+
+    `field_sources` responde "que tipo de fonte?"; isto responde "qual linha, qual
+    decisão, de quem". A pergunta que a investigação do caso 15 não conseguiu
+    responder sem arqueologia de timestamps.
+    """
+    atual = dict(mat.lineage or {})
+    atual["criada_por"] = {
+        "motivo": motivo,
+        "staging_id": getattr(staging, "id", None),
+        "document_id": getattr(staging, "document_id", None),
+        "decided_by_user_id": getattr(staging, "decided_by_user_id", None),
+        "decided_at": (
+            staging.decided_at.isoformat()
+            if staging is not None and staging.decided_at is not None
+            else None
+        ),
+        "numero_matricula": mat.numero_matricula,
+    }
+    mat.lineage = atual
+
+
+def registrar_lineage_campo(
+    mat: Matricula, campo: str, staging: ExtractedFieldStaging, *, extra: Optional[str] = None
+) -> None:
+    """Carimba qual linha de staging escreveu cada campo."""
+    atual = dict(mat.lineage or {})
+    campos = dict(atual.get("campos") or {})
+    campos[campo] = {
+        "staging_id": staging.id,
+        "document_id": staging.document_id,
+        **({"via": extra} if extra else {}),
+    }
+    atual["campos"] = campos
+    mat.lineage = atual
+
+
+# ---------------------------------------------------------------------------
+# Âncora do ITR pelo código INCRA (Ficha 08 §4)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AncoragemIncra:
+    """Resultado da tentativa de ancorar linhas órfãs a uma matrícula."""
+
+    matricula: Optional[Matricula] = None
+    codigo: str = ""
+    ambiguo: bool = False           # o código casa 2+ matrículas
+    divergente: bool = False        # o documento traz códigos INCRA diferentes entre si
+    candidatas: list[int] = field(default_factory=list)
+
+    @property
+    def vinculavel(self) -> bool:
+        """Só o caso LIMPO vincula sozinho: casamento único e sem divergência."""
+        return self.matricula is not None and not self.ambiguo and not self.divergente
+
+
+def ancorar_por_incra(
+    db: Session,
+    *,
+    tenant_id: int,
+    property_id: int,
+    codigos_do_documento: list[Any],
+) -> AncoragemIncra:
+    """Encontra a matrícula do imóvel cujo código INCRA casa com o do documento.
+
+    Regra (Ficha 08 §4 + salvaguardas da skill da Isis de 20/07):
+
+    * **um** código normalizado, casando **uma** matrícula → vincula;
+    * o documento traz códigos INCRA **diferentes entre si** → não vincula
+      (é o alerta "matrícula com INCRAs distintos");
+    * o código casa **2+** matrículas → não vincula (ambíguo).
+
+    Nos dois últimos casos o chamador emite pendência + proposta de 1 clique.
+    O automático só existe no caso limpo.
+    """
+    normalizados = {norm_incra(c) for c in codigos_do_documento}
+    normalizados.discard("")
+
+    if not normalizados:
+        return AncoragemIncra()
+
+    if len(normalizados) > 1:
+        return AncoragemIncra(divergente=True, codigo=", ".join(sorted(normalizados)))
+
+    codigo = normalizados.pop()
+    matriculas = (
+        db.query(Matricula)
+        .filter(
+            Matricula.tenant_id == tenant_id,
+            Matricula.property_id == property_id,
+            Matricula.deactivated_at.is_(None),
+        )
+        .all()
+    )
+    casadas = [m for m in matriculas if norm_incra(m.codigo_incra_sncr) == codigo]
+
+    if len(casadas) == 1:
+        return AncoragemIncra(matricula=casadas[0], codigo=codigo, candidatas=[casadas[0].id])
+    if len(casadas) > 1:
+        return AncoragemIncra(
+            codigo=codigo, ambiguo=True, candidatas=[m.id for m in casadas]
+        )
+    return AncoragemIncra(codigo=codigo)
+
+
+# ---------------------------------------------------------------------------
+# Varredura de aceites perdidos (P12 — nada some sem dizer)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AceitePerdido:
+    staging_id: int
+    document_id: Optional[int]
+    field_name: str
+    target_entity: Optional[str]
+    target_field: Optional[str]
+    motivo: str                       # "sem_coluna" | "sem_dono"
+    detalhe: str
+    sugestao_matricula_id: Optional[int] = None
+
+
+def _colunas_de(entidade: Optional[str]) -> set[str]:
+    from app.models.client import Client  # noqa: PLC0415
+    from app.models.property import Property  # noqa: PLC0415
+
+    modelo = {"matricula": Matricula, "imovel": Property, "cliente": Client}.get(
+        (entidade or "").lower()
+    )
+    if modelo is None:
+        return set()
+    return {c.name for c in modelo.__table__.columns}
+
+
+def varrer_aceites_perdidos(
+    db: Session,
+    *,
+    tenant_id: int,
+    process_id: int,
+    property_id: Optional[int] = None,
+) -> list[AceitePerdido]:
+    """Toda linha ACEITA ou virou dado na base, ou aparece aqui.
+
+    Duas classes distintas, que um guard só de schema não separaria:
+
+    * **sem_coluna** — o `target_field` não existe no modelo de destino (`vtn`).
+      O aceite não tinha para onde ir desde sempre.
+    * **sem_dono** — a coluna existe e o aceite é válido, mas a linha não está
+      ancorada a nenhuma entidade (`nirf_cib` com `matricula_hint` NULL). Tem
+      destino, falta dono.
+
+    A segunda classe é a que o caso 15 revelou e que uma varredura de schema
+    deixaria passar em silêncio.
+    """
+    perdidos: list[AceitePerdido] = []
+
+    linhas = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+            ExtractedFieldStaging.status == ExtractedFieldStatus.aceito,
+        )
+        .all()
+    )
+
+    for linha in linhas:
+        alvo = (linha.target_field or "").strip()
+        if not alvo:
+            continue
+
+        colunas = _colunas_de(linha.target_entity)
+        if colunas and alvo not in colunas:
+            perdidos.append(AceitePerdido(
+                staging_id=linha.id, document_id=linha.document_id,
+                field_name=linha.field_name, target_entity=linha.target_entity,
+                target_field=alvo, motivo="sem_coluna",
+                detalhe=(
+                    f"campo sem destino: {linha.target_entity}.{alvo} não existe no "
+                    "modelo — o aceite não tem onde ser gravado"
+                ),
+            ))
+            continue
+
+        # Sem dono: destino de matrícula, mas a linha não está ancorada a nenhuma.
+        if (linha.target_entity or "").lower() == "matricula" and not (
+            (linha.matricula_hint or "").strip()
+        ):
+            perdidos.append(AceitePerdido(
+                staging_id=linha.id, document_id=linha.document_id,
+                field_name=linha.field_name, target_entity=linha.target_entity,
+                target_field=alvo, motivo="sem_dono",
+                detalhe=(
+                    f"aceito aguardando vínculo: {alvo} — nenhuma matrícula ancorada "
+                    "a este documento"
+                ),
+            ))
+
+    return perdidos
