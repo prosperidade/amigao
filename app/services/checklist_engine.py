@@ -12,8 +12,28 @@ from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.checklist_template import ChecklistTemplate, ProcessChecklist
+
+# ---------------------------------------------------------------------------
+# ARMADILHA DE PERSISTÊNCIA (corrigida — dívida #70)
+# ---------------------------------------------------------------------------
+# `ProcessChecklist.items` é `Column(JSON)` SEM `MutableList`: o SQLAlchemy não
+# rastreia mutação in-place. O padrão antigo destes helpers era
+#
+#     items = list(checklist.items or [])   # lista nova, MAS com os MESMOS dicts
+#     item['status'] = 'received'           # muta o dict — que também está no atributo
+#     checklist.items = items               # 'antigo' já == 'novo' → sem history
+#
+# ...e o objeto NUNCA ficava dirty: o flush não emitia UPDATE e a marcação se
+# perdia. Passava despercebido porque, quando o checklist é criado na MESMA
+# transação (fluxo do intake), o INSERT grava o estado final já mutado — só
+# falhava em checklist JÁ persistido, isto é, todo upload posterior.
+#
+# `macroetapa_engine.py:418-434` já tinha descoberto e curado exatamente isto
+# no campo `actions`; os quatro pontos de `items` aqui ficaram sem o remédio.
+# Correção: copiar cada dict (`dict(src)`) e chamar `flag_modified`.
 
 # ---------------------------------------------------------------------------
 # Estruturas de retorno
@@ -45,6 +65,16 @@ class ChecklistStatus:
 # ---------------------------------------------------------------------------
 # Funções públicas
 # ---------------------------------------------------------------------------
+
+def _persistir_items(checklist: ProcessChecklist, items: list) -> None:
+    """Grava a lista de itens de forma que o SQLAlchemy DETECTE a mudança.
+
+    Ver a nota de armadilha no topo do módulo: sem copiar os dicts e sem
+    `flag_modified`, a alteração fica só em memória e some no flush.
+    """
+    checklist.items = [dict(i) for i in items]
+    flag_modified(checklist, "items")
+
 
 def get_or_create_checklist(
     db: Session,
@@ -149,7 +179,7 @@ def mark_item_received(
         if item.get("id") == item_id:
             item["status"] = "received"
             item["document_id"] = document_id
-            checklist.items = items
+            _persistir_items(checklist, items)
             return True
     return False
 
@@ -168,7 +198,7 @@ def mark_item_waived(
             item["status"] = "waived"
             item["waiver_reason"] = reason
             item["document_id"] = None
-            checklist.items = items
+            _persistir_items(checklist, items)
             return True
     return False
 
@@ -186,7 +216,7 @@ def mark_item_pending(
             item["status"] = "pending"
             item["document_id"] = None
             item["waiver_reason"] = None
-            checklist.items = items
+            _persistir_items(checklist, items)
             return True
     return False
 
@@ -222,7 +252,7 @@ def auto_link_document(
         if casou:
             item["status"] = "received"
             item["document_id"] = document_id
-            checklist.items = items
+            _persistir_items(checklist, items)
             return item.get("id")
     return None
 
