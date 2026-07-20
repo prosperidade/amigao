@@ -104,6 +104,28 @@ _GRAU_TO_NIVEL_RISCO: dict[str, str] = {
 }
 
 
+def _chave_auto(fato: dict[str, Any]) -> str:
+    """Identidade de um auto de infração: (órgão autuante, dígitos do número).
+
+    Só os DÍGITOS do número — "AI nº 123.456/2024", "123456/2024" e
+    "ai-123456-2024" são o mesmo auto; a formatação varia entre a capa, o corpo e
+    o anexo. Filtrar por `isalnum()` não serve: "º" é alfanumérico em Unicode e
+    sobreviveria em uma grafia e não na outra.
+
+    O órgão entra na chave porque o número sozinho não identifica: IBAMA e SEMAD
+    podem emitir autos com a mesma numeração, e fundi-los criaria um passivo
+    inexistente. Sem número, devolve "" — e o chamador NÃO agrupa (juntar sem
+    identificador seria adivinhar).
+    """
+    numero = "".join(ch for ch in str(fato.get("numero_auto") or "") if ch.isdigit())
+    if not numero:
+        return ""
+    orgao = "".join(
+        ch for ch in str(fato.get("orgao_autuante") or "").upper()
+        if ch.isascii() and ch.isalnum()
+    )
+    return f"{orgao}:{numero}"
+
 class DiagnosticoOutputValidationError(ValueError):
     """Erro tipado quando o output do diagnóstico falha a validação Pydantic."""
 
@@ -448,9 +470,36 @@ class DiagnosticoAgent(BaseAgent):
                 for m in prop.matriculas or []:
                     matricula_proprietarios.extend(m.proprietarios or [])
 
+        # DEDUPE POR NÚMERO DO AUTO (#78, exigência do André).
+        # `fatos_by_doc` é indexado por DOCUMENTO: N documentos viram N fatos.
+        # Mas N documentos raramente são N autos — são páginas, vias e anexos do
+        # mesmo auto. No caso 15 são 19 documentos de auto de infração; sem
+        # agrupar, o consultor veria 19 passivos idênticos poluindo a Visão geral.
+        # Agrupa por `numero_auto` normalizado e guarda TODOS os documentos que
+        # comprovam aquele auto (rastreabilidade — Princípio 11).
+        # Fato SEM número não é agrupado: sem identificador, juntar seria adivinhar.
+        agrupados: dict[str, dict[str, Any]] = {}
+        avulsos: list[dict[str, Any]] = []
+        for doc_id, fato in fatos_by_doc.items():
+            numero = _chave_auto(fato)
+            if not numero:
+                avulsos.append({**fato, "document_ids": [doc_id]})
+                continue
+            existente = agrupados.get(numero)
+            if existente is None:
+                agrupados[numero] = {**fato, "document_ids": [doc_id]}
+            else:
+                existente["document_ids"].append(doc_id)
+                # Campo vazio no primeiro documento pode estar preenchido em outra
+                # via do mesmo auto — completa sem sobrescrever o que já veio.
+                for chave, valor in fato.items():
+                    if valor not in (None, "", []) and existente.get(chave) in (None, "", []):
+                        existente[chave] = valor
+
         fatos: list[dict[str, Any]] = []
-        for _doc_id, fato in fatos_by_doc.items():
+        for fato in [*agrupados.values(), *avulsos]:
             enriched = dict(fato)
+            enriched["document_ids"] = sorted(fato.get("document_ids") or [])
             enriched["enquadramento_fontes"] = lookup_enquadramento(
                 fato.get("enquadramento_legal"),
                 db_session=self.ctx.session,
