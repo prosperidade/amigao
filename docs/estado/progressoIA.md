@@ -2204,3 +2204,36 @@ Consequência: os fatos dos 19 autos são extraídos e ficam prontos nos AIJobs,
 mas **não aparecem na Visão geral** até o caso avançar E1→E2 — o que depende do
 gate do checklist da etapa (item 1 da validação de 20/07). Nada se perde; só não
 há efeito visível imediato.
+
+## Gate E1 destravado — checkbox clicável + guard-rail (20/07/2026)
+
+`fix/validacao-fluxo-20-07` · item 1 da validação de fluxo
+
+### Três problemas no mesmo caminho
+
+1. **Checkboxes decorativos.** `CheckSquare`/`Square` dentro de uma `<div>`, sem
+   `onClick`. O endpoint `PATCH /macroetapa/{m}/actions` existia e ninguém o
+   chamava. O consultor via "0/N ações" sem poder marcar — e o gate depende
+   dessas ações. Foi o que prendeu o processo 15 na `entrada_demanda`.
+2. **Não persistiria mesmo se clicável.** Dos quatro pontos que mutam
+   `MacroetapaChecklist.actions`, só `mark_stage_agents_done` tinha
+   `flag_modified` — mesma armadilha da dívida #70 no `checklist_engine`.
+3. **Sem autoria.** Gravava `completed_at` sem quem marcou.
+
+### O que toca IA
+
+- **Guard-rail, não bloqueio.** Avançar sem os agentes é legítimo — a IA propõe,
+  o humano decide. Mas nunca em silêncio: `can-advance` devolve
+  `agentes_executados` + `avisos`, e a confirmação grava na auditoria o que
+  estava pendente. Liberdade com consciência assinada.
+- **A frase vem pronta do backend.** A tela não reimplementa a regra — foi a
+  redação duplicada que produziu as divergências do ADR-031.
+- O sinal de "os agentes rodaram" é o `agent_suggestion` que
+  `mark_stage_agents_done` carimba nas ações.
+
+### Erro pego pelo teste
+
+A UI foi escrita chamando `POST .../actions/toggle` — path inferido do endpoint
+vizinho `/actions/validate`. A rota real é `PATCH .../actions`. Sem o teste
+ponta a ponta, a UI iria para produção apontando para um endpoint inexistente,
+e o botão não faria nada — exatamente o sintoma que estávamos corrigindo.
