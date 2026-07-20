@@ -30,6 +30,10 @@ interface CanAdvance {
   gaps: string[];                 // CAM3WS-005 (Sprint K) — lacunas informativas
   objective: string | null;
   expected_outputs: string[];
+  // Guard-rail do avanço: o backend DECLARA o que não foi feito; a tela não
+  // reimplementa a regra, só mostra a frase e pede a confirmação consciente.
+  agentes_executados: boolean;
+  avisos: string[];
 }
 
 interface ActionItem {
@@ -94,6 +98,21 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
       toast.error(err.response?.data?.detail ?? 'Erro ao avançar etapa');
     },
   });
+
+  // Guard-rail do avanço (item 1 da validação 20/07) — "radar não cancela".
+  // Avançar sem os agentes da etapa é LEGÍTIMO (a IA propõe, o humano decide),
+  // mas nunca em silêncio: o consultor declara que sabe, e a confirmação vai
+  // para a auditoria com o que estava pendente no momento.
+  const [confirmandoAvanco, setConfirmandoAvanco] = useState(false);
+
+  const pedirAvanco = () => {
+    if (!gate.next_macroetapa) return;
+    if (gate.avisos && gate.avisos.length > 0) {
+      setConfirmandoAvanco(true);
+      return;
+    }
+    advanceMutation.mutate(gate.next_macroetapa);
+  };
 
   // Fase 0.2 — "Rodar os agentes da etapa" (Ficha 07 §2/§6). Dispara a chain da
   // etapa atual; ao concluir, o worker marca o checklist e o card fica "pronto
@@ -204,7 +223,7 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
       {gate.next_macroetapa && (
         <button
           type="button"
-          onClick={() => gate.next_macroetapa && advanceMutation.mutate(gate.next_macroetapa)}
+          onClick={pedirAvanco}
           disabled={!gate.can_advance || advanceMutation.isPending}
           className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold transition-colors ${
             gate.can_advance
@@ -230,6 +249,56 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
               : 'Aguardando requisitos'}
           </span>
         </button>
+      )}
+
+      {/* Modal do guard-rail: declara em texto claro o que NÃO foi feito. */}
+      {confirmandoAvanco && gate.next_macroetapa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-white/10 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Avançar mesmo assim?
+                </h3>
+                <ul className="mt-2 space-y-1">
+                  {gate.avisos.map((aviso, i) => (
+                    <li key={i} className="text-sm text-gray-600 dark:text-slate-300">
+                      {aviso}
+                    </li>
+                  ))}
+                </ul>
+                {gate.gaps.length > 0 && (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                    {gate.gaps.length} lacuna(s) também serão registradas na auditoria.
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
+                  A confirmação fica registrada com o que estava pendente agora.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmandoAvanco(false)}
+                className="px-3 py-2 rounded-xl text-sm text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmandoAvanco(false);
+                  if (gate.next_macroetapa) advanceMutation.mutate(gate.next_macroetapa);
+                }}
+                className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium"
+              >
+                Avançar mesmo assim
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Caso encerrado (sem próxima etapa) */}
