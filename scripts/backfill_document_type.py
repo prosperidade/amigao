@@ -59,7 +59,8 @@ def _print_report(rel: RelatorioBackfill, *, verbose: bool) -> None:
     print(f"\n== Backfill de document_type · {rel.escopo} · {modo} ==")
     print(f"  sem tipo, COM texto salvo (classificáveis): {rel.candidatos}")
     print(f"  sem tipo e SEM texto (precisam de OCR antes): {rel.sem_texto}")
-    print(f"  {'gravados' if rel.executado else 'seriam gravados'}: {len(rel.gravados)}")
+    lista = rel.gravados if rel.executado else rel.a_gravar
+    print(f"  {'gravados' if rel.executado else 'seriam gravados'}: {len(lista)}")
     print(f"  vinculados a item de checklist: {len(rel.vinculados)}")
     print(f"  texto lido mas sem tipo específico: {len(rel.sem_tipo_definido)}")
 
@@ -120,7 +121,7 @@ def main() -> int:
             _print_report(previa, verbose=args.verbose)
             return 0
 
-        n = len([r for r in previa.resultados if r.tipo_proposto not in (None, "", "outro")])
+        n = len(previa.a_gravar)   # mesma contagem do relatório — uma fonte só
         if n == 0:
             _print_report(previa, verbose=args.verbose)
             print("\n  Nada a gravar — encerrando sem escrever.")
