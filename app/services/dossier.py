@@ -254,6 +254,22 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
     )
 
 
+def _tem_documento_de(documents: list[Document], requisito: str) -> bool:
+    """True quando algum documento da lista serve ao requisito da Ficha 08.
+
+    Traduz o vocabulário pela fonte única (`requisito_de_doc_type`) em vez de
+    comparar `document_type` por igualdade — era assim que uma
+    `certidao_inteiro_teor` deixava de contar como matrícula.
+    """
+    from app.services.requisito_documental import requisito_de_doc_type  # noqa: PLC0415
+
+    return any(
+        requisito_de_doc_type(d.document_type) == requisito
+        for d in documents
+        if d.deleted_at is None
+    )
+
+
 def validate_technical_consistency(
     process: Process,
     prop: Optional[Property],
@@ -266,7 +282,9 @@ def validate_technical_consistency(
     """
     issues: list[Inconsistency] = []
     demand = process.demand_type.value if process.demand_type else None
-    doc_types = {d.document_type for d in documents if d.document_type}
+    # (o antigo set `doc_types` saiu: comparava `document_type` cru, cego a
+    # sinônimos. Quem precisa da pergunta usa `_tem_documento_de`, que passa pela
+    # fonte única de vocabulário.)
 
     # ── Regras globais ────────────────────────────────────────────────────────
 
@@ -292,13 +310,38 @@ def validate_technical_consistency(
             (m.numero_matricula or "").strip() for m in prop.matriculas_vigentes()
         )
         if not prop.registry_number and not tem_matricula:
-            issues.append(Inconsistency(
-                code="MISSING_MATRICULA",
-                severity="error",
-                title="Matrícula do imóvel ausente",
-                description="O imóvel não possui número de matrícula registrado. Documento essencial para a maioria das demandas.",
-                field="property.registry_number",
-            ))
+            # P12 aplicado a requisitos (Ficha 08 §7): o consultor NUNCA vê
+            # "ausente" com o documento visível na tela. A cura do forense ensinou
+            # o emissor a ler `Matricula` materializada, mas ele continuava cego ao
+            # DOCUMENTO — caso real do processo 15: duas certidões de inteiro teor
+            # anexadas, OCR concluído, `numero_matricula` já no staging, e a tela
+            # dizia "Matrícula do imóvel ausente" (severity error).
+            #
+            # Presença do documento e consolidação do dado são eixos DIFERENTES;
+            # colapsá-los numa string só foi a causa raiz. Com o documento na base
+            # o sinal continua existindo (o dado ainda não está consolidado), mas
+            # dito com honestidade e sem severidade de erro.
+            if _tem_documento_de(documents, "matricula"):
+                issues.append(Inconsistency(
+                    code="MATRICULA_EM_PROCESSAMENTO",
+                    severity="info",
+                    title="Matrícula recebida, aguardando consolidação",
+                    description=(
+                        "A matrícula foi anexada e lida, mas os dados ainda não "
+                        "foram gravados na base. Rode a Consolidação na aba "
+                        "Conferência para materializar o número, a área e as "
+                        "averbações."
+                    ),
+                    field="property.registry_number",
+                ))
+            else:
+                issues.append(Inconsistency(
+                    code="MISSING_MATRICULA",
+                    severity="error",
+                    title="Matrícula do imóvel ausente",
+                    description="O imóvel não possui número de matrícula registrado. Documento essencial para a maioria das demandas.",
+                    field="property.registry_number",
+                ))
 
         if not prop.car_code and demand in ("licenciamento", "regularizacao_fundiaria", "outorga", "compensacao"):
             issues.append(Inconsistency(
@@ -377,10 +420,16 @@ def validate_technical_consistency(
     # ── Regras por tipo de demanda ────────────────────────────────────────────
 
     if demand == "car":
+        # Divergência D2 da auditoria: esta regra usava `prop.matriculas` (TODAS)
+        # enquanto o MISSING_MATRICULA logo acima usa `matriculas_vigentes()` —
+        # duas semânticas de vigência no MESMO arquivo. Unificado em vigentes
+        # (ADR-027/#60): a ficha histórica é documento válido, não matrícula atual.
         tem_matricula = bool(prop) and any(
-            (m.numero_matricula or "").strip() for m in (prop.matriculas or [])
+            (m.numero_matricula or "").strip() for m in prop.matriculas_vigentes()
         )
-        if "matricula" not in doc_types and prop and not prop.registry_number and not tem_matricula:
+        # `doc_types` compara string crua; a fonte única traduz o vocabulário
+        # (uma `certidao_inteiro_teor` É a matrícula anexada).
+        if not _tem_documento_de(documents, "matricula") and prop and not prop.registry_number and not tem_matricula:
             issues.append(Inconsistency(
                 code="CAR_NO_MATRICULA_DOC",
                 severity="warning",

@@ -202,12 +202,24 @@ def auto_link_document(
     pendente do checklist com o mesmo doc_type. Retorna o item_id vinculado
     ou None se nenhum match.
     """
+    from app.services.requisito_documental import requisito_de_doc_type  # noqa: PLC0415
+
+    requisito_do_doc = requisito_de_doc_type(doc_type)
     items = list(checklist.items or [])
     for item in items:
-        if (
-            item.get("doc_type") == doc_type
-            and item.get("status") == "pending"
-        ):
+        if item.get("status") != "pending":
+            continue
+        item_doc_type = item.get("doc_type")
+        # Igualdade exata primeiro (comportamento histórico, mais específico).
+        casou = item_doc_type == doc_type
+        # Fallback pela fonte única: traduz os dois lados para o requisito da
+        # Ficha 08 antes de comparar. Sem isto, `certidao_inteiro_teor` nunca casa
+        # com o item `matricula`, e `cpf_cnpj` nunca casa com `doc_pessoal` —
+        # divergência D3 da auditoria (o item ficava pendente com o arquivo na
+        # base).
+        if not casou and requisito_do_doc is not None:
+            casou = requisito_de_doc_type(item_doc_type) == requisito_do_doc
+        if casou:
             item["status"] = "received"
             item["document_id"] = document_id
             checklist.items = items
