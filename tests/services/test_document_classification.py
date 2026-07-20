@@ -355,3 +355,23 @@ def test_dispensa_persiste(db_session):
         ProcessChecklist.process_id == proc.id).first()
     assert recarregado.items[0]["status"] == "waived"
     assert recarregado.items[0]["waiver_reason"] == "cliente isento"
+
+
+def test_relatorio_dry_run_conta_o_que_seria_gravado(db_session):
+    """O dry-run dizia "seriam gravados: 0" quando gravaria 28 (caso 15).
+
+    `gravados` filtra pelo que foi de fato escrito e por isso zera no dry-run;
+    `a_gravar` conta os que têm tipo específico — é o número que o operador
+    precisa ver antes de decidir executar.
+    """
+    from app.services.document_classification import planejar_backfill
+
+    tenant, proc = _seed(db_session)
+    _doc(db_session, tenant, proc, doc_type=None, texto=TEXTO_MATRICULA)
+    _doc(db_session, tenant, proc, doc_type=None, texto=TEXTO_CCIR)
+    _doc(db_session, tenant, proc, doc_type=None, texto=TEXTO_MUDO)   # vira "outro"
+
+    rel = planejar_backfill(db_session, process_ids=[proc.id], executar=False)
+
+    assert len(rel.gravados) == 0        # nada escrito — correto no dry-run
+    assert len(rel.a_gravar) == 2        # e o operador vê 2, não 0

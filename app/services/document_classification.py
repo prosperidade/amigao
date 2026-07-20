@@ -124,6 +124,18 @@ class RelatorioBackfill:
         return [r for r in self.resultados if r.gravado]
 
     @property
+    def a_gravar(self) -> list[ResultadoClassificacao]:
+        """Os que TÊM tipo específico — o número que importa no dry-run.
+
+        `gravados` filtra pelo que foi de fato escrito e por isso zera no
+        dry-run: o relatório dizia "seriam gravados: 0" quando eram 28.
+        """
+        return [
+            r for r in self.resultados
+            if r.tipo_proposto not in (None, "", "outro")
+        ]
+
+    @property
     def sem_tipo_definido(self) -> list[ResultadoClassificacao]:
         """Texto lido mas as regras não chegaram a um tipo específico."""
         return [r for r in self.resultados if not r.gravado and r.tipo_proposto in (None, "outro", "")]
