@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   X, CheckSquare, Square, FileText, Clock, Sparkles,
@@ -100,6 +100,29 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
   });
 
   const currentStep = macroetapaStatus?.steps.find(s => s.status === 'active');
+
+  // Item 1 da validação 20/07 — os checkboxes das ações eram DECORATIVOS:
+  // renderizavam CheckSquare/Square dentro de uma <div>, sem onClick. O endpoint
+  // PATCH /macroetapa/{m}/actions já existia e ninguém o chamava, então o
+  // consultor via "0/N ações concluídas" sem ter como marcar nenhuma — e o gate
+  // de avanço, que depende dessas ações, mantinha o caso parado na etapa.
+  const queryClient = useQueryClient();
+  const toggleAction = useMutation({
+    mutationFn: async (vars: { actionId: string; completed: boolean }) => {
+      const etapa = currentStep?.macroetapa;
+      const res = await api.patch(
+        `/processes/${card.id}/macroetapa/${etapa}/actions`,
+        { action_id: vars.actionId, completed: vars.completed },
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      // O gate de avanço lê estas ações — recarregar os dois juntos evita a tela
+      // dizer "pronta para avançar" com o botão ainda desabilitado.
+      queryClient.invalidateQueries({ queryKey: ['macroetapa-status', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['process-can-advance', card.id] });
+    },
+  });
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'preview', label: 'Visão geral' },
@@ -350,9 +373,18 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
 
               <div className="space-y-1.5">
                 {currentStep.actions.map(action => (
-                  <div
+                  <button
                     key={action.id}
-                    className="flex items-start gap-3 p-3 rounded-lg text-left w-full"
+                    type="button"
+                    disabled={toggleAction.isPending}
+                    onClick={() =>
+                      toggleAction.mutate({
+                        actionId: action.id,
+                        completed: !action.completed,
+                      })
+                    }
+                    title={action.completed ? 'Desmarcar ação' : 'Marcar como concluída'}
+                    className="flex items-start gap-3 p-3 rounded-lg text-left w-full hover:bg-gray-50 dark:hover:bg-zinc-800/50 disabled:opacity-50 transition-colors"
                   >
                     {action.completed ? (
                       <CheckSquare className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
@@ -368,7 +400,7 @@ export default function MacroetapaSidePanel({ card, onClose }: Props) {
                     >
                       {action.label}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
 
