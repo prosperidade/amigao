@@ -169,10 +169,16 @@ def _create_alerts_for_document(
     processes = q.limit(100).all()
     count = 0
 
+    # `demand_types` é coluna JSON de lista. Se vier uma STRING (mesma classe do
+    # `proprietarios`), o `in` abaixo vira comparação de SUBSTRING: 'car' casaria
+    # dentro de 'licenciamento_car' e o alerta dispararia pelo motivo errado, sem
+    # erro nenhum. Lista de verdade ou nada.
+    demand_types = doc.demand_types if isinstance(doc.demand_types, list) else []
+
     for process in processes:
         # Verificar match de demand_type
-        if doc.demand_types and process.demand_type:
-            if process.demand_type.value not in doc.demand_types:
+        if demand_types and process.demand_type:
+            if process.demand_type.value not in demand_types:
                 continue
 
         alert = LegislationAlert(

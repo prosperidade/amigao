@@ -416,6 +416,9 @@ class DiagnosticoAgent(BaseAgent):
             check_autuado_diverge_titular,
             lookup_enquadramento,
         )
+        from app.services.inconsistency_matrix import (  # noqa: PLC0415
+            normalize_list_of_dicts,
+        )
 
         doc_ids = [
             d.get("id")
@@ -468,7 +471,13 @@ class DiagnosticoAgent(BaseAgent):
             prop = self.ctx.session.query(Property).filter(Property.id == process.property_id).first()
             if prop:
                 for m in prop.matriculas or []:
-                    matricula_proprietarios.extend(m.proprietarios or [])
+                    # Leitura tolerante (porta única): o legado tem `proprietarios`
+                    # gravado como string nua, e `extend` sobre string ITERA OS
+                    # CARACTERES — corrompia em silêncio aqui e só estourava adiante,
+                    # no `p.get("cpf")` do auto de infração. Normaliza antes de somar.
+                    matricula_proprietarios.extend(
+                        normalize_list_of_dicts(m.proprietarios, item_key="nome")
+                    )
 
         # DEDUPE POR NÚMERO DO AUTO (#78, exigência do André).
         # `fatos_by_doc` é indexado por DOCUMENTO: N documentos viram N fatos.

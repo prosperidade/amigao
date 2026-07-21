@@ -270,6 +270,99 @@ def is_area_plausible(ha: Optional[float]) -> bool:
     return ha is not None and AREA_PLAUSIBLE_MIN_HA <= ha <= AREA_PLAUSIBLE_MAX_HA
 
 
+# ---------------------------------------------------------------------------
+# Forma de container em coluna JSON — porta ÚNICA (leitura E escrita)
+# ---------------------------------------------------------------------------
+# Caso 15 / caso do `proprietarios`: o CCIR extrai `detentor` como ESCALAR de
+# texto e o mapeamento o roteia para `Matricula.proprietarios`, que é coluna de
+# LISTA (`default=list`, schema `list[dict]`). A string nua foi gravada, e quem
+# leu fez `lista.extend("Leonardo Ribeiro")` — que NÃO levanta erro: itera os
+# CARACTERES. A falha só apareceu dois módulos adiante, com `'str' object has no
+# attribute 'get'`, apontando para o lugar errado.
+#
+# A lição (P12, "nada some sem dizer"): forma errada tem que ser barrada onde
+# nasce e tolerada onde se lê — nunca corrompida no meio do caminho.
+
+# Colunas JSON de lista cujo ITEM é um dict de shape conhecido: escalar que pousa
+# nelas é embrulhado nesta chave. Coluna de lista FORA deste mapa não aceita
+# escalar — rejeita alto em vez de gravar nu.
+LIST_ITEM_KEY: dict[str, str] = {
+    # Só entram aqui colunas cujo shape do item foi VERIFICADO. Chutar a chave
+    # faria o sistema embrulhar silenciosamente onde deveria recusar — que é
+    # exatamente a classe de erro que este módulo existe para matar.
+    "proprietarios": "nome",
+}
+
+
+def normalize_list_of_dicts(value: Any, *, item_key: str = "nome") -> list[dict[str, Any]]:
+    """LEITURA tolerante de coluna JSON de lista → sempre ``list[dict]``.
+
+    Aceita o que o banco de fato tem, incluindo o legado torto: ``None``, string
+    nua ('Leonardo Ribeiro' → ``[{'nome': ...}]``), dict solto (→ lista de um) e
+    listas mistas de dicts com escalares. NUNCA levanta e NUNCA devolve algo que
+    itere em caracteres — o chamador pode fazer ``.get()`` em cada item com
+    segurança. Itens vazios são descartados.
+    """
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, str):
+        texto = value.strip()
+        return [{item_key: texto}] if texto else []
+    if isinstance(value, (list, tuple)):
+        out: list[dict[str, Any]] = []
+        for item in value:
+            if isinstance(item, dict):
+                out.append(item)
+            elif isinstance(item, str):
+                texto = item.strip()
+                if texto:
+                    out.append({item_key: texto})
+            elif item is not None:
+                out.append({item_key: item})
+        return out
+    return [{item_key: value}]
+
+
+def fit_json_container(
+    value: Any, container: Any, column_name: str = ""
+) -> tuple[Any, Optional[str]]:
+    """ESCRITA: encaixa o valor na forma da coluna JSON, ou recusa alto.
+
+    ``container`` é ``list``/``dict`` (derivado do ``default=`` da coluna) ou
+    ``None`` para coluna escalar. Devolve ``(valor_encaixado, erro)``; com
+    ``erro`` preenchido o chamador NÃO grava e registra em ``ignorados`` — é o
+    "falhar ruidosamente" que faltava: escalar nu nunca mais pousa em coluna de
+    lista/dict.
+    """
+    if value is None or container is None:
+        return value, None
+
+    if container is list:
+        item_key = LIST_ITEM_KEY.get(column_name)
+        if isinstance(value, (list, tuple)):
+            if all(isinstance(i, dict) for i in value):
+                return list(value), None
+            if item_key is None:
+                return None, f"{column_name} (lista com item escalar e sem shape conhecido)"
+            return normalize_list_of_dicts(value, item_key=item_key), None
+        if isinstance(value, dict):
+            return [value], None
+        if item_key is None:
+            return None, f"{column_name} (escalar em coluna de lista, sem shape conhecido)"
+        return normalize_list_of_dicts(value, item_key=item_key), None
+
+    if container is dict:
+        if isinstance(value, dict):
+            return value, None
+        # Escalar não vira dict por adivinhação: sem chave, embrulhar seria
+        # inventar estrutura. Recusa e fica visível.
+        return None, f"{column_name} (escalar em coluna de dict)"
+
+    return value, None
+
+
 # Anotações que grudam no número da matrícula e NÃO fazem parte dele.
 #   '4655 (2 de 3)'  '(parte 2 de 3)'  → fatia de georreferenciamento
 #   'R-01' 'AV-3' 'R.05'              → ato registral (registro/averbação)
