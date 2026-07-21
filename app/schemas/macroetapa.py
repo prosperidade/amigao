@@ -92,6 +92,11 @@ class CanAdvanceResponse(BaseModel):
     gaps: list[str] = []                  # CAM3WS-005 (Sprint K) — lacunas informativas (não travam)
     objective: Optional[str] = None
     expected_outputs: list[str] = []
+    # Guard-rail do avanço (item 1 da validação 20/07): NUNCA trava — declara.
+    # `avisos` é o que o consultor precisa saber ANTES de confirmar; a
+    # confirmação registra na auditoria o que estava pendente no momento.
+    agentes_executados: bool = True
+    avisos: list[str] = []
 
 
 # CAM3WS-006 — Saídas/artefatos por etapa

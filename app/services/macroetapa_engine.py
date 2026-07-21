@@ -74,6 +74,24 @@ def initialize_macroetapa_checklists(
 # Calcular completion %
 # ---------------------------------------------------------------------------
 
+def _persistir_actions(checklist: MacroetapaChecklist, actions: list) -> None:
+    """Grava as ações de forma que o SQLAlchemy DETECTE a mudança.
+
+    `MacroetapaChecklist.actions` é JSON sem `MutableList`: o padrão
+    `actions = list(...)` → mutar os dicts → reatribuir NÃO deixa o objeto
+    dirty, porque os dicts são compartilhados e no instante da atribuição
+    "antigo" já é igual a "novo". O flush não emite UPDATE e a marcação se
+    perde.
+
+    `mark_stage_agents_done` já tinha descoberto isso e curado no seu próprio
+    ponto; os outros três (`toggle_action`, `validate_action`,
+    `mark_action_needs_validation`) ficaram sem o remédio — mesma classe que a
+    dívida #70 fechou no `checklist_engine` para o campo `items`.
+    """
+    checklist.actions = [dict(a) for a in actions]
+    flag_modified(checklist, "actions")
+
+
 def calculate_completion_pct(actions: list[dict]) -> float:
     """Calcula % de conclusao baseado nas acoes do checklist."""
     if not actions:
@@ -196,6 +214,8 @@ def toggle_action(
     checklist: MacroetapaChecklist,
     action_id: str,
     completed: bool,
+    *,
+    user_id: Optional[int] = None,
 ) -> MacroetapaChecklist:
     """Marca/desmarca uma acao no checklist."""
     actions = list(checklist.actions)  # copia para trigger de update
@@ -204,6 +224,10 @@ def toggle_action(
         if action.get("id") == action_id:
             action["completed"] = completed
             action["completed_at"] = datetime.now(UTC).isoformat() if completed else None
+            # Autoria da marcação manual (item 1 da validação 20/07): quem marcou
+            # e quando. Antes só o instante era gravado — sem dono, a auditoria da
+            # etapa não respondia "quem disse que isto foi feito?".
+            action["completed_by_user_id"] = user_id if completed else None
             # Se desmarcou, invalida validação humana (precisa revalidar)
             if not completed:
                 action["validated_at"] = None
@@ -214,7 +238,7 @@ def toggle_action(
     if not found:
         raise HTTPException(status_code=404, detail=f"Ação '{action_id}' não encontrada")
 
-    checklist.actions = actions
+    _persistir_actions(checklist, actions)
     checklist.completion_pct = calculate_completion_pct(actions)
     db.flush()
     return checklist
@@ -253,7 +277,7 @@ def validate_action(
     if not found:
         raise HTTPException(status_code=404, detail=f"Ação '{action_id}' não encontrada")
 
-    checklist.actions = actions
+    _persistir_actions(checklist, actions)
     db.flush()
     return checklist
 
@@ -280,7 +304,7 @@ def mark_action_needs_validation(
                 action["validated_at"] = None
                 action["validated_by_user_id"] = None
             break
-    checklist.actions = actions
+    _persistir_actions(checklist, actions)
     db.flush()
     return checklist
 
@@ -374,6 +398,21 @@ def ensure_macroetapa_checklists(
 # ---------------------------------------------------------------------------
 # Elo evento→card (Fase 0.2) — agentes da etapa concluídos → "pronto para avançar"
 # ---------------------------------------------------------------------------
+
+def stage_agents_executados(checklist: MacroetapaChecklist | None) -> bool:
+    """Os agentes desta etapa já rodaram?
+
+    Sinal: `mark_stage_agents_done` carimba `agent_suggestion` nas ações que
+    marcou. Nenhuma ação com sugestão de agente ⇒ a chain da etapa não passou
+    por aqui — ou o consultor marcou tudo na mão.
+
+    Não é bloqueio: alimenta o aviso do avanço (radar-não-cancela). O consultor
+    pode avançar sem os agentes; ele só não pode fazer isso sem saber.
+    """
+    if checklist is None:
+        return False
+    return any(a.get("agent_suggestion") for a in (checklist.actions or []))
+
 
 def mark_stage_agents_done(
     db: Session,

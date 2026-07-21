@@ -75,6 +75,7 @@ from app.services.macroetapa_engine import (
     has_proposal_accepted,
     has_rota_validada,
     initialize_macroetapa_checklists,
+    stage_agents_executados,
     toggle_action,
     validate_action,
 )
@@ -870,6 +871,19 @@ def _compute_can_advance(
     if not process.initial_summary:
         gaps.append("Resumo inicial da demanda (voz do cliente) não registrado")
 
+    # Guard-rail (item 1 da validação 20/07): liberdade com consciência.
+    # Se a etapa TEM chain de agentes e ela não rodou, o avanço não é
+    # bloqueado — mas o consultor é avisado em texto claro antes de confirmar.
+    agentes_ok = True
+    avisos: list[str] = []
+    if current_etapa is not None and MACROETAPA_AGENT_CHAIN.get(current_etapa):
+        agentes_ok = stage_agents_executados(cl)
+        if not agentes_ok:
+            avisos.append(
+                "Os agentes desta etapa não foram executados — o caso avançará "
+                "sem diagnóstico automático."
+            )
+
     return CanAdvanceResponse(
         can_advance=can,
         current_macroetapa=current_etapa.value if current_etapa else None,
@@ -879,6 +893,8 @@ def _compute_can_advance(
         gaps=gaps,
         objective=meta.get("objective"),
         expected_outputs=meta.get("expected_outputs", []),
+        agentes_executados=agentes_ok,
+        avisos=avisos,
     )
 
 
@@ -929,11 +945,24 @@ def advance_process_macroetapa(
         tenant_id=current_user.tenant_id,
     )
 
+    # Guard-rail (item 1 da validação 20/07): a confirmação registra O QUE
+    # estava pendente no momento do avanço. Liberdade com consciência assinada —
+    # daqui a três meses a auditoria responde "o consultor sabia?" com sim e a
+    # lista exata do que ele viu na tela.
+    ressalvas: list[str] = []
+    if not gate.agentes_executados:
+        ressalvas.append("agentes da etapa não executados")
+    if gate.gaps:
+        ressalvas.append(f"{len(gate.gaps)} lacuna(s): " + "; ".join(gate.gaps))
+    detalhe = f"Macroetapa avançada para {body.macroetapa.value}"
+    if ressalvas:
+        detalhe += " — avanço confirmado com ressalvas: " + " | ".join(ressalvas)
+
     repo.add_audit(
         user_id=current_user.id,
         process=process,
         action="macroetapa_changed",
-        details=f"Macroetapa avançada para {body.macroetapa.value}",
+        details=detalhe,
         new_value=body.macroetapa.value,
     )
 
@@ -1094,7 +1123,9 @@ def toggle_macroetapa_action(
     if not checklist:
         raise HTTPException(status_code=404, detail="Checklist da macroetapa não encontrado")
 
-    checklist = toggle_action(db, checklist, body.action_id, body.completed)
+    checklist = toggle_action(
+        db, checklist, body.action_id, body.completed, user_id=current_user.id
+    )
     db.commit()
     db.refresh(checklist)
     return checklist
