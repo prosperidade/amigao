@@ -361,6 +361,33 @@ porquê.
 
 ---
 
+## Cascata de vinculação ITR → matrícula (spec da Isis, 2026-07-20)
+
+> Esta seção **não estava na ficha original** — é a resposta da Isis à pergunta
+> "como o ITR encontra a matrícula dele?", registrada aqui porque é regra de
+> domínio e vale como spec (ver ADR-032).
+
+Do sinal mais forte ao mais fraco:
+
+1. **NIRF normalizado** — extrai o NIRF do cabeçalho do ITR e compara com o NIRF
+   já registrado na Matrícula (aparece repetido de forma consistente ao longo dos
+   registros/hipotecas). Match único → vincula automaticamente, alta confiança.
+2. **Código INCRA normalizado, só se o match for único** — se o NIRF não estiver
+   disponível ou não bater. Nenhuma ou 2+ matrículas → não autolinka.
+3. **Corroboração (área + denominação)** como desempate — quando o INCRA sozinho
+   não resolve (caso 909-8 × 371-0, duas famílias documentais concorrentes).
+   Reforça a hipótese, **mas nunca autolinka sozinho**: vira sugestão de alta
+   probabilidade.
+4. **Vínculo manual do consultor** — o sistema apresenta o ITR como não vinculado,
+   mostra os candidatos com os sinais a favor de cada um, e o consultor decide. A
+   decisão fica registrada: é proveniência, útil inclusive se a divergência de
+   INCRA virar caso de retificação formal.
+
+> ⚑ **Pendente de domínio (não bloqueante):** confirmação de leitura da Isis sobre
+> o vínculo ITR→matrícula por INCRA normalizado — §4 aplicado conforme esta
+> cascata. Comportamento implementado é o conservador: os degraus 1 e 2 vinculam;
+> 3 e 4 nunca decidem sozinhos.
+
 ## Estado de implementação (mantido pelo time técnico)
 
 Esta seção **não faz parte da ficha da Isis** — registra o que já virou código.
@@ -374,7 +401,10 @@ Esta seção **não faz parte da ficha da Isis** — registra o que já virou c�
 | §7.3 — vencido = alerta, nunca trava | ✅ implementado | `alertas` (nunca muda o estado para ausente) |
 | §3.1 — titular único | ❌ dívida **#73** | — |
 | §3.2 — chave composta comarca+matrícula | ❌ dívida **#72** | — |
-| §4 — campos-âncora novos (Livro, Folha, Ficha, NIRF, Módulo Fiscal, nº CCIR) | ❌ dívida **#74** | — |
+| §4 — **NIRF/CIB** (identidade) | ✅ implementado | `_FIELD_SPECS['matricula']` + cascata |
+| §4 — Livro, Folha, Ficha, Módulo Fiscal, nº CCIR (completude) | ❌ dívida **#74** | — |
+| §5.1 — hierarquia declarada no confronto de identidade | ✅ implementado | `confronto_identidade.py` |
+| §8 — normalização de código antes de comparar | ✅ implementado | `norm_incra` (só dígitos) |
 | §5 — duas cadeias de prioridade | ❌ dívida **#75** | — |
 | §8 — normalização (UTM×geodésica, vértices, Gleba×Lote) | ❌ dívida **#76** | — |
 | §8 — CAR aponta pendência → Conferência responde com doc já presente | 💡 oportunidade de produto (#77) | — |
