@@ -503,8 +503,21 @@ def consolidate_process(
         elif entity == "matricula" and prop is not None:
             hint = winner.matricula_hint
             if not hint:
-                ignorados.append(f"matricula sem matricula_hint: {target_field}")
-                continue
+                # Aqui o NIRF do caso 15 se perdia: o ITR não declara número de
+                # matrícula (identifica por NIRF/CIB e INCRA — Ficha 08 §4), então
+                # suas linhas chegam sem hint e o aceite não tinha onde pousar.
+                # A cascata da Isis (20/07) tenta ancorar pelos sinais do próprio
+                # documento; só os degraus 1 e 2 vinculam sozinhos.
+                anc = _ancorar_documento(db, tenant_id, process_id, prop, winner)
+                if anc is not None:
+                    hint = anc.numero_matricula
+                else:
+                    ignorados.append(
+                        f"aceito aguardando vínculo: {target_field} — nenhuma "
+                        "matrícula ancorada a este documento (escolha manual na "
+                        "Conferência)"
+                    )
+                    continue
             # Guard fantasma: hint vindo só de tipos que não declaram matrícula
             # (sigef, outro…) não CRIA matrícula — atualiza se já existir.
             allow_create = any(
@@ -765,6 +778,41 @@ def _reconcile_matricula_activation(
     return desativadas, reativadas
 
 
+def _ancorar_documento(db, tenant_id: int, process_id: int, prop, winner):
+    """Roda a cascata da Isis para o documento da linha vencedora.
+
+    Devolve a `Matricula` quando um degrau AUTOLINKÁVEL resolve (1 NIRF, 2
+    INCRA único). Degraus 3 e 4 não vinculam sozinhos — devolve None e o
+    chamador emite a pendência para o consultor decidir.
+    """
+    from app.models.extracted_field_staging import (  # noqa: PLC0415
+        ExtractedFieldStaging,
+    )
+    from app.services.consolidacao_lineage import vincular_itr  # noqa: PLC0415
+
+    if prop is None or winner.document_id is None:
+        return None
+    irmas = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+            ExtractedFieldStaging.document_id == winner.document_id,
+        )
+        .all()
+    )
+    por_campo = {linha.field_name: linha.field_value for linha in irmas}
+    incras = [
+        v for k, v in por_campo.items()
+        if k in ("codigo_incra", "codigo_sncr_incra")
+    ]
+    r = vincular_itr(
+        db, tenant_id=tenant_id, property_id=prop.id,
+        nirf=por_campo.get("nirf_cib"), codigos_incra=incras,
+    )
+    return r.matricula if r.autolink else None
+
+
 def _upsert_matricula(
     db: Session, tenant_id: int, property_id: int, hint: str, *, allow_create: bool = True,
 ):
@@ -790,6 +838,29 @@ def _upsert_matricula(
         field_sources={"numero_matricula": "human_validated"},
     )
     db.add(mat)
+    db.flush()
+    # Certidão de nascimento (caso 15): de qual staging/decisão este registro
+    # veio. Sem isso, "de onde veio esse 2923?" só se responde cruzando
+    # timestamps na mão — foi o que a investigação teve de fazer.
+    from app.models.extracted_field_staging import (  # noqa: PLC0415
+        ExtractedFieldStaging,
+        ExtractedFieldStatus,
+    )
+    from app.services.consolidacao_lineage import (  # noqa: PLC0415
+        registrar_lineage_criacao,
+    )
+
+    origem = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.matricula_hint == hint,
+            ExtractedFieldStaging.status == ExtractedFieldStatus.aceito,
+        )
+        .order_by(ExtractedFieldStaging.decided_at.desc().nullslast())
+        .first()
+    )
+    registrar_lineage_criacao(mat, staging=origem)
     db.flush()
     return mat, True
 

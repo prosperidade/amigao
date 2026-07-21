@@ -46,6 +46,10 @@ interface ConsolidationResult {
   imovel_atualizado: boolean;
   area_total_matriculas: number | null;
   acoes_criadas: number;
+  // Aceites que NÃO viraram dado na base. O backend já os listava; a tela
+  // nunca os mostrou — e foi assim que o NIRF e o VTN do caso 15 sumiram em
+  // silêncio depois de o consultor ter aceitado os dois.
+  ignorados: string[];
 }
 
 const STATUS_CLS: Record<string, string> = {
@@ -111,6 +115,12 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
       setConsolidated(res);
       invalidate();
       toast.success(`Consolidado: ${res.campos_gravados} campo(s) gravado(s)${res.acoes_criadas > 0 ? ` · ${res.acoes_criadas} ação(ões)` : ''}.`);
+      // O aceite perdido merece o mesmo destaque do sucesso: se o consultor
+      // decidiu e o dado não entrou, ele precisa saber AGORA, não descobrir
+      // semanas depois com o campo vazio no dossiê.
+      if (res.ignorados?.length) {
+        toast.error(`${res.ignorados.length} campo(s) aceito(s) não foram gravados — veja o detalhe abaixo.`);
+      }
     },
     onError: (e) => toast.error(errDetail(e, 'Falha ao consolidar na base.')),
   });
@@ -224,6 +234,20 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
           </div>
         </div>
       ))}
+
+      {/* P12: aceite que não achou destino aparece — nunca some calado. */}
+      {consolidated && consolidated.ignorados?.length > 0 && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-3 space-y-1">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            {consolidated.ignorados.length} campo(s) aceito(s) não foram gravados
+          </p>
+          <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
+            {consolidated.ignorados.map((motivo, i) => (
+              <li key={i}>· {motivo}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {consolidated && (
         <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-3 text-sm text-emerald-800 dark:text-emerald-300">
