@@ -1347,6 +1347,46 @@ def decide_staging_field(
     return StagingDecisionResult(field_id=row.id, status=row.status, decided_value=decided)
 
 
+@router.get("/{process_id}/confronto-identidade")
+def get_confronto_identidade(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Números de matrícula concorrentes no caso — a decisão mais cara do domínio.
+
+    No caso 15 o CCIR declarava 2923 e a certidão 4698, e a Conferência nunca
+    colocou os dois lado a lado. O consultor escolheu sem saber que estava
+    escolhendo a identidade jurídica do imóvel.
+
+    A frase da regra vem do BACKEND (padrão do guard-rail): a tela não
+    reimplementa a hierarquia da Ficha 08 §5.1.
+    """
+    from app.services.confronto_identidade import detectar_confronto  # noqa: PLC0415
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado"
+    )
+    c = detectar_confronto(db, tenant_id=current_user.tenant_id, process_id=process_id)
+    return {
+        "ha_confronto": c.ha_confronto,
+        "regra": c.regra,
+        "prevalente": (
+            {"numero": c.prevalente.numero, "fonte": c.prevalente.rotulo_fonte}
+            if c.prevalente else None
+        ),
+        "fontes": [
+            {
+                "numero": f.numero, "document_id": f.document_id,
+                "fonte": f.rotulo_fonte, "status": f.status,
+                "staging_id": f.staging_id,
+            }
+            for f in c.fontes
+        ],
+        "cadeia_proposta": c.cadeia_proposta,
+    }
+
+
 @router.get("/{process_id}/vinculo-candidatos/{document_id}")
 def listar_candidatos_vinculo(
     process_id: int,

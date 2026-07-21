@@ -15,6 +15,7 @@ import { api } from '@/lib/api';
 import ConsolidacaoPanel from './ConsolidacaoPanel';
 import CadeiaFichasPanel from './CadeiaFichasPanel';
 import RequisitosPanel from './RequisitosPanel';
+import ConfrontoIdentidade from './ConfrontoIdentidade';
 
 interface ConferenciaTabProps {
   processId: number;
@@ -43,7 +44,12 @@ export default function ConferenciaTab({ processId }: ConferenciaTabProps) {
       <div className="space-y-6">
         {/* Cadeia pode existir mesmo sem staging pendente (matrículas já
             consolidadas) — o painel se auto-oculta quando não há proposta. */}
-        <RequisitosPanel processId={processId} />
+        <ConfrontoIdentidade processId={processId} />
+        {/* Identidade primeiro: decidir QUAL matrícula é o imóvel antes de
+          conferir campo a campo. Foi a ausência disto que deixou o caso 15
+          nascer com o número defasado do CCIR. */}
+      <ConfrontoIdentidade processId={processId} />
+      <RequisitosPanel processId={processId} />
         <CadeiaFichasPanel processId={processId} />
         <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-dashed border-gray-200 dark:border-white/10 p-8 text-center">
           <ClipboardCheck className="w-8 h-8 text-gray-300 dark:text-slate-600 mx-auto mb-2" />
