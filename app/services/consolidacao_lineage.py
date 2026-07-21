@@ -164,6 +164,93 @@ def ancorar_por_incra(
 
 
 # ---------------------------------------------------------------------------
+# Cascata de vinculação ITR → matrícula (spec da Isis, 20/07)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Vinculacao:
+    """Resultado da cascata. `nivel` diz por QUAL sinal chegou aqui."""
+
+    matricula: Optional[Matricula] = None
+    nivel: int = 0                    # 1=NIRF · 2=INCRA · 3=corroboração · 0=nenhum
+    sinal: str = ""
+    autolink: bool = False            # só 1 e 2 autolinkam
+    candidatas: list[dict[str, Any]] = field(default_factory=list)
+    motivo: str = ""
+
+
+def vincular_itr(
+    db: Session,
+    *,
+    tenant_id: int,
+    property_id: int,
+    nirf: Any = None,
+    codigos_incra: Optional[list[Any]] = None,
+    area: Any = None,
+    denominacao: Any = None,
+) -> Vinculacao:
+    """Cascata do mais forte ao mais fraco (spec da Isis, 20/07).
+
+    1. **NIRF normalizado** — se casa UMA matrícula, vincula (alta confiança).
+    2. **INCRA normalizado** — só se o match for ÚNICO.
+    3. **Corroboração (área + denominação)** — desempate quando o INCRA não
+       resolve. **NUNCA autolinka**, mesmo com os dois batendo: é sugestão de
+       alta probabilidade. A Isis foi explícita, e nenhuma otimização pode
+       promover sugestão a vínculo.
+    4. Nada resolveu → o consultor decide, vendo os candidatos e os sinais a
+       favor de cada um (a decisão dele vira proveniência).
+    """
+    matriculas = (
+        db.query(Matricula)
+        .filter(
+            Matricula.tenant_id == tenant_id,
+            Matricula.property_id == property_id,
+            Matricula.deactivated_at.is_(None),
+        )
+        .all()
+    )
+    if not matriculas:
+        return Vinculacao(motivo="o imóvel ainda não tem matrícula na base")
+
+    # ---- Degrau 1: NIRF ----------------------------------------------------
+    alvo_nirf = norm_incra(nirf)
+    if alvo_nirf:
+        casadas = [m for m in matriculas if norm_incra(m.nirf_cib) == alvo_nirf]
+        if len(casadas) == 1:
+            return Vinculacao(
+                matricula=casadas[0], nivel=1, sinal="nirf", autolink=True,
+                motivo=f"NIRF {nirf} casa com a matrícula {casadas[0].numero_matricula}",
+            )
+
+    # ---- Degrau 2: INCRA ---------------------------------------------------
+    anc = ancorar_por_incra(
+        db, tenant_id=tenant_id, property_id=property_id,
+        codigos_do_documento=codigos_incra or [],
+    )
+    if anc.vinculavel:
+        return Vinculacao(
+            matricula=anc.matricula, nivel=2, sinal="incra", autolink=True,
+            motivo=f"código INCRA casa apenas com {anc.matricula.numero_matricula}",
+        )
+
+    # ---- Degrau 3: corroboração — DÍVIDA (recorte do André, 20/07) ---------
+    # Área + denominação como desempate ranqueado, e a tela rica de "sinais a
+    # favor", ficam para follow-up: é refinamento de UX, e enquanto não existem
+    # o caso ambíguo cai no degrau 4 manual, que resolve. A cascata da Isis
+    # (20/07) é a spec da dívida.
+    # ---- Degrau 4: o consultor decide --------------------------------------
+    return Vinculacao(
+        candidatas=[
+            {"matricula_id": m.id, "numero_matricula": m.numero_matricula, "sinais": []}
+            for m in matriculas
+        ],
+        motivo=(
+            "nenhum sinal resolveu com segurança — escolha a matrícula "
+            "(a decisão fica registrada como proveniência)"
+        ),
+    )
+
+# ---------------------------------------------------------------------------
 # Varredura de aceites perdidos (P12 — nada some sem dizer)
 # ---------------------------------------------------------------------------
 
