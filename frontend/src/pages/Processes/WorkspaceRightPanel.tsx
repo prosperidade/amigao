@@ -106,7 +106,7 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
   const [confirmandoAvanco, setConfirmandoAvanco] = useState(false);
 
   const pedirAvanco = () => {
-    if (!gate.next_macroetapa) return;
+    if (!gate?.next_macroetapa) return;
     if (gate.avisos && gate.avisos.length > 0) {
       setConfirmandoAvanco(true);
       return;
