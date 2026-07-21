@@ -1347,6 +1347,94 @@ def decide_staging_field(
     return StagingDecisionResult(field_id=row.id, status=row.status, decided_value=decided)
 
 
+@router.get("/{process_id}/vinculo-candidatos/{document_id}")
+def listar_candidatos_vinculo(
+    process_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Degrau 4 da cascata (spec da Isis) — a quem este documento pode pertencer.
+
+    Roda a cascata e devolve o que ela concluiu: vínculo automático (NIRF ou
+    INCRA único), ou a lista de candidatos para o consultor escolher. Nunca
+    decide sozinho fora dos degraus 1 e 2.
+    """
+    from app.models.document import Document  # noqa: PLC0415
+    from app.services.consolidacao_lineage import vincular_itr  # noqa: PLC0415
+
+    repo = ProcessRepository(db, current_user.tenant_id)
+    process = repo.get_or_404(process_id, detail="Processo não encontrado")
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.tenant_id == current_user.tenant_id)
+        .first()
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+    if not process.property_id:
+        return {"autolink": False, "nivel": 0, "candidatas": [],
+                "motivo": "o processo ainda não tem imóvel vinculado"}
+
+    linhas = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == current_user.tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+            ExtractedFieldStaging.document_id == document_id,
+        )
+        .all()
+    )
+    por_campo = {linha.field_name: linha.field_value for linha in linhas}
+    incras = [
+        v for k, v in por_campo.items()
+        if k in ("codigo_incra", "codigo_sncr_incra")
+    ]
+    r = vincular_itr(
+        db, tenant_id=current_user.tenant_id, property_id=process.property_id,
+        nirf=por_campo.get("nirf_cib"), codigos_incra=incras,
+    )
+    return {
+        "autolink": r.autolink,
+        "nivel": r.nivel,
+        "sinal": r.sinal,
+        "motivo": r.motivo,
+        "matricula_id": r.matricula.id if r.matricula else None,
+        "candidatas": r.candidatas,
+    }
+
+
+@router.post("/{process_id}/vinculo-manual/{document_id}")
+def vincular_documento_manual(
+    process_id: int,
+    document_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Degrau 4 — o consultor escolhe a matrícula; a escolha vira proveniência."""
+    from app.services.consolidacao_lineage import (  # noqa: PLC0415
+        vincular_manualmente,
+    )
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado"
+    )
+    matricula_id = body.get("matricula_id")
+    if not matricula_id:
+        raise HTTPException(status_code=422, detail="'matricula_id' é obrigatório")
+    try:
+        n = vincular_manualmente(
+            db, tenant_id=current_user.tenant_id, process_id=process_id,
+            document_id=document_id, matricula_id=int(matricula_id),
+            user_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    return {"linhas_ancoradas": n, "matricula_id": int(matricula_id)}
+
+
 @router.post("/{process_id}/consolidar", response_model=ConsolidationResult)
 def consolidate_process_endpoint(
     process_id: int,

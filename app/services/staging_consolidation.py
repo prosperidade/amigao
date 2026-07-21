@@ -243,6 +243,28 @@ def decide_field(
         raise HTTPException(status_code=404, detail="Campo de staging não encontrado.")
 
     irmaos: list[int] = []
+    if acao == "reabrir":
+        # Devolve a PENDENTE para o consultor decidir de novo — com a tela
+        # consertada. O que estava decidido vai inteiro para a auditoria antes
+        # de ser limpo: reabrir não apaga história.
+        anterior = {
+            "status": row.status.value if row.status else None,
+            "decided_value": row.decided_value,
+            "decided_by_user_id": row.decided_by_user_id,
+            "decided_at": row.decided_at.isoformat() if row.decided_at else None,
+        }
+        row.status = ExtractedFieldStatus.pendente
+        row.decided_value = None
+        row.decided_by_user_id = None
+        row.decided_at = None
+        db.flush()
+        _audit(db, tenant_id, process_id, user_id, "staging_reabrir", {
+            "field_id": row.id, "target_entity": row.target_entity,
+            "target_field": row.target_field, "matricula_hint": row.matricula_hint,
+            "decisao_anterior": anterior,
+        })
+        db.commit()
+        return row
     if acao == "rejeitar":
         row.status = ExtractedFieldStatus.rejeitado
         row.decided_value = None

@@ -343,3 +343,54 @@ def varrer_aceites_perdidos(
             ))
 
     return perdidos
+
+def vincular_manualmente(
+    db: Session,
+    *,
+    tenant_id: int,
+    process_id: int,
+    document_id: int,
+    matricula_id: int,
+    user_id: Optional[int],
+) -> int:
+    """Degrau 4 — o consultor escolhe a matrícula; a escolha vira proveniência.
+
+    Ancora TODAS as linhas de staging daquele documento à matrícula escolhida
+    (preenchendo `matricula_hint`), que é o que faltava para o aceite ter onde
+    pousar. A decisão fica registrada com quem/quando/sinal — a Isis observou
+    que isso é útil se a divergência de INCRA virar retificação formal depois.
+
+    Devolve quantas linhas foram ancoradas.
+    """
+    mat = (
+        db.query(Matricula)
+        .filter(Matricula.id == matricula_id, Matricula.tenant_id == tenant_id)
+        .first()
+    )
+    if mat is None:
+        raise ValueError(f"matrícula {matricula_id} não encontrada")
+
+    linhas = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+            ExtractedFieldStaging.document_id == document_id,
+        )
+        .all()
+    )
+    for linha in linhas:
+        linha.matricula_hint = mat.numero_matricula
+
+    atual = dict(mat.lineage or {})
+    vinculos = list(atual.get("vinculos_manuais") or [])
+    vinculos.append({
+        "document_id": document_id,
+        "user_id": user_id,
+        "sinal": "manual",
+        "linhas_ancoradas": len(linhas),
+    })
+    atual["vinculos_manuais"] = vinculos
+    mat.lineage = atual
+    db.flush()
+    return len(linhas)
