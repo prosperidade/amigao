@@ -90,6 +90,16 @@ class Matricula(Base):
     # Fecha o ponto cego que obrigava a consolidação ao fallback `old is not None`.
     field_sources = Column(PortableJSON, nullable=True, default=dict)
 
+    # LINEAGE (item 5 da Fase 2 — caso 15): de qual staging/decisão este
+    # registro nasceu. `field_sources` diz o TIPO da fonte (raw/ai/humano);
+    # isto diz QUAL linha e QUAL decisão — a certidão de nascimento.
+    # Sem ela, a pergunta "de onde veio esse 2923?" só se responde cruzando
+    # timestamps na mão, que foi exatamente o que a investigação do caso 15
+    # teve de fazer.
+    # Shape: {"criada_por": {staging_id, document_id, decided_by_user_id,
+    #          decided_at, valor}, "campos": {campo: staging_id}}
+    lineage = Column(PortableJSON, nullable=True, default=dict)
+
     # Desativação REVERSÍVEL (forense caso Isis) — REJEITAR na Conferência a
     # staging que materializou a matrícula a tira da soma sem hard-delete. NULL =
     # ativa; preenchido = fora da soma (`Property.area_total_matriculas`). A

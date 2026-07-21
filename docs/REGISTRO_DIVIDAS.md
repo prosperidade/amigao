@@ -8,7 +8,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 79.** (#78 aberta pela dívida #70,
+> **PRÓXIMO NÚMERO LIVRE: 80.** (#79 aberta pela identidade da matrícula,
+> `fix/consolidacao-lineage-decisoes`, 2026-07-20 — degrau 3 da cascata da Isis;
+> ver abaixo. A #74 teve a FATIA NIRF fechada na mesma rodada.) (#78 aberta pela dívida #70,
 > `fix/70-classificacao-persistida`, 2026-07-20 — extração dos documentos sem
 > staging, medida e orçada, aguardando decisão; ver abaixo.) (#70 a #77 abertas pela fonte única de requisitos
 > documentais, `fix/fonte-unica-requisitos-documentais`, 2026-07-20 — ver bloco
@@ -128,7 +130,7 @@ cadastro devem bater com o documento de identidade, e qualquer outro nome (cônj
 coobrigado, herdeiro) é *parte relacionada*, nunca cotitular — mesmo com "proprietários"
 no plural. Não implementado. **Fix:** resolver titular antes do cruzamento.
 
-**74. Ficha 08 §4 — campos-âncora registrais novos.** Livro, Folha, Ficha, NIRF/CIB,
+**74. Ficha 08 §4 — campos-âncora registrais novos.** **FATIA NIRF FECHADA** (20/07, ADR-032): `nirf_cib` entrou no `_FIELD_SPECS` da certidão + prompt + materialização, porque é INFRAESTRUTURA DE IDENTIDADE — o degrau 1 da cascata da Isis compara o NIRF do ITR contra o da matrícula, e o campo nascia sempre NULL, deixando o degrau mais forte morto e a cascata começando silenciosamente no degrau 2. **Seguem abertos** Livro, Folha, Ficha, Módulo Fiscal e nº do CCIR (completude, não identidade). **Somado à lista:** `vtn` — foi ACEITO no caso 15 e não existe coluna em `matriculas`; hoje aparece em `ignorados` na Conferência (não some mais calado), mas continua sem destino.  Livro, Folha, Ficha, NIRF/CIB,
 Módulo Fiscal e Número do CCIR entram na base como campos próprios (alguns sem par de
 cruzamento, §4.1). O extrator hoje não os emite. **Fix:** ampliar `_FIELD_SPECS`.
 
@@ -215,6 +217,23 @@ e `municipio` do doc 320; apagá-las perderia leitura única. A adoção **não 
 **Carona:** o dry-run do backfill dizia "seriam gravados: 0" quando gravaria 28 —
 `gravados` filtra pelo que foi escrito e zera no dry-run. Corrigido com `a_gravar`,
 agora fonte única do relatório e da frase de confirmação.
+
+## Identidade da matrícula (20/07) — o que ficou
+
+**79. Degrau 3 da cascata de vinculação — corroboração por área + denominação.**
+Spec pronta: resposta da Isis de 20/07. Quando NIRF e INCRA não resolvem, usar
+área total e denominação do ITR contra cada matrícula candidata; se um candidato
+bate nos dois (mesmo com grafia diferente — "Lote 01-C" × "Sao Jorge Lote 01-C"),
+**vira sugestão de alta probabilidade — NUNCA autolink**. A Isis foi explícita, e
+há comentário no código travando isso: quando este degrau for implementado, o
+teste obrigatório é `nunca_autolinka`. Junto vem a tela rica de candidatos com os
+sinais a favor de cada um. Enquanto não existem, o caso ambíguo cai no degrau 4
+manual, que resolve. **Origem:** ADR-032.
+
+**Perguntas de domínio em aberto com a Isis** (não bloqueantes, comportamento
+conservador implementado): confirmação de leitura do vínculo ITR→matrícula por
+INCRA normalizado (§4 aplicado). RAT×CAR já foi respondida em 20/07 (o RAT não
+substitui o CAR) e está anotada na Ficha 08.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 

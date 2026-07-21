@@ -53,9 +53,16 @@ class StagingDecisionRequest(BaseModel):
       em ``divergente_transcricao``. Cria a Ação AGORA (mesmo gerador que a
       Consolidação roda automaticamente); o campo continua divergente, a
       decisão do consultor foi "virar trabalho rastreável", não "resolver".
+    - ``reabrir``: devolve o campo a PENDENTE, desfazendo a decisão anterior.
+      Pré-requisito da re-decisão: no caso 15 o consultor decidiu com a tela
+      cega (sem o confronto 2923×4698) e precisa poder decidir de novo com a
+      tela honesta. O valor anterior vai para a auditoria — reabrir não apaga
+      história, acrescenta.
     """
 
-    acao: Literal["aceitar", "escolher_fonte", "editar", "rejeitar", "criar_acao"]
+    acao: Literal[
+        "aceitar", "escolher_fonte", "editar", "rejeitar", "criar_acao", "reabrir"
+    ]
     valor: Optional[Any] = None   # obrigatório em "editar"
     fonte: Optional[str] = None   # metadado opcional em "escolher_fonte"
 

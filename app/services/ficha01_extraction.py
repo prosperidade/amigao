@@ -252,6 +252,12 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("averbacao_rl", "averbacao_rl", "matricula", "averbacao_rl"),
         _FieldSpec("numero_geo", "numero_geo", "matricula", "geo_certificacao_codigo"),
         _FieldSpec("codigo_certificacao", "codigo_certificacao", "matricula", "geo_certificacao_codigo"),
+        # NIRF/CIB na CERTIDAO (cascata da Isis, degrau 1 — 20/07): o mesmo
+        # identificador da Receita aparece repetido nos registros/hipotecas da
+        # matricula. Sem extrair aqui, `Matricula.nirf_cib` nasce SEMPRE NULL e o
+        # degrau mais forte da vinculacao ITR->matricula fica morto, com a cascata
+        # comecando silenciosamente no degrau 2 (INCRA). Ficha 08 secao 4.
+        _FieldSpec("nirf_cib", "nirf_cib", "matricula", "nirf_cib"),
         _FieldSpec("onus", "onus", "matricula", "onus_gravames"),
     ],
     "itr": [
@@ -346,6 +352,10 @@ Instruções de completude:
   de origem da RL).
 - "codigo_certificacao": código do georreferenciamento (SIGEF/INCRA), se houver,
   SEM texto de vértice grudado.
+- "nirf_cib": o NIRF/CIB do imóvel na Receita Federal (ex.: "6.442.022-1").
+  Costuma aparecer REPETIDO ao longo dos registros e hipotecas ("NIRF n°...",
+  "CIB n°..."). É o mesmo identificador do ITR e serve para casar os dois
+  documentos. Copie o número como está.
 {
   "numero_matricula": null,
   "registro_livro_folha": null,
@@ -359,6 +369,7 @@ Instruções de completude:
   "averbacao_rl": null,
   "numero_geo": null,
   "codigo_certificacao": null,
+  "nirf_cib": null,
   "onus": null,
   "confidence": {}
 }

@@ -2205,6 +2205,51 @@ mas **não aparecem na Visão geral** até o caso avançar E1→E2 — o que dep
 gate do checklist da etapa (item 1 da validação de 20/07). Nada se perde; só não
 há efeito visível imediato.
 
+## Identidade da matrícula — confronto, cascata e lineage (20/07/2026)
+
+`fix/consolidacao-lineage-decisoes` · ADR-032 · fecha a Fase 2 da investigação
+do caso 15
+
+### O que a investigação achou (e o que ela refutou)
+
+A matrícula **2923** foi materializada onde deveria ser **4698**. A hipótese de
+trabalho era bug de consolidação usando staging rejeitado. **Refutada:** a
+consolidação filtra `status == aceito`, e a timeline prova outra coisa — o CCIR
+do Lote 1B declara `matricula_hint = 2923` (número registral defasado), o
+consultor aceitou os campos do CCIR (14:44) e rejeitou os da certidão (4698), e
+a consolidação (14:46) fez exatamente o que foi mandado.
+
+**O sistema não errou: ninguém avisou que havia uma escolha de identidade sendo
+feita.** A Conferência apresentava os campos documento a documento; os dois
+números nunca apareceram lado a lado.
+
+### O que toca IA
+
+- **Sprint determinístico** — nenhuma chamada LLM nova. A cascata e o confronto
+  são regra pura sobre dados já extraídos.
+- **A extração ganhou um campo por razão de identidade, não de completude:**
+  `nirf_cib` na certidão de matrícula. O degrau 1 da cascata da Isis compara o
+  NIRF do ITR contra o da matrícula, e esse campo nascia **sempre NULL** — o
+  degrau mais forte seria letra morta e a cascata começaria no 2 sem ninguém
+  notar. Fatia da #74 promovida a infraestrutura.
+- **Normalização importa mais do que parece:** `norm_compare` não serve para
+  código — colapsa pontuação em espaço, e `000.051.123.390-9` ≠ `000051.123390-9`
+  no agrupamento. Foi assim que o ITR ficou órfão. `norm_incra` compara só
+  dígitos.
+- **A IA propõe, o humano decide — inclusive na vinculação.** Degraus 1 e 2
+  autolinkam (sinal forte, match único); 3 e 4 **nunca** decidem sozinhos. A
+  Isis foi explícita de que corroboração é sugestão, e há teste travando isso
+  antes mesmo de o degrau existir.
+
+### O achado que mais incomoda
+
+O backend **já gritava**. `staging_consolidation` já populava `ignorados` com as
+duas classes (`sem hint` e `sem destino`), e `ConsolidationResult.ignorados` já
+existia no schema — mas **a UI nunca leu o campo**. Quando a Isis clicou "Gravar
+na base", a resposta da API provavelmente já dizia que o NIRF e o VTN tinham
+sido ignorados. A informação existia, no instante certo, e a tela não a mostrou.
+
+Não era falta de detecção. Era falta de alto-falante.
 ## Gate E1 destravado — checkbox clicável + guard-rail (20/07/2026)
 
 `fix/validacao-fluxo-20-07` · item 1 da validação de fluxo
