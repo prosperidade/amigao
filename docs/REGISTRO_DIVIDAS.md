@@ -235,6 +235,58 @@ conservador implementado): confirmação de leitura do vínculo ITR→matrícula
 INCRA normalizado (§4 aplicado). RAT×CAR já foi respondida em 20/07 (o RAT não
 substitui o CAR) e está anotada na Ficha 08.
 
+## Escalar em coluna de lista (21/07) — reveladas pela varredura de classe
+
+Origem: o crash do `diagnostico` em produção (`'str' object has no attribute
+'get'`). Corrigido em `fix/escalar-em-coluna-lista`; a varredura de classe que
+acompanhou o fix achou o que segue.
+
+**80. Reparo do dado já gravado em produção.** As 2 matrículas do caso 15 (ids
+29 e 30) têm `proprietarios = "Leonardo Ribeiro"` — string nua em coluna de
+lista, com `field_sources.proprietarios = human_validated`. O fix de LEITURA já
+as tolera, então não há urgência nem risco; mas o dado segue torto e a
+normalização (`[{"nome": ...}]`) deve rodar **pelo rito** (dry-run → aval →
+execute). Não vai junto do bugfix de propósito: misturar correção de código com
+migração de dado esconde qual dos dois quebrou se algo quebrar.
+
+**81. A fonte BEM-FORMADA de `proprietarios` é descartada.** O prompt do
+doc_type `matricula` já extrai `"proprietarios": [{"nome","cpf"}]` no shape
+certo (`ficha01_extraction.py`), mas **não existe `_FieldSpec` roteando o
+campo** — só os escalares `ccir.detentor` e `sigef.proprietario` alimentam a
+coluna. Consequência: 100% dos valores vindos do pipeline nascem malformados e
+dependem do embrulho de compatibilidade. Ligar o spec exige entrar em
+`_LIST_COLLAPSE_FIELDS` (senão vira N linhas de staging por proprietário).
+**Não entrou no PR do fix por razão operacional:** ligá-lo muda o que a extração
+produz, e a Isis estava decidindo o staging do caso 15 no mesmo dia — linhas
+novas apareceriam no meio da re-decisão. Sequenciar depois do teste.
+
+**82. Tipar as colunas JSON em vez de tapar buraco a buraco.** Um
+`TypeDecorator` derivado de `PortableJSON` (`PortableJSONList` /
+`PortableJSONDict`) validando em `process_bind_param` mataria a classe inteira
+nas ~20 colunas `default=list`/`default=dict`, em vez de depender de guard por
+call-site. Toca todos os modelos e rebate em muitos testes (sem migration — é só
+Python). Estimativa 3-5 dias. É a correção estrutural do arquétipo.
+
+**83. Guards ausentes em colunas JSON que falham ALTO.** A varredura mapeou ~25
+call-sites que iteram/indexam coluna JSON sem checar tipo:
+`MacroetapaChecklist.actions` (5 pontos de leitura em API/dashboard),
+`Proposal.scope_items`/`payment_installments` (proposta e contrato),
+`ChecklistTemplate.items`, `WorkflowTemplate.steps`, `Etapa.sources`,
+`AIJob.result` (`intake.py` e `intake_enrichment.py` não têm o `isinstance` que
+`diagnostico.py` tem), `User.preferences`, `StageOutput.content_data`. Todos
+falham alto (500 visível), nenhum corrompe dado em silêncio — por isso ficam
+para o #82 em vez de virarem 25 `isinstance` avulsos.
+
+**84. `KnowledgeDoc.extra_metadata.demand_types` compara escalar contra array.**
+`knowledge_catalog.py` usa `CAST(... AS jsonb) @>` sobre `demand_types`; se o
+valor tiver sido gravado como string em vez de lista, o `@>` nunca casa e a
+busca volta **silenciosamente vazia**. Mesma família do #83, mas silencioso —
+merece guard próprio quando alguém encostar no módulo. O irmão desta classe
+(`legislation_monitor`, onde `in` sobre string virava match de SUBSTRING) já foi
+corrigido junto do fix.
+
+**PRÓXIMO LIVRE: 85.**
+
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
 **46. Tipagem mypy do backend (~495 erros) é advisory, não enforçada.** O job

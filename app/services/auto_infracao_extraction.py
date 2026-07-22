@@ -21,6 +21,7 @@ import re
 from typing import Any, Optional
 
 from app.core.config import settings
+from app.services.inconsistency_matrix import normalize_list_of_dicts
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +194,11 @@ def check_autuado_diverge_titular(
 
     candidatos_cpf = {_digits(titular_cpf)} if titular_cpf else set()
     candidatos_nome = {(titular_nome or "").strip().lower()} if titular_nome else set()
-    for p in matricula_proprietarios or []:
+    # Defesa em profundidade: a assinatura promete `list[dict]`, mas este é o
+    # ponto onde o shape torto DE FATO estourou (caso 15). Uma nota informativa
+    # sobre titular não pode derrubar o diagnóstico inteiro — item não-dict é
+    # normalizado, não fatal.
+    for p in normalize_list_of_dicts(matricula_proprietarios, item_key="nome"):
         if p.get("cpf"):
             candidatos_cpf.add(_digits(p["cpf"]))
         if p.get("nome"):

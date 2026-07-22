@@ -32,6 +32,7 @@ from app.services.audit_hash import stamp_audit_hash
 from app.services.inconsistency_matrix import (
     _clean_matricula_hint,
     _to_float_br,
+    fit_json_container,
     is_area_plausible,
     norm_compare,
     parse_area_ha,
@@ -100,6 +101,34 @@ def _stringify_structured(value: Any) -> str:
     if isinstance(value, list):
         return "; ".join(_stringify_structured(v) for v in value)
     return str(value)
+
+
+def _json_container_of(column: Any) -> Any:
+    """Forma pretendida de uma coluna JSON, lida do próprio modelo.
+
+    A convenção do projeto é declarar ``default=list`` / ``default=dict`` nas
+    colunas JSON portáveis. Derivar daí (em vez de manter uma lista à parte)
+    impede a divergência silenciosa entre o modelo e esta checagem quando alguém
+    adicionar uma coluna nova. Coluna escalar devolve ``None``.
+    """
+    default = getattr(column, "default", None)
+    if default is None:
+        return None
+    # Atenção: para `default=list` o SQLAlchemy NÃO guarda o builtin em `.arg` —
+    # embrulha o callable (`CallableColumnDefault`), então comparar por
+    # identidade (`arg is list`) nunca casa. Avaliar o default é o que responde
+    # de verdade qual container a coluna espera.
+    arg = getattr(default, "arg", None)
+    if getattr(default, "is_callable", False):
+        try:
+            arg = arg(None)
+        except Exception:  # default exótico: não arrisca palpite
+            return None
+    if isinstance(arg, list):
+        return list
+    if isinstance(arg, dict):
+        return dict
+    return None
 
 
 def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = None) -> Any:
@@ -666,9 +695,19 @@ def _write_entity(
         ignorados.append(f"{row.target_entity}.{target}")
         return False
 
-    coerced = _coerce(value, obj.__table__.columns[col].type, col, unidade)
+    column = obj.__table__.columns[col]
+    coerced = _coerce(value, column.type, col, unidade)
     if coerced is None:
         ignorados.append(f"{row.target_entity}.{col} (valor incoercível/implausível)")
+        return False
+
+    # Forma do container (caso `proprietarios`): coluna JSON de lista/dict não
+    # recebe escalar nu. Ou o valor é encaixado no shape certo, ou é RECUSADO e
+    # some visível em `ignorados` — nunca gravado torto para explodir três
+    # módulos adiante.
+    coerced, erro_forma = fit_json_container(coerced, _json_container_of(column), col)
+    if erro_forma is not None:
+        ignorados.append(f"{row.target_entity}.{erro_forma}")
         return False
 
     old = getattr(obj, col, None)

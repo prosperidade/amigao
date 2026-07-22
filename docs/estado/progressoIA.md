@@ -2282,3 +2282,79 @@ A UI foi escrita chamando `POST .../actions/toggle` — path inferido do endpoin
 vizinho `/actions/validate`. A rota real é `PATCH .../actions`. Sem o teste
 ponta a ponta, a UI iria para produção apontando para um endpoint inexistente,
 e o botão não faria nada — exatamente o sintoma que estávamos corrigindo.
+
+## Escalar em coluna de lista — o crash do diagnóstico (21/07/2026)
+
+`fix/escalar-em-coluna-lista` · achado em produção, com a Isis na tela
+
+### O que aconteceu
+
+A Isis rodou a leitura do diagnóstico no caso 15 e ela falhou. Rodou de novo:
+falhou igual. O erro em produção era `'str' object has no attribute 'get'`.
+
+A cadeia completa, do defeito ao sintoma:
+
+1. O CCIR extrai `detentor` como **escalar de texto**, e o mapeamento o roteia
+   para `Matricula.proprietarios` — que é coluna de **lista** (`default=list`,
+   schema `list[dict]`).
+2. O `_coerce` só serializava dict/list para colunas `String`; para coluna JSON
+   o valor passava verbatim. A string nua `"Leonardo Ribeiro"` foi gravada.
+3. Quem leu fez `lista.extend(m.proprietarios or [])`. **`extend` sobre uma
+   string não levanta erro: itera os caracteres.** A lista virou
+   `['L','e','o','n',...]`.
+4. O estouro apareceu dois módulos adiante, em `p.get("cpf")` do auto de
+   infração — apontando para o lugar errado.
+
+### O que toca IA
+
+- **Sprint determinístico** — nenhuma chamada LLM nova. E o diagnóstico falhava
+  ANTES de qualquer chamada: `tokens_in` e `model_used` nulos, 72 ms de duração.
+  Foi o que provou, em 30 segundos, que o problema era montagem de dados e não o
+  modelo — vale como método: `ai_jobs` com custo zero é sinal de falha pré-LLM.
+- **A nota de titular divergente estava errada mesmo quando não quebrava.** Com
+  a lista corrompida em caracteres, nenhum nome casava nunca; o sistema
+  reportaria divergência de titularidade até quando o autuado É o titular. O fix
+  não devolveu só a estabilidade, devolveu a resposta.
+
+### A hipótese que foi refutada
+
+A leitura natural era "o #120 entrou hoje, o #120 quebrou". A varredura chegou a
+propor isso com uma história convincente (a cascata nova faria linhas antes
+descartadas pousarem numa matrícula). **Timestamps refutaram:** as matrículas
+têm `updated_at` de 20/07, e o #120 subiu em 21/07 às 14:27. A string já estava
+lá desde a véspera.
+
+O que mudou não foi o dado — foi **quem olhou**. O caso 15 está na E1, e o
+diagnóstico só roda na E2; nunca tinha passado por ali. Defeito pré-existente,
+exposto por uma execução manual. Medir antes de concluir, de novo.
+
+### O padrão, terceira aparição
+
+É o mesmo do caso 15 na forma mais pura: **o dado chegava, era lido, e não
+contava — sem ninguém ser avisado.** Aqui em grau superlativo, porque o `extend`
+sobre string *não falha*: fabrica 16 proprietários fantasmas e entrega a
+explosão para outro módulo. Se tivesse falhado onde nasceu, o erro apontaria
+para o CCIR.
+
+Daí a forma do fix: **barrar onde nasce, tolerar onde se lê.** Escalar nu não
+pousa mais em coluna de lista (ou encaixa no shape, ou é recusado alto e some
+visível em `ignorados`); e a leitura normaliza o legado que já está gravado
+torto. A detecção do container é lida do próprio modelo (`default=list`), para
+não haver uma segunda lista de colunas capaz de divergir em silêncio da
+primeira.
+
+### Varredura de classe
+
+Um bug desta família nunca vem sozinho. A varredura mapeou os dois eixos
+(escalar→coluna de lista; iteração sem guard de tipo) e achou mais um caso
+**silencioso**, corrigido junto: em `legislation_monitor`, `demand_types` como
+string fazia o `in` virar comparação de substring — `'car'` casaria dentro de
+`'licenciamento_car'`, disparando alerta legislativo pelo motivo errado, sem
+erro nenhum.
+
+O resto (~25 call-sites) falha alto e virou dívida #83, com a correção
+estrutural proposta no #82. O achado mais incômodo virou #81: a fonte
+**bem-formada** de `proprietarios` existe no prompt e é descartada por falta de
+um `_FieldSpec` — ou seja, 100% dos valores vindos do pipeline nascem
+malformados. Ficou de fora do PR por razão operacional, não técnica: ligá-lo
+mudaria o que a extração produz enquanto a Isis decidia o staging do mesmo caso.
