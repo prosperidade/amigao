@@ -80,6 +80,21 @@ class ChainProposalOut(BaseModel):
     evidencia: str
 
 
+class MatriculaVigenteMini(BaseModel):
+    """Matrícula VIGENTE do imóvel — alimenta o seletor manual de cadeia (#60).
+
+    Quando os sinais determinísticos não disparam (registro_anterior/denominação
+    ausentes, tokens de lote divergentes — caso 15: "Lote 1 B" vs "Gleba 01 B"),
+    o consultor declara a ficha anterior à mão escolhendo entre estas."""
+
+    id: int
+    numero_matricula: Optional[str] = None
+    area_ha: Optional[float] = None
+    denominacao_imovel: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ChainPair(BaseModel):
     anterior_id: int
     vigente_id: int
