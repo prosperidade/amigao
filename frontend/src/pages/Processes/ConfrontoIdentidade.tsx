@@ -1,11 +1,14 @@
 /**
  * ConfrontoIdentidade — a primeira coisa da Conferência quando dois documentos
- * declaram números de matrícula diferentes.
+ * DO MESMO LOTE declaram números de matrícula diferentes.
  *
  * É o painel que teria evitado o erro do caso 15: o CCIR do Lote 1B declarava
  * 2923 (número registral defasado), a certidão declarava 4698 (atual), e a tela
  * nunca colocou os dois lado a lado. O consultor aceitou o CCIR e rejeitou a
  * certidão sem saber que estava escolhendo a identidade jurídica do imóvel.
+ *
+ * Um card POR LOTE: 6776 (Lote 1C) e 4698 (Lote 1B) não se confrontam — são
+ * lotes diferentes da mesma fazenda (agrupamento por lote no backend, 21/07).
  *
  * A frase da regra vem PRONTA do backend (mesmo padrão do guard-rail do avanço):
  * a tela não reimplementa a hierarquia da Ficha 08 §5.1. Foi a redação duplicada
@@ -34,12 +37,16 @@ interface CadeiaProposta {
   evidencia_document_id: number | null;
 }
 
-interface ConfrontoResponse {
-  ha_confronto: boolean;
+interface Confronto {
   regra: string;
   prevalente: { numero: string; fonte: string } | null;
   fontes: FonteNumero[];
   cadeia_proposta: CadeiaProposta | null;
+}
+
+interface ConfrontoResponse extends Confronto {
+  ha_confronto: boolean;
+  confrontos?: Confronto[];
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -51,16 +58,7 @@ const STATUS_LABEL: Record<string, string> = {
   divergente_fundo: 'divergente',
 };
 
-export default function ConfrontoIdentidade({ processId }: { processId: number }) {
-  const { data, isLoading } = useQuery<ConfrontoResponse>({
-    queryKey: ['confronto-identidade', processId],
-    queryFn: () => api.get(`/processes/${processId}/confronto-identidade`).then(r => r.data),
-  });
-
-  // Sem confronto não há o que mostrar — o painel só aparece quando há de fato
-  // números concorrentes. Radar-não-cancela: falha ao carregar não derruba a aba.
-  if (isLoading || !data?.ha_confronto) return null;
-
+function ConfrontoCard({ c }: { c: Confronto }) {
   return (
     <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-500/40 bg-amber-50/70 dark:bg-amber-500/5 overflow-hidden">
       <div className="px-5 py-4 border-b border-amber-200 dark:border-amber-500/20">
@@ -71,7 +69,7 @@ export default function ConfrontoIdentidade({ processId }: { processId: number }
               Qual é o número da matrícula deste imóvel?
             </h3>
             <p className="text-xs text-amber-800 dark:text-amber-300/90 mt-1">
-              Documentos deste caso declaram números diferentes. Decida isto antes
+              Documentos deste lote declaram números diferentes. Decida isto antes
               de conferir os campos — é a identidade jurídica do imóvel.
             </p>
           </div>
@@ -80,8 +78,8 @@ export default function ConfrontoIdentidade({ processId }: { processId: number }
 
       {/* Números lado a lado, com a fonte de cada um. */}
       <div className="px-5 py-4 grid gap-2 sm:grid-cols-2">
-        {data.fontes.map(f => {
-          const prevalece = data.prevalente?.numero === f.numero;
+        {c.fontes.map(f => {
+          const prevalece = c.prevalente?.numero === f.numero;
           return (
             <div
               key={f.staging_id}
@@ -116,13 +114,13 @@ export default function ConfrontoIdentidade({ processId }: { processId: number }
       {/* A regra vem pronta do backend — a tela não reimplementa a hierarquia. */}
       <div className="px-5 pb-4">
         <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-          {data.regra}
+          {c.regra}
         </p>
       </div>
 
       {/* Cadeia proposta ANTES da decisão: os dois números podem ser a mesma
           terra em momentos diferentes, e não um erro a corrigir. */}
-      {data.cadeia_proposta && (
+      {c.cadeia_proposta && (
         <div className="px-5 py-4 border-t border-amber-200 dark:border-amber-500/20 bg-white/50 dark:bg-white/5">
           <div className="flex items-start gap-3">
             <GitBranch className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
@@ -131,12 +129,36 @@ export default function ConfrontoIdentidade({ processId }: { processId: number }
                 Possível linhagem detectada
               </p>
               <p className="text-xs text-gray-600 dark:text-slate-400 mt-1 leading-relaxed">
-                {data.cadeia_proposta.texto}
+                {c.cadeia_proposta.texto}
               </p>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export default function ConfrontoIdentidade({ processId }: { processId: number }) {
+  const { data, isLoading } = useQuery<ConfrontoResponse>({
+    queryKey: ['confronto-identidade', processId],
+    queryFn: () => api.get(`/processes/${processId}/confronto-identidade`).then(r => r.data),
+  });
+
+  // Sem confronto não há o que mostrar — o painel só aparece quando há de fato
+  // números concorrentes no mesmo lote. Radar-não-cancela: falha ao carregar
+  // não derruba a aba.
+  if (isLoading || !data?.ha_confronto) return null;
+
+  // Forma nova: um confronto por lote. Fallback à forma antiga (objeto único)
+  // se `confrontos` não vier.
+  const confrontos = data.confrontos ?? [data];
+
+  return (
+    <div className="space-y-3">
+      {confrontos.map((c, i) => (
+        <ConfrontoCard key={c.fontes[0]?.staging_id ?? i} c={c} />
+      ))}
     </div>
   );
 }

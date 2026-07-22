@@ -154,3 +154,42 @@ def test_vtn_aceito_sem_coluna_aparece_em_ignorados(db_session):
                             user_id=None)
 
     assert r["ignorados"], "o aceite sem coluna não pode sumir calado"
+
+
+def test_flag_sem_casa_pendencia_duravel(db_session):
+    """Item 6 (pós-teste Isis): aceite que não vai pousar na base é flagado a
+    CADA leitura — durável, não só na caixa efêmera do pós-consolidação.
+
+    - hint de doc NÃO-criador (sigef) e sem matrícula na base → sem casa;
+    - hint de doc criador (ccir) → terá casa (será criada) → não flaga;
+    - hint que já existe na base → tem casa → não flaga.
+    """
+    from app.services.staging_consolidation import flag_sem_casa
+
+    tenant, proc, prop, cli = _seed(db_session)
+
+    # Matrícula 6776 já existe na base.
+    m = Matricula(tenant_id=tenant.id, property_id=prop.id, numero_matricula="6776")
+    db_session.add(m)
+    db_session.flush()
+
+    # Aceite para 4698 vindo de SIGEF (guard fantasma — não cria) e sem 4698 na
+    # base → órfão.
+    sigef = _doc(db_session, tenant, proc, "sigef")
+    orfao = _aceito(db_session, tenant, proc, sigef, "codigo_certificacao", "GEO-1",
+                    "geo_certificacao_codigo", hint="4698", tipo="sigef")
+    # Aceite para 8001 vindo de CCIR (criador) → será criada.
+    ccir = _doc(db_session, tenant, proc, "ccir")
+    criavel = _aceito(db_session, tenant, proc, ccir, "codigo_sncr_incra", "111.222.333.444-5",
+                      "codigo_incra_sncr", hint="8001", tipo="ccir")
+    # Aceite para 6776 (já existe) → tem casa.
+    existente = _aceito(db_session, tenant, proc, ccir, "cartorio", "Cartório X",
+                        "cartorio", hint="6776", tipo="ccir")
+    db_session.commit()
+
+    motivos = flag_sem_casa(db_session, tenant.id, proc.id, prop)
+
+    assert orfao.id in motivos
+    assert "4698" in motivos[orfao.id]
+    assert criavel.id not in motivos
+    assert existente.id not in motivos

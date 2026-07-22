@@ -69,7 +69,9 @@ _MATRICULA_FIELDS = {"numero_matricula", "cartorio", "registro_livro_folha_ficha
                      "geo_certificacao_codigo", "geo_certificacao_status",
                      "averbacao_app", "averbacao_rl", "onus_gravames", "proprietarios",
                      # Cadeia (#60): sinais registrais da linhagem gravam na matrícula.
-                     "registro_anterior", "denominacao_anterior"}
+                     "registro_anterior", "denominacao_anterior",
+                     # Item 7 (21/07): número do CCIR (localiza o documento).
+                     "numero_ccir"}
 _MATRICULA_ALIAS: dict[str, Optional[str]] = {}
 
 # Guard fantasma (Sprint 4): só documentos que legitimamente DECLARAM matrícula
@@ -925,3 +927,66 @@ def _audit(db: Session, tenant_id: int, process_id: int, user_id: Optional[int],
     db.add(log)
     db.flush()
     stamp_audit_hash(db, log)
+
+
+def flag_sem_casa(
+    db: Session, tenant_id: int, process_id: int, prop: Any
+) -> dict[int, str]:
+    """Aceites de matrícula que NÃO vão pousar na base — de forma DURÁVEL.
+
+    Item 6 (pós-teste Isis, 21/07): a varredura de `consolidar` já detectava o
+    "aceite sem casa" e o punha em ``ignorados``, mas o sinal só aparecia na
+    caixa efêmera do pós-consolidação — sumia ao navegar. Aqui o MESMO julgamento
+    (mesmos tipos criadores, mesma cascata de âncora) vira um flag por linha, lido
+    a cada GET de staging: a pendência fica à vista até ser resolvida, nunca some
+    calada. Não escreve nada — só julga.
+
+    Devolve ``{staging_id: motivo}`` para as linhas ACEITAS que ficariam órfãs.
+    """
+    aceitos = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+            ExtractedFieldStaging.status == ExtractedFieldStatus.aceito,
+            ExtractedFieldStaging.target_entity == "matricula",
+        )
+        .all()
+    )
+    if not aceitos:
+        return {}
+
+    existentes = {
+        _clean_matricula_hint(m.numero_matricula)
+        for m in (prop.matriculas_ativas() if prop is not None else [])
+        if m.numero_matricula
+    }
+    # Um hint terá matrícula criada se ALGUM aceite dele vem de tipo criador
+    # (matricula/ccir/itr/car) — é o que liga o allow_create na consolidação.
+    hints_com_criador = {
+        _clean_matricula_hint(r.matricula_hint)
+        for r in aceitos
+        if r.matricula_hint
+        and (r.source_doc_type or "").lower() in _MATRICULA_CREATOR_DOC_TYPES
+    }
+
+    out: dict[int, str] = {}
+    for r in aceitos:
+        hint = _clean_matricula_hint(r.matricula_hint)
+        if not hint:
+            # Sem número declarado (ITR identifica por NIRF/INCRA): só pousa se a
+            # cascata da Isis ancorar sozinha (degraus 1-2). Senão, pendência.
+            if _ancorar_documento(db, tenant_id, process_id, prop, r) is None:
+                out[r.id] = (
+                    "aceito sem matrícula-alvo — o documento não declara número; "
+                    "vincule-o a uma matrícula na Conferência"
+                )
+            continue
+        if hint in existentes or hint in hints_com_criador:
+            continue  # tem casa: já existe ou será criada por um doc criador
+        out[r.id] = (
+            f"aceito para a matrícula {hint}, que não existe na base e não será "
+            f"criada por '{r.source_doc_type or '—'}' (guard fantasma) — cadastre a "
+            "matrícula ou vincule o documento"
+        )
+    return out

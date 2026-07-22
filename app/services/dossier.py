@@ -118,6 +118,7 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
                         "geo_certificacao_status": m.geo_certificacao_status,
                         "codigo_incra_sncr": m.codigo_incra_sncr,
                         "nirf_cib": m.nirf_cib,
+                        "numero_ccir": m.numero_ccir,
                         "area_ha": m.area_ha,
                         "field_sources": m.field_sources or {},
                     }

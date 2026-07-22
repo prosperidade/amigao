@@ -44,7 +44,7 @@ export default function ConferenciaTab({ processId }: ConferenciaTabProps) {
       <div className="space-y-6">
         {/* Identidade primeiro: decidir QUAL matrícula é o imóvel antes de
           conferir campo a campo. Foi a ausência disto que deixou o caso 15
-          nascer com o número defasado do CCIR. */}
+          nascer com o número defasado do CCIR. Auto-oculta sem confronto. */}
         <ConfrontoIdentidade processId={processId} />
         <RequisitosPanel processId={processId} />
         {/* Cadeia pode existir mesmo sem staging pendente (matrículas já
@@ -64,6 +64,10 @@ export default function ConferenciaTab({ processId }: ConferenciaTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* O confronto de identidade tem de aparecer DURANTE a conferência, não só
+          quando o staging esvazia — foi o que faltou no teste da Isis (21/07): o
+          painel existia mas só no estado vazio, inalcançável com campos pendentes. */}
+      <ConfrontoIdentidade processId={processId} />
       <RequisitosPanel processId={processId} />
       <CadeiaFichasPanel processId={processId} />
       <ConsolidacaoPanel processId={processId} />

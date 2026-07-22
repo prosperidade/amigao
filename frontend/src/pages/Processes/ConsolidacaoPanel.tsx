@@ -13,7 +13,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import {
-  CheckCircle2, XCircle, Pencil, ListChecks, Database, Loader2, Layers, ArrowRight,
+  CheckCircle2, XCircle, Pencil, ListChecks, Database, Loader2, Layers, ArrowRight, RotateCcw, AlertCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { acoesKeys } from '@/lib/acoes/hooks';
@@ -36,6 +36,9 @@ interface StagingField {
   matricula_hint: string | null;
   status: string;
   decided_value: { value?: unknown } | null;
+  // Item 6 — aceite que não vai pousar na base (computado no servidor, durável).
+  sem_casa?: boolean;
+  sem_casa_motivo?: string | null;
 }
 
 interface ConsolidationResult {
@@ -65,10 +68,17 @@ const STATUS_LABEL: Record<string, string> = {
   divergente_fundo: 'Divergente (fundo)', aceito: 'Aceito', rejeitado: 'Rejeitado',
 };
 
-function entityLabel(f: StagingField): string {
+function entityLabel(f: StagingField, rotulos: Record<string, string> = {}): string {
   if (f.target_entity === 'cliente') return 'Cliente';
   if (f.target_entity === 'imovel') return 'Imóvel';
-  if (f.target_entity === 'matricula') return f.matricula_hint ? `Matrícula ${f.matricula_hint}` : 'Matrícula';
+  if (f.target_entity === 'matricula') {
+    if (!f.matricula_hint) return 'Matrícula';
+    // Rótulo de linhagem (item 4): "Matrícula 2923 — ficha anterior da 4698"
+    // quando a cadeia já existe, para os itens do CCIR (hint defasado) não
+    // parecerem um imóvel à parte.
+    const rot = rotulos[f.matricula_hint.replace(/\D/g, '')];
+    return rot ? `Matrícula ${f.matricula_hint} — ${rot}` : `Matrícula ${f.matricula_hint}`;
+  }
   return 'Outros';
 }
 
@@ -88,15 +98,26 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
     queryKey: ['staging-fields', processId],
     queryFn: () => api.get(`/processes/${processId}/staging-fields`).then(r => r.data),
   });
+  const { data: rotulos = {} } = useQuery<Record<string, string>>({
+    queryKey: ['matriculas-rotulos', processId],
+    queryFn: () => api.get(`/processes/${processId}/matriculas-rotulos`).then(r => r.data),
+  });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['staging-fields', processId] });
+  // Uma decisão de campo pode mudar o confronto de identidade e a cadeia — ao
+  // reabrir, os dois têm de voltar a aparecer. Invalida as três leituras juntas.
+  const invalidateConferencia = () => {
+    invalidate();
+    qc.invalidateQueries({ queryKey: ['confronto-identidade', processId] });
+    qc.invalidateQueries({ queryKey: ['chain-proposals', processId] });
+  };
 
   const decide = useMutation({
     mutationFn: (p: { id: number; acao: string; valor?: string }) =>
       api.post(`/processes/${processId}/staging-fields/${p.id}/decidir`, { acao: p.acao, valor: p.valor }).then(r => r.data),
     onSuccess: (_data, variables) => {
       setEditingId(null);
-      invalidate();
+      invalidateConferencia();
       if (variables.acao === 'criar_acao') {
         qc.invalidateQueries({ queryKey: acoesKeys.list(processId) });
         toast.success('Ação criada na aba Ações a partir da divergência.');
@@ -135,14 +156,14 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
   const grupos = useMemo(() => {
     const by: Record<string, StagingField[]> = {};
     for (const f of fields) {
-      const k = entityLabel(f);
+      const k = entityLabel(f, rotulos);
       (by[k] ||= []).push(f);
     }
     for (const k of Object.keys(by)) {
       by[k].sort((a, b) => (a.target_field || '').localeCompare(b.target_field || ''));
     }
     return by;
-  }, [fields]);
+  }, [fields, rotulos]);
 
   if (isLoading) {
     return <p className="text-sm text-gray-500 dark:text-slate-400 flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin" /> Carregando campos…</p>;
@@ -181,6 +202,14 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                 <span className={`text-xs px-2 py-0.5 rounded border whitespace-nowrap ${STATUS_CLS[f.status] ?? ''}`}>
                   {STATUS_LABEL[f.status] ?? f.status}
                 </span>
+                {f.sem_casa && (
+                  <span
+                    title={f.sem_casa_motivo ?? 'Aceito, mas não vai gravar na base.'}
+                    className="flex items-center gap-1 text-xs px-2 py-0.5 rounded border whitespace-nowrap bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30"
+                  >
+                    <AlertCircle className="w-3 h-3" /> não vai gravar
+                  </span>
+                )}
                 {editingId === f.id ? (
                   <div className="flex items-center gap-1">
                     <input
@@ -194,7 +223,19 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                     <button onClick={() => setEditingId(null)} className="text-xs px-1.5 py-1 text-gray-400">×</button>
                   </div>
                 ) : f.status === 'aceito' || f.status === 'rejeitado' ? (
-                  <span className="text-xs text-gray-400 dark:text-slate-500">decidido</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 dark:text-slate-500">
+                      {f.status === 'aceito' ? 'aceito' : 'rejeitado'}
+                    </span>
+                    {/* Reabrir devolve o campo a PENDENTE — o roteiro da Isis
+                        exigia rever uma decisão e não havia botão (o confronto
+                        e a cadeia voltam a aparecer com a decisão reaberta). */}
+                    <button onClick={() => decide.mutate({ id: f.id, acao: 'reabrir' })}
+                      title="Reabrir esta decisão (volta a pendente)"
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/10">
+                      <RotateCcw className="w-3 h-3" /> Reabrir
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-1">
                     {f.status === 'divergente_transcricao' ? (
