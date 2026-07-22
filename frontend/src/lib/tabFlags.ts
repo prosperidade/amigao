@@ -32,14 +32,12 @@ export const TAB_VISIBILITY_DEFAULTS: Record<string, boolean> = {
   acoes: true,       // Ações
   saidas: true,      // Saídas
 
-  // Comercial OCULTA (S5-C): o Sprint 5 convergiu tudo. Proposta continua no
-  // menu lateral (/proposals) com todas as ações (enviar/aceitar/recusar/nova
-  // versão/gerar contrato); o contrato e sua assinatura vivem no ContractEditor
-  // (/contracts/:id), alcançável pela Saídas; e a lista de artefatos do caso
-  // (proposta/minuta/contrato) converge na aba Saídas com download. Nada fica
-  // acessível SÓ pela Comercial — nenhum botão morto. A aba segue viva por
-  // baixo (componente/rota), só some da superfície (mesmo padrão do S6).
-  commercial: false,
+  // Comercial VISÍVEL de novo (21/07): o consultor sentiu falta dos botões de
+  // Proposta e Contrato no workspace do caso. A aba volta à superfície — segue
+  // gated por etapa (min_stage_index=5, orçamento/negociação em diante), então
+  // só aparece quando o caso chega ao momento comercial e os botões têm o que
+  // fazer (a proposta nasce da Rota, S5-A) — sem botão morto em etapa cedo.
+  commercial: true,
 
   // ── Ocultas no MVP (Sprint 6) — vivas por baixo, só a superfície some ────
   tasks: false,      // Tarefas — a entidade Task segue existindo; a fusão

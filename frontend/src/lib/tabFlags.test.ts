@@ -8,26 +8,28 @@ import {
   FALLBACK_TAB,
 } from './tabFlags';
 
-// S5-C (Ficha 07 §3) — as 6 abas do MVP. A Comercial foi OCULTADA no S5-C
-// (convergiu em Saídas + /proposals + ContractEditor); segue viva por baixo.
-const AbasVisiveis = ['diagnosis', 'documents', 'alertas', 'dossier', 'acoes', 'saidas'];
-const AbasOcultas = ['commercial', 'tasks', 'messages', 'ai', 'timeline', 'decisions'];
+// As 6 abas do MVP + a Comercial, que voltou à superfície (21/07): o consultor
+// sentiu falta dos botões de Proposta/Contrato no workspace. Segue gated por
+// etapa (min_stage_index=5) — visível de novo, mas só a partir do momento
+// comercial. As 5 abas do Sprint 6 seguem ocultas (vivas por baixo).
+const AbasVisiveis = ['diagnosis', 'documents', 'alertas', 'dossier', 'acoes', 'saidas', 'commercial'];
+const AbasOcultas = ['tasks', 'messages', 'ai', 'timeline', 'decisions'];
 
 describe('isTabVisible', () => {
-  it('as 6 abas do MVP ficam visíveis', () => {
+  it('as 6 abas do MVP + a Comercial ficam visíveis', () => {
     for (const key of AbasVisiveis) {
       expect(isTabVisible(key), `${key} deveria estar visível`).toBe(true);
     }
   });
 
-  it('Comercial + as 5 abas do Sprint 6 ficam ocultas', () => {
+  it('as 5 abas do Sprint 6 ficam ocultas', () => {
     for (const key of AbasOcultas) {
       expect(isTabVisible(key), `${key} deveria estar oculta`).toBe(false);
     }
   });
 
-  it('a Comercial (E6/E7) foi ocultada no S5-C — convergiu em Saídas', () => {
-    expect(isTabVisible('commercial')).toBe(false);
+  it('a Comercial (E6/E7) voltou à superfície (21/07) — botões de proposta/contrato', () => {
+    expect(isTabVisible('commercial')).toBe(true);
   });
 
   it('chave desconhecida é fail-open (visível) — nunca esconde aba nova por engano', () => {

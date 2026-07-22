@@ -90,6 +90,20 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
   });
   const doAct = (id: number, action: string) => act.mutate({ id, action });
 
+  // S5-B — gera o contrato a partir da proposta ACEITA, direto na aba (mesmo
+  // POST /contracts/gerar do ProposalEditor). 422 = bloqueio honesto (perfil do
+  // tenant incompleto, valores/ matrícula) — vem como toast, não some calado.
+  const gerarContrato = useMutation({
+    mutationFn: (proposalId: number) =>
+      api.post('/contracts/gerar', { proposal_id: proposalId }).then(r => r.data),
+    onSuccess: (data: { contract: { id: number } }) => {
+      qc.invalidateQueries({ queryKey: ['contracts', processId] });
+      toast.success('Contrato gerado a partir da proposta.');
+      navigate(`/contracts/${data.contract.id}`);
+    },
+    onError: (e) => toast.error(errDetail(e, 'Não foi possível gerar o contrato.')),
+  });
+
   const { data: contracts = [], isLoading: loadingContracts } = useQuery({
     queryKey: ['contracts', processId],
     queryFn: async () => {
@@ -185,6 +199,12 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
                           <XCircle className="w-3 h-3" /> Recusar
                         </button>
                       </>
+                    )}
+                    {eff === 'accepted' && (
+                      <button disabled={gerarContrato.isPending} onClick={() => gerarContrato.mutate(p.id)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white">
+                        <FileText className="w-3 h-3" /> Gerar Contrato
+                      </button>
                     )}
                     {(eff === 'rejected' || eff === 'expired') && (
                       <button disabled={busy} onClick={() => doAct(p.id, 'nova-versao')}
