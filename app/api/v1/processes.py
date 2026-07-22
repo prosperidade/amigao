@@ -51,6 +51,7 @@ from app.schemas.matricula import (
     ChainApplyRequest,
     ChainApplyResult,
     ChainProposalOut,
+    MatriculaVigenteMini,
 )
 from app.schemas.process import (
     Process,
@@ -1564,6 +1565,26 @@ def list_chain_proposals(
     if prop is None:
         return []
     return [ChainProposalOut(**p.__dict__) for p in detect_chain_proposals(prop)]
+
+
+@router.get("/{process_id}/matriculas-vigentes", response_model=list[MatriculaVigenteMini])
+def list_matriculas_vigentes(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Matrículas VIGENTES do imóvel do processo — alimenta o seletor manual de
+    cadeia na Conferência (#60).
+
+    Existe porque `detect_chain_proposals` é deterministicamente conservador:
+    quando os sinais não disparam (sem `registro_anterior`/`denominacao_anterior`,
+    tokens de lote divergentes — caso 15: "Lote 1 B" vs "Gleba 01 B"), não há
+    proposta para clicar. Estas alimentam a declaração manual (humano decide,
+    Princípio 1). Sem imóvel → lista vazia."""
+    _process, prop = _load_process_property(db, current_user.tenant_id, process_id)
+    if prop is None:
+        return []
+    return [MatriculaVigenteMini.model_validate(m) for m in prop.matriculas_vigentes()]
 
 
 @router.post("/{process_id}/chain-proposals/aplicar", response_model=ChainApplyResult)
