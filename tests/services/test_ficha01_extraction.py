@@ -129,6 +129,25 @@ def test_build_matricula_hint_proprio_numero():
     assert area.field_value == {"value": 660.6561, "unidade": "ha"}
 
 
+def test_build_ccir_extrai_numero_ccir():
+    """Item 7 (21/07): o número do CCIR (localiza o documento) ganha campo
+    próprio em matrícula, distinto do Código do Imóvel no SNCR."""
+    parsed = {
+        "numero_ccir": "65077819246",
+        "codigo_sncr_incra": "000.051.123.390-9",
+        "area_ha": 660.6561,
+        "confidence": {},
+    }
+    rows = build_staging_fields("ccir", parsed)
+    ccir_num = next(r for r in rows if r.field_name == "numero_ccir")
+    assert ccir_num.field_value["value"] == "65077819246"
+    assert ccir_num.target_entity == "matricula"
+    assert ccir_num.target_field == "numero_ccir"
+    # NÃO confunde com o código SNCR/INCRA.
+    sncr = next(r for r in rows if r.field_name == "codigo_sncr_incra")
+    assert sncr.target_field == "codigo_incra_sncr"
+
+
 def test_build_pula_campos_vazios():
     parsed = {"numero_car": "X", "municipio": None, "uf": "", "matriculas": [], "confidence": {}}
     rows = build_staging_fields("car", parsed)

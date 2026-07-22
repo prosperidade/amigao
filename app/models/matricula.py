@@ -52,6 +52,10 @@ class Matricula(Base):
     # Cadastros rurais
     codigo_incra_sncr = Column(String, nullable=True)
     nirf_cib = Column(String, nullable=True)
+    # Item 7 (21/07) — número do CCIR (o certificado ANUAL, per-lote). É por ele
+    # que a consultora LOCALIZA o documento. Distinto do codigo_incra_sncr (o
+    # Código do Imóvel no SNCR) e do Property.ccir depreciado por ambiguidade.
+    numero_ccir = Column(String, nullable=True)
     # Fase 0 (gap-analysis Ficha 07, item 8) — exercício (ano) do CCIR mais
     # recente lido para esta matrícula. CCIR é documento ANUAL — permite o
     # auditor emitir CCIR_EXERCICIO_ANTERIOR (catálogo já tinha o código,

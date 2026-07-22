@@ -13,7 +13,7 @@ from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedF
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
 from app.models.tenant import Tenant
-from app.services.confronto_identidade import detectar_confronto
+from app.services.confronto_identidade import detectar_confronto, detectar_confrontos
 
 _SEQ = {"n": 0}
 
@@ -57,6 +57,20 @@ def _linha(db_session, tenant, proc, doc, campo, valor, *, status=None):
         field_name=campo, field_value={"value": valor},
         status=status or ExtractedFieldStatus.pendente,
         target_entity="matricula", target_field=campo,
+        source_doc_type=doc.document_type,
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
+def _area(db_session, tenant, proc, doc, valor):
+    """Linha de área do documento — dá a assinatura de lote (agrupamento 21/07)."""
+    row = ExtractedFieldStaging(
+        tenant_id=tenant.id, process_id=proc.id, document_id=doc.id,
+        field_name="area_ha", field_value={"value": valor, "unidade": "ha"},
+        status=ExtractedFieldStatus.pendente,
+        target_entity="matricula", target_field="area_ha",
         source_doc_type=doc.document_type,
     )
     db_session.add(row)
@@ -181,6 +195,45 @@ def test_sem_staging_nao_quebra(db_session):
     c = detectar_confronto(db_session, tenant_id=tenant.id, process_id=proc.id)
     assert c.ha_confronto is False
     assert c.fontes == []
+
+
+def test_lotes_distintos_com_areas_diferentes_nao_confrontam(db_session):
+    """Requisito da Isis (21/07): 6776 (Lote 1C, 349 ha) e 4698 (Lote 1B, 660 ha)
+    são lotes diferentes da mesma fazenda — NÃO se confrontam.
+
+    Antes, o confronto juntava toda linha `numero_matricula` do processo e
+    acusava um confronto falso entre lotes distintos — veneno com cara de feature.
+    """
+    tenant, proc, prop = _seed(db_session)
+    d1c = _doc(db_session, tenant, proc, "matricula")
+    d1b = _doc(db_session, tenant, proc, "matricula")
+    _linha(db_session, tenant, proc, d1c, "numero_matricula", "6776")
+    _area(db_session, tenant, proc, d1c, "349,9022")
+    _linha(db_session, tenant, proc, d1b, "numero_matricula", "4698")
+    _area(db_session, tenant, proc, d1b, "660,6561")
+
+    confrontos = detectar_confrontos(db_session, tenant_id=tenant.id, process_id=proc.id)
+
+    assert confrontos == []  # lotes distintos → nenhum confronto
+    # E o compat singular também não acusa confronto.
+    assert detectar_confronto(db_session, tenant_id=tenant.id, process_id=proc.id).ha_confronto is False
+
+
+def test_mesmo_lote_mesma_area_confronta(db_session):
+    """Dois números com a MESMA área são o mesmo lote (CCIR defasado × certidão)
+    — aí sim é confronto de identidade."""
+    tenant, proc, prop = _seed(db_session)
+    ccir = _doc(db_session, tenant, proc, "ccir")
+    cert = _doc(db_session, tenant, proc, "matricula")
+    _linha(db_session, tenant, proc, ccir, "numero_matricula", "2923")
+    _area(db_session, tenant, proc, ccir, "660,6561")
+    _linha(db_session, tenant, proc, cert, "numero_matricula", "4698")
+    _area(db_session, tenant, proc, cert, "660,6561")
+
+    confrontos = detectar_confrontos(db_session, tenant_id=tenant.id, process_id=proc.id)
+
+    assert len(confrontos) == 1
+    assert confrontos[0].prevalente.numero == "4698"   # certidão vence
 
 
 def test_hierarquia_ccir_vence_itr(db_session):

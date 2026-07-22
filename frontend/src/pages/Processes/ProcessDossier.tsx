@@ -54,6 +54,7 @@ interface DossierMatricula {
   geo_certificacao_status: string | null;
   codigo_incra_sncr: string | null;
   nirf_cib: string | null;
+  numero_ccir: string | null;
   area_ha: number | null;
   field_sources: Record<string, string>;
 }
@@ -241,6 +242,7 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
                 <KeyFieldRow label="Nº SIGEF" value={m.geo_certificacao_codigo} entity="matricula" entityId={m.id} field="geo_certificacao_codigo" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
                 <KeyFieldRow label="INCRA/SNCR" value={m.codigo_incra_sncr} entity="matricula" entityId={m.id} field="codigo_incra_sncr" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
                 <KeyFieldRow label="NIRF" value={m.nirf_cib} entity="matricula" entityId={m.id} field="nirf_cib" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
+                <KeyFieldRow label="Nº CCIR" value={m.numero_ccir} entity="matricula" entityId={m.id} field="numero_ccir" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
               </div>
             </div>
           ))}

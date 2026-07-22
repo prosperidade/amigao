@@ -32,6 +32,11 @@ class ExtractedFieldStagingOut(BaseModel):
     ai_job_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    # Item 6 (pós-teste Isis): aceite que não vai pousar na base fica visível de
+    # forma DURÁVEL — não só na caixa efêmera do pós-consolidação. Computado a
+    # cada GET (flag_sem_casa), nunca gravado.
+    sem_casa: bool = False
+    sem_casa_motivo: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

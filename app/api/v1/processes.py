@@ -1319,12 +1319,22 @@ def list_process_staging_fields(
     fase nada escreve no staging ainda; o endpoint já existe para a UI consumir.
     Filtro opcional por ``status``.
     """
+    from app.services.staging_consolidation import flag_sem_casa  # noqa: PLC0415
+
     ProcessRepository(db, current_user.tenant_id).get_or_404(
         process_id, detail="Processo não encontrado."
     )
-    return ExtractedFieldStagingRepository(db, current_user.tenant_id).list_by_process(
+    rows = ExtractedFieldStagingRepository(db, current_user.tenant_id).list_by_process(
         process_id, status=status
     )
+    # Item 6 — "aceite sem casa" durável: o mesmo julgamento da consolidação vira
+    # um flag por linha, a cada leitura, para a pendência nunca sumir calada.
+    _proc, prop = _load_process_property(db, current_user.tenant_id, process_id)
+    motivos = flag_sem_casa(db, current_user.tenant_id, process_id, prop)
+    for r in rows:
+        r.sem_casa = r.id in motivos
+        r.sem_casa_motivo = motivos.get(r.id)
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -1394,29 +1404,73 @@ def get_confronto_identidade(
     A frase da regra vem do BACKEND (padrão do guard-rail): a tela não
     reimplementa a hierarquia da Ficha 08 §5.1.
     """
-    from app.services.confronto_identidade import detectar_confronto  # noqa: PLC0415
+    from app.services.confronto_identidade import detectar_confrontos  # noqa: PLC0415
 
     ProcessRepository(db, current_user.tenant_id).get_or_404(
         process_id, detail="Processo não encontrado"
     )
-    c = detectar_confronto(db, tenant_id=current_user.tenant_id, process_id=process_id)
-    return {
-        "ha_confronto": c.ha_confronto,
-        "regra": c.regra,
-        "prevalente": (
-            {"numero": c.prevalente.numero, "fonte": c.prevalente.rotulo_fonte}
-            if c.prevalente else None
-        ),
-        "fontes": [
-            {
-                "numero": f.numero, "document_id": f.document_id,
-                "fonte": f.rotulo_fonte, "status": f.status,
-                "staging_id": f.staging_id,
-            }
-            for f in c.fontes
-        ],
-        "cadeia_proposta": c.cadeia_proposta,
+    confrontos = detectar_confrontos(
+        db, tenant_id=current_user.tenant_id, process_id=process_id
+    )
+
+    def _serialize(c: Any) -> dict[str, Any]:
+        return {
+            "regra": c.regra,
+            "prevalente": (
+                {"numero": c.prevalente.numero, "fonte": c.prevalente.rotulo_fonte}
+                if c.prevalente else None
+            ),
+            "fontes": [
+                {
+                    "numero": f.numero, "document_id": f.document_id,
+                    "fonte": f.rotulo_fonte, "status": f.status,
+                    "staging_id": f.staging_id,
+                }
+                for f in c.fontes
+            ],
+            "cadeia_proposta": c.cadeia_proposta,
+        }
+
+    lista = [_serialize(c) for c in confrontos]
+    primeiro = lista[0] if lista else {
+        "regra": "", "prevalente": None, "fontes": [], "cadeia_proposta": None,
     }
+    # `confrontos` é a forma nova (um por lote); os campos de topo espelham o
+    # primeiro para compat com clientes antigos.
+    return {
+        "ha_confronto": bool(confrontos),
+        "confrontos": lista,
+        **primeiro,
+    }
+
+
+@router.get("/{process_id}/matriculas-rotulos")
+def matriculas_rotulos(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> dict[str, str]:
+    """Rótulo de linhagem por número de matrícula histórica (item 4, 21/07).
+
+    Solução barata para a confusão da Isis ("17 itens do CCIR, nenhum na aba da
+    4698"): os itens do CCIR ficam sob a matrícula 2923 (o hint do documento),
+    não sob a 4698. Em vez de re-homar hints (reescrever a resolução de
+    identidade), só ROTULAMOS o grupo quando a cadeia já existe — "Matrícula 2923
+    — ficha anterior da 4698". Devolve ``{numero_matricula: rótulo}`` só para as
+    históricas encadeadas; sem cadeia → vazio (rótulo some)."""
+    from app.services.inconsistency_matrix import _clean_matricula_hint  # noqa: PLC0415
+
+    _proc, prop = _load_process_property(db, current_user.tenant_id, process_id)
+    if prop is None:
+        return {}
+    por_id = {m.id: m for m in prop.matriculas_ativas()}
+    out: dict[str, str] = {}
+    for m in prop.matriculas_historicas():
+        vig = por_id.get(m.superseded_by_id) if m.superseded_by_id else None
+        chave = _clean_matricula_hint(m.numero_matricula)
+        if vig is not None and vig.numero_matricula and chave:
+            out[chave] = f"ficha anterior da {vig.numero_matricula}"
+    return out
 
 
 @router.get("/{process_id}/vinculo-candidatos/{document_id}")

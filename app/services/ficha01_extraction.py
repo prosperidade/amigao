@@ -227,6 +227,11 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("status_car", "status_car", "imovel", "car_status"),
     ],
     "ccir": [
+        # Item 7 (#74-restante) — número do CCIR: a consultora LOCALIZA o
+        # documento por ele. Coluna PRÓPRIA em matrícula (per-lote, uma fazenda
+        # tem um CCIR por lote); distinto do codigo_sncr_incra (Código do Imóvel
+        # no SNCR) e do imovel.ccir depreciado por ambiguidade (N1 item 5).
+        _FieldSpec("numero_ccir", "numero_ccir", "matricula", "numero_ccir"),
         _FieldSpec("codigo_sncr_incra", "codigo_sncr_incra", "matricula", "codigo_incra_sncr"),
         _FieldSpec("area_ha", "area_ha", "matricula", "area_ha", "ha"),
         _FieldSpec("detentor", "detentor", "matricula", "proprietarios"),
@@ -329,8 +334,11 @@ TEXTO:
 {text}""",
     "ccir": """Extraia os campos deste CCIR (Certificado de Cadastro de Imóvel Rural).
 Retorne APENAS JSON. Campos ausentes = null.
-{"codigo_sncr_incra": null, "area_ha": null, "detentor": null, "municipio": null,
- "denominacao": null, "numero_matricula": null, "confidence": {}}
+- "numero_ccir": o NÚMERO DO CCIR (identifica ESTE certificado; é por ele que a
+  consultora LOCALIZA o documento). NÃO confundir com "codigo_sncr_incra" (o
+  Código do Imóvel Rural no SNCR/INCRA, formato 000.000.000.000-0).
+{"numero_ccir": null, "codigo_sncr_incra": null, "area_ha": null, "detentor": null,
+ "municipio": null, "denominacao": null, "numero_matricula": null, "confidence": {}}
 TEXTO:
 {text}""",
     "matricula": """Esta é uma CERTIDÃO DE MATRÍCULA / Registro de Imóveis. Extraia.

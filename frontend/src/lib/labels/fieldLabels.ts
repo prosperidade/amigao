@@ -22,6 +22,7 @@ export const FIELD_LABELS: Record<string, string> = {
   nirf: 'NIRF',
   ccir: 'CCIR',
   ccir_numero: 'CCIR',
+  numero_ccir: 'Nº CCIR',
   sigef: 'SIGEF',
   sigef_numero: 'SIGEF',
   car: 'CAR',
