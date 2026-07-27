@@ -116,7 +116,10 @@ export const DEMAND_LABELS: Record<string, string> = {
   compensacao: '🌱 Compensação/PRAD',
   exigencia_bancaria: '🏦 Exigência Bancária',
   misto: '🔀 Misto',
-  nao_identificado: '❓ Não identificado',
+  // "Não identificado" dizia à consultora que o sistema não sabe algo que ela
+  // sabe — e não dizia o que fazer. "A classificar" nomeia a mesma coisa como
+  // tarefa dela, que é o que de fato é (26/07, item 10).
+  nao_identificado: '❓ A classificar',
 };
 
 export const URGENCY_CONFIG: Record<string, { label: string; cls: string }> = {
