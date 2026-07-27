@@ -76,6 +76,51 @@ A disciplina inteira cabe numa pergunta ao fim de cada rodada: *atualizei o puls
 
 Os agentes do Claude Code devem rodar essa checklist no fechamento de cada prompt — é a contrapartida documental do "reporte cada commit". Um prompt não está "pronto" só porque o código passou; está pronto quando o pulso foi atualizado e os gatilhos de estrutura foram percorridos.
 
+## Regras permanentes de produto (não são de documentação, mas moram aqui porque valem para TODA rodada)
+
+### 1. Termo interno de sistema nunca renderiza cru na UI do consultor
+
+*(instituída em 2026-07-26, `fix/validacao-26-07`, item 14)*
+
+`document_type`, `status`, `agent_name`, `source_doc_type`, `tipo` de fonte,
+`origem` de dado, enums, ids técnicos: são chaves de banco e de schema. Na tela do
+consultor passam **obrigatoriamente** por um dicionário de rótulos.
+
+Não é preciosismo de UX. Uma consultora ambiental que lê `auto_infracao` ou
+`failed` aprende que o sistema fala outra língua — e um sistema em outra língua
+não é conferido, é obedecido ou ignorado. Os dois desfechos são ruins.
+
+**Dicionários existentes (estender, nunca recriar):**
+
+| domínio | fonte única |
+|---|---|
+| campos extraídos de documento | `frontend/src/lib/labels/fieldLabels.ts` |
+| tipo de documento · tipo de fonte · origem do dado | `frontend/src/lib/labels/docLabels.ts` |
+| eventos de auditoria · agentes | `frontend/src/lib/activityLabels.ts` + `AGENT_LABELS` (`@/types/agent`) |
+| severidade · família de alerta | `frontend/src/lib/regulatory/labels.ts` |
+| tipo de demanda · macroetapa | `frontend/src/pages/Processes/quadro-types.ts` |
+
+**Critério de tradução:** linguagem de consultora ambiental, nunca de engenheiro.
+"staging" → *"dados extraídos aguardando sua conferência"*; "vigia" → *"Vigia
+normativo"*; "failed" → *"falhou — tentar novamente"*. Chave desconhecida degrada
+para um rótulo humano, jamais para o valor cru.
+
+**Guard:** `frontend/src/lib/labels/docLabels.test.ts` trava a regra para os
+dicionários novos (inclusive "nenhum rótulo contém `_`"). Estender ao adicionar
+dicionário.
+
+### 2. Gate que exige ato humano só mergeia com o gesto na UI e teste E2E dele
+
+*(instituída em 2026-07-26, mesma rodada — ver ADR-035 e o caso do gate E2→E3)*
+
+Se o backend passa a exigir uma decisão humana (assinatura, validação, aceite),
+o **mesmo PR** entrega o botão que produz esse ato e um teste que exercita o
+gesto na tela. Gate sem maçaneta é um caso travado sem mensagem de erro: no
+processo 15 o gate cobrava "diagnóstico assinado" e não existia lugar nenhum para
+assinar — a tela renderizava `null`.
+
+**Gate e maçaneta nascem juntos.**
+
 ## Fluxo: o que fazer ao gerar um documento novo
 
 Quatro perguntas, nesta ordem:

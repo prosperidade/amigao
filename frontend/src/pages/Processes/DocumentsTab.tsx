@@ -7,6 +7,11 @@ import type { AIJob } from '@/types/agent';
 import ProcessChecklist from './ProcessChecklist';
 import DocumentUploadZone from '@/components/DocumentUploadZone';
 import { labelFor, isMetaField, humanizeValue } from '@/lib/labels/fieldLabels';
+import {
+  DOC_TYPE_NAO_CLASSIFICADO_AJUDA,
+  docTypeLabel,
+  isDocTypeNaoClassificado,
+} from '@/lib/labels/docLabels';
 
 interface DocumentsTabProps {
   processId: number;
@@ -115,7 +120,16 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-xs text-gray-400 dark:text-slate-500">
                         {(doc.file_size_bytes / 1024 / 1024).toFixed(2)} MB
-                        {doc.document_type && ` · ${doc.document_type}`}
+                        {' · '}
+                        <span
+                          title={
+                            isDocTypeNaoClassificado(doc.document_type)
+                              ? DOC_TYPE_NAO_CLASSIFICADO_AJUDA
+                              : undefined
+                          }
+                        >
+                          {docTypeLabel(doc.document_type)}
+                        </span>
                         {' · '}{new Date(doc.created_at).toLocaleDateString('pt-BR')}
                       </p>
                       {extractedDocIds.has(doc.id) && (
