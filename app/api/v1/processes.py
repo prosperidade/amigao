@@ -1331,9 +1331,24 @@ def list_process_staging_fields(
     # um flag por linha, a cada leitura, para a pendência nunca sumir calada.
     _proc, prop = _load_process_property(db, current_user.tenant_id, process_id)
     motivos = flag_sem_casa(db, current_user.tenant_id, process_id, prop)
+    # Nome do documento de origem por linha (26/07) — uma query, não N+1. Sem ele
+    # a Conferência agrupa linhas de documentos diferentes no mesmo quadro anônimo.
+    doc_ids = {r.document_id for r in rows if r.document_id}
+    nomes: dict[int, str] = {}
+    if doc_ids:
+        nomes = {
+            doc_id: (original or filename or f"documento #{doc_id}")
+            for doc_id, filename, original in db.query(
+                Document.id, Document.filename, Document.original_file_name
+            ).filter(
+                Document.tenant_id == current_user.tenant_id,
+                Document.id.in_(doc_ids),
+            )
+        }
     for r in rows:
         r.sem_casa = r.id in motivos
         r.sem_casa_motivo = motivos.get(r.id)
+        r.source_doc_nome = nomes.get(r.document_id) if r.document_id else None
     return rows
 
 

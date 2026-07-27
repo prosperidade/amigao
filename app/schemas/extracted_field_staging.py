@@ -37,6 +37,11 @@ class ExtractedFieldStagingOut(BaseModel):
     # cada GET (flag_sem_casa), nunca gravado.
     sem_casa: bool = False
     sem_casa_motivo: Optional[str] = None
+    # Nome do documento de origem (26/07). A Conferência agrupava TODAS as linhas
+    # sem `matricula_hint` num único quadro "Matrícula" — no caso 15 isso juntou
+    # 15 linhas de 3 documentos diferentes (2 ITRs + um contrato), e o mesmo campo
+    # aparecia três vezes sem dizer de onde vinha. Resolvido no read-time.
+    source_doc_nome: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
