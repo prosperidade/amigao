@@ -483,9 +483,22 @@ def consolidate_process(
             if row.matricula_hint:
                 matricula_estabelecida.add(row.matricula_hint)
             continue
-        if row.decided_value is None:  # achado (divergente_fundo) — não grava valor
+        if row.decided_value is None:
+            # Achado (aceito a partir de `divergente_fundo`): por projeto NÃO grava
+            # valor — a matriz já roteou como issue/escopo. O que era errado era o
+            # SILÊNCIO: a linha ficava "Aceito" na tela e sumia da consolidação sem
+            # aparecer em `ignorados` nem em selo. Foi o "aceitei e não gravou" do
+            # caso 15 (staging 836 `total_area_ha` e 784 `area_grafica_ha`).
+            ignorados.append(
+                f"{entity or '—'}.{row.target_field or '—'}: aceito como ACHADO — "
+                "não grava valor na base (vira pendência a tratar)"
+            )
             continue
         if _raw_value(row) is None:
+            ignorados.append(
+                f"{entity or '—'}.{row.target_field or '—'}: aceito sem valor legível "
+                "no documento — nada a gravar"
+            )
             continue
         key = ((entity, row.matricula_hint, row.target_field)
                if entity == "matricula" else (entity, row.target_field))
@@ -642,8 +655,11 @@ def consolidate_process(
 
     area_total = prop.area_total_matriculas() if prop is not None else None
 
+    # `ignorados` entra no gatilho do audit: uma consolidação que SÓ produziu
+    # aceites-sem-casa é exatamente a que a consultora precisa ver registrada
+    # ("cliquei em gravar e não aconteceu nada" tem de ter linha na auditoria).
     if (writes or reconciliacoes or acoes_criadas or divergencias_devolvidas
-            or mat_desativadas or mat_reativadas):
+            or mat_desativadas or mat_reativadas or ignorados):
         _audit(db, tenant_id, process_id, user_id, "consolidar", {
             "process_id": process_id, "campos_gravados": len(writes),
             "matriculas_criadas": mat_criadas, "matriculas_atualizadas": mat_atualizadas,
@@ -652,6 +668,11 @@ def consolidate_process(
             "acoes_criadas": acoes_criadas,
             "acoes": [{"id": a.id, "titulo": a.titulo} for a in acoes],
             "writes": writes, "reconciliacoes": reconciliacoes,
+            # `ignorados` no AUDIT (26/07): antes só voltava no corpo da resposta e
+            # morria na caixa efêmera da tela. Aceite que não pousou tem de deixar
+            # rastro permanente — "nada some sem dizer" (P12) vale também para a
+            # auditoria, não só para a UI.
+            "ignorados": ignorados,
             "divergencias_devolvidas": divergencias_devolvidas,
         })
     db.commit()
@@ -929,6 +950,57 @@ def _audit(db: Session, tenant_id: int, process_id: int, user_id: Optional[int],
     stamp_audit_hash(db, log)
 
 
+# Campos do imóvel que o sistema DERIVA e por isso nunca grava da Conferência.
+# Ter o motivo específico (em vez do genérico "não tem lugar") é o que evita a
+# consultora insistir num aceite que jamais vai pousar.
+_IMOVEL_DERIVADOS: dict[str, str] = {
+    "total_area_ha": (
+        "a área total do imóvel é calculada pela soma das matrículas vigentes — "
+        "aceite a área em cada matrícula, não aqui"
+    ),
+    "regulatory_issues": (
+        "pendências do parecer do órgão viram alertas na Visão geral, "
+        "não um campo da ficha"
+    ),
+}
+
+
+def _destino_sem_casa(entity: str, target_field: Optional[str]) -> Optional[str]:
+    """Motivo legível quando o destino do aceite não existe na base.
+
+    Devolve ``None`` quando o campo tem casa (vai pousar normalmente).
+    """
+    from app.models.client import Client  # noqa: PLC0415
+    from app.models.property import Property  # noqa: PLC0415
+
+    target = (target_field or "").strip()
+    if not target:
+        return "aceito sem campo de destino — nada a gravar"
+
+    if entity == "imovel":
+        derivado = _IMOVEL_DERIVADOS.get(target)
+        if derivado:
+            return f"não entra na ficha: {derivado}"
+        col = _IMOVEL_ALIAS.get(target, target) if target in _IMOVEL_ALIAS else target
+        tem_coluna = col is not None and col in Property.__table__.columns
+        if col not in _IMOVEL_FIELDS or not tem_coluna:
+            return (
+                f"'{target}' ainda não tem campo na ficha do imóvel — a informação "
+                "fica registrada aqui, mas não aparece no cadastro"
+            )
+        return None
+
+    if entity == "cliente":
+        col = _CLIENTE_ALIAS.get(target, target) if target in _CLIENTE_ALIAS else target
+        tem_coluna = col is not None and col in Client.__table__.columns
+        if col not in _CLIENTE_FIELDS or not tem_coluna:
+            return (
+                f"'{target}' ainda não tem campo no cadastro do cliente — a "
+                "informação fica registrada aqui, mas não aparece na ficha"
+            )
+    return None
+
+
 def flag_sem_casa(
     db: Session, tenant_id: int, process_id: int, prop: Any
 ) -> dict[int, str]:
@@ -941,20 +1013,50 @@ def flag_sem_casa(
     a cada GET de staging: a pendência fica à vista até ser resolvida, nunca some
     calada. Não escreve nada — só julga.
 
+    26/07 — a varredura passou a cobrir TAMBÉM imóvel e cliente. Antes só olhava
+    matrícula, e foi justamente pelo lado do imóvel que o caso 15 vazou: `aceito`
+    de `total_area_ha` (área do imóvel é derivada da soma das matrículas, nunca
+    gravada aqui) e de `modulos_fiscais` (sem coluna na base) sumiam sem selo
+    nenhum. Selo que não cobre o caminho por onde o dado se perde não é selo.
+
     Devolve ``{staging_id: motivo}`` para as linhas ACEITAS que ficariam órfãs.
+    Motivo é texto de CONSULTORA — ele aparece na tela, não no log.
     """
-    aceitos = (
+    todos_aceitos = (
         db.query(ExtractedFieldStaging)
         .filter(
             ExtractedFieldStaging.tenant_id == tenant_id,
             ExtractedFieldStaging.process_id == process_id,
             ExtractedFieldStaging.status == ExtractedFieldStatus.aceito,
-            ExtractedFieldStaging.target_entity == "matricula",
         )
         .all()
     )
-    if not aceitos:
+    if not todos_aceitos:
         return {}
+
+    out_geral: dict[int, str] = {}
+    aceitos: list[ExtractedFieldStaging] = []
+    for r in todos_aceitos:
+        entity = (r.target_entity or "").lower()
+        # Achado aceito (`divergente_fundo`): decisão legítima, mas NÃO grava valor.
+        # Dizer isso na linha é a diferença entre "aceitei e não gravou" e
+        # "aceitei como achado, e o sistema me disse".
+        if r.decided_value is None and r.field_name != "matricula_listada":
+            out_geral[r.id] = (
+                "aceito como achado — a divergência fica registrada para tratar, "
+                "mas o valor não entra na ficha do imóvel"
+            )
+            continue
+        if entity == "matricula":
+            aceitos.append(r)
+            continue
+        if entity in ("imovel", "cliente"):
+            motivo = _destino_sem_casa(entity, r.target_field)
+            if motivo:
+                out_geral[r.id] = motivo
+
+    if not aceitos:
+        return out_geral
 
     existentes = {
         _clean_matricula_hint(m.numero_matricula)
@@ -970,7 +1072,7 @@ def flag_sem_casa(
         and (r.source_doc_type or "").lower() in _MATRICULA_CREATOR_DOC_TYPES
     }
 
-    out: dict[int, str] = {}
+    out: dict[int, str] = dict(out_geral)
     for r in aceitos:
         hint = _clean_matricula_hint(r.matricula_hint)
         if not hint:

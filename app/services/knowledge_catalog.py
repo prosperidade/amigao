@@ -20,7 +20,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import date as _date
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -248,7 +248,7 @@ def search(
     limit: int = 10,
     tenant_id: int | None = None,
     source_type: str | None = None,
-    jurisdiction: str | None = None,
+    jurisdiction: str | Sequence[str] | None = None,
     uf: str | None = None,
     identifier: str | None = None,
     demand_type: str | None = None,
@@ -279,8 +279,20 @@ def search(
         where.append("kc.source_type = :source_type")
         params["source_type"] = source_type
     if jurisdiction:
-        where.append("kc.jurisdiction = :jurisdiction")
-        params["jurisdiction"] = jurisdiction
+        # Aceita lista (ADR-034): a esfera FEDERAL do domínio corresponde a duas
+        # jurisdições no corpus — `federal` e `nacional` (resoluções CONAMA e
+        # afins). Exigir uma só deixaria metade da fundamentação federal de fora.
+        juris = [jurisdiction] if isinstance(jurisdiction, str) else list(jurisdiction)
+        if len(juris) == 1:
+            where.append("kc.jurisdiction = :jurisdiction")
+            params["jurisdiction"] = juris[0]
+        else:
+            marcadores = []
+            for i, j in enumerate(juris):
+                chave = f"jurisdiction_{i}"
+                marcadores.append(f":{chave}")
+                params[chave] = j
+            where.append(f"kc.jurisdiction IN ({', '.join(marcadores)})")
     if uf:
         # Federal (uf IS NULL) é aplicável a qualquer UF — filtrar por UF não pode
         # excluir a legislação federal (caso #12: 761 chunks federais ficavam de

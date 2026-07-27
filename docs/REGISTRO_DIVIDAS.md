@@ -8,7 +8,11 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 80.** (#79 aberta pela identidade da matrícula,
+> **PRÓXIMO NÚMERO LIVRE: 91.** (#85 a #90 abertas pela remediação de 26/07,
+> `fix/validacao-26-07`: vigia de revogação, editor de rota do consultor,
+> `SourceRef.pagina`, área gravada em coluna de status, linguagem técnica na UI
+> fora das telas da Isis, e as 4 specs da Ficha-do-chat. Ver bloco próprio.)
+> (histórico do contador abaixo — **PRÓXIMO NÚMERO LIVRE: 80** era o valor antes.) (#79 aberta pela identidade da matrícula,
 > `fix/consolidacao-lineage-decisoes`, 2026-07-20 — degrau 3 da cascata da Isis;
 > ver abaixo. A #74 teve a FATIA NIRF fechada na mesma rodada.) (#78 aberta pela dívida #70,
 > `fix/70-classificacao-persistida`, 2026-07-20 — extração dos documentos sem
@@ -285,7 +289,79 @@ merece guard próprio quando alguém encostar no módulo. O irmão desta classe
 (`legislation_monitor`, onde `in` sobre string virava match de SUBSTRING) já foi
 corrigido junto do fix.
 
-**PRÓXIMO LIVRE: 85.**
+---
+
+### Abertas pela remediação de 2026-07-26 (`fix/validacao-26-07`)
+
+**85. Vigia normativo de revogação — 3 degraus.** Hoje o sistema afirma *"vigência
+conferida em DD/MM/AAAA"* (ADR-035, item 12) — que é honesto e insuficiente. O
+degrau (a) foi entregue: a data da última verificação do corpus aparece ao lado de
+cada norma. Faltam: **(b)** *detecção* — job que reconsulta a fonte oficial e marca
+`LegislationDocument.revoked_at` quando a norma cai; **(c)** *propagação* — alerta
+no caso que citou a norma revogada, para a consultora saber que uma fundamentação
+já usada mudou de status. Sem (b) e (c), "conferida em 12/2024" pode significar
+"revogada em 03/2025 e ninguém viu". **O que destrava:** confiabilidade da
+biblioteca qualificada ao longo do tempo — que é o produto inteiro da ADR-033.
+
+**86. Editor de rota do consultor.** Consequência direta da ADR-033: se o agente
+não propõe mais rota, a consultora precisa de onde **construir a dela**. Hoje a
+`Rota`/`RotaPasso` (E5) só nasce por caminho automático; falta a tela de compor,
+ordenar e anotar passos à mão, com fonte por passo (`origem_manual_nota` já existe
+no model). **O que destrava:** fecha o ciclo que a ADR-033 abriu — sem isso a
+decisão de sombrear a rota tira uma muleta sem entregar a ferramenta. **Prioridade:
+alta** — é a próxima fase da fila oficial.
+
+**87. `SourceRef.pagina` não é populada pelos extratores.** O contrato de UI já
+aceita página (`FonteChip` renderiza "p. N" quando existe) e a ADR-035 exige
+"documento de origem + página". Os extratores ainda não devolvem o número da
+página do trecho lido — então hoje o clique abre o documento, mas no início, não
+no ponto. **O que destrava:** conferência de fonte em documento longo (auto de
+infração de 40 páginas) deixa de ser uma caça ao trecho.
+
+**88. `rl_declarada_ha` grava ÁREA na coluna de STATUS (`Property.rl_status`).**
+Medido em prod no processo 15: `properties.rl_status = "250,2094"` — um número de
+hectares numa coluna que descreve situação ("averbada"). Vem do mapeamento
+`ficha01_extraction._FIELD_SPECS['car']: rl_declarada_ha → imovel.rl_status`, somado
+à entrada de `rl_status` na allowlist da consolidação. O Hub exibe "Reserva Legal:
+250,2094". **Fix correto:** coluna `Property.rl_area_ha` (migration aditiva) +
+remapeamento, mantendo `rl_status` para situação. **Não foi feito aqui** por ser
+mudança de modelo com efeito no Hub e no dossiê — escopo próprio. **Dado sujo em
+prod:** 1 linha (property 12), a corrigir junto do fix.
+
+**89. Linguagem técnica na UI — telas fora do escopo da Isis (item 14c).** A
+varredura de 26/07 catalogou termos internos renderizados crus. O que a Isis opera
+(workspace, Conferência, diagnóstico) foi corrigido em `fix/validacao-26-07`; o
+restante fica para PR próprio de linguagem, com esta tabela como spec:
+
+| tela | termo exposto | tradução proposta | esforço |
+|---|---|---|---|
+| `ProcessDossier.tsx:398` | `{doc.document_type}` cru (`auto_infracao`) | `docTypeLabel()` | S |
+| `ProcessDossier.tsx:457` | `{p.status}` da proposta, cru | dicionário de status comercial | S |
+| `PropertyHub.tsx:709` | `{iss.tipo}` da issue, cru | `FAMILIA_LABEL` / rótulo de alerta | S |
+| `PropertyHub.tsx:1122` | `{ev.entity_type}` (`process`, `document`) | dicionário de entidade | S |
+| `DashboardRegente.tsx:359` | `{a.severity}` cru | `SEVERITY_LABEL` (já existe) | S |
+| `ProcessChecklist.tsx` | `status` `pending`/`received`/`waived` em lógica e rótulo | dicionário de checklist | M |
+| `MacroetapaStepper.tsx` | `step.status === 'completed'` refletido em texto | rótulos de etapa | M |
+| `AgentsPage`/`AIPanel` | nomes internos de agente e `job.status` inglês | `AGENT_LABELS` (existe) + status PT | M |
+| global | `failed`/`running`/`queued` em toasts e badges | "falhou — tentar novamente" etc. | M |
+
+**Já existia e foi reusado (não refazer):** `fieldLabels.ts` (campos),
+`activityLabels.ts` + `AGENT_LABELS` de `@/types/agent` (eventos e agentes),
+`regulatory/labels.ts` (severidade/família), `quadro-types.ts` (demanda/macroetapa).
+Adicionado agora: `lib/labels/docLabels.ts` (tipo de documento, tipo de fonte,
+origem do dado) com teste de guarda.
+
+**90. Especificações pendentes da Ficha-do-chat (análise futura).** Quatro
+conceitos nomeados mas ainda sem spec fechada: **(a) readiness gate** — o que
+significa um caso estar "pronto" para avançar, além dos gates atuais por
+macroetapa; **(b) classificação de achados** — taxonomia estável do que o auditor
+encontra, separando "divergência", "lacuna" e "risco"; **(c) evidência com força**
+— graduar o peso de uma fonte (documento oficial > relato > inferência), que hoje
+existe só como `confianca` solta em `SourceRef`; **(d) versionamento** — o que se
+versiona (diagnóstico, consolidação, ficha) e o que apenas se audita. **O que
+destrava:** os quatro decidem juntos como o sistema fala sobre certeza.
+
+**PRÓXIMO LIVRE: 91.**
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 

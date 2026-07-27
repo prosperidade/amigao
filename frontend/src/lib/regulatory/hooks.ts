@@ -7,6 +7,7 @@
  * - `GET   /processes/{pid}/issues/{iid}/decision`      (404 = sem decisão)
  * - `PUT   /processes/{pid}/issues/{iid}/decision`      (Regra B — rejeita suspeita)
  * - `GET   /processes/{pid}/diagnoses`
+ * - `POST  /processes/{pid}/diagnoses/from-agent`         (materializa da análise)
  * - `PATCH /processes/{pid}/diagnoses/{version}/validate` (gate camada 2)
  *
  * Query keys centralizadas em `regulatoryKeys` para invalidate consistente.
@@ -139,6 +140,26 @@ export function useDiagnoses(processId: number): UseQueryResult<RegulatoryDiagno
       return r.data as RegulatoryDiagnosis[];
     },
     enabled: !!processId,
+  });
+}
+
+/**
+ * Materializa o diagnóstico a partir da última análise do agente.
+ *
+ * A maçaneta do gate E2→E3 (caso 15): sem `RegulatoryDiagnosis` criado não há o
+ * que assinar, e o gate cobrava assinatura sem lugar para dá-la. Idempotente no
+ * backend — havendo versão não validada, devolve ela em vez de empilhar outra.
+ */
+export function useCreateDiagnosisFromAgent(processId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api
+        .post(`/processes/${processId}/diagnoses/from-agent`)
+        .then(r => r.data as RegulatoryDiagnosis),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: regulatoryKeys.diagnoses(processId) });
+    },
   });
 }
 

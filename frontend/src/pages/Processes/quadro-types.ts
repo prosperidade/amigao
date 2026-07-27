@@ -146,5 +146,5 @@ export const DEMAND_TYPE_LABELS: Record<string, string> = {
   exigencia_bancaria: 'Exigência Bancária',
   prad: 'PRAD',
   misto: 'Misto',
-  nao_identificado: 'Não Identificado',
+  nao_identificado: 'A classificar',
 };

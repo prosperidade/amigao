@@ -18,6 +18,7 @@ import {
 import { api } from '@/lib/api';
 import { acoesKeys } from '@/lib/acoes/hooks';
 import { labelFor, humanizeValue } from '@/lib/labels/fieldLabels';
+import { docTypeLabel } from '@/lib/labels/docLabels';
 
 /** Mensagem de erro legível a partir do AxiosError (detail do backend, senão genérica). */
 function errDetail(e: unknown, fallback: string): string {
@@ -39,6 +40,8 @@ interface StagingField {
   // Item 6 — aceite que não vai pousar na base (computado no servidor, durável).
   sem_casa?: boolean;
   sem_casa_motivo?: string | null;
+  /** Nome do documento de origem — separa os quadros sem número de matrícula. */
+  source_doc_nome?: string | null;
 }
 
 interface ConsolidationResult {
@@ -72,7 +75,18 @@ function entityLabel(f: StagingField, rotulos: Record<string, string> = {}): str
   if (f.target_entity === 'cliente') return 'Cliente';
   if (f.target_entity === 'imovel') return 'Imóvel';
   if (f.target_entity === 'matricula') {
-    if (!f.matricula_hint) return 'Matrícula';
+    if (!f.matricula_hint) {
+      // 26/07 — antes retornava 'Matrícula' seco e TODAS as linhas sem número
+      // caíam no mesmo quadro: no caso 15, 15 linhas de 3 documentos distintos
+      // (2 ITRs + 1 contrato), com denominação/área repetidas sem dizer de onde
+      // vinham. Agrupar pelo DOCUMENTO desfaz a mistura: o ITR não declara nº de
+      // matrícula (identifica por NIRF/INCRA), e isso é uma informação útil —
+      // não um defeito a esconder.
+      const doc = f.source_doc_nome?.trim();
+      return doc
+        ? `Sem matrícula declarada — ${doc}`
+        : 'Sem matrícula declarada';
+    }
     // Rótulo de linhagem (item 4): "Matrícula 2923 — ficha anterior da 4698"
     // quando a cadeia já existe, para os itens do CCIR (hint defasado) não
     // parecerem um imóvel à parte.
@@ -195,19 +209,25 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
               <div key={f.id} className="flex items-center gap-3 flex-wrap p-2.5 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5">
                 <div className="flex-1 min-w-[160px]">
                   <p className="text-sm text-gray-800 dark:text-slate-200">{labelFor(f.target_field || f.field_name)}</p>
+                  {/* Item 14 — `source_doc_type` é chave de banco ("auto_infracao",
+                      "rg_cpf"); passa pelo dicionário antes de virar tela. */}
                   <p className="text-xs text-gray-400 dark:text-slate-500">
-                    {f.source_doc_type ?? '—'} · {fieldValueStr(f)}
+                    {docTypeLabel(f.source_doc_type)} · {fieldValueStr(f)}
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded border whitespace-nowrap ${STATUS_CLS[f.status] ?? ''}`}>
                   {STATUS_LABEL[f.status] ?? f.status}
                 </span>
+                {/* Selo legível (26/07): o motivo sai do tooltip e vira texto na
+                    linha. Tooltip só é lido por quem já desconfia — e a queixa
+                    era exatamente não entender por que o aceite não pousou. */}
                 {f.sem_casa && (
-                  <span
-                    title={f.sem_casa_motivo ?? 'Aceito, mas não vai gravar na base.'}
-                    className="flex items-center gap-1 text-xs px-2 py-0.5 rounded border whitespace-nowrap bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30"
-                  >
-                    <AlertCircle className="w-3 h-3" /> não vai gravar
+                  <span className="basis-full order-last flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1">
+                    <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="font-semibold">Aceito, mas não entra na base:</strong>{' '}
+                      {f.sem_casa_motivo ?? 'este campo não tem destino no cadastro.'}
+                    </span>
                   </span>
                 )}
                 {editingId === f.id ? (
@@ -302,14 +322,26 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
       {/* Ação PRINCIPAL da aba Conferência — barra fixa (sticky) no rodapé do
           card pra ficar sempre à vista, não enterrada no fim do scroll. */}
       <div className="sticky bottom-0 z-10 -mx-5 -mb-5 px-5 py-3 rounded-b-xl border-t border-gray-200 dark:border-white/10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-xs text-gray-500 dark:text-slate-400">
+        <div className="text-xs text-gray-500 dark:text-slate-400 min-w-0">
           {`${consolidaveis} campo(s) serão gravados`}
           {pendentesObrig > 0 && ` · ${pendentesObrig} divergência(s) virarão ações a resolver`}.
+          {/* A REGRA, escrita (26/07): a pergunta "por que aceitei e não gravou?"
+              é respondida ANTES do clique, na própria tela — não depois, no
+              suporte. Espelha exatamente o que a consolidação faz. */}
+          <p className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500">
+            Aceitar não grava: grava aqui. Cada campo entra na ficha da matrícula
+            indicada — sem matrícula-alvo, vira pendência de vínculo e continua
+            nesta lista, marcado.
+          </p>
         </div>
         <button
           onClick={() => consolidate.mutate()}
           disabled={consolidate.isPending || consolidaveis === 0}
-          title={consolidaveis === 0 ? 'Aceite ao menos um campo para gravar.' : 'Gravar os campos aceitos na base (divergências viram ações)'}
+          title={
+            consolidaveis === 0
+              ? 'Aceite ao menos um campo para gravar.'
+              : 'Grava na base os campos que você aceitou. Campo com matrícula-alvo entra na ficha dela; sem alvo, fica como pendência de vínculo. Divergências não resolvidas viram ações.'
+          }
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium"
         >
           {consolidate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}

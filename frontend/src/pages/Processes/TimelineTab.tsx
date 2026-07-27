@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { describeEvento, type EventoKind, type TimelineEvent } from './historicoEventos';
 import { agruparBlocos, resumoCluster, type DescribedEvent } from './historicoBlocos';
+import { origemDadoLabel } from '@/lib/labels/docLabels';
 
 interface TimelineTabProps {
   processId: number;
@@ -53,7 +54,9 @@ function EventoCard({ log, ev }: DescribedEvent) {
           {ev.origem && (
             <p className="text-xs text-gray-500 dark:text-slate-400 mt-2 flex items-center gap-1">
               <FileSearch className="w-3 h-3 shrink-0 text-gray-400 dark:text-slate-500" />
-              <span className="min-w-0">Origem do dado: <span className="font-medium text-gray-600 dark:text-slate-300">{ev.origem}</span></span>
+              {/* Item 14 — `origem` é chave interna ("human_validated",
+                  "derived_matricula"); passa pelo dicionário. */}
+              <span className="min-w-0">Origem do dado: <span className="font-medium text-gray-600 dark:text-slate-300">{origemDadoLabel(ev.origem)}</span></span>
             </p>
           )}
         </div>

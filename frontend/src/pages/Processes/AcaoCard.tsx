@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import { Check, Link2, Loader2, Pencil, X } from 'lucide-react';
 import { useUpdateAcao, useTriarAcao } from '@/lib/acoes/hooks';
 import { humanizeAcaoTitulo } from '@/lib/acoes/titulo';
+import { fonteTipoLabel } from '@/lib/labels/docLabels';
 import {
   ACAO_PRIORIDADE_LABELS,
   ACAO_STATUS_LABELS,
@@ -37,13 +38,15 @@ function FonteChip({ fonte }: { fonte: AcaoFonte }) {
       </span>
     );
   }
-  const label = fonte.descricao || fonte.ref || fonte.tipo || 'fonte';
+  // Item 14 — `fonte.tipo` é chave de schema ("matriz", "auditor"); vira rótulo
+  // de consultora antes de chegar à tela.
+  const label = fonte.descricao || fonte.ref || fonteTipoLabel(fonte.tipo);
   return (
     <span
       className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20"
-      title={fonte.tipo ? `${fonte.tipo}${fonte.ref ? ` · ${fonte.ref}` : ''}` : undefined}
+      title={fonte.tipo ? `${fonteTipoLabel(fonte.tipo)}${fonte.ref ? ` · ${fonte.ref}` : ''}` : undefined}
     >
-      {fonte.tipo ? `${fonte.tipo}: ` : ''}{label}
+      {fonte.tipo ? `${fonteTipoLabel(fonte.tipo)}: ` : ''}{label}
     </span>
   );
 }

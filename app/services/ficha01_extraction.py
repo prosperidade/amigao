@@ -62,6 +62,12 @@ CANONICAL_DOC_TYPES: list[str] = [
     "memorial_descritivo",
     "auto_infracao",
     "certidao_embargo",
+    # `contrato` (26/07, caso 15): peça contratual do caso — NÃO alimenta staging
+    # cadastral (sem `_FIELD_SPECS`). Existe para que um contrato pare de ser
+    # classificado como certificação/ficha e ter seus termos lidos como dados do
+    # imóvel — foi assim que "Plano de Recuperação de Área Degradada (PRAD)"
+    # virou denominação de imóvel no processo 15.
+    "contrato",
     "outro",
 ]
 
@@ -94,7 +100,38 @@ _SPECIFIC_DOC_TYPES = {t for t in CANONICAL_DOC_TYPES if t != "outro"}
 # vinha antes de `matricula`. Corrigido com a precedência + marcadores fortes.
 # NÃO usar "matrícula nº" como gatilho de `matricula`: um memorial SIGEF cita o
 # número da matrícula — gatilho fraco roubaria a classificação.
-_CLASSIFY_RULES: list[tuple[str, tuple[str, ...]]] = [
+# Um "gatilho" é `str` (basta conter) ou `tuple[str, ...]` (precisa conter TODOS).
+# A forma composta nasceu do caso 15: marcador isolado é fraco demais para
+# identificar documento — ver `sigef` abaixo.
+_Gatilho = "str | tuple[str, ...]"
+
+_CLASSIFY_RULES: list[tuple[str, tuple[Any, ...]]] = [
+    # ── Identidade FORTE do SIGEF (26/07, caso 15) ────────────────────────────
+    # Vem no topo porque um memorial do Sigef CITA CCIR/matrícula no corpo e era
+    # sequestrado por `ccir` (doc 322 real: "Memorial descritivo certificado.pdf",
+    # cabeçalho INCRA/Sigef, classificado como CCIR). Só marcadores compostos e
+    # inconfundíveis entram aqui — nada que um CCIR ou uma certidão possa ter.
+    ("sigef", (
+        "gerado automaticamente pelo sigef",
+        ("memorial descritivo", "sigef"),
+        ("memorial descritivo", "instituto nacional de colonizacao"),
+        ("memorial descritivo", "instituto nacional de colonização"),
+    )),
+    # ── Contrato ──────────────────────────────────────────────────────────────
+    # Antes de qualquer ficha cadastral: um contrato de prestação de serviço
+    # ambiental fala de georreferenciamento, PRAD e imóvel o tempo todo. No caso
+    # 15 o "Contrato BIOTA PRAD" (doc 329) casou `sigef` só por conter
+    # "georreferenc" — e a ficha do SIGEF leu "Plano de Recuperação de Área
+    # Degradada (PRAD)" como DENOMINAÇÃO DO IMÓVEL. Documento inteiro lido como
+    # se fosse outro.
+    ("contrato", (
+        "contrato de prestacao de servicos", "contrato de prestação de serviços",
+        "contrato particular", "instrumento particular de contrato",
+        ("contratada", "contratante", "clausula"),
+        ("contratada", "contratante", "cláusula"),
+        ("obrigacoes das partes", "contratada"),
+        ("obrigações das partes", "contratada"),
+    )),
     ("rat", (
         "relatorio de analise tecnica", "relatório de análise técnica",
         "analise tecnica do car", "análise técnica do car", "go-rat", "rat-",
@@ -147,9 +184,17 @@ _CLASSIFY_RULES: list[tuple[str, tuple[str, ...]]] = [
         "imposto sobre a propriedade territorial rural", "nirf", " vtn",
         "valor da terra nua", "documento de informacao e apuracao do itr",
     )),
+    # SIGEF "fraco" — o que sobra depois da identidade forte lá em cima. Perdeu
+    # `georreferenciamento`/`georreferenciado` e `memorial descritivo` nus: os
+    # três aparecem em contrato, parecer e certidão sem que o documento SEJA uma
+    # certificação. O que ficou só ocorre em peça de georreferenciamento de fato.
     ("sigef", (
-        "sigef", "memorial descritivo", "georreferenciamento", "georreferenciado",
-        "vertices", "vértices", "certificacao do imovel", "certificação do imóvel",
+        "sigef", "vertices", "vértices",
+        "certificacao do imovel", "certificação do imóvel",
+        "codigo da certificacao", "código da certificação",
+        ("memorial descritivo", "azimute"),
+        ("georreferenciamento", "vertice"),
+        ("georreferenciamento", "vértice"),
     )),
     ("rg_cpf", (
         "registro geral", "carteira de identidade", "cedula de identidade",
@@ -176,9 +221,21 @@ def classify_doc_type(text: str, current: Optional[str] = None) -> str:
 
     low = (text or "").lower()
     for dt, keywords in _CLASSIFY_RULES:
-        if any(kw in low for kw in keywords):
+        if any(_gatilho_bate(kw, low) for kw in keywords):
             return dt
     return cur or "outro"
+
+
+def _gatilho_bate(gatilho: Any, texto_low: str) -> bool:
+    """`str` → basta conter. `tuple` → precisa conter TODOS os termos.
+
+    O composto existe porque marcador isolado identifica mal: "georreferenciamento"
+    aparece em contrato, "memorial descritivo" aparece em certidão. Exigir a
+    co-ocorrência é o que separa "o documento FALA de X" de "o documento É X".
+    """
+    if isinstance(gatilho, tuple):
+        return all(termo in texto_low for termo in gatilho)
+    return gatilho in texto_low
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +575,40 @@ def _is_garbage_for_code(value: Any) -> bool:
 # produzam listas ligeiramente diferentes (2c).
 _LIST_COLLAPSE_FIELDS = {"pendencias_rat", "onus"}
 
+# Campos de IDENTIDADE do imóvel: quem é a fazenda e de quem ela é. Errar aqui
+# não é ruído — renomeia o imóvel na base e contamina o diagnóstico. No caso 15 a
+# denominação do imóvel virou "Plano de Recuperação de Área Degradada (PRAD)"
+# porque um contrato foi lido com a ficha do SIGEF.
+_IDENTITY_FIELDS = {"denominacao", "proprietario", "detentor"}
+
+# Marcadores que provam que o documento É a fonte legítima de identidade do seu
+# tipo. Tipo fora do mapa não é checado (a ficha dele já é a própria identidade).
+_IDENTITY_EVIDENCE: dict[str, tuple[str, ...]] = {
+    "sigef": (
+        "sigef", "certificacao", "certificação", "vertice", "vértice",
+        "memorial descritivo", "incra",
+    ),
+    "ccir": (
+        "ccir", "certificado de cadastro de imovel rural",
+        "certificado de cadastro de imóvel rural",
+    ),
+}
+
+
+def _pode_declarar_identidade(doc_type: str, texto: Optional[str]) -> bool:
+    """O documento tem lastro para declarar denominação/proprietário do imóvel?
+
+    Rede de segurança independente do classificador (26/07): mesmo que um tipo
+    seja atribuído por engano — por regra, por LLM ou pela mão de alguém — a
+    identidade do imóvel só sai de documento que carrega a marca do seu próprio
+    tipo. Sem o texto em mãos, não bloqueia (não é papel deste guard adivinhar).
+    """
+    marcas = _IDENTITY_EVIDENCE.get(doc_type)
+    if not marcas or not texto:
+        return True
+    low = texto.lower()
+    return any(m in low for m in marcas)
+
 
 def _dedup_token(field_name: str, value: Any, unidade: Optional[str]) -> str:
     """Token de valor para a chave de dedup, ciente do tipo do campo (2a/2c)."""
@@ -530,14 +621,22 @@ def _dedup_token(field_name: str, value: Any, unidade: Optional[str]) -> str:
     return _value_key(value)
 
 
-def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingField]:
+def build_staging_fields(
+    doc_type: str, parsed: dict[str, Any], *, texto: Optional[str] = None
+) -> list[StagingField]:
     """Mapeia o JSON extraído → linhas de staging (sem persistir).
 
     Pula campos vazios. Trata listas especiais (car.matriculas → 1 linha por
     matrícula com `matricula_hint`; rat.pendencias → `pendencias_rat`).
+
+    ``texto`` (opcional) é o conteúdo lido do documento. Quando fornecido, ativa o
+    guard de identidade: denominação/proprietário só saem de documento que prova
+    ser do tipo declarado (ver `_pode_declarar_identidade`).
     """
     if not isinstance(parsed, dict):
         return []
+
+    identidade_ok = _pode_declarar_identidade(doc_type, texto)
 
     from app.services.field_validators import check_format  # noqa: PLC0415
     from app.services.inconsistency_matrix import _clean_matricula_hint  # noqa: PLC0415
@@ -559,6 +658,16 @@ def build_staging_fields(doc_type: str, parsed: dict[str, Any]) -> list[StagingF
         if _is_empty(value):
             continue
         # 2b — campo de código recebendo frase/título (lixo do LLM): descarta.
+        # Guard de identidade (26/07): documento sem a marca do próprio tipo não
+        # nomeia o imóvel nem o dono. WARNING de propósito — é sinal de
+        # classificação errada a montante, não ruído esperado.
+        if not identidade_ok and spec.field_name in _IDENTITY_FIELDS:
+            logger.warning(
+                "ficha01_extraction: %s ignorado — documento classificado '%s' nao "
+                "apresenta marcas desse tipo (identidade nao confiavel): %r",
+                spec.field_name, doc_type, value,
+            )
+            continue
         if spec.field_name in _CODE_FIELDS and _is_garbage_for_code(value):
             logger.info("ficha01_extraction: descartado lixo em %s: %r", spec.field_name, value)
             continue
@@ -695,7 +804,9 @@ def extract_and_stage(
     if not parsed:
         return StagingResult(doc_type=dt, rows_written=0, skipped_reason="extração vazia/falha")
 
-    fields = build_staging_fields(dt, parsed)
+    # `texto=` liga o guard de identidade: o próprio conteúdo do documento é a
+    # prova de que ele pode nomear o imóvel/dono (26/07, caso 15).
+    fields = build_staging_fields(dt, parsed, texto=text)
 
     # 4c — dedup na persistência: não recriar linha já existente (mesma fonte +
     # campo + hint + valor). Resolve a triplicação de re-extrações. Valores

@@ -247,7 +247,7 @@ def list_jobs(
     if status:
         q = q.filter(AIJob.status == status)
     jobs = q.order_by(AIJob.created_at.desc()).offset(skip).limit(limit).all()
-    return [_serialize_job(j) for j in jobs]
+    return [_serialize_job(j, db=db) for j in jobs]
 
 
 # ---------------------------------------------------------------------------
@@ -262,14 +262,29 @@ def get_job(job_id: int, db: DbDep, current_user: UserDep) -> dict[str, Any]:
     ).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado.")
-    return _serialize_job(job)
+    return _serialize_job(job, db=db)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _serialize_job(j: AIJob) -> dict[str, Any]:
+def _serialize_job(j: AIJob, *, db: Optional[Session] = None) -> dict[str, Any]:
+    """Serializa o job para a UI.
+
+    ADR-033 — o `result` do agente de legislação passa pelo modo sombra ANTES de
+    sair: no piloto a API não serve etapas/prazos/caminho, só a fundamentação
+    localizada. Filtrar aqui (e não no componente) é o que garante que a rota não
+    volte à tela por descuido de renderer — o dado não chega ao navegador. O
+    banco continua com o output completo.
+    """
+    resultado = j.result
+    if db is not None:
+        from app.services.rota_shadow import apply_shadow  # noqa: PLC0415
+
+        resultado = apply_shadow(
+            db, resultado, tenant_id=j.tenant_id, agent_name=j.agent_name
+        )
     return {
         "id": j.id,
         "entity_type": j.entity_type,
@@ -288,7 +303,7 @@ def _serialize_job(j: AIJob) -> dict[str, Any]:
         "tokens_out": j.tokens_out,
         "cost_usd": j.cost_usd,
         "duration_ms": j.duration_ms,
-        "result": j.result,
+        "result": resultado,
         "error": j.error,
         "created_at": j.created_at,
         "finished_at": j.finished_at,
