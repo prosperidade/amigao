@@ -11,6 +11,7 @@ import { useIssues, useDiagnosisNotes } from '@/lib/regulatory/hooks';
 import { SEVERITY_ORDER } from '@/lib/regulatory/labels';
 import AlertaCard from './AlertaCard';
 import { useCreateAcao } from '@/lib/acoes/hooks';
+import FonteChip, { type FonteRef } from '@/components/FonteChip';
 
 interface DiagnosisTabProps {
   process: Process;
@@ -34,12 +35,20 @@ interface Afirmacao {
   fontes: SourceRef[];
 }
 
-function fonteLabel(fontes: SourceRef[] | undefined): string {
-  const f = fontes?.[0];
-  if (!f || f.sem_fonte) return 'sem fonte identificada';
-  const parts = [f.descricao, f.valor].filter(Boolean);
-  const extra = (fontes?.length ?? 0) > 1 ? ` (+${fontes!.length - 1})` : '';
-  return (parts.length > 0 ? parts.join(' — ') : f.tipo) + extra;
+/** Fontes clicáveis de uma afirmação (26/07). Lista vazia vira aviso honesto. */
+function Fontes({ fontes }: { fontes: SourceRef[] | undefined }) {
+  if (!fontes || fontes.length === 0) {
+    return (
+      <FonteChip fonte={{ tipo: 'sem_fonte', sem_fonte: true }} />
+    );
+  }
+  return (
+    <>
+      {fontes.map((f, i) => (
+        <FonteChip key={i} fonte={f as unknown as FonteRef} />
+      ))}
+    </>
+  );
 }
 
 export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProps) {
@@ -88,9 +97,11 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
   return (
     <div className="space-y-4">
 
-      {/* PROMPT_9 — Camada 2 do Princípio 1: bloco de assinatura
-          + badge de pendentes + modal 422 do gate. Renderiza só quando há
-          RegulatoryDiagnosis criado (silencioso caso contrário). */}
+      {/* PROMPT_9 — Camada 2 do Princípio 1: bloco de validação + badge de
+          pendentes + modal 422 do gate. A partir do caso 15 (26/07) o botão
+          aparece MESMO sem `RegulatoryDiagnosis` criado: o clique materializa a
+          última análise do agente e valida no mesmo gesto (gate e maçaneta
+          nascem juntos). */}
       <DiagnosisAssinatura
         processId={process.id}
         propertyId={process.property_id}
@@ -218,9 +229,9 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
                               <div className="flex items-start gap-2">
                                 <span className="text-red-400 mt-0.5">&#x2022;</span> {p.texto}
                               </div>
-                              <p className="text-xs text-gray-400 dark:text-slate-500 ml-4">
-                                Fonte: {fonteLabel(p.fontes)}
-                              </p>
+                              <div className="ml-4 mt-1 flex flex-wrap items-start gap-1">
+                                <Fontes fontes={p.fontes} />
+                              </div>
                             </li>
                           ))
                         : passivosLegado!.map((p, i) => (
@@ -257,9 +268,9 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
                                   Ações
                                 </button>
                               </div>
-                              <p className="text-xs text-gray-400 dark:text-slate-500 ml-4">
-                                Fonte: {fonteLabel(a.fontes)}
-                              </p>
+                              <div className="ml-4 mt-1 flex flex-wrap items-start gap-1">
+                                <Fontes fontes={a.fontes} />
+                              </div>
                             </li>
                           ))
                         : acoesLegado!.map((a, i) => (
