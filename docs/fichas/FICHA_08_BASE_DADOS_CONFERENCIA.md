@@ -51,6 +51,16 @@ blindar o Extrator contra eles.
 >
 > Implementado: `rat` fica fora do vocabulário do requisito `car` em
 > `requisito_documental.py`, com teste travando (`test_vocabulario_tipo_fora_dos_seis`).
+>
+> **Adendo 2026-07-26 (Isis) — o RAT é fonte de CONTEXTO/HISTÓRICO.** Não basta
+> não satisfazer o requisito: ele precisa *aparecer com o papel certo*. O RAT
+> retrata a análise do órgão **numa data**, e essa foto pode já estar superada
+> pela retificação seguinte — foi o que aconteceu no caso 15, onde o RAT de 2024
+> descrevia um CAR que a retificação de 15/11/2024 mudou. Na tela e no
+> diagnóstico ele se chama **"análise histórica do CAR"**, nunca "CAR".
+> Implementado em `frontend/src/lib/labels/docLabels.ts` (`rat`) e travado por
+> `tests/services/test_rat_nao_satisfaz_car.py` (vocabulário **e** equivalências —
+> equivalência era a segunda porta pela qual ele poderia entrar).
 
 > ⚑ **CAR é dado único do imóvel como um todo**, independente de quantas matrículas o
 > compõem. Ele é anexado uma única vez no Imóvel Hub e referenciado por todos os

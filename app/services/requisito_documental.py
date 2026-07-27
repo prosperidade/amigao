@@ -96,6 +96,12 @@ REQUISITOS_BASE: tuple[Requisito, ...] = (
         key="car",
         label="CAR",
         papel="Documento-mãe ambiental — RL, APP, área vetorizada, situação do cadastro.",
+        # `rat` NÃO entra aqui, e isso é decisão de domínio, não omissão
+        # (Isis, 26/07): o RAT é o **parecer do órgão sobre** o CAR, com foto de
+        # uma análise passada. O documento oficial do cadastro é o
+        # recibo/demonstrativo. RAT é fonte de CONTEXTO e HISTÓRICO — nunca
+        # satisfaz o requisito do CAR, por mais completo que pareça. Ver
+        # `tests/services/test_rat_nao_satisfaz_car.py` e Ficha 08 §2.
         doc_types=frozenset({"car", "recibo_car", "cadastro_ambiental_rural"}),
         subcampos_essenciais=frozenset({"numero_car"}),
     ),
