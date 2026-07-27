@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { CONFIDENCE_STYLES } from '@/types/agent';
 import { labelFor, isMetaField, humanizeValue } from '@/lib/labels/fieldLabels';
+import FonteChip, { type FonteRef } from '@/components/FonteChip';
 
 // Safe accessors for Record<string, unknown>
 function str(v: unknown): string { return v != null ? String(v) : ''; }
@@ -259,23 +260,14 @@ function DiagnósticoResult({ r }: { r: Record<string, unknown> }) {
               return (
                 <div key={i} className="p-2.5 bg-sky-50/50 dark:bg-sky-500/5 rounded-lg border border-sky-100 dark:border-sky-500/20">
                   <p className="text-sm text-gray-800 dark:text-slate-200">{str(a.texto)}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {fontes.map((f, fi) => {
-                      const semFonte = f.sem_fonte === true || f.tipo === 'sem_fonte';
-                      const label = str(f.descricao) || str(f.ref) || str(f.tipo);
-                      return (
-                        <span
-                          key={fi}
-                          className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                            semFonte
-                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30'
-                              : 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20'
-                          }`}
-                        >
-                          {semFonte ? '⚠️ sem fonte identificada' : `${str(f.tipo)}: ${label}`}
-                        </span>
-                      );
-                    })}
+                  {/* Fonte CLICÁVEL (26/07): o chip abre o documento de origem
+                      ou o texto da norma. Fonte que não se pode conferir com um
+                      clique é indistinguível de invenção — foi a lição da
+                      GO-NOT-2024-001985. */}
+                  <div className="mt-1 flex flex-wrap items-start gap-1">
+                    {fontes.map((f, fi) => (
+                      <FonteChip key={fi} fonte={f as unknown as FonteRef} />
+                    ))}
                   </div>
                 </div>
               );
@@ -444,7 +436,103 @@ function AuditorResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
+/**
+ * Biblioteca qualificada (ADR-033) — as normas localizadas, ao pé da letra.
+ *
+ * É o que a Análise Legal mostra no modo sombra: fundamentação achada, com fonte
+ * clicável, alcance declarado e a data em que a vigência foi conferida. Não
+ * sequencia etapas nem estima prazo — a rota é decisão da consultora.
+ */
+function BibliotecaQualificada({ r }: { r: Record<string, unknown> }) {
+  const normas = objArr(r.fundamentacao);
+  const rotulo = str(r.rota_shadow_rotulo) || 'fundamentação localizada — a rota é decisão do consultor';
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-purple-200 dark:border-purple-500/30 bg-purple-50/60 dark:bg-purple-500/5 p-3">
+        <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+          <BookOpen className="w-3.5 h-3.5" /> {rotulo}
+        </p>
+        <p className="text-[11px] text-purple-700/80 dark:text-purple-300/80 mt-1">
+          O sistema localiza as normas aplicáveis e as apresenta como estão escritas.
+          Ele não define etapas, prazos nem ordem de protocolo.
+        </p>
+      </div>
+
+      {normas.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-slate-400">
+          Nenhum trecho normativo foi localizado para este caso. Sem fundamentação
+          encontrada, o sistema não sugere norma de memória.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {normas.map((n, i) => {
+            const fonte = (n.fonte && typeof n.fonte === 'object'
+              ? { ...(n.fonte as Record<string, unknown>), trecho: n.trecho }
+              : null) as FonteRef | null;
+            const alcance = [str(n.esfera), str(n.uf)].filter(Boolean).join(' · ');
+            return (
+              <div
+                key={i}
+                className="p-3 rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10"
+              >
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-gray-800 dark:text-white min-w-0">
+                    {str(n.identificador) || str(n.titulo) || 'Norma'}
+                    {str(n.secao) && (
+                      <span className="text-gray-500 dark:text-slate-400"> — {str(n.secao)}</span>
+                    )}
+                  </p>
+                  {alcance && (
+                    <span className="shrink-0 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border bg-gray-50 text-gray-600 border-gray-200 dark:bg-white/5 dark:text-slate-300 dark:border-white/10">
+                      {alcance}
+                    </span>
+                  )}
+                </div>
+                {str(n.titulo) && str(n.titulo) !== str(n.identificador) && (
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{str(n.titulo)}</p>
+                )}
+                {str(n.trecho) && (
+                  <p className="mt-2 text-sm text-gray-700 dark:text-slate-300 whitespace-pre-wrap border-l-2 border-purple-300 dark:border-purple-500/40 pl-3 max-h-56 overflow-auto">
+                    {str(n.trecho)}
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {fonte && <FonteChip fonte={fonte} />}
+                  {/* Item 12 — honestidade estrutural: o sistema não afirma "está
+                      vigente", afirma quando conferiu. A diferença é a que separa
+                      informar de garantir. */}
+                  <span className="text-[10px] text-gray-400 dark:text-slate-500">
+                    {str(n.vigencia_conferida_em)
+                      ? `vigência conferida em ${new Date(str(n.vigencia_conferida_em)).toLocaleDateString('pt-BR')}`
+                      : 'vigência ainda não conferida'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {str(r.orgao_competente) && (
+        <KeyValue label="Órgão indicado nos autos" value={str(r.orgao_competente)} />
+      )}
+
+      {str(r.justificativa) && (
+        <p className="text-xs text-gray-500 dark:text-slate-400 italic mt-2 bg-gray-50 dark:bg-white/5 p-2 rounded">
+          {str(r.justificativa)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function LegislaçãoResult({ r }: { r: Record<string, unknown> }) {
+  // ADR-033 — no modo sombra o backend nem serve os campos prescritivos; este
+  // guard é a segunda barreira, para o caso de um payload antigo em cache.
+  if (r.rota_shadow === true) {
+    return <BibliotecaQualificada r={r} />;
+  }
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">

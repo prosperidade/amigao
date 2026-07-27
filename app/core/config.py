@@ -284,6 +284,15 @@ class Settings(BaseSettings):
     # marginal em Flash, ROI alto na precisão das citações.
     LEGISLATION_RAG_TOP_K: int = 8
 
+    # ADR-033 — modo da rota regulatória servida pela Análise Legal.
+    #   "shadow" (default do piloto): o agente continua rodando e o output segue
+    #      inteiro em `AIJob.result`, mas a API NÃO serve etapas/prazos/caminho —
+    #      o consultor vê só as normas ao pé da letra, com fonte e alcance. A
+    #      rota é decisão dele.
+    #   "ativa": comportamento anterior (a sugestão de caminho aparece na tela).
+    # Sobrescrevível por tenant em `tenants.settings['rota_regulatoria_mode']`.
+    ROTA_REGULATORIA_MODE: str = "shadow"
+
     # Claude API (agente regulatório)
     CLAUDE_LEGAL_MODEL: str = "claude-sonnet-4-20250514"
     # Sprint W (2026-05-14): subido de 4096 para 8192. Gemini 2.5 Flash é
