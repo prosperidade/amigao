@@ -1,11 +1,17 @@
 /**
- * DiagnosisAssinatura — bloco "Assinar diagnóstico" + badge de pendentes + modal do gate 422.
+ * DiagnosisAssinatura — bloco "Validar diagnóstico" + badge de pendentes + modal do gate 422.
  *
  * Renderiza dentro do `DiagnosisTab`. Encadeia:
  *  - `useDiagnoses(processId)` → última versão
  *  - `useIssues(propertyId, 'open')` → críticas abertas
  *  - `useQueries` de `decision` por issue crítica → conta pendentes client-side
+ *  - `useCreateDiagnosisFromAgent(processId)` → POST .../diagnoses/from-agent
  *  - `useValidateDiagnosis(processId)` → PATCH .../validate
+ *
+ * Caso 15 (26/07): o bloco devolvia `null` quando não havia `RegulatoryDiagnosis`,
+ * e NADA no fluxo criava esse registro — o gate E2→E3 cobrava uma assinatura que
+ * não tinha onde ser dada. Agora o botão aparece sempre que há análise do agente:
+ * um clique materializa a versão e valida. Gate e maçaneta na mesma tela.
  *
  * O backend é a autoridade do gate: se o 422 da lista divergir do cálculo
  * client-side (ex.: cache stale), confiamos no 422 e mostramos o que veio.
@@ -23,6 +29,7 @@ import { CheckCircle2, FilePen, Loader2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   regulatoryKeys,
+  useCreateDiagnosisFromAgent,
   useDiagnoses,
   useIssues,
   useValidateDiagnosis,
@@ -52,6 +59,7 @@ export default function DiagnosisAssinatura({
   const { data: diagnoses, isLoading: loadingDiag } = useDiagnoses(processId);
   const { data: issues = [] } = useIssues(propertyId, 'open');
   const validate = useValidateDiagnosis(processId);
+  const materializar = useCreateDiagnosisFromAgent(processId);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalAlertas, setModalAlertas] = useState<DiagnosisGate422Detail['alertas_pendentes']>([]);
@@ -83,6 +91,9 @@ export default function DiagnosisAssinatura({
     })),
   });
 
+  // Um único estado "trabalhando": materializar + validar são um gesto só.
+  const emAndamento = validate.isPending || materializar.isPending;
+
   const allDecisionsLoaded = decisionResults.every(r => !r.isLoading);
   // Pendente = crítica aberta sem decisão registrada.
   const pendentesCount = allDecisionsLoaded
@@ -90,34 +101,54 @@ export default function DiagnosisAssinatura({
     : null;
 
   // ── Handlers ────────────────────────────────────────────────────────────
-  function handleAssinar() {
-    if (!ultima) return;
+  /** Traduz o erro do backend para a tela: gate 422 abre o modal; o resto vira toast. */
+  function handleErro(err: unknown, fallback: string) {
+    const ax = err as AxiosError<{ detail?: DiagnosisGate422Detail | string }>;
+    const detail = ax.response?.data?.detail;
+    // Shape do gate camada 2: objeto com `alertas_pendentes`.
+    if (detail && typeof detail === 'object' && Array.isArray(detail.alertas_pendentes)) {
+      setModalAlertas(detail.alertas_pendentes);
+      setModalOpen(true);
+      return;
+    }
+    if (ax.response?.status === 409) {
+      // Já validado — caso raro de race (alguém validou em outra aba).
+      toast.error(typeof detail === 'string' ? detail : 'Diagnóstico já validado.');
+      return;
+    }
+    if (detail && typeof detail === 'object' && typeof detail.message === 'string') {
+      toast.error(detail.message);
+      return;
+    }
+    toast.error(typeof detail === 'string' ? detail : fallback);
+  }
+
+  function assinarVersao(version: number) {
     validate.mutate(
-      { version: ultima.version },
+      { version },
       {
-        onSuccess: () => {
-          toast.success(`Diagnóstico v${ultima.version} assinado.`);
-        },
-        onError: err => {
-          const ax = err as AxiosError<{ detail?: DiagnosisGate422Detail | string }>;
-          const detail = ax.response?.data?.detail;
-          // Shape do gate camada 2: objeto com `alertas_pendentes`.
-          if (
-            detail &&
-            typeof detail === 'object' &&
-            Array.isArray(detail.alertas_pendentes)
-          ) {
-            setModalAlertas(detail.alertas_pendentes);
-            setModalOpen(true);
-          } else if (ax.response?.status === 409) {
-            // Já validado — caso raro de race (alguém assinou em outro tab).
-            toast.error(typeof detail === 'string' ? detail : 'Diagnóstico já validado.');
-          } else {
-            toast.error(typeof detail === 'string' ? detail : 'Falha ao assinar diagnóstico.');
-          }
-        },
+        onSuccess: () => toast.success(`Diagnóstico v${version} validado.`),
+        onError: err => handleErro(err, 'Falha ao validar o diagnóstico.'),
       },
     );
+  }
+
+  function handleValidar() {
+    if (ultima) {
+      assinarVersao(ultima.version);
+      return;
+    }
+    // Nenhuma versão ainda: materializa a última análise do agente e valida no
+    // MESMO gesto. Foi a lacuna do caso 15 — o gate cobrava assinatura e não
+    // havia diagnóstico criado, então não existia botão nenhum na tela.
+    materializar.mutate(undefined, {
+      onSuccess: diag => assinarVersao(diag.version),
+      onError: err =>
+        handleErro(
+          err,
+          'Não foi possível preparar o diagnóstico para validação.',
+        ),
+    });
   }
 
   function handleGoToAlerta(issueId: number) {
@@ -136,18 +167,13 @@ export default function DiagnosisAssinatura({
     );
   }
 
-  if (!ultima) {
-    // Nenhum diagnóstico criado ainda — nada pra assinar.
-    return null;
-  }
-
-  if (ultima.validated_at) {
+  if (ultima?.validated_at) {
     return (
       <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            Diagnóstico v{ultima.version} assinado
+            Diagnóstico v{ultima.version} validado
           </p>
         </div>
         <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
@@ -164,23 +190,25 @@ export default function DiagnosisAssinatura({
           <div>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
               <FilePen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              Assinar diagnóstico v{ultima.version}
+              Validar diagnóstico{ultima ? ` v${ultima.version}` : ''}
             </h3>
             <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-              Camada 2 do Princípio 1 — toda crítica precisa de decisão neste processo.
+              Sua validação assina a leitura e libera o caso para a próxima etapa.
+              Todo alerta crítico precisa de decisão sua antes.
             </p>
           </div>
           <button
             type="button"
-            onClick={handleAssinar}
-            disabled={validate.isPending}
+            onClick={handleValidar}
+            disabled={emAndamento}
+            title="Assina o diagnóstico em seu nome (fica registrado quem validou e quando) e libera a etapa seguinte"
             className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
-            {validate.isPending ? (
+            {emAndamento ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <>
-                Assinar
+                Validar diagnóstico
                 {pendentesCount !== null && pendentesCount > 0 && (
                   <span className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300 text-[10px] font-semibold rounded-full px-1.5 py-0.5">
                     {pendentesCount} pendente{pendentesCount === 1 ? '' : 's'}
@@ -193,7 +221,7 @@ export default function DiagnosisAssinatura({
         {pendentesCount !== null && pendentesCount > 0 && (
           <p className="text-[11px] text-amber-700 dark:text-amber-300">
             {pendentesCount} alerta(s) crítico(s) sem decisão. Decida cada um
-            abaixo (nesta tela) antes de assinar.
+            abaixo (nesta tela) antes de validar.
           </p>
         )}
       </div>
@@ -207,11 +235,11 @@ export default function DiagnosisAssinatura({
             <div className="p-5 border-b border-gray-100 dark:border-white/10 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                  Faltam decisões para assinar
+                  Faltam decisões para validar
                 </h2>
                 <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
                   {modalAlertas.length} alerta(s) crítico(s) sem decisão neste
-                  processo. Decida cada um antes de assinar o diagnóstico.
+                  processo. Decida cada um antes de validar o diagnóstico.
                 </p>
               </div>
               <button

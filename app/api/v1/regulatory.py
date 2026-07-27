@@ -8,6 +8,7 @@ Princípio 1 — 5 botões P4 + reconciliação dos 3 status) + PROMPT_7 (ADR-01
 * ``GET   /processes/{process_id}/diagnoses``                                    (lista versões)
 * ``GET   /processes/{process_id}/diagnoses/{version}``                          (versão específica)
 * ``POST  /processes/{process_id}/diagnoses``                                    (cria versão nova; gate A4)
+* ``POST  /processes/{process_id}/diagnoses/from-agent``                         (materializa da última análise do agente — a maçaneta do gate E2→E3)
 * ``PATCH /processes/{process_id}/diagnoses/{version}/validate``                 (assinatura humana — camada 1; gate camada 2 rejeita se faltar ProcessIssueDecision em alerta crítico)
 * ``GET   /properties/{property_id}/issues?status=...``                          (lista issues)
 * ``PATCH /properties/{property_id}/issues/{issue_id}``                          (consultor edita os 2 status perenes — PROMPT_7 perdeu campos de decisão)
@@ -213,6 +214,136 @@ def create_diagnosis(
         # validated_by/validated_at None — Princípio 1 (humano valida depois).
     )
     db.add(diag)
+    db.commit()
+    db.refresh(diag)
+    return diag
+
+
+@process_router.post(
+    "/{process_id}/diagnoses/from-agent",
+    response_model=RegulatoryDiagnosisOut,
+)
+def create_diagnosis_from_agent(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> RegulatoryDiagnosis:
+    """Materializa o `RegulatoryDiagnosis` a partir da última análise do agente.
+
+    **A maçaneta que faltava** (caso 15, 26/07). O gate E2→E3 exige diagnóstico
+    assinado, mas nada criava o registro: a saída do agente ficava só em
+    `AIJob.result` e o bloco de assinatura da UI não tinha o que renderizar.
+    Medido no processo 15: 2 jobs de diagnóstico concluídos, 0 linhas em
+    `regulatory_diagnoses`, gate cobrando assinatura sem lugar para assinar.
+
+    Comportamento:
+    1. Já existe versão NÃO validada → devolve ela (idempotente; o gesto da
+       consultora é "validar", não "empilhar versão").
+    2. Não existe → monta o `content` a partir do último `AIJob` concluído do
+       agente `diagnostico` (ver `diagnosis_materializer`), valida no MESMO gate
+       Pydantic do POST e persiste com `validated_at=None`.
+    3. Sem job de diagnóstico → 422 acionável ("rode a análise primeiro"),
+       nunca um 500 nem um silêncio.
+
+    Não assina: a assinatura continua sendo o `PATCH .../validate` (Princípio 1 —
+    materializar não é decidir).
+    """
+    from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
+    from app.services.diagnosis_materializer import (  # noqa: PLC0415
+        DiagnosisMaterializationError,
+        build_content_from_job_result,
+    )
+
+    _get_process_or_404(db, process_id, current_user.tenant_id)
+
+    existente = (
+        db.query(RegulatoryDiagnosis)
+        .filter(
+            RegulatoryDiagnosis.process_id == process_id,
+            RegulatoryDiagnosis.tenant_id == current_user.tenant_id,
+            RegulatoryDiagnosis.validated_at.is_(None),
+        )
+        .order_by(RegulatoryDiagnosis.version.desc())
+        .first()
+    )
+    if existente is not None:
+        return existente
+
+    job = (
+        db.query(AIJob)
+        .filter(
+            AIJob.tenant_id == current_user.tenant_id,
+            AIJob.entity_type == "process",
+            AIJob.entity_id == process_id,
+            AIJob.agent_name == "diagnostico",
+            AIJob.status == AIJobStatus.completed,
+        )
+        .order_by(AIJob.created_at.desc())
+        .first()
+    )
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Nenhuma análise de diagnóstico concluída neste processo — "
+                "rode o agente de diagnóstico antes de validar."
+            ),
+        )
+
+    try:
+        content = build_content_from_job_result(job.result or {}, ai_job_id=job.id)
+    except DiagnosisMaterializationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    try:
+        validate_diagnostic_content(content)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": (
+                    "A saída do agente não respeita o schema "
+                    "DiagnosticoPreliminarContent — não é possível materializar."
+                ),
+                "errors": exc.errors(include_url=False, include_context=False),
+            },
+        ) from exc
+
+    max_version = (
+        db.query(func.max(RegulatoryDiagnosis.version))
+        .filter(
+            RegulatoryDiagnosis.process_id == process_id,
+            RegulatoryDiagnosis.tenant_id == current_user.tenant_id,
+        )
+        .scalar()
+    )
+    diag = RegulatoryDiagnosis(
+        tenant_id=current_user.tenant_id,
+        process_id=process_id,
+        content=content,
+        version=(max_version or 0) + 1,
+    )
+    db.add(diag)
+    db.flush()
+
+    audit = AuditLog(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        entity_type="regulatory_diagnosis",
+        entity_id=diag.id,
+        action="materialized_from_agent",
+        new_value=str(job.id),
+        details=(
+            f"Diagnóstico v{diag.version} do processo {process_id} materializado "
+            f"a partir do AIJob {job.id} por {current_user.email}"
+        ),
+    )
+    db.add(audit)
+    db.flush()
+    stamp_audit_hash(db, audit)
+
     db.commit()
     db.refresh(diag)
     return diag
