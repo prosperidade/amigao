@@ -289,19 +289,32 @@ class LegislacaoAgent(BaseAgent):
         uf_filter = uf.strip() if uf and uf.strip() else None
         top_k = getattr(settings, "LEGISLATION_RAG_TOP_K", 8)
 
-        def _do_search(*, uf_arg: str | None, demand_arg: str | None) -> list:
+        def _do_search(
+            *, uf_arg: str | None, demand_arg: str | None,
+            jurisdicao: Any = None, limite: int | None = None,
+        ) -> list:
             return search(
                 self.ctx.session,
                 composed,
-                limit=top_k,
+                limit=limite or top_k,
                 source_type="legislation",
                 uf=uf_arg,
+                jurisdiction=jurisdicao,
                 tenant_id=self.ctx.tenant_id,
                 demand_type=demand_arg,
                 min_similarity=0.0,
             )
 
         try:
+            # ADR-034 — ESFERA VEM DO ÓRGÃO DO PASSIVO, NUNCA DA UF. Um caso pode
+            # ter auto do IBAMA (federal) e notificação da SEMAD (estadual) ao
+            # mesmo tempo — é o processo 15. Uma varredura POR ESFERA presente
+            # garante que cada passivo seja fundamentado no corpus da sua esfera;
+            # antes, a UF do imóvel decidia sozinha e um auto federal podia sair
+            # respondido com norma estadual (plausível e errado).
+            por_esfera = self._rag_por_esfera(_do_search, uf_filter, demand_filter, top_k)
+            if por_esfera:
+                return por_esfera
             results = _do_search(uf_arg=uf_filter, demand_arg=demand_filter)
             # Fallback 1 — solta a UF (mantém federal; tenta outras UFs também).
             if not results and uf_filter:
@@ -331,6 +344,69 @@ class LegislacaoAgent(BaseAgent):
                 "legislacao.rag falha na busca semantica: %s", exc,
             )
             return []
+
+    # Esfera do domínio → jurisdições do corpus (`knowledge_catalog.jurisdiction`).
+    # "federal" abrange `nacional` (CONAMA e afins): são normas de alcance
+    # nacional, não de um estado — separá-las deixaria metade da fundamentação
+    # federal fora da busca.
+    _ESFERA_JURISDICOES: dict[str, tuple[str, ...]] = {
+        "federal": ("federal", "nacional"),
+        "estadual": ("estadual",),
+        "municipal": ("municipal",),
+    }
+
+    def _rag_por_esfera(
+        self, do_search: Any, uf_filter: str | None, demand_filter: str | None, top_k: int
+    ) -> list:
+        """Uma varredura de corpus por esfera presente no caso (ADR-034).
+
+        Devolve ``[]`` quando o caso não tem passivo com órgão identificável — aí
+        o caminho antigo (por UF) segue valendo. Não inventar esfera quando não se
+        sabe de quem é a exigência é parte da regra, não uma lacuna.
+        """
+        if not self.ctx.process_id:
+            return []
+        try:
+            from app.services.passivos_esfera import esferas_do_processo  # noqa: PLC0415
+
+            esferas = esferas_do_processo(
+                self.ctx.session, self.ctx.tenant_id, self.ctx.process_id
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("legislacao.esfera falha ao derivar passivos: %s", exc)
+            return []
+        if not esferas:
+            return []
+
+        # Divide o orçamento de trechos entre as esferas: o caso com dois passivos
+        # precisa de fundamentação dos DOIS, não do dobro de trechos de um só.
+        cota = max(3, top_k // len(esferas))
+        acumulado: list = []
+        vistos: set[Any] = set()
+        for esfera in esferas:
+            jurisdicoes = self._ESFERA_JURISDICOES.get(esfera)
+            if not jurisdicoes:
+                continue
+            # Estadual filtra pela UF do imóvel; federal/nacional não têm UF.
+            uf_arg = uf_filter if esfera == "estadual" else None
+            achados = do_search(
+                uf_arg=uf_arg, demand_arg=demand_filter,
+                jurisdicao=jurisdicoes, limite=cota,
+            )
+            if not achados and demand_filter:
+                achados = do_search(
+                    uf_arg=uf_arg, demand_arg=None,
+                    jurisdicao=jurisdicoes, limite=cota,
+                )
+            for c in achados:
+                if c.id in vistos:
+                    continue
+                vistos.add(c.id)
+                acumulado.append(c)
+            logger.info(
+                "legislacao.rag esfera=%s uf=%s trechos=%d", esfera, uf_arg, len(achados),
+            )
+        return acumulado
 
     def _format_rag_context(self, chunks: list) -> str:
         """Formata trechos RAG como blocos numerados pra inserir no prompt."""
