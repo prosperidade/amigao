@@ -215,6 +215,25 @@ class DiagnosticoAgent(BaseAgent):
             "legal_context": json.dumps(legal_data, ensure_ascii=False, default=str),
         })
 
+        # Defensivo (mesmo padrão do `rag_chunks` no agente legislação): o
+        # template do banco pode ser de uma versão que descrevia `documents` como
+        # mera lista de ids. Agora ele carrega `trecho` de cada documento, e a
+        # instrução de LER e CITAR esses trechos precisa chegar mesmo sem
+        # atualizar o prompt persistido — foi por não ter canal nenhum que os
+        # dois relatórios da E4 não entraram no diagnóstico (validação 30/07).
+        if "trecho" not in user_prompt:
+            user_prompt += (
+                "\n\nSOBRE OS DOCUMENTOS: cada item de DOCUMENTOS traz `id`, "
+                "`nome_arquivo` e `trecho` (texto real do documento). LEIA os "
+                "trechos: eles são fonte válida como qualquer outro insumo, "
+                "inclusive relatórios e pareceres anexados depois da primeira "
+                "análise. Ao citar um documento na fonte de uma afirmação, "
+                "escreva o id no formato \"doc. N\" (ex.: \"relatório técnico — "
+                "doc. 359\") para que a fonte vire link. Item marcado "
+                "`sem_leitura` ou `trecho_omitido` NÃO foi lido: não afirme nada "
+                "sobre o conteúdo dele."
+            )
+
         # Modelo dedicado por env (AI_DIAGNOSTICO_MODEL); vazio cai no default
         # global. White-label do consultor (user_preferences) ainda tem precedência
         # no gateway. Mesma convenção do agente legislacao.
@@ -349,17 +368,70 @@ class DiagnosticoAgent(BaseAgent):
             .filter(Document.deleted_at.is_(None))
             .all()
         )
-        data["documents"] = [
-            {
+        data["documents"] = self._documentos_com_trecho(docs)
+
+        return data
+
+    def _documentos_com_trecho(self, docs: list[Any]) -> list[dict[str, Any]]:
+        """Cada documento do caso com nome e um TRECHO do que está escrito nele.
+
+        Validação Isis 30/07 — o gargalo do fluxo real: ela subiu dois relatórios
+        analíticos na E4, re-rodou o diagnóstico e nada foi incorporado. A causa
+        não era filtro nem cache: o contexto listava os documentos apenas por
+        ``{id, document_type, ocr_status}``. **Nem uma linha do conteúdo entrava
+        no prompt.** Os canais que existiam eram estruturados — campos cadastrais
+        (staging) e fatos de auto de infração — e texto corrido de parecer ou
+        relatório não se encaixa em nenhum deles. Documento novo de tipo livre
+        simplesmente não tinha por onde chegar ao diagnóstico.
+
+        Regras do trecho:
+
+        * o mais RECENTE primeiro — documento recém-anexado é justamente o que
+          motivou re-rodar o diagnóstico;
+        * teto por documento e teto global (``settings``), para o custo não
+          crescer com o tamanho do dossiê;
+        * documento sem texto extraído entra assim mesmo, marcado
+          ``sem_leitura`` — o caso 15 tinha um ``.docx`` parado em
+          ``ocr_status=pending`` desde o upload, e silenciá-lo faria o
+          diagnóstico parecer completo estando cego (P12);
+        * o ``id`` viaja junto do trecho para que o LLM cite "doc. N" e a fonte
+          vire link (o mesmo id que ``_doc_ids_citados`` reconhece).
+        """
+        from app.core.config import settings  # noqa: PLC0415
+
+        por_doc = max(500, int(settings.DIAGNOSTICO_DOC_TRECHO_CHARS))
+        total = max(por_doc, int(settings.DIAGNOSTICO_DOCS_TRECHO_TOTAL_CHARS))
+        gasto = 0
+        out: list[dict[str, Any]] = []
+        for d in sorted(docs, key=lambda x: x.id, reverse=True):
+            item: dict[str, Any] = {
                 "id": d.id,
+                "nome_arquivo": d.original_file_name or d.filename,
                 "document_type": d.document_type,
                 "ocr_status": d.ocr_status.value if d.ocr_status else None,
                 "review_required": d.review_required,
             }
-            for d in docs
-        ]
-
-        return data
+            texto = (d.extracted_text or "").strip()
+            if not texto:
+                item["sem_leitura"] = True
+                item["nota"] = (
+                    "documento anexado ao caso mas ainda SEM texto extraído — "
+                    "o conteúdo dele não foi considerado nesta análise"
+                )
+            elif gasto >= total:
+                item["trecho_omitido"] = True
+                item["nota"] = (
+                    "conteúdo não incluído nesta análise por limite de contexto — "
+                    "documento mais antigo do caso"
+                )
+            else:
+                trecho = texto[: min(por_doc, total - gasto)]
+                gasto += len(trecho)
+                item["trecho"] = trecho
+                if len(trecho) < len(texto):
+                    item["trecho_truncado"] = True
+            out.append(item)
+        return out
 
     # ------------------------------------------------------------------
     # Fallback persistido (PR fix/diagnostico-insumo)
@@ -1443,7 +1515,7 @@ class DiagnosticoAgent(BaseAgent):
                 "Analise este imovel rural. Os INSUMOS abaixo sao as UNICAS fontes validas para citar.\n\n"
                 "PROPRIEDADE: {property_data}\n\n"
                 "PROCESSO (inclui matriz_inconsistencias e relato_demanda_consultor quando houver): {process_data}\n\n"
-                "DOCUMENTOS: {documents}\n\n"
+                "DOCUMENTOS DO CASO (cada um com nome do arquivo e um trecho do conteudo): {documents}\n\n"
                 "DADOS EXTRAIDOS (campos por documento): {extracted_fields}\n\n"
                 "CONTEXTO LEGAL: {legal_context}\n\n"
                 "Retorne o JSON de diagnostico. Em 'afirmacoes', CADA passivo e CADA acao deve apontar a fonte "
