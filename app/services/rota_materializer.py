@@ -33,9 +33,10 @@ real é mediada pelo consultor. Nunca bloqueamos o sprint blindando identidade.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.agents.base import AgentContext, AgentRegistry
@@ -59,6 +60,11 @@ class RotaMaterializeResult:
     created: int
     matched: int
     is_diff: bool  # houve diferença vs. o snapshot anterior?
+    # Órgãos que a IA citou fora das esferas do caso e o guard removeu (ADR-034).
+    # Sobe até a tela: correção silenciosa esconderia que o agente errou de esfera.
+    orgaos_corrigidos: list[dict[str, Any]] = field(default_factory=list)
+    # Versão em que a rota anterior ficou guardada antes desta regeneração.
+    versao_preservada: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +158,57 @@ def _etapa_from_raw(raw: Any) -> Etapa | None:
         return None
 
 
+def orgao_fora_das_esferas(orgao: str | None, esferas: list[str]) -> bool:
+    """O órgão pertence a uma esfera que este caso NÃO tem?
+
+    Conservador de propósito: só acusa quando o órgão é RECONHECÍVEL e sua esfera
+    está fora das do caso. Órgão não reconhecido ("Cliente / Advogado", cartório,
+    um estado sem sigla catalogada) não é acusado — na dúvida não se apaga o
+    trabalho do agente.
+    """
+    from app.services.esfera import esfera_do_orgao  # noqa: PLC0415
+
+    if not orgao or not esferas:
+        return False
+    esfera = esfera_do_orgao(orgao)
+    return esfera is not None and esfera not in esferas
+
+
+def aplicar_esfera_do_caso(
+    etapas: list[Etapa], caminho: str | None, orgao: str | None, esferas: list[str]
+) -> tuple[list[Etapa], str | None, list[dict[str, Any]]]:
+    """Guard determinístico da ADR-034 na Rota (validação 30/07).
+
+    O prompt já recebe os órgãos do caso, mas prompt é pedido, não garantia — e o
+    custo do erro aqui é prazo perdido, não retrabalho de tela. Em produção a
+    Rota do caso 15 nasceu com TODOS os passos em "SEMAD"/"SEMAD-GO" para autos do
+    **IBAMA**: "Protocolização da defesa administrativa na SEMAD".
+
+    Quando o órgão de um passo é de esfera que o caso não tem, o órgão é
+    **removido** (vira nulo) em vez de mantido: passo sem órgão o consultor
+    completa; passo com o órgão ERRADO ele segue. O passo continua na rota —
+    radar-não-cancela — e o que foi retirado volta em ``corrigidos`` para virar
+    aviso na tela e linha de auditoria.
+    """
+    corrigidos: list[dict[str, Any]] = []
+    if not esferas:
+        return etapas, orgao, corrigidos
+
+    saida: list[Etapa] = []
+    for etapa in etapas:
+        if orgao_fora_das_esferas(etapa.orgao, esferas):
+            corrigidos.append({"passo": etapa.titulo, "orgao_removido": etapa.orgao})
+            saida.append(etapa.model_copy(update={"orgao": None}))
+        else:
+            saida.append(etapa)
+
+    orgao_final = orgao
+    if orgao_fora_das_esferas(orgao, esferas):
+        corrigidos.append({"passo": "(órgão competente da rota)", "orgao_removido": orgao})
+        orgao_final = None
+    return saida, orgao_final, corrigidos
+
+
 def _norma_ref(etapa: Etapa) -> str | None:
     """Citação denormalizada — 1ª fonte ``legislacao`` com descrição (p/ display+dedupe)."""
     for src in etapa.sources:
@@ -160,10 +217,32 @@ def _norma_ref(etapa: Etapa) -> str | None:
     return None
 
 
+def _identidade_passo(orgao: str | None, titulo: str) -> tuple[str, str]:
+    """Identidade legível de um passo — o par que a chave nova resume."""
+    return ((orgao or "").strip().lower(), (titulo or "").strip().lower())
+
+
 def _passo_dedupe_key(rota_id: int, norma_ref: str | None, orgao: str | None, titulo: str) -> str:
-    """Chave estável por (rota, norma, órgão, título). Espelha ``Acao.dedupe_key``
-    (ADR-016). Exclui ``ordem`` (instável) e matrícula (a rota é por imóvel)."""
-    raw = f"{norma_ref or ''}|{orgao or ''}|{titulo.strip().lower()}"
+    """Chave estável por (rota, órgão, título). Espelha ``Acao.dedupe_key`` (ADR-016).
+
+    Exclui ``ordem`` (instável), matrícula (a rota é por imóvel) e — desde a
+    validação de 30/07 — a ``norma_ref``.
+
+    Por que a norma saiu: ela vem do ``fonte_trecho`` que o LLM escreve, e o LLM
+    não é determinístico. Duas execuções produziam o MESMO passo com chaves
+    diferentes, e a reconciliação "aditiva" duplicava a rota inteira em vez de
+    casar. Medido em produção no caso 15: os pares 7/12 ("Recebimento e análise
+    do auto de infração e notificação") e 8/13 ("Reunião e levantamento
+    documental para defesa") — título e órgão idênticos, ``dedupe_key``
+    diferentes. Foi essa enxurrada de duplicatas que levou a consultora a limpar
+    a rota na mão e a relatar que "atualizar da IA apagou toda a rota".
+
+    ``norma_ref`` continua PERSISTIDA no passo (display e proveniência) — só
+    deixou de participar da identidade. O parâmetro fica na assinatura porque
+    chamadores antigos o passam posicionalmente.
+    """
+    _ = norma_ref  # fora da identidade de propósito — ver docstring
+    raw = f"{orgao or ''}|{titulo.strip().lower()}"
     digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:24]
     return f"r{rota_id}:{digest}"
 
@@ -192,6 +271,66 @@ def _run_legislacao(
     caminho = str(data.get("caminho_regulatorio") or "") or None
     orgao = str(data.get("orgao_competente") or "") or None
     return etapas, caminho, orgao, result.ai_job_id
+
+
+def _snapshot_rota(rota: Rota) -> dict[str, Any]:
+    """Foto serializável da rota + passos, como estão AGORA."""
+    return {
+        "rota": {
+            "id": rota.id,
+            "demand_type": rota.demand_type,
+            "status": rota.status.value if rota.status else None,
+            "caminho_regulatorio": rota.caminho_regulatorio,
+            "orgao_competente": rota.orgao_competente,
+            "validated_at": rota.validated_at.isoformat() if rota.validated_at else None,
+        },
+        "passos": [
+            {
+                "id": p.id,
+                "ordem": p.ordem,
+                "titulo": p.titulo,
+                "descricao": p.descricao,
+                "orgao": p.orgao,
+                "prazo_estimado_dias": p.prazo_estimado_dias,
+                "prazo_fonte": p.prazo_fonte,
+                "norma_ref": p.norma_ref,
+                "sources": p.sources,
+                "classificacao": p.classificacao.value if p.classificacao else None,
+                "origem": p.origem.value if p.origem else None,
+                "origem_manual_nota": p.origem_manual_nota,
+                "status": p.status.value if p.status else None,
+                "dedupe_key": p.dedupe_key,
+            }
+            for p in rota.passos
+        ],
+    }
+
+
+def preservar_versao(
+    db: Session, *, rota: Rota, tenant_id: int, user_id: int | None,
+    motivo: str = "regeneracao",
+) -> int | None:
+    """Congela o estado atual da rota como uma versão numerada. Devolve o número.
+
+    Chamado ANTES de a IA reconciliar. Rota sem passos não vira versão (não há o
+    que preservar, e uma lista de versões vazias só faz ruído).
+    """
+    from app.models.rota import RotaVersao  # noqa: PLC0415
+
+    if rota is None or rota.id is None or not rota.passos:
+        return None
+    ultima = (
+        db.query(func.max(RotaVersao.versao))
+        .filter(RotaVersao.rota_id == rota.id)
+        .scalar()
+    )
+    versao = (ultima or 0) + 1
+    db.add(RotaVersao(
+        tenant_id=tenant_id, rota_id=rota.id, versao=versao, motivo=motivo,
+        snapshot=_snapshot_rota(rota), created_by_user_id=user_id,
+    ))
+    db.flush()
+    return versao
 
 
 def _upsert_rota(
@@ -251,6 +390,13 @@ def _reconcile_passos(
     Retorna ``(created, matched, is_diff)``.
     """
     existing = {p.dedupe_key: p for p in rota.passos}
+    # Índice de compatibilidade: passos gravados ANTES de a `norma_ref` sair da
+    # identidade têm chave legada. Sem isto, a primeira regeneração pós-mudança
+    # duplicaria a rota inteira uma última vez — exatamente o que o fix combate.
+    por_identidade = {
+        _identidade_passo(p.orgao, p.titulo): p for p in rota.passos
+        if p.origem == RotaPassoOrigem.ia
+    }
     max_ordem = max((p.ordem for p in rota.passos), default=0)
 
     created = 0
@@ -264,7 +410,9 @@ def _reconcile_passos(
             continue
         seen.add(key)
 
-        match = existing.get(key)
+        match = existing.get(key) or por_identidade.get(
+            _identidade_passo(etapa.orgao, etapa.titulo)
+        )
         if match is None:
             max_ordem += 1
             passo = RotaPasso(
@@ -313,9 +461,46 @@ def materialize_rota(
         else "nao_identificado"
     )
 
+    # Perda de trabalho do consultor = nunca mais (validação 30/07). A foto é
+    # tirada ANTES de a IA rodar: se a regeneração falhar no meio, a versão já
+    # está guardada; se der certo, o consultor tem para onde voltar.
+    rota_atual = (
+        db.query(Rota)
+        .filter(
+            Rota.tenant_id == tenant_id,
+            Rota.process_id == process.id,
+            Rota.demand_type == demand_type,
+        )
+        .first()
+    )
+    versao_preservada = preservar_versao(
+        db, rota=rota_atual, tenant_id=tenant_id, user_id=user_id
+    ) if rota_atual is not None else None
+
     etapas, caminho, orgao, ai_job_id = _run_legislacao(
         db, process=process, tenant_id=tenant_id, user_id=user_id, demand_type=demand_type
     )
+
+    # ADR-034 na Rota (validação 30/07): a esfera vem de QUEM autuou, não da UF.
+    esferas: list[str] = []
+    try:
+        from app.services.passivos_esfera import esferas_do_processo  # noqa: PLC0415
+
+        esferas = list(esferas_do_processo(db, tenant_id, process.id))
+    except Exception as exc:  # noqa: BLE001 — sem esfera o guard só não age
+        logger.warning("rota_materializer: falha ao derivar esferas do caso: %s", exc)
+    etapas, orgao, orgaos_corrigidos = aplicar_esfera_do_caso(
+        etapas, caminho, orgao, esferas
+    )
+    if orgaos_corrigidos:
+        logger.warning(
+            "rota_orgao_fora_da_esfera",
+            extra={
+                "process_id": process.id, "tenant_id": tenant_id,
+                "esferas_do_caso": esferas, "corrigidos": orgaos_corrigidos,
+            },
+        )
+
     rota = _upsert_rota(
         db,
         process=process,
@@ -352,4 +537,8 @@ def materialize_rota(
             "status": rota.status.value,
         },
     )
-    return RotaMaterializeResult(rota=rota, created=created, matched=matched, is_diff=is_diff)
+    return RotaMaterializeResult(
+        rota=rota, created=created, matched=matched, is_diff=is_diff,
+            orgaos_corrigidos=orgaos_corrigidos,
+        versao_preservada=versao_preservada,
+    )

@@ -8,6 +8,8 @@
 * ``DELETE /rotas/{rota_id}/passos/{passo_id}``
 * ``POST  /rotas/{rota_id}/passos/{passo_id}/validar``   (exige classificação — Princípio 1)
 * ``POST  /rotas/{rota_id}/fechar``                      (todos validados; AuditLog hash chain)
+* ``GET   /processes/{process_id}/rota/regeneracao-previa`` (o que a atualização vai fazer)
+* ``GET   /rotas/{rota_id}/versoes``                     (histórico — nada se perde)
 
 Auth: perfil ``internal``. Tenant isolation em todas as queries.
 
@@ -20,8 +22,10 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
@@ -41,7 +45,9 @@ from app.schemas.rota import (
     RotaPassoCreate,
     RotaPassoOut,
     RotaPassoUpdate,
+    RotaRegeneracaoPrevia,
     RotaReorder,
+    RotaVersaoOut,
 )
 from app.services.audit_hash import stamp_audit_hash
 from app.services.rota_materializer import materialize_rota
@@ -181,6 +187,81 @@ def gerar_rota(
         matched=result.matched,
         is_diff=result.is_diff,
         rota=RotaOut.model_validate(result.rota),
+        orgaos_corrigidos=result.orgaos_corrigidos,
+        versao_preservada=result.versao_preservada,
+    )
+
+
+@process_router.get("/{process_id}/rota/regeneracao-previa", response_model=RotaRegeneracaoPrevia)
+def previa_regeneracao(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> RotaRegeneracaoPrevia:
+    """O que vai acontecer se o consultor mandar a IA atualizar a rota.
+
+    Existe para que o aviso da tela seja VERDADE conferida no servidor, e não uma
+    frase otimista escrita no componente: diz quantos passos existem hoje e em
+    que versão eles ficarão guardados. "Atualizar da IA apagou toda a rota"
+    (30/07) nasceu de uma ação irreversível oferecida sem aviso.
+    """
+    from app.models.rota import RotaVersao  # noqa: PLC0415
+
+    _get_process_or_404(db, process_id, current_user.tenant_id)
+    rota = (
+        db.query(Rota)
+        .filter(Rota.process_id == process_id, Rota.tenant_id == current_user.tenant_id)
+        .order_by(Rota.id.desc())
+        .first()
+    )
+    if rota is None or not rota.passos:
+        return RotaRegeneracaoPrevia(
+            passos_atuais=0, versao_a_preservar=None,
+            aviso="Nenhuma rota ainda — a IA vai propor a primeira.",
+        )
+    ultima = (
+        db.query(func.max(RotaVersao.versao))
+        .filter(RotaVersao.rota_id == rota.id)
+        .scalar()
+    ) or 0
+    proxima = ultima + 1
+    validados = sum(1 for p in rota.passos if p.status == RotaPassoStatus.validado)
+    manuais = sum(1 for p in rota.passos if p.origem == RotaPassoOrigem.manual)
+    detalhe = []
+    if validados:
+        detalhe.append(f"{validados} já validado(s)")
+    if manuais:
+        detalhe.append(f"{manuais} criado(s) por você")
+    sufixo = f" ({', '.join(detalhe)})" if detalhe else ""
+    return RotaRegeneracaoPrevia(
+        passos_atuais=len(rota.passos),
+        versao_a_preservar=proxima,
+        aviso=(
+            f"A rota atual — {len(rota.passos)} passo(s){sufixo} — será preservada "
+            f"como versão {proxima} e continua consultável no histórico. Nada é "
+            "apagado: a IA só acrescenta o que for novo."
+        ),
+    )
+
+
+@rota_router.get("/{rota_id}/versoes", response_model=list[RotaVersaoOut])
+def listar_versoes(
+    rota_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> list[Any]:
+    """Histórico da rota — cada foto guardada antes de uma regeneração."""
+    from app.models.rota import RotaVersao  # noqa: PLC0415
+
+    _get_rota_or_404(db, rota_id, current_user.tenant_id)
+    return (
+        db.query(RotaVersao)
+        .filter(
+            RotaVersao.rota_id == rota_id,
+            RotaVersao.tenant_id == current_user.tenant_id,
+        )
+        .order_by(RotaVersao.versao.desc())
+        .all()
     )
 
 
@@ -275,6 +356,22 @@ def remover_passo(
     current_user: User = Depends(get_current_internal_user),
 ) -> None:
     passo = _get_passo_or_404(db, rota_id, passo_id, current_user.tenant_id)
+    # Apagar passo é irreversível e era MUDO — na reconstituição de 30/07 dois
+    # passos do caso 15 tinham sumido e não havia como saber quem, quando nem
+    # qual era o conteúdo. O que sai da rota fica na trilha.
+    _audit(
+        db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        rota_id=rota_id,
+        action="rota_passo_removido",
+        old_value=passo.titulo,
+        details=(
+            f"passo {passo.id} · ordem {passo.ordem} · origem "
+            f"{passo.origem.value if passo.origem else '—'} · status "
+            f"{passo.status.value if passo.status else '—'}"
+        ),
+    )
     db.delete(passo)
     db.commit()
 

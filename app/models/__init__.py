@@ -48,6 +48,7 @@ from app.models.rota import (
     RotaPassoOrigem,
     RotaPassoStatus,
     RotaStatus,
+    RotaVersao,
 )
 from app.models.stage_output import StageOutput
 from app.models.task import Task

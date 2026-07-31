@@ -82,6 +82,39 @@ class RotaMaterializeOut(BaseModel):
     matched: int = Field(..., description="Passos que já existiam (idempotência)")
     is_diff: bool = Field(..., description="A IA trouxe diferença vs. o snapshot anterior")
     rota: RotaOut
+    # ADR-034 na Rota: órgãos citados fora das esferas do caso, removidos pelo
+    # guard. Sobe à tela — correção silenciosa esconderia que o agente errou.
+    orgaos_corrigidos: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Passos cujo órgão foi removido por ser de esfera que o caso não tem",
+    )
+    # Versionamento da regeneração (validação 30/07): a tela precisa poder dizer
+    # QUAL versão guardou a rota anterior.
+    versao_preservada: int | None = Field(
+        default=None,
+        description="Número da versão em que a rota anterior foi preservada, se houve",
+    )
+
+
+class RotaVersaoOut(BaseModel):
+    """Uma foto da rota guardada antes de uma regeneração (histórico)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    versao: int
+    motivo: str
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+    created_by_user_id: int | None = None
+    created_at: datetime | None = None
+
+
+class RotaRegeneracaoPrevia(BaseModel):
+    """O aviso ANTES de mandar a IA atualizar a rota — conferido no servidor."""
+
+    passos_atuais: int
+    versao_a_preservar: int | None = None
+    aviso: str
 
 
 # ---------------------------------------------------------------------------
