@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -102,6 +103,25 @@ _GRAU_TO_NIVEL_RISCO: dict[str, str] = {
     "alto": "alto",
     "critico_impeditivo_potencial": "critico",
 }
+
+
+def _rotulo_norma(enq: dict[str, Any]) -> str:
+    """Rótulo da fonte normativa com o DISPOSITIVO, quando o chunk o carrega.
+
+    Item 9 da validação 30/07 (Isis): "onde o chunk permitir, citar artigo/
+    parágrafo específico, não só a norma inteira". O metadado já existia —
+    `knowledge_catalog.section` guarda "Art. 70." — e morria no caminho: a
+    descrição da fonte era só o texto cru da citação.
+    """
+    citacao = (enq.get("citacao") or "").strip()
+    dispositivo = (enq.get("dispositivo") or "").strip().rstrip(".")
+    if not dispositivo:
+        return citacao
+    # Não repetir o dispositivo quando a própria citação já o traz
+    # ("Art. 70 da Lei 9.605/98").
+    if dispositivo.lower().replace(" ", "") in citacao.lower().replace(" ", ""):
+        return citacao
+    return f"{citacao}, {dispositivo}"
 
 
 def _chave_auto(fato: dict[str, Any]) -> str:
@@ -213,6 +233,38 @@ class DiagnosticoAgent(BaseAgent):
             "extracted_fields": json.dumps(extracted_data, ensure_ascii=False, default=str),
             "legal_context": json.dumps(legal_data, ensure_ascii=False, default=str),
         })
+
+        # Defensivo (mesmo padrão do `rag_chunks` no agente legislação): o
+        # template do banco pode ser de uma versão que descrevia `documents` como
+        # mera lista de ids. Agora ele carrega `trecho` de cada documento, e a
+        # instrução de LER e CITAR esses trechos precisa chegar mesmo sem
+        # atualizar o prompt persistido — foi por não ter canal nenhum que os
+        # dois relatórios da E4 não entraram no diagnóstico (validação 30/07).
+        if "trecho" not in user_prompt:
+            user_prompt += (
+                "\n\nSOBRE OS DOCUMENTOS: cada item de DOCUMENTOS traz `id`, "
+                "`nome_arquivo` e `trecho` (texto real do documento). LEIA os "
+                "trechos: eles são fonte válida como qualquer outro insumo, "
+                "inclusive relatórios e pareceres anexados depois da primeira "
+                "análise. Ao citar um documento na fonte de uma afirmação, "
+                "escreva o id no formato \"doc. N\" (ex.: \"relatório técnico — "
+                "doc. 359\") para que a fonte vire link. Item marcado "
+                "`sem_leitura` ou `trecho_omitido` NÃO foi lido: não afirme nada "
+                "sobre o conteúdo dele."
+            )
+
+        # Vocabulário da consultora (correção da Isis, 30/07): *"o passivo gerou
+        # o auto; PENDÊNCIA é o que resta a resolver"*. A chave `categoria` do
+        # JSON continua "passivo" — é identificador interno e renomeá-la
+        # quebraria os consumidores —, mas a PROSA que ela lê tem de falar a
+        # língua dela.
+        user_prompt += (
+            "\n\nVOCABULÁRIO OBRIGATÓRIO: nos textos em português (situacao_geral, "
+            "passivos_identificados, acoes_remediacao, observacoes, afirmacoes.texto) "
+            'escreva "pendência" — nunca "passivo" — para o que resta a resolver no '
+            'caso. "Passivo" só cabe para o fato consumado que gerou a autuação. '
+            "Os NOMES das chaves do JSON não mudam."
+        )
 
         # Modelo dedicado por env (AI_DIAGNOSTICO_MODEL); vazio cai no default
         # global. White-label do consultor (user_preferences) ainda tem precedência
@@ -348,17 +400,70 @@ class DiagnosticoAgent(BaseAgent):
             .filter(Document.deleted_at.is_(None))
             .all()
         )
-        data["documents"] = [
-            {
+        data["documents"] = self._documentos_com_trecho(docs)
+
+        return data
+
+    def _documentos_com_trecho(self, docs: list[Any]) -> list[dict[str, Any]]:
+        """Cada documento do caso com nome e um TRECHO do que está escrito nele.
+
+        Validação Isis 30/07 — o gargalo do fluxo real: ela subiu dois relatórios
+        analíticos na E4, re-rodou o diagnóstico e nada foi incorporado. A causa
+        não era filtro nem cache: o contexto listava os documentos apenas por
+        ``{id, document_type, ocr_status}``. **Nem uma linha do conteúdo entrava
+        no prompt.** Os canais que existiam eram estruturados — campos cadastrais
+        (staging) e fatos de auto de infração — e texto corrido de parecer ou
+        relatório não se encaixa em nenhum deles. Documento novo de tipo livre
+        simplesmente não tinha por onde chegar ao diagnóstico.
+
+        Regras do trecho:
+
+        * o mais RECENTE primeiro — documento recém-anexado é justamente o que
+          motivou re-rodar o diagnóstico;
+        * teto por documento e teto global (``settings``), para o custo não
+          crescer com o tamanho do dossiê;
+        * documento sem texto extraído entra assim mesmo, marcado
+          ``sem_leitura`` — o caso 15 tinha um ``.docx`` parado em
+          ``ocr_status=pending`` desde o upload, e silenciá-lo faria o
+          diagnóstico parecer completo estando cego (P12);
+        * o ``id`` viaja junto do trecho para que o LLM cite "doc. N" e a fonte
+          vire link (o mesmo id que ``_doc_ids_citados`` reconhece).
+        """
+        from app.core.config import settings  # noqa: PLC0415
+
+        por_doc = max(500, int(settings.DIAGNOSTICO_DOC_TRECHO_CHARS))
+        total = max(por_doc, int(settings.DIAGNOSTICO_DOCS_TRECHO_TOTAL_CHARS))
+        gasto = 0
+        out: list[dict[str, Any]] = []
+        for d in sorted(docs, key=lambda x: x.id, reverse=True):
+            item: dict[str, Any] = {
                 "id": d.id,
+                "nome_arquivo": d.original_file_name or d.filename,
                 "document_type": d.document_type,
                 "ocr_status": d.ocr_status.value if d.ocr_status else None,
                 "review_required": d.review_required,
             }
-            for d in docs
-        ]
-
-        return data
+            texto = (d.extracted_text or "").strip()
+            if not texto:
+                item["sem_leitura"] = True
+                item["nota"] = (
+                    "documento anexado ao caso mas ainda SEM texto extraído — "
+                    "o conteúdo dele não foi considerado nesta análise"
+                )
+            elif gasto >= total:
+                item["trecho_omitido"] = True
+                item["nota"] = (
+                    "conteúdo não incluído nesta análise por limite de contexto — "
+                    "documento mais antigo do caso"
+                )
+            else:
+                trecho = texto[: min(por_doc, total - gasto)]
+                gasto += len(trecho)
+                item["trecho"] = trecho
+                if len(trecho) < len(texto):
+                    item["trecho_truncado"] = True
+            out.append(item)
+        return out
 
     # ------------------------------------------------------------------
     # Fallback persistido (PR fix/diagnostico-insumo)
@@ -509,10 +614,26 @@ class DiagnosticoAgent(BaseAgent):
         for fato in [*agrupados.values(), *avulsos]:
             enriched = dict(fato)
             enriched["document_ids"] = sorted(fato.get("document_ids") or [])
+            # Precisão de fonte (validação 30/07): o dossiê de um auto tem ofício,
+            # notificação, PRAD, pedido de prorrogação — TUDO tipado
+            # `auto_infracao` e tudo virando "fato de auto". O `document_id`
+            # singular que sobrevivia ao agrupamento era um membro arbitrário
+            # desse conjunto (ordem dos AIJobs), e a afirmação o rotulava "Auto de
+            # infração <n>". Foi assim que "auto 484341" abriu um PEDIDO DE
+            # PRORROGAÇÃO. Agora cada documento viaja com o nome do arquivo e com
+            # a checagem de se o próprio texto carrega aquele número.
+            enriched["documentos"] = self._documentos_do_auto(
+                enriched["document_ids"], fato.get("numero_auto")
+            )
+            # A esfera do PASSIVO (ADR-034) escopa a busca da norma: sem ela, uma
+            # citação federal casava com compêndio estadual de outra UF (medido:
+            # "Art. 70 da Lei 9.605/98" → compêndio de licenciamento do MT).
             enriched["enquadramento_fontes"] = lookup_enquadramento(
                 fato.get("enquadramento_legal"),
                 db_session=self.ctx.session,
                 tenant_id=self.ctx.tenant_id,
+                esferas=self._esfera_do_auto(fato),
+                orgao=fato.get("orgao_autuante"),
             )
             enriched["nota_titular_divergente"] = check_autuado_diverge_titular(
                 fato.get("autuado_nome"),
@@ -523,6 +644,63 @@ class DiagnosticoAgent(BaseAgent):
             )
             fatos.append(enriched)
         return fatos
+
+    def _esfera_do_auto(self, fato: dict[str, Any]) -> list[str]:
+        """Esfera derivada do ÓRGÃO AUTUANTE deste auto (ADR-034), não da UF.
+
+        Devolve ``[]`` quando o órgão não é reconhecível — e aí a busca segue sem
+        escopo, como antes. Não inventar esfera é parte da regra.
+        """
+        from app.services.esfera import esfera_do_orgao  # noqa: PLC0415
+
+        esfera = esfera_do_orgao(fato.get("orgao_autuante"))
+        return [esfera] if esfera else []
+
+    def _documentos_do_auto(
+        self, document_ids: list[int], numero_auto: Any
+    ) -> list[dict[str, Any]]:
+        """Identidade REAL de cada documento que sustenta um auto de infração.
+
+        Devolve, por documento: ``document_id``, ``descricao`` (o nome do arquivo
+        — o que a consultora vai de fato abrir) e ``confere_numero`` (o texto
+        extraído contém os dígitos do auto?).
+
+        O `confere_numero` existe porque o dossiê do caso 15 tem documentos que
+        citam DOIS autos no mesmo arquivo (`2007_484341D_484343D_...`): a
+        vinculação por extração sozinha não distingue de qual auto aquela peça é.
+        Quando o número não confere, a fonte continua aparecendo — é evidência do
+        caso — mas marcada com confiança baixa, em vez de posar de auto.
+        """
+        from app.models.document import Document  # noqa: PLC0415
+
+        if not document_ids:
+            return []
+        digitos = "".join(ch for ch in str(numero_auto or "") if ch.isdigit())
+        docs = (
+            self.ctx.session.query(Document)
+            .filter(
+                Document.id.in_(document_ids),
+                Document.tenant_id == self.ctx.tenant_id,
+            )
+            .all()
+        )
+        por_id = {d.id: d for d in docs}
+        out: list[dict[str, Any]] = []
+        for doc_id in document_ids:
+            doc = por_id.get(doc_id)
+            if doc is None:
+                continue
+            nome = doc.original_file_name or doc.filename or f"documento #{doc.id}"
+            texto = doc.extracted_text or ""
+            confere = bool(digitos) and digitos in "".join(
+                ch for ch in texto if ch.isdigit()
+            )
+            out.append({
+                "document_id": doc_id,
+                "descricao": nome,
+                "confere_numero": confere,
+            })
+        return out
 
     def _load_persisted_extraction(self, process_data: dict[str, Any]) -> dict[str, Any] | None:
         """Busca os campos extraídos persistidos nos ``AIJob`` do extrator quando
@@ -854,6 +1032,45 @@ class DiagnosticoAgent(BaseAgent):
             return "documento"
         return "documento"
 
+    # "doc. 326, 327, 341" / "documento 355" / "docs 12 e 13" — como o LLM cita os
+    # documentos do caso quando o contexto os apresenta por id.
+    _RE_DOC_IDS = re.compile(r"\bdocs?\.?\s*(\d[\d\s,e]*)", re.IGNORECASE)
+
+    def _doc_ids_citados(self, texto: str) -> list[int]:
+        """Ids de documento citados na descrição da fonte, na ordem em que aparecem.
+
+        Só devolve ids que EXISTEM neste processo — o número solto do texto de uma
+        norma ("art. 70") não vira link para um documento que por acaso tem esse
+        id. Fonte errada é pior que fonte ausente.
+        """
+        candidatos: list[int] = []
+        for bloco in self._RE_DOC_IDS.findall(texto or ""):
+            for pedaco in re.split(r"[,\se]+", bloco):
+                if pedaco.isdigit():
+                    n = int(pedaco)
+                    if n not in candidatos:
+                        candidatos.append(n)
+        if not candidatos:
+            return []
+        return [n for n in candidatos if n in self._documentos_do_processo()]
+
+    def _documentos_do_processo(self) -> set[int]:
+        """Ids dos documentos vivos do processo (cache por execução)."""
+        if getattr(self, "_doc_ids_cache", None) is None:
+            from app.models.document import Document  # noqa: PLC0415
+
+            rows = (
+                self.ctx.session.query(Document.id)
+                .filter(
+                    Document.process_id == self.ctx.process_id,
+                    Document.tenant_id == self.ctx.tenant_id,
+                    Document.deleted_at.is_(None),
+                )
+                .all()
+            )
+            self._doc_ids_cache = {r[0] for r in rows}
+        return self._doc_ids_cache
+
     def _parse_item_fontes(self, raw: Any) -> list[Any]:
         """Converte a 'fonte' que o LLM atribuiu a um item → list[SourceRef].
         String vazia / 'sem fonte' → marca sem_fonte (NUNCA inventa)."""
@@ -870,7 +1087,19 @@ class DiagnosticoAgent(BaseAgent):
                 if not s or "sem fonte" in s.lower():
                     out.append(_sem_fonte())
                 else:
-                    out.append(SourceRef(tipo=self._infer_fonte_tipo(s), descricao=s))
+                    # Fonte SEM SETA (validação 30/07): o LLM já escrevia
+                    # "…, doc. 326, 327, 341" e o chip nascia com `ref=None`, então
+                    # não virava link. O sistema sabia o documento, escrevia o
+                    # número na tela, e não deixava abrir. Aqui os ids citados
+                    # viram refs clicáveis — um chip por documento.
+                    ids = self._doc_ids_citados(s)
+                    if ids:
+                        out.extend(
+                            SourceRef(tipo="documento", ref=str(i), descricao=s)
+                            for i in ids
+                        )
+                    else:
+                        out.append(SourceRef(tipo=self._infer_fonte_tipo(s), descricao=s))
             elif isinstance(it, dict):
                 desc = (it.get("descricao") or it.get("ref") or it.get("fonte") or "").strip()
                 if not desc or "sem fonte" in desc.lower():
@@ -914,15 +1143,44 @@ class DiagnosticoAgent(BaseAgent):
             descricao = fato.get("descricao_infracao") or "infração sem descrição extraída"
             texto = f"Auto de infração {numero} ({orgao}): {descricao}"
 
-            fontes: list[Any] = [SourceRef(
-                tipo="documento", ref=str(fato.get("document_id")) if fato.get("document_id") else None,
-                descricao=f"Auto de infração {numero}",
-            )]
+            # Uma fonte por DOCUMENTO do dossiê, cada uma com o nome do arquivo —
+            # o rótulo do chip passa a descrever o que o clique abre. Antes era um
+            # `document_id` singular (membro arbitrário do grupo) rotulado "Auto de
+            # infração <n>": a tela prometia o auto e abria um pedido de
+            # prorrogação. Documento cujo texto não carrega o número do auto entra
+            # com confiança baixa — evidência do caso, não a peça autuadora.
+            fontes: list[Any] = [
+                SourceRef(
+                    tipo="documento",
+                    ref=str(d["document_id"]),
+                    descricao=d["descricao"],
+                    confianca="alta" if d.get("confere_numero") else "baixa",
+                )
+                for d in (fato.get("documentos") or [])
+            ]
+            if not fontes:
+                fontes = [SourceRef(
+                    tipo="documento",
+                    ref=str(fato.get("document_id")) if fato.get("document_id") else None,
+                    descricao=f"Auto de infração {numero}",
+                )]
             for enq in fato.get("enquadramento_fontes") or []:
                 if enq.get("localizada"):
+                    # Item 9 — citar o DISPOSITIVO onde o chunk permitir. "Lei
+                    # 9.605/98, art. 70" diz ao consultor o que conferir; "Lei
+                    # 9.605/98" o manda ler a lei inteira.
                     fontes.append(SourceRef(
-                        tipo="legislacao", ref=str(enq.get("chunk_id")) if enq.get("chunk_id") else None,
-                        descricao=enq.get("citacao"),
+                        tipo="legislacao",
+                        ref=str(enq.get("chunk_id")) if enq.get("chunk_id") else None,
+                        descricao=_rotulo_norma(enq),
+                    ))
+                elif enq.get("cobertura_insuficiente"):
+                    # Item 10 (sugestão da Isis) — a lacuna é da BASE, não da
+                    # norma. Dizer "não localizada" sugeriria que a norma citada
+                    # no auto não existe; a verdade é que não temos como conferir.
+                    fontes.append(SourceRef(
+                        tipo="sem_fonte", sem_fonte=True,
+                        descricao=f"{enq.get('citacao')} — {enq.get('motivo')}",
                     ))
                 else:
                     fontes.append(SourceRef(
@@ -933,9 +1191,19 @@ class DiagnosticoAgent(BaseAgent):
 
             nota = fato.get("nota_titular_divergente")
             if nota:
+                docs_nota = [d for d in (fato.get("documentos") or []) if d.get("confere_numero")]
+                docs_nota = docs_nota or (fato.get("documentos") or [])
+                fontes_nota: list[Any] = [
+                    SourceRef(
+                        tipo="documento", ref=str(d["document_id"]),
+                        descricao=f"{d['descricao']} × titular atual",
+                        confianca="alta" if d.get("confere_numero") else "baixa",
+                    )
+                    for d in docs_nota[:1]
+                ]
                 out.append(Afirmacao(
                     texto=nota, categoria="passivo",
-                    fontes=[SourceRef(
+                    fontes=fontes_nota or [SourceRef(
                         tipo="documento", ref=str(fato.get("document_id")) if fato.get("document_id") else None,
                         descricao=f"Auto de infração {numero} × titular atual",
                     )],
@@ -1307,7 +1575,7 @@ class DiagnosticoAgent(BaseAgent):
                 "Analise este imovel rural. Os INSUMOS abaixo sao as UNICAS fontes validas para citar.\n\n"
                 "PROPRIEDADE: {property_data}\n\n"
                 "PROCESSO (inclui matriz_inconsistencias e relato_demanda_consultor quando houver): {process_data}\n\n"
-                "DOCUMENTOS: {documents}\n\n"
+                "DOCUMENTOS DO CASO (cada um com nome do arquivo e um trecho do conteudo): {documents}\n\n"
                 "DADOS EXTRAIDOS (campos por documento): {extracted_fields}\n\n"
                 "CONTEXTO LEGAL: {legal_context}\n\n"
                 "Retorne o JSON de diagnostico. Em 'afirmacoes', CADA passivo e CADA acao deve apontar a fonte "

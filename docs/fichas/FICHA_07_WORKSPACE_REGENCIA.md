@@ -215,6 +215,34 @@ Estados do contrato: gerado → aguardando retorno do cliente → concluído (as
 - **Usuário / Organização (Bloco 0) não iniciado** — no MVP, responsável único.
 - **Fora do MVP:** execução regulatória (pós-contrato), captura multicanal, Marketing, Acompanhamento.
 
+## 12. Rodada de fechamento — validação da Isis de 30/07/2026
+
+`fix/polimento-validacao-30-07`. Última rodada de polimento sobre a Ficha 07: 12
+achados da consultora percorrendo o caso 15 (Fazenda São Jorge) de ponta a ponta.
+O que cada um mudou na Ficha, em uma linha:
+
+| # | Achado dela | O que mudou aqui |
+|---|---|---|
+| 1 | "Gravar na base deu erro" | Clique que falha grava `consolidar_falhou` na trilha e devolve frase de consultora. Ressalva deixou de ser alarme vermelho. |
+| 2 | "Diz auto 492262, abre 492263" / "abre pedido de prorrogação" | §1 *nenhuma afirmação sem fonte* ganha precisão: a fonte é rotulada com o NOME DO ARQUIVO e todo o dossiê é alcançável; doc que não carrega o número entra com confiança baixa. |
+| 3 | Rota mandou "defender auto na SEMAD" para auto do IBAMA | §9 — a esfera do passivo (ADR-034) passa a reger a ROTA, não só a busca de corpus. Guard determinístico remove órgão de esfera que o caso não tem. |
+| 4 | "Atualizar da IA apagou toda a rota" | §8/§9 — regeneração cria versão (`rota_versoes`), com aviso prévio conferido no servidor. A `dedupe_key` deixou de depender da norma (instável entre execuções). |
+| 5 | Gate E5→E6 travado sem dizer o quê | §7 — o blocker passa a contar o que falta ("N sem classificação; M não validados") e apontar a maçaneta. |
+| 6 | Botão "rodar agentes" da E4 falhou; a seção de agentes funcionou | §2 — os dois mapas macroetapa→chain viram um só (dívida #66). A diferença restante (fila × execução na hora) está dita na mensagem de erro. |
+| 7 | Dois relatórios subidos na E4 não entraram no diagnóstico | §5 — o contexto do diagnóstico passa a levar TRECHO de cada documento do caso, mais recente primeiro, com fonte citável. **Era o gargalo do fluxo real.** |
+| 8 | "Passivo gerou o auto; pendência é o que resta" | §0 — a tela e a prosa dos agentes falam **pendência**. O termo interno segue no código. |
+| 9 | Biblioteca cita a norma inteira | A fonte cita o **dispositivo** (`Art. 70`) onde o chunk o carrega. A biblioteca da Análise Legal já o renderizava; o buraco era a afirmação do diagnóstico. |
+| 10 | "Declare quando não tiver base do órgão" | §1 — cobertura insuficiente é DECLARADA ("base em atualização") em vez de fundamentada com o que há de outra esfera. Sugestão dela, adotada. |
+| 11 | "Com seta abre, sem seta não" | Fonte que nomeia documento vira link; id inexistente não vira seta. |
+| 12 | E3 pulada aparece vazia | §4 — a Coleta Documental declara-se **estação opcional**, com o caminho do upload à mão. |
+
+**O que esta rodada não fechou** (dívidas nomeadas no REGISTRO): a exceção exata
+do item 1 não foi reconstituível — o replay da consolidação contra o staging real
+do caso 15 não levanta, e o log da aplicação está fora de alcance; a trilha nova
+existe para que a próxima ocorrência seja diagnosticável. Classificação
+documental grossa (19 peças de dossiê tipadas `auto_infracao`) e OCR de `.docx`
+seguem abertos.
+
 ---
 
 Fim da Ficha 07. Peça única do workspace. Referência: Ficha 05 (Consolidação), Ficha 06 (esquema cliente/imóvel), Backlog de Ideias e Funcionalidades Futuras, Mapa-Mestre de Arquitetura.

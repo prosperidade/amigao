@@ -130,18 +130,100 @@ def extract_auto_infracao_fato(text: str) -> Optional[dict[str, Any]]:
 # do citation_evaluator: extract_citations faz o parse regex).
 # ---------------------------------------------------------------------------
 
+def _digitos(valor: Any) -> str:
+    return "".join(ch for ch in str(valor or "") if ch.isdigit())
+
+
+def chunk_confere_com_a_norma(chunk: Any, numero: str, ano: int) -> bool:
+    """O trecho recuperado É, de fato, a norma citada?
+
+    A similaridade vetorial responde "parece com", não "é". Medido em produção
+    (caso 15): a citação **"Art. 70 da Lei 9.605/98"** — lei FEDERAL — foi
+    "localizada" no chunk 4838, que é o *"MT — Compêndio Regente NUC04: Núcleo de
+    Licenciamento Ambiental"*, seção "Art. 70.", jurisdição estadual, UF **MT**.
+    Casou pela string "Art. 70." e virou fonte clicável de um passivo federal em
+    Goiás. Idem "IN IBAMA nº 14/2009" → chunk 19532, uma resolução de **MS**
+    sobre comércio de iscas vivas.
+
+    A conferência é de IDENTIDADE, não de parecença: o número da norma (e o ano,
+    quando o corpus o carrega) tem de aparecer em `identifier`, `title` ou no
+    próprio texto do trecho. Sem isso, "localizada" é uma afirmação falsa com
+    aparência de rigor — a classe de erro mais cara aqui.
+    """
+    num = _digitos(numero)
+    if not num:
+        return False
+    campos = " ".join(
+        str(v or "") for v in (
+            getattr(chunk, "identifier", None),
+            getattr(chunk, "title", None),
+            getattr(chunk, "chunk_text", None),
+        )
+    )
+    digitos_campos = _digitos(campos)
+    if num not in digitos_campos:
+        return False
+    # Ano confirma quando aparece; ausência não reprova (nem todo corpus o traz).
+    ano_txt = str(ano)
+    if ano_txt in campos or ano_txt[-2:] in campos:
+        return True
+    return True
+
+
+# Quantos chunks de uma esfera o corpus precisa ter para que "não localizei"
+# signifique "não existe na norma" e não "minha base é rasa aqui". Abaixo disso a
+# resposta honesta é declarar a lacuna de COBERTURA (sugestão da Isis, 30/07).
+_COBERTURA_MINIMA_CHUNKS = 500
+
+
+def _cobertura_da_esfera(db_session, esfera: str) -> int:
+    """Quantos chunks de legislação o corpus tem para esta esfera."""
+    from sqlalchemy import text as sql_text  # noqa: PLC0415
+
+    jurisdicoes = ("federal", "nacional") if esfera == "federal" else (esfera,)
+    try:
+        return int(
+            db_session.execute(
+                sql_text(
+                    "SELECT count(*) FROM knowledge_catalog "
+                    "WHERE source_type = 'legislation' AND jurisdiction = ANY(:j)"
+                ),
+                {"j": list(jurisdicoes)},
+            ).scalar()
+            or 0
+        )
+    except Exception as exc:  # pragma: no cover - defensivo
+        logger.warning("auto_infracao_extraction: contagem de cobertura falhou: %s", exc)
+        return _COBERTURA_MINIMA_CHUNKS  # na dúvida, não acusa lacuna que não sabe medir
+
+
 def lookup_enquadramento(
     enquadramento_text: Optional[str],
     *,
     db_session,
     tenant_id: Optional[int] = None,
+    esferas: Optional[list[str]] = None,
+    orgao: Optional[str] = None,
 ) -> list[dict[str, Any]]:
-    """Para cada citação encontrada no enquadramento legal, verifica se a norma
-    está no `knowledge_catalog`. Retorna uma lista de
-    ``{"citacao": raw, "localizada": bool, "chunk_id": int|None}``.
+    """Para cada citação do enquadramento legal, procura a norma no corpus.
 
-    Nenhum passivo sem lei, CONCRETO: norma não achada é honestamente marcada
-    "não localizada no corpus" — nunca se inventa a fonte (Princípio 11).
+    Devolve, por citação: ``citacao``, ``localizada``, ``chunk_id``,
+    ``dispositivo`` (o artigo/seção do trecho — item 9 da validação 30/07),
+    ``identificador``/``titulo`` da norma achada e, quando for o caso,
+    ``cobertura_insuficiente`` + ``motivo``.
+
+    Três mudanças em relação à versão anterior, todas medidas no caso 15:
+
+    1. **Escopo por esfera.** A busca era global; num corpus com 26.5k chunks
+       estaduais contra 785 federais, citação federal afogava em compêndio de
+       outro estado. Havendo esfera do caso (ADR-034), a busca é restrita a ela.
+    2. **Conferência de identidade.** Similaridade responde "parece com"; agora
+       o chunk só conta se carregar o NÚMERO da norma citada.
+    3. **Honestidade de cobertura.** Quando a esfera exigida tem base rasa, a
+       resposta deixa de ser "não localizada" (que sugere que a norma não
+       existe) e passa a declarar que a BASE é insuficiente — com alerta interno
+       para nós. Fundamentar com o que se tem, quando o que se tem é de outra
+       esfera, produz texto plausível e errado.
     """
     if not (enquadramento_text or "").strip():
         return []
@@ -153,20 +235,69 @@ def lookup_enquadramento(
     if not citations:
         return [{"citacao": enquadramento_text.strip(), "localizada": False, "chunk_id": None}]
 
+    jurisdicoes: Optional[list[str]] = None
+    if esferas:
+        mapa = {"federal": ["federal", "nacional"], "estadual": ["estadual"],
+                "municipal": ["municipal"]}
+        jurisdicoes = [j for e in esferas for j in mapa.get(e, [])] or None
+
+    # Cobertura medida uma vez por esfera, não por citação.
+    cobertura = {e: _cobertura_da_esfera(db_session, e) for e in (esferas or [])}
+    esferas_rasas = [e for e, n in cobertura.items() if n < _COBERTURA_MINIMA_CHUNKS]
+
     results = []
     for cit in citations:
         try:
             hits = search(
-                db_session, cit.raw, limit=3, tenant_id=tenant_id,
-                source_type="legislation", min_similarity=0.55,
+                db_session, cit.raw, limit=5, tenant_id=tenant_id,
+                source_type="legislation", jurisdiction=jurisdicoes,
+                min_similarity=0.55,
             )
         except Exception as exc:  # pragma: no cover - defensivo (RAG indisponível)
             logger.warning("auto_infracao_extraction: lookup enquadramento falhou: %s", exc)
             hits = []
-        if hits:
-            results.append({"citacao": cit.raw, "localizada": True, "chunk_id": hits[0].id})
+
+        confere = next(
+            (h for h in hits if chunk_confere_com_a_norma(h, cit.numero, cit.ano)), None
+        )
+        if confere is not None:
+            results.append({
+                "citacao": cit.raw,
+                "localizada": True,
+                "chunk_id": confere.id,
+                # Item 9 — citar o DISPOSITIVO, não só a norma inteira.
+                "dispositivo": (confere.section or None),
+                "identificador": confere.identifier,
+                "titulo": confere.title,
+                "jurisdicao": confere.jurisdiction,
+            })
+            continue
+
+        # `cobertura_insuficiente` sai SEMPRE explícito: é um booleano em que o
+        # consumidor ramifica, e ausência de chave é pior que `False` — obriga
+        # todo leitor a adivinhar se "não veio" é "não" ou "não sei".
+        item: dict[str, Any] = {
+            "citacao": cit.raw, "localizada": False, "chunk_id": None,
+            "cobertura_insuficiente": False,
+        }
+        if esferas_rasas:
+            alvo = orgao or "/".join(esferas_rasas)
+            item["cobertura_insuficiente"] = True
+            item["motivo"] = (
+                f"cobertura normativa insuficiente para {alvo} — base em atualização"
+            )
+            # Alerta INTERNO: é acionável para nós (ingerir corpus), não é
+            # informação para o consultor resolver.
+            logger.warning(
+                "cobertura_normativa_insuficiente",
+                extra={
+                    "citacao": cit.raw, "orgao": orgao, "esferas": esferas,
+                    "chunks_por_esfera": cobertura,
+                },
+            )
         else:
-            results.append({"citacao": cit.raw, "localizada": False, "chunk_id": None})
+            item["motivo"] = "não localizada no corpus"
+        results.append(item)
     return results
 
 

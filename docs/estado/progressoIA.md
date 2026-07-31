@@ -2358,3 +2358,73 @@ estrutural proposta no #82. O achado mais incômodo virou #81: a fonte
 um `_FieldSpec` — ou seja, 100% dos valores vindos do pipeline nascem
 malformados. Ficou de fora do PR por razão operacional, não técnica: ligá-lo
 mudaria o que a extração produz enquanto a Isis decidia o staging do mesmo caso.
+
+## Rodada de fechamento da Ficha 07 — validação da Isis (30/07/2026)
+
+`fix/polimento-validacao-30-07` · 12 achados da consultora no caso 15
+
+### O que a auditoria de produção mostrou antes de qualquer linha de código
+
+A sessão dela de 30/07 está inteira na trilha: upload dos dois relatórios às
+19:58, cadeia do diagnóstico às 20:04, três ações criadas à mão, onze decisões de
+staging entre 20:24 e 20:26, avanço de macroetapa às 20:28, três regenerações de
+rota entre 20:30 e 20:37. **Só um clique não está lá: o "Gravar na base".**
+
+Isso é diagnóstico por ausência, e é o achado que mais ensina. O `_audit` de
+sucesso da consolidação mora *dentro* da transação que a exceção desfaz — então
+o único caminho que precisava de rastro era, por construção, o único incapaz de
+deixar rastro. O replay da consolidação contra o staging real (34 aceitos, 7
+divergentes, `proprietarios` como string nua do legado #80) **não levanta**: a
+causa é ambiente e não se reconstitui sem o log da aplicação. O fix honesto não é
+adivinhar a exceção; é fazer com que a próxima seja diagnosticável.
+
+### O que toca IA
+
+- **Precisão de fonte é uma afirmação, e ela era falsa.** A afirmação "Auto de
+  infração 484341" apontava o documento 325 —
+  `Solicitação de Prorrogação de Prazo PRAD.pdf`. Não era bug de renderização: o
+  dedupe do #78 já guardava `document_ids` (todos os documentos que comprovam o
+  auto) *exatamente para rastreabilidade*, e a afirmação lia o `document_id`
+  singular, um membro arbitrário do grupo. Terceira aparição do padrão: **o
+  backend já sabia, a superfície não leu.**
+- **Similaridade responde "parece com", nunca "é".** O pior achado da rodada:
+  "Art. 70 da Lei 9.605/98" — federal — foi dada como localizada no chunk 4838,
+  que é o *compêndio de licenciamento de Mato Grosso*, seção "Art. 70.",
+  jurisdição estadual. Casou pela string. O corpus explica a física do erro:
+  26.505 chunks estaduais contra 785 federais (IBAMA: 106). Num corpus
+  desbalanceado, busca vetorial sem escopo e sem conferência de identidade
+  **sempre** vai afogar a esfera minoritária. Agora o número da norma tem de
+  aparecer no chunk, e a busca é escopada pela esfera do órgão autuante.
+- **Declarar a lacuna é mais útil que preencher com o que se tem.** A sugestão
+  foi dela: quando a base não cobre o órgão exigido, dizer "cobertura normativa
+  insuficiente — base em atualização". A alternativa que existia era pior do que
+  não responder: fundamentava um auto federal com norma estadual de outro estado,
+  com fonte clicável e aparência de rigor.
+- **Prompt é pedido, não garantia.** A ADR-034 já derivava a esfera do órgão, mas
+  só para escolher corpus. Levá-la ao prompt não bastava: a rota nasceu inteira
+  "SEMAD" para autos do IBAMA. Onde o custo do erro é prazo perdido, o guard é
+  determinístico — o órgão de esfera que o caso não tem é removido, e o passo
+  fica (radar-não-cancela) com o que foi retirado subindo até a tela.
+- **O contexto do diagnóstico não tinha canal para texto livre.** Ela subiu dois
+  relatórios analíticos e nada foi incorporado. Não era filtro nem cache: os
+  documentos entravam no prompt como `{id, tipo, ocr_status}` — nem uma linha de
+  conteúdo. Os canais existentes eram estruturados (campos cadastrais; fatos de
+  auto), e parecer não se encaixa em nenhum. Documento de tipo livre não tinha
+  por onde chegar, novo ou antigo. É o gargalo do fluxo real dela.
+
+### Ressalva não é erro
+
+O aviso de aceites sem destino era um `toast.error` **vermelho** disparado no
+caminho de **sucesso**. Uma gravação que funcionou era lida como "deu erro". Vale
+como regra de casa: vermelho é reservado para o que de fato falhou — sinalizar
+sem alarmar é parte de dizer a verdade, não um refinamento estético.
+
+### A instabilidade que virou destruição
+
+`dedupe_key` da rota incluía a `norma_ref`, que sai do `fonte_trecho` que o LLM
+escreve — e o LLM não é determinístico. Duas execuções produziam o MESMO passo
+com chaves diferentes; a reconciliação "aditiva" duplicava a rota inteira. Prova
+em produção: os pares 7/12 e 8/13 do caso 15, título e órgão idênticos, chaves
+distintas. A limpeza manual da enxurrada é que apagava trabalho — "atualizar da
+IA apagou toda a rota" descrevia com precisão o efeito, não o mecanismo. Identidade
+instável não é só ruído de dedupe: vira perda de trabalho humano.

@@ -147,6 +147,25 @@ class LegislacaoAgent(BaseAgent):
             "legislation": legislation_context,
         })
 
+        # ADR-034 na ROTA, não só no corpus (validação 30/07). A esfera derivada
+        # do órgão já escolhia QUAIS normas buscar (`_rag_por_esfera`), mas nunca
+        # chegava ao PROMPT: o modelo via a UF do imóvel (GO) e sequenciava tudo
+        # na SEMAD. Em produção, a Rota do caso 15 nasceu inteira "SEMAD/SEMAD-GO"
+        # para autos do IBAMA — "defender auto na SEMAD". O bloco abaixo diz, em
+        # texto, de quem é cada exigência do caso e com que fonte se sabe disso.
+        bloco_esfera = self._bloco_passivos_esfera()
+        if bloco_esfera:
+            user_prompt += "\n\n" + bloco_esfera
+
+        # Vocabulário da consultora (Isis, 30/07): na tela dela, "pendência" é o
+        # que resta resolver; "passivo" é o fato consumado que gerou a autuação.
+        # Vale para a prosa, não para os nomes das chaves do JSON.
+        user_prompt += (
+            "\n\nVOCABULÁRIO: nos textos em português escreva \"pendência\" para o "
+            "que resta a resolver no caso; reserve \"passivo\" ao fato consumado que "
+            "gerou a autuação. Os nomes das chaves do JSON não mudam."
+        )
+
         # Defensivo: se o template salvo no banco for da versao antiga e nao incluir
         # {rag_chunks}, anexamos os trechos manualmente ao final do prompt.
         if rag_context and "TRECHOS LEGISLATIVOS HIPER-RELEVANTES" not in user_prompt:
@@ -354,6 +373,50 @@ class LegislacaoAgent(BaseAgent):
         "estadual": ("estadual",),
         "municipal": ("municipal",),
     }
+
+    def _bloco_passivos_esfera(self) -> str:
+        """Os passivos do caso, com órgão e esfera, EM TEXTO para o prompt.
+
+        Sem isto o modelo só tem a UF do imóvel e conclui o óbvio errado: caso em
+        Goiás ⇒ SEMAD. O bloco é declarativo e fechado — nomeia os órgãos que o
+        caso de fato tem e proíbe substituí-los por outro. Não inventa: caso sem
+        passivo com órgão identificável devolve string vazia e o prompt segue como
+        antes (não afirmar esfera desconhecida é parte da regra).
+        """
+        if not self.ctx.process_id:
+            return ""
+        try:
+            from app.services.passivos_esfera import passivos_do_processo  # noqa: PLC0415
+
+            passivos = passivos_do_processo(
+                self.ctx.session, self.ctx.tenant_id, self.ctx.process_id
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("legislacao.esfera falha ao montar bloco de passivos: %s", exc)
+            return ""
+        com_orgao = [p for p in passivos if p.orgao and p.esfera]
+        if not com_orgao:
+            return ""
+
+        linhas = [
+            "ÓRGÃOS E ESFERAS DESTE CASO (derivados de quem emitiu cada exigência — "
+            "NÃO da UF do imóvel):",
+        ]
+        for p in com_orgao:
+            ref = f" — {p.referencia}" if p.referencia else ""
+            origem = "documento anexado" if p.origem == "documento" else "relato do cliente"
+            linhas.append(f"- {p.orgao} · esfera {p.esfera}{ref} (fonte: {origem})")
+        esferas = sorted({p.esfera for p in com_orgao if p.esfera})
+        linhas.append("")
+        linhas.append(
+            "REGRA OBRIGATÓRIA: cada etapa/prazo/norma deve se dirigir ao ÓRGÃO que "
+            "emitiu a exigência correspondente, na esfera acima. É erro grave "
+            "protocolar defesa de auto federal em órgão estadual (ou vice-versa). "
+            f"Esferas presentes: {', '.join(esferas)}. "
+            "Se uma etapa não pertence a nenhum desses órgãos, deixe `orgao` nulo "
+            "em vez de escolher um plausível."
+        )
+        return "\n".join(linhas)
 
     def _rag_por_esfera(
         self, do_search: Any, uf_filter: str | None, demand_filter: str | None, top_k: int

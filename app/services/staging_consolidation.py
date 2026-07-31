@@ -927,6 +927,64 @@ def _upsert_matricula(
     return mat, True
 
 
+def registrar_falha_consolidacao(
+    db: Session, *, tenant_id: int, process_id: int, user_id: Optional[int], exc: BaseException
+) -> None:
+    """Grava na auditoria que a consolidação FALHOU — em transação própria.
+
+    Medido em 30/07 (caso 15): a consultora clicou "Gravar na base", viu erro, e
+    a auditoria não tinha UMA linha do ocorrido. Todo o resto da sessão dela está
+    lá (staging_decidir, macroetapa_changed, rota_materializada); só o clique que
+    falhou é mudo — justamente porque o `_audit` de sucesso vive DENTRO da
+    transação que o erro faz rollback. A investigação chegou a "não completou" e
+    parou aí: sem exceção, sem stack, sem caminho.
+
+    Por isso a trilha comita sozinha: o fracasso tem de sobreviver ao
+    desfazimento do que o causou. Guarda a classe e a mensagem da exceção (não o
+    stack — vai para o log com ``exc_info``), e nunca levanta: se a auditoria
+    falhar, o handler ainda tem de devolver a mensagem ao consultor.
+
+    O ``rollback()`` é CONDICIONAL, de propósito. Erro vindo do banco deixa a
+    transação abortada e nada mais roda nela sem descartá-la primeiro; mas erro
+    de aplicação (um ``TypeError`` no meio do cálculo) deixa a sessão sadia, e
+    descartar sem precisar destruiria trabalho de quem chamou. Tenta escrever;
+    só se a escrita bater na transação envenenada é que desfaz e tenta de novo.
+    """
+    detalhes = json.dumps(
+        {
+            "process_id": process_id,
+            "erro_tipo": type(exc).__name__,
+            "erro": str(exc)[:2000],
+        },
+        ensure_ascii=False, default=str,
+    )
+
+    def _gravar() -> None:
+        log = AuditLog(
+            tenant_id=tenant_id, user_id=user_id, entity_type="process",
+            entity_id=process_id, action="consolidar_falhou", details=detalhes,
+        )
+        db.add(log)
+        db.flush()
+        stamp_audit_hash(db, log)
+        db.commit()
+
+    try:
+        _gravar()
+        return
+    except Exception:  # noqa: BLE001 — sessão provavelmente abortada; descarta e insiste
+        logger.warning(
+            "consolidar: trilha da falha não gravou na 1ª tentativa (process=%s) — "
+            "descartando a transação e repetindo", process_id,
+        )
+    try:
+        db.rollback()
+        _gravar()
+    except Exception:  # noqa: BLE001 — a trilha nunca pode virar um segundo erro
+        logger.exception("consolidar: falha ao registrar a própria falha (process=%s)", process_id)
+        db.rollback()
+
+
 def _load_client(db: Session, tenant_id: int, client_id: int):
     from app.models.client import Client  # noqa: PLC0415
     return db.query(Client).filter(Client.id == client_id, Client.tenant_id == tenant_id).first()

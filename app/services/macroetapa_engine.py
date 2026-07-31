@@ -160,6 +160,71 @@ def has_rota_validada(db: Session, tenant_id: int, process_id: int) -> bool:
     )
 
 
+def descrever_pendencia_rota(db: Session, tenant_id: int, process_id: int) -> str:
+    """O que EXATAMENTE falta para a rota deste processo estar fechada.
+
+    Validação Isis 30/07: o gate E5→E6 segurou o caso e a tela dizia apenas
+    "feche a rota antes de avançar" — verdadeiro e inútil. Fechar a rota tem duas
+    portas em série (classificar cada passo, depois validar cada passo) e o
+    consultor não tinha como saber em qual delas estava preso. Medido no caso 15:
+    rota `em_validacao` com 8 passos ainda `proposto`.
+
+    A frase sai daqui, do servidor, e não de cada componente — foi a redação
+    duplicada que produziu as divergências do ADR-031. Devolve "" quando não há
+    pendência (a rota já está validada).
+    """
+    from app.models.rota import Rota, RotaPassoStatus, RotaStatus  # noqa: PLC0415
+
+    rotas = (
+        db.query(Rota)
+        .filter(Rota.tenant_id == tenant_id, Rota.process_id == process_id)
+        .all()
+    )
+    if not rotas:
+        return (
+            "A rota regulatória ainda não foi gerada — abra a aba Rota e peça a "
+            "proposta da IA (ou monte os passos à mão) antes de avançar."
+        )
+    if any(r.status == RotaStatus.validada for r in rotas):
+        return ""
+
+    rota = max(rotas, key=lambda r: (len(r.passos), r.id))
+    if not rota.passos:
+        return (
+            "A rota existe mas está sem passos — gere a proposta da IA ou "
+            "adicione os passos à mão antes de avançar."
+        )
+    nao_validados = [p for p in rota.passos if p.status != RotaPassoStatus.validado]
+    sem_classificacao = [p for p in nao_validados if p.classificacao is None]
+
+    if rota.status == RotaStatus.desatualizada:
+        return (
+            f"A IA trouxe passos novos depois que você fechou a rota: "
+            f"{len(nao_validados)} passo(s) esperam sua conferência na aba Rota. "
+            "Valide-os (ou remova) e feche a rota de novo."
+        )
+    partes: list[str] = []
+    if sem_classificacao:
+        partes.append(
+            f"{len(sem_classificacao)} passo(s) sem classificação "
+            "(marque cada um como item de proposta ou direção)"
+        )
+    classificados_pendentes = [p for p in nao_validados if p.classificacao is not None]
+    if classificados_pendentes:
+        partes.append(
+            f"{len(classificados_pendentes)} passo(s) classificados mas ainda não validados"
+        )
+    if not partes:
+        return (
+            "Todos os passos estão validados — falta só clicar em "
+            '"Fechar rota" na aba Rota para assinar e liberar o avanço.'
+        )
+    return (
+        "Falta fechar a rota regulatória: " + "; ".join(partes) + ". "
+        'Resolva na aba Rota e clique em "Fechar rota".'
+    )
+
+
 def has_proposal_accepted(db: Session, tenant_id: int, process_id: int) -> bool:
     """Ficha 07 §7 — saída da E6 (`orcamento_negociacao`) exige proposta
     gerada e aceita pelo cliente (`ProposalStatus.accepted`)."""

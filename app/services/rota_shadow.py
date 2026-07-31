@@ -108,7 +108,18 @@ def apply_shadow(
     servivel = {k: v for k, v in result.items() if k not in _CAMPOS_PRESCRITIVOS}
     servivel["rota_shadow"] = True
     servivel["rota_shadow_rotulo"] = ROTULO_SHADOW
-    servivel["fundamentacao"] = build_fundamentacao(db, result, tenant_id=tenant_id)
+    fundamentacao = build_fundamentacao(db, result, tenant_id=tenant_id)
+    servivel["fundamentacao"] = fundamentacao
+    # Honestidade de cobertura (item 10, sugestão da Isis 30/07): biblioteca
+    # vazia é resposta honesta, mas MUDA. A tela mostrava um bloco em branco e o
+    # consultor não sabia distinguir "não há norma aplicável" de "minha base não
+    # cobre este órgão". Agora a lacuna é declarada.
+    if not fundamentacao:
+        servivel["cobertura_nota"] = (
+            "Nenhuma norma localizada no corpus para este caso. Isso NÃO significa "
+            "que não exista fundamentação aplicável — a base pode não cobrir o "
+            "órgão/esfera exigidos. Confira na fonte oficial antes de usar."
+        )
     return servivel
 
 

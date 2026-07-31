@@ -32,6 +32,7 @@ import WorkspaceRightPanel from './WorkspaceRightPanel';
 import DecisionsTab from './DecisionsTab';
 import SaidasTab from './SaidasTab';
 import ConferenciaTab from './ConferenciaTab';
+import EstacaoOpcionalE3 from './EstacaoOpcionalE3';
 import AIPanel from '@/pages/AI/AIPanel';
 
 type TabKey = 'diagnosis' | 'alertas' | 'acoes' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'messages' | 'timeline' | 'ai' | 'saidas';
@@ -241,6 +242,14 @@ export default function ProcessDetail() {
             </button>
           </div>
         )}
+        {/* E3 como ESTAÇÃO OPCIONAL (validação 30/07). O salto E2→E4 é design
+            (ADR-019) e continua intacto; o que muda é que a etapa pulada nunca
+            fica inalcançável — ver EstacaoOpcionalE3. */}
+        <EstacaoOpcionalE3
+          viewingStage={viewingStage}
+          currentStage={currentStage}
+          onAnexar={() => setActiveTab('documents')}
+        />
       </div>
 
       {/* Área 3 — Barra horizontal de tabs (ex-menu lateral).

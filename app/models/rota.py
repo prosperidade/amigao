@@ -185,6 +185,57 @@ class Rota(Base):
         cascade="all, delete-orphan",
         order_by="RotaPasso.ordem",
     )
+    versoes = relationship(
+        "RotaVersao",
+        back_populates="rota",
+        cascade="all, delete-orphan",
+        order_by="RotaVersao.versao",
+    )
+
+
+class RotaVersao(Base):
+    """Foto da Rota ANTES de cada regeneração — histórico que nunca se perde.
+
+    Validação Isis 30/07: *"atualizar da IA apagou toda a rota"*. A reconciliação
+    é aditiva por projeto, mas isso não bastava: como a ``dedupe_key`` incluía a
+    ``norma_ref`` (que o LLM varia entre execuções), re-rodar duplicava passos
+    quase idênticos — e o consultor limpava a mão, apagando trabalho junto. Em
+    produção o caso 15 tem os pares 7/12 e 8/13: mesmo título, mesmo órgão,
+    chaves diferentes.
+
+    Perda de trabalho do consultor = nunca mais. Antes de qualquer regeneração o
+    estado corrente vira uma versão numerada e imutável (rota + passos em JSON),
+    consultável na tela. A regeneração deixa de ser uma aposta.
+    """
+
+    __tablename__ = "rota_versoes"
+    __table_args__ = (
+        UniqueConstraint("rota_id", "versao", name="uq_rota_versoes_rota_versao"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(
+        Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    rota_id = Column(
+        Integer, ForeignKey("rotas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    versao = Column(Integer, nullable=False)
+    # Motivo do congelamento — hoje só "regeneracao"; nomeado para o dia em que
+    # houver outro (importação, reversão).
+    motivo = Column(String(50), nullable=False, default="regeneracao")
+    # Snapshot completo: {"rota": {...}, "passos": [...]}. JSON e não FK: uma
+    # versão é uma FOTO, não um vínculo vivo — tem de sobreviver ao passo apagado.
+    snapshot = Column(PortableJSON, nullable=False, default=dict)
+
+    created_by_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), default=lambda: datetime.now(UTC)
+    )
+
+    rota = relationship("Rota", back_populates="versoes")
 
 
 class RotaPasso(Base):

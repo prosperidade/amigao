@@ -263,6 +263,15 @@ class Settings(BaseSettings):
     # None. 30k chars cobre os docs reais (~7,5k tokens no gpt-4o-mini, folgado
     # nos 128k de contexto). Configurável p/ ajustar sem deploy.
     EXTRACTOR_MAX_CHARS: int = 30_000
+    # Diagnóstico — trecho de cada documento levado ao contexto (validação 30/07).
+    # A consultora subiu 2 relatórios analíticos na E4, re-rodou o diagnóstico e
+    # nada foi incorporado: o contexto listava os documentos só por
+    # `{id, tipo, ocr_status}` — sem UMA linha do conteúdo. O que tinha canal
+    # eram os campos CADASTRAIS (staging) e os fatos de auto de infração; texto
+    # corrido de parecer/relatório não tinha por onde entrar.
+    # Por documento e no total, para o custo não crescer com o tamanho do caso.
+    DIAGNOSTICO_DOC_TRECHO_CHARS: int = 4_000
+    DIAGNOSTICO_DOCS_TRECHO_TOTAL_CHARS: int = 60_000
     # Custo máximo por job (USD) — proteção contra prompt injection gigante
     AI_MAX_COST_PER_JOB_USD: float = 0.10
     # Sprint R — teto mensal padrão por tenant (USD). 0 = ilimitado.
