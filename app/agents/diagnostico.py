@@ -105,6 +105,25 @@ _GRAU_TO_NIVEL_RISCO: dict[str, str] = {
 }
 
 
+def _rotulo_norma(enq: dict[str, Any]) -> str:
+    """Rótulo da fonte normativa com o DISPOSITIVO, quando o chunk o carrega.
+
+    Item 9 da validação 30/07 (Isis): "onde o chunk permitir, citar artigo/
+    parágrafo específico, não só a norma inteira". O metadado já existia —
+    `knowledge_catalog.section` guarda "Art. 70." — e morria no caminho: a
+    descrição da fonte era só o texto cru da citação.
+    """
+    citacao = (enq.get("citacao") or "").strip()
+    dispositivo = (enq.get("dispositivo") or "").strip().rstrip(".")
+    if not dispositivo:
+        return citacao
+    # Não repetir o dispositivo quando a própria citação já o traz
+    # ("Art. 70 da Lei 9.605/98").
+    if dispositivo.lower().replace(" ", "") in citacao.lower().replace(" ", ""):
+        return citacao
+    return f"{citacao}, {dispositivo}"
+
+
 def _chave_auto(fato: dict[str, Any]) -> str:
     """Identidade de um auto de infração: (órgão autuante, dígitos do número).
 
@@ -593,10 +612,15 @@ class DiagnosticoAgent(BaseAgent):
             enriched["documentos"] = self._documentos_do_auto(
                 enriched["document_ids"], fato.get("numero_auto")
             )
+            # A esfera do PASSIVO (ADR-034) escopa a busca da norma: sem ela, uma
+            # citação federal casava com compêndio estadual de outra UF (medido:
+            # "Art. 70 da Lei 9.605/98" → compêndio de licenciamento do MT).
             enriched["enquadramento_fontes"] = lookup_enquadramento(
                 fato.get("enquadramento_legal"),
                 db_session=self.ctx.session,
                 tenant_id=self.ctx.tenant_id,
+                esferas=self._esfera_do_auto(fato),
+                orgao=fato.get("orgao_autuante"),
             )
             enriched["nota_titular_divergente"] = check_autuado_diverge_titular(
                 fato.get("autuado_nome"),
@@ -607,6 +631,17 @@ class DiagnosticoAgent(BaseAgent):
             )
             fatos.append(enriched)
         return fatos
+
+    def _esfera_do_auto(self, fato: dict[str, Any]) -> list[str]:
+        """Esfera derivada do ÓRGÃO AUTUANTE deste auto (ADR-034), não da UF.
+
+        Devolve ``[]`` quando o órgão não é reconhecível — e aí a busca segue sem
+        escopo, como antes. Não inventar esfera é parte da regra.
+        """
+        from app.services.esfera import esfera_do_orgao  # noqa: PLC0415
+
+        esfera = esfera_do_orgao(fato.get("orgao_autuante"))
+        return [esfera] if esfera else []
 
     def _documentos_do_auto(
         self, document_ids: list[int], numero_auto: Any
@@ -1118,9 +1153,21 @@ class DiagnosticoAgent(BaseAgent):
                 )]
             for enq in fato.get("enquadramento_fontes") or []:
                 if enq.get("localizada"):
+                    # Item 9 — citar o DISPOSITIVO onde o chunk permitir. "Lei
+                    # 9.605/98, art. 70" diz ao consultor o que conferir; "Lei
+                    # 9.605/98" o manda ler a lei inteira.
                     fontes.append(SourceRef(
-                        tipo="legislacao", ref=str(enq.get("chunk_id")) if enq.get("chunk_id") else None,
-                        descricao=enq.get("citacao"),
+                        tipo="legislacao",
+                        ref=str(enq.get("chunk_id")) if enq.get("chunk_id") else None,
+                        descricao=_rotulo_norma(enq),
+                    ))
+                elif enq.get("cobertura_insuficiente"):
+                    # Item 10 (sugestão da Isis) — a lacuna é da BASE, não da
+                    # norma. Dizer "não localizada" sugeriria que a norma citada
+                    # no auto não existe; a verdade é que não temos como conferir.
+                    fontes.append(SourceRef(
+                        tipo="sem_fonte", sem_fonte=True,
+                        descricao=f"{enq.get('citacao')} — {enq.get('motivo')}",
                     ))
                 else:
                     fontes.append(SourceRef(
