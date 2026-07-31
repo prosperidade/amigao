@@ -69,6 +69,7 @@ from app.schemas.requisito_documental import (
 )
 from app.services.macroetapa_engine import (
     advance_macroetapa,
+    descrever_pendencia_rota,
     ensure_macroetapa_checklists,
     get_macroetapa_status,
     has_consolidated,
@@ -799,6 +800,12 @@ def _compute_can_advance(
     # Fase 0 (item 9 do adendo) — mesma lógica pra E5/E6/E7; barato calcular
     # sempre (1 query indexada cada), independe da etapa atual.
     rota_validada = has_rota_validada(db, process.tenant_id, process.id)
+    # A frase do blocker da E5 sai do servidor com o número exato do que falta
+    # (validação 30/07). Só custa query quando a rota de fato não está fechada.
+    rota_pendencia_detalhe = (
+        None if rota_validada
+        else descrever_pendencia_rota(db, process.tenant_id, process.id)
+    )
     proposta_aceita = has_proposal_accepted(db, process.tenant_id, process.id)
     contract_signed = has_contract_signed(db, process.tenant_id, process.id)
 
@@ -811,6 +818,7 @@ def _compute_can_advance(
         consolidacao_executada=consolidacao_executada,
         rota_validada=rota_validada,
         proposta_aceita=proposta_aceita,
+        rota_pendencia_detalhe=rota_pendencia_detalhe,
     )
 
     state_value = None
@@ -1058,8 +1066,30 @@ def run_stage_agents(
             stop_on_review=True,
         )
     except Exception as exc:
-        logger.warning("Falha ao enfileirar chain '%s': %s", chain_name, exc)
-        raise HTTPException(status_code=503, detail="Não foi possível enfileirar os agentes da etapa.")
+        # Validação 30/07: o botão da etapa falhou na 1ª tentativa e a MESMA
+        # cadeia rodou pela seção de Agentes. A diferença entre as duas portas é
+        # o transporte — aqui a chain vai para a fila do Celery, lá ela roda
+        # dentro da requisição —, então uma fila indisponível derrubava só este
+        # caminho. A mensagem dizia "não foi possível" sem dizer o quê nem o que
+        # fazer, e a falha não deixava rastro nenhum.
+        logger.exception("Falha ao enfileirar chain '%s' (process=%s)", chain_name, process_id)
+        repo.add_audit(
+            user_id=current_user.id,
+            process=process,
+            action="stage_agents_dispatch_falhou",
+            details=f"chain '{chain_name}': {type(exc).__name__}: {exc}",
+            new_value=chain_name,
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "A fila de processamento não respondeu, então os agentes desta "
+                "etapa não foram disparados (nada foi perdido). Tente de novo em "
+                "alguns instantes — ou rode a mesma análise pela aba IA, que "
+                "executa na hora."
+            ),
+        ) from exc
 
     repo.add_audit(
         user_id=current_user.id,

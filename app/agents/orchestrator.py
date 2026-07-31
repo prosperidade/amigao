@@ -88,16 +88,26 @@ INTENT_TO_CHAIN: dict[str, str] = {
     "create_content": "marketing_content",
 }
 
-# Mapeamento macroetapa -> chain sugerida
-MACROETAPA_CHAINS: dict[str, str | None] = {
-    "entrada_demanda": "intake",
-    "diagnostico_preliminar": "diagnostico_completo",
-    "coleta_documental": None,
-    "diagnostico_tecnico": "diagnostico_completo",
-    "caminho_regulatorio": "enquadramento_regulatorio",
-    "orcamento_negociacao": "gerar_proposta",
-    "contrato_formalizacao": None,
-}
+# Mapeamento macroetapa -> chain sugerida.
+#
+# FONTE ÚNICA (dívida #66 fechada em 30/07): este dict é DERIVADO de
+# `app/models/macroetapa.py:MACROETAPA_AGENT_CHAIN`. Eram dois mapas escritos à
+# mão que divergiam em `caminho_regulatorio` — o botão "Rodar agentes da etapa"
+# lia `analise_regulatoria` (["legislacao"]) e o orquestrador lia
+# `enquadramento_regulatorio` (["extrator", "legislacao"]). Mesma etapa, dois
+# comportamentos, conforme a porta pela qual o consultor entrasse. Foi o que
+# apareceu na validação de 30/07 como "o botão da etapa falhou e a seção de
+# agentes funcionou".
+#
+# A chave continua sendo `str` (o valor do enum) para não obrigar quem consome o
+# orquestrador a importar o enum de macroetapa.
+def _derivar_macroetapa_chains() -> dict[str, str | None]:
+    from app.models.macroetapa import MACROETAPA_AGENT_CHAIN  # noqa: PLC0415
+
+    return {etapa.value: chain for etapa, chain in MACROETAPA_AGENT_CHAIN.items()}
+
+
+MACROETAPA_CHAINS: dict[str, str | None] = _derivar_macroetapa_chains()
 
 
 # ---------------------------------------------------------------------------

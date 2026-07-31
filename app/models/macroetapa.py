@@ -507,6 +507,7 @@ def can_advance_macroetapa(
     consolidacao_executada: bool = True,
     rota_validada: bool = True,
     proposta_aceita: bool = True,
+    rota_pendencia_detalhe: str | None = None,
 ) -> tuple[bool, list[str]]:
     """Regente CAM3FT-005 — só avança se output mínimo OK + sem trava + validações OK.
 
@@ -547,9 +548,17 @@ def can_advance_macroetapa(
             "grave a Conferência na base antes de avançar."
         )
     if current_macroetapa == Macroetapa.caminho_regulatorio and not rota_validada:
+        # A frase ESPECÍFICA ("3 passos sem classificação; 5 classificados mas
+        # ainda não validados") vem do caller, que tem o banco à mão
+        # (`macroetapa_engine.descrever_pendencia_rota`). O texto abaixo é o piso:
+        # verdadeiro, e era ele que segurava a consultora sem dizer em qual das
+        # duas portas — classificar, depois validar — ela estava presa (30/07).
         blockers.append(
-            "A rota regulatória ainda não foi fechada (todos os passos "
-            "validados e classificados) — feche a rota antes de avançar."
+            rota_pendencia_detalhe
+            or (
+                "A rota regulatória ainda não foi fechada (todos os passos "
+                "validados e classificados) — feche a rota antes de avançar."
+            )
         )
     if current_macroetapa == Macroetapa.orcamento_negociacao and not proposta_aceita:
         blockers.append(
