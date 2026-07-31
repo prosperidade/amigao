@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -509,6 +510,17 @@ class DiagnosticoAgent(BaseAgent):
         for fato in [*agrupados.values(), *avulsos]:
             enriched = dict(fato)
             enriched["document_ids"] = sorted(fato.get("document_ids") or [])
+            # Precisão de fonte (validação 30/07): o dossiê de um auto tem ofício,
+            # notificação, PRAD, pedido de prorrogação — TUDO tipado
+            # `auto_infracao` e tudo virando "fato de auto". O `document_id`
+            # singular que sobrevivia ao agrupamento era um membro arbitrário
+            # desse conjunto (ordem dos AIJobs), e a afirmação o rotulava "Auto de
+            # infração <n>". Foi assim que "auto 484341" abriu um PEDIDO DE
+            # PRORROGAÇÃO. Agora cada documento viaja com o nome do arquivo e com
+            # a checagem de se o próprio texto carrega aquele número.
+            enriched["documentos"] = self._documentos_do_auto(
+                enriched["document_ids"], fato.get("numero_auto")
+            )
             enriched["enquadramento_fontes"] = lookup_enquadramento(
                 fato.get("enquadramento_legal"),
                 db_session=self.ctx.session,
@@ -523,6 +535,52 @@ class DiagnosticoAgent(BaseAgent):
             )
             fatos.append(enriched)
         return fatos
+
+    def _documentos_do_auto(
+        self, document_ids: list[int], numero_auto: Any
+    ) -> list[dict[str, Any]]:
+        """Identidade REAL de cada documento que sustenta um auto de infração.
+
+        Devolve, por documento: ``document_id``, ``descricao`` (o nome do arquivo
+        — o que a consultora vai de fato abrir) e ``confere_numero`` (o texto
+        extraído contém os dígitos do auto?).
+
+        O `confere_numero` existe porque o dossiê do caso 15 tem documentos que
+        citam DOIS autos no mesmo arquivo (`2007_484341D_484343D_...`): a
+        vinculação por extração sozinha não distingue de qual auto aquela peça é.
+        Quando o número não confere, a fonte continua aparecendo — é evidência do
+        caso — mas marcada com confiança baixa, em vez de posar de auto.
+        """
+        from app.models.document import Document  # noqa: PLC0415
+
+        if not document_ids:
+            return []
+        digitos = "".join(ch for ch in str(numero_auto or "") if ch.isdigit())
+        docs = (
+            self.ctx.session.query(Document)
+            .filter(
+                Document.id.in_(document_ids),
+                Document.tenant_id == self.ctx.tenant_id,
+            )
+            .all()
+        )
+        por_id = {d.id: d for d in docs}
+        out: list[dict[str, Any]] = []
+        for doc_id in document_ids:
+            doc = por_id.get(doc_id)
+            if doc is None:
+                continue
+            nome = doc.original_file_name or doc.filename or f"documento #{doc.id}"
+            texto = doc.extracted_text or ""
+            confere = bool(digitos) and digitos in "".join(
+                ch for ch in texto if ch.isdigit()
+            )
+            out.append({
+                "document_id": doc_id,
+                "descricao": nome,
+                "confere_numero": confere,
+            })
+        return out
 
     def _load_persisted_extraction(self, process_data: dict[str, Any]) -> dict[str, Any] | None:
         """Busca os campos extraídos persistidos nos ``AIJob`` do extrator quando
@@ -854,6 +912,45 @@ class DiagnosticoAgent(BaseAgent):
             return "documento"
         return "documento"
 
+    # "doc. 326, 327, 341" / "documento 355" / "docs 12 e 13" — como o LLM cita os
+    # documentos do caso quando o contexto os apresenta por id.
+    _RE_DOC_IDS = re.compile(r"\bdocs?\.?\s*(\d[\d\s,e]*)", re.IGNORECASE)
+
+    def _doc_ids_citados(self, texto: str) -> list[int]:
+        """Ids de documento citados na descrição da fonte, na ordem em que aparecem.
+
+        Só devolve ids que EXISTEM neste processo — o número solto do texto de uma
+        norma ("art. 70") não vira link para um documento que por acaso tem esse
+        id. Fonte errada é pior que fonte ausente.
+        """
+        candidatos: list[int] = []
+        for bloco in self._RE_DOC_IDS.findall(texto or ""):
+            for pedaco in re.split(r"[,\se]+", bloco):
+                if pedaco.isdigit():
+                    n = int(pedaco)
+                    if n not in candidatos:
+                        candidatos.append(n)
+        if not candidatos:
+            return []
+        return [n for n in candidatos if n in self._documentos_do_processo()]
+
+    def _documentos_do_processo(self) -> set[int]:
+        """Ids dos documentos vivos do processo (cache por execução)."""
+        if getattr(self, "_doc_ids_cache", None) is None:
+            from app.models.document import Document  # noqa: PLC0415
+
+            rows = (
+                self.ctx.session.query(Document.id)
+                .filter(
+                    Document.process_id == self.ctx.process_id,
+                    Document.tenant_id == self.ctx.tenant_id,
+                    Document.deleted_at.is_(None),
+                )
+                .all()
+            )
+            self._doc_ids_cache = {r[0] for r in rows}
+        return self._doc_ids_cache
+
     def _parse_item_fontes(self, raw: Any) -> list[Any]:
         """Converte a 'fonte' que o LLM atribuiu a um item → list[SourceRef].
         String vazia / 'sem fonte' → marca sem_fonte (NUNCA inventa)."""
@@ -870,7 +967,19 @@ class DiagnosticoAgent(BaseAgent):
                 if not s or "sem fonte" in s.lower():
                     out.append(_sem_fonte())
                 else:
-                    out.append(SourceRef(tipo=self._infer_fonte_tipo(s), descricao=s))
+                    # Fonte SEM SETA (validação 30/07): o LLM já escrevia
+                    # "…, doc. 326, 327, 341" e o chip nascia com `ref=None`, então
+                    # não virava link. O sistema sabia o documento, escrevia o
+                    # número na tela, e não deixava abrir. Aqui os ids citados
+                    # viram refs clicáveis — um chip por documento.
+                    ids = self._doc_ids_citados(s)
+                    if ids:
+                        out.extend(
+                            SourceRef(tipo="documento", ref=str(i), descricao=s)
+                            for i in ids
+                        )
+                    else:
+                        out.append(SourceRef(tipo=self._infer_fonte_tipo(s), descricao=s))
             elif isinstance(it, dict):
                 desc = (it.get("descricao") or it.get("ref") or it.get("fonte") or "").strip()
                 if not desc or "sem fonte" in desc.lower():
@@ -914,10 +1023,27 @@ class DiagnosticoAgent(BaseAgent):
             descricao = fato.get("descricao_infracao") or "infração sem descrição extraída"
             texto = f"Auto de infração {numero} ({orgao}): {descricao}"
 
-            fontes: list[Any] = [SourceRef(
-                tipo="documento", ref=str(fato.get("document_id")) if fato.get("document_id") else None,
-                descricao=f"Auto de infração {numero}",
-            )]
+            # Uma fonte por DOCUMENTO do dossiê, cada uma com o nome do arquivo —
+            # o rótulo do chip passa a descrever o que o clique abre. Antes era um
+            # `document_id` singular (membro arbitrário do grupo) rotulado "Auto de
+            # infração <n>": a tela prometia o auto e abria um pedido de
+            # prorrogação. Documento cujo texto não carrega o número do auto entra
+            # com confiança baixa — evidência do caso, não a peça autuadora.
+            fontes: list[Any] = [
+                SourceRef(
+                    tipo="documento",
+                    ref=str(d["document_id"]),
+                    descricao=d["descricao"],
+                    confianca="alta" if d.get("confere_numero") else "baixa",
+                )
+                for d in (fato.get("documentos") or [])
+            ]
+            if not fontes:
+                fontes = [SourceRef(
+                    tipo="documento",
+                    ref=str(fato.get("document_id")) if fato.get("document_id") else None,
+                    descricao=f"Auto de infração {numero}",
+                )]
             for enq in fato.get("enquadramento_fontes") or []:
                 if enq.get("localizada"):
                     fontes.append(SourceRef(
@@ -933,9 +1059,19 @@ class DiagnosticoAgent(BaseAgent):
 
             nota = fato.get("nota_titular_divergente")
             if nota:
+                docs_nota = [d for d in (fato.get("documentos") or []) if d.get("confere_numero")]
+                docs_nota = docs_nota or (fato.get("documentos") or [])
+                fontes_nota: list[Any] = [
+                    SourceRef(
+                        tipo="documento", ref=str(d["document_id"]),
+                        descricao=f"{d['descricao']} × titular atual",
+                        confianca="alta" if d.get("confere_numero") else "baixa",
+                    )
+                    for d in docs_nota[:1]
+                ]
                 out.append(Afirmacao(
                     texto=nota, categoria="passivo",
-                    fontes=[SourceRef(
+                    fontes=fontes_nota or [SourceRef(
                         tipo="documento", ref=str(fato.get("document_id")) if fato.get("document_id") else None,
                         descricao=f"Auto de infração {numero} × titular atual",
                     )],

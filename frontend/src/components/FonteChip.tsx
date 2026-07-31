@@ -62,6 +62,11 @@ export default function FonteChip({ fonte }: { fonte: FonteRef }) {
 
   // ── Documento do caso: abre o arquivo ────────────────────────────────────
   if (fonte.tipo === 'documento' && fonte.ref) {
+    // Confiança baixa = o documento pertence ao dossiê, mas o próprio texto dele
+    // não confirma o dado afirmado (validação 30/07: o dossiê de um auto tem
+    // ofício, PRAD e pedido de prorrogação, e todos citavam DOIS autos). Continua
+    // clicável — é evidência real — mas a tela não o apresenta como prova direta.
+    const fraca = fonte.confianca === 'baixa';
     const abrir = async () => {
       try {
         const res = await api.get(`/documents/${fonte.ref}/download-url`);
@@ -74,11 +79,20 @@ export default function FonteChip({ fonte }: { fonte: FonteRef }) {
       <button
         type="button"
         onClick={abrir}
-        title="Abrir o documento de origem"
-        className={`${BASE} bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30`}
+        title={
+          fraca
+            ? 'Documento do caso relacionado a esta pendência — o texto dele não confirma o número citado. Confira ao abrir.'
+            : 'Abrir o documento de origem'
+        }
+        className={`${BASE} ${
+          fraca
+            ? 'bg-sky-50/60 text-sky-700 border-dashed border-sky-300 hover:bg-sky-100 dark:bg-sky-500/5 dark:text-sky-300/90 dark:border-sky-500/30'
+            : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30'
+        }`}
       >
         <FileText className="w-3 h-3 shrink-0" />
         <span className="truncate">{rotulo}</span>
+        {fraca && <span className="shrink-0 opacity-80">· relacionado</span>}
         {fonte.pagina != null && <span className="shrink-0">· p. {fonte.pagina}</span>}
         <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
       </button>
