@@ -149,12 +149,25 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
     onSuccess: (res) => {
       setConsolidated(res);
       invalidate();
-      toast.success(`Consolidado: ${res.campos_gravados} campo(s) gravado(s)${res.acoes_criadas > 0 ? ` · ${res.acoes_criadas} ação(ões)` : ''}.`);
       // O aceite perdido merece o mesmo destaque do sucesso: se o consultor
       // decidiu e o dado não entrou, ele precisa saber AGORA, não descobrir
       // semanas depois com o campo vazio no dossiê.
-      if (res.ignorados?.length) {
-        toast.error(`${res.ignorados.length} campo(s) aceito(s) não foram gravados — veja o detalhe abaixo.`);
+      //
+      // Mas RESSALVA NÃO É ERRO (validação 30/07): isto era um `toast.error`
+      // vermelho disparado no caminho de SUCESSO, e a consultora leu "gravar na
+      // base deu erro" numa gravação que funcionou. Vermelho é reservado para o
+      // que de fato falhou — a ressalva vem em âmbar, junto do número gravado,
+      // apontando o detalhe. Sinalizar sem alarmar.
+      const ignorados = res.ignorados?.length ?? 0;
+      const base = `Gravado na base: ${res.campos_gravados} campo(s)${res.acoes_criadas > 0 ? ` · ${res.acoes_criadas} ação(ões)` : ''}.`;
+      if (ignorados > 0) {
+        toast(`${base} ${ignorados} aceite(s) não tinham onde pousar — veja o detalhe abaixo.`, {
+          icon: '⚠️',
+          style: { background: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d' },
+          duration: 6000,
+        });
+      } else {
+        toast.success(base);
       }
     },
     onError: (e) => toast.error(errDetail(e, 'Falha ao consolidar na base.')),

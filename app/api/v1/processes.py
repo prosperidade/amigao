@@ -1586,14 +1586,40 @@ def consolidate_process_endpoint(
 
     Determinístico, idempotente. NÃO grava nada que não esteja aceito; NÃO
     sobrescreve Property.total_area_ha (área = derivada da soma das matrículas)."""
-    from app.services.staging_consolidation import consolidate_process  # noqa: PLC0415
+    from app.services.staging_consolidation import (  # noqa: PLC0415
+        consolidate_process,
+        registrar_falha_consolidacao,
+    )
 
     ProcessRepository(db, current_user.tenant_id).get_or_404(
         process_id, detail="Processo não encontrado."
     )
-    result = consolidate_process(
-        db, tenant_id=current_user.tenant_id, process_id=process_id, user_id=current_user.id
-    )
+    try:
+        result = consolidate_process(
+            db, tenant_id=current_user.tenant_id, process_id=process_id, user_id=current_user.id
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Nenhum clique morre calado (validação 30/07): o `_audit` de sucesso mora
+        # dentro da transação que o erro desfaz, então uma consolidação que quebra
+        # não deixava NADA — nem auditoria, nem mensagem com causa. Aqui a falha
+        # vira linha permanente (transação própria), log com stack, e uma frase
+        # que diz ao consultor o que aconteceu e o que fazer.
+        logger.exception("consolidar: falhou para process_id=%s", process_id)
+        registrar_falha_consolidacao(
+            db, tenant_id=current_user.tenant_id, process_id=process_id,
+            user_id=current_user.id, exc=exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "A gravação na base falhou e NADA foi gravado — suas decisões na "
+                "Conferência continuam salvas. A falha ficou registrada na "
+                f"auditoria deste caso ({type(exc).__name__}). Tente de novo; se "
+                "repetir, avise o suporte com o número do caso."
+            ),
+        ) from exc
     return ConsolidationResult(**result)
 
 
