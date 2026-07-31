@@ -361,7 +361,54 @@ existe só como `confianca` solta em `SourceRef`; **(d) versionamento** — o qu
 versiona (diagnóstico, consolidação, ficha) e o que apenas se audita. **O que
 destrava:** os quatro decidem juntos como o sistema fala sobre certeza.
 
-**PRÓXIMO LIVRE: 91.**
+**91. A exceção de "Gravar na base" (30/07) não foi reconstituída.** A auditoria
+de produção prova que o clique falhou e não completou (toda a sessão da Isis está
+na trilha; a linha `consolidar` de 30/07 não existe). O **replay** da
+`consolidate_process` contra o staging real do caso 15 — 34 aceitos, 7
+`divergente_transcricao`, `proprietarios` como string nua do legado #80, base no
+estado pós-26/07 — **não levanta exceção**: a causa é ambiente (fila, timeout de
+plataforma, estado de sessão) e não se reconstitui sem o log da aplicação, fora
+de alcance nesta rodada. `registrar_falha_consolidacao` + o `logger.exception` no
+endpoint existem para que a PRÓXIMA ocorrência seja diagnosticável em um minuto.
+**Marco para fechar:** primeira linha `consolidar_falhou` em produção — ler o
+`erro_tipo`/`erro` e corrigir a causa raiz. **Origem:** validação Isis 30/07.
+
+**92. Classificação documental grossa: o dossiê inteiro vira `auto_infracao`.**
+No caso 15, **19 documentos** são tipados `auto_infracao` — mas o conjunto tem
+ofício, notificação, julgamento, PRAD, resposta técnica, requerimento REFIZ,
+relatório de vistoria, termo de embargo e pedido de prorrogação. Consequências
+medidas: `_stage_ficha01` roda `extract_auto_infracao_fato` em todos, cada peça
+produz um "fato de auto" e o consultor vê 5 autos onde existem 2 (o mesmo auto
+484341 apareceu 3 vezes porque `orgao_autuante` variou entre "IBAMA", "IBAMA-GO"
+e "IBAMA/MMA - SUP. ESTADUAL", quebrando o dedupe de `_chave_auto`). A rodada de
+30/07 tratou o SINTOMA (a fonte agora nomeia o arquivo real e marca confiança);
+a causa é de classificação. **O que destrava:** subtipos de peça de fiscalização
+(`auto_infracao` vs `oficio` vs `notificacao` vs `prad` vs `termo_embargo`) em
+`classify_doc_type`, e canonicalização da sigla do órgão antes do dedupe.
+**Origem:** validação Isis 30/07.
+
+**93. `.docx` nunca é lido — fica em `ocr_status=pending` para sempre.** O
+documento 360 do caso 15
+(`relatorio_ampliado_defesa_car_fazenda_sao_jorge.docx`) foi anexado em 30/07 às
+19:55 e continua sem `extracted_text`: o pipeline de OCR trata PDF e imagem, e o
+`.docx` entra na fila e não sai. Até a rodada de 30/07 isso era **silencioso**;
+agora ele aparece no contexto do diagnóstico marcado `sem_leitura`, então o furo
+é visível — mas o conteúdo continua fora. **O que destrava:** extrator de texto
+para `.docx`/`.odt` (biblioteca local, sem custo de IA) no `ocr_pdf`/`ocr_tasks`,
+ou recusa explícita no upload. **Origem:** validação Isis 30/07.
+
+**94. A primeira regeneração de rota pós-#4 pode reordenar passos legados.** A
+`dedupe_key` do `RotaPasso` deixou de incluir `norma_ref` (era ela que duplicava
+a rota a cada execução). Passos gravados antes disso carregam chave legada e são
+casados por um índice de compatibilidade `(orgao, titulo)` — o que impede a
+duplicação, mas **não regrava** a `dedupe_key` antiga. Efeito: a linha continua
+correta e estável, e a chave persistida fica dessincronizada da fórmula atual.
+**O que destrava:** script idempotente que recalcula `dedupe_key` dos passos
+`origem=ia` (custo zero de IA, mesmo padrão do `backfill_document_type.py`).
+Baixo impacto — em produção há 1 rota com 11 passos. **Origem:** item 4 da
+validação Isis 30/07.
+
+**PRÓXIMO LIVRE: 95.**
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
@@ -715,6 +762,18 @@ em `caminho_regulatorio`: o primeiro mapeia para `"analise_regulatoria"`, o segu
 o mapa. **O que destrava:** unificar numa fonte única (ou documentar por que são dois) e
 testar que ambos os nomes de chain existem no registry `CHAINS`. **Origem:** forense caso
 Isis (`fix/forense-caso-isis`, 2026-07-18).
+**✅ FECHADA (30/07, `fix/polimento-validacao-30-07`):** `MACROETAPA_CHAINS` deixou de ser
+escrito à mão e passou a ser **derivado** de `MACROETAPA_AGENT_CHAIN` (fonte única), com a
+chave em `str` para não obrigar quem consome o orquestrador a importar o enum.
+`tests/agents/test_chain_fonte_unica.py` trava as três garantias: os dois mapas dizem a
+mesma coisa, toda `Macroetapa` tem entrada, e todo nome de chain apontado existe no
+registry `CHAINS` (etapa manual — `coleta_documental`/`contrato_formalizacao` — segue
+`None` por projeto). O que a #66 previa como "fonte latente de comportamento
+inconsistente" apareceu de fato na validação de 30/07: o botão "Rodar agentes da etapa"
+falhou na E4 e a mesma cadeia rodou pela seção de Agentes. A divergência de mapa era
+metade; a outra metade é o TRANSPORTE (fila do Celery × execução dentro da requisição),
+que continua sendo duas coisas de propósito — mas o 503 mudo do botão virou mensagem que
+diz o que houve e qual a saída, e grava `stage_agents_dispatch_falhou` na trilha.
 
 ## Bloqueada por terceiros / coordenação (NÃO tocar sozinho)
 
