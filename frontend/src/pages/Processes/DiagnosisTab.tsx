@@ -220,7 +220,7 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
                 {(passivosAfirmados.length > 0 || (passivosLegado?.length ?? 0) > 0) && (
                   <div className="mb-3">
                     <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" /> Passivos Identificados
+                      <AlertTriangle className="w-3 h-3" /> Pendências Identificadas
                     </p>
                     <ul className="space-y-1.5">
                       {passivosAfirmados.length > 0

@@ -151,7 +151,7 @@ export default function AcaoCard({ acao, processId }: AcaoCardProps) {
             {acao.origem_descricao && (
               <p className="mt-1 flex items-start gap-1 text-xs text-gray-500 dark:text-slate-400">
                 <Link2 className="w-3 h-3 mt-0.5 shrink-0" />
-                <span className="min-w-0">Passivo de origem: {acao.origem_descricao}</span>
+                <span className="min-w-0">Pendência de origem: {acao.origem_descricao}</span>
               </p>
             )}
           </div>

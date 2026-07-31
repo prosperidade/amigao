@@ -100,7 +100,7 @@ function AcoesList({ processId }: { processId: number }) {
             Ações do caso
           </h2>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-            {`Cada passivo do diagnóstico vira uma ação a triar. A IA propõe; você decide.`}
+            {`Cada pendência do diagnóstico vira uma ação a triar. A IA propõe; você decide.`}
             {pendentesCount > 0 && (
               <span className="ml-1 text-amber-600 dark:text-amber-400 font-medium">
                 {pendentesCount} pendente(s) de triagem.

@@ -253,6 +253,19 @@ class DiagnosticoAgent(BaseAgent):
                 "sobre o conteúdo dele."
             )
 
+        # Vocabulário da consultora (correção da Isis, 30/07): *"o passivo gerou
+        # o auto; PENDÊNCIA é o que resta a resolver"*. A chave `categoria` do
+        # JSON continua "passivo" — é identificador interno e renomeá-la
+        # quebraria os consumidores —, mas a PROSA que ela lê tem de falar a
+        # língua dela.
+        user_prompt += (
+            "\n\nVOCABULÁRIO OBRIGATÓRIO: nos textos em português (situacao_geral, "
+            "passivos_identificados, acoes_remediacao, observacoes, afirmacoes.texto) "
+            'escreva "pendência" — nunca "passivo" — para o que resta a resolver no '
+            'caso. "Passivo" só cabe para o fato consumado que gerou a autuação. '
+            "Os NOMES das chaves do JSON não mudam."
+        )
+
         # Modelo dedicado por env (AI_DIAGNOSTICO_MODEL); vazio cai no default
         # global. White-label do consultor (user_preferences) ainda tem precedência
         # no gateway. Mesma convenção do agente legislacao.

@@ -157,6 +157,15 @@ class LegislacaoAgent(BaseAgent):
         if bloco_esfera:
             user_prompt += "\n\n" + bloco_esfera
 
+        # Vocabulário da consultora (Isis, 30/07): na tela dela, "pendência" é o
+        # que resta resolver; "passivo" é o fato consumado que gerou a autuação.
+        # Vale para a prosa, não para os nomes das chaves do JSON.
+        user_prompt += (
+            "\n\nVOCABULÁRIO: nos textos em português escreva \"pendência\" para o "
+            "que resta a resolver no caso; reserve \"passivo\" ao fato consumado que "
+            "gerou a autuação. Os nomes das chaves do JSON não mudam."
+        )
+
         # Defensivo: se o template salvo no banco for da versao antiga e nao incluir
         # {rag_chunks}, anexamos os trechos manualmente ao final do prompt.
         if rag_context and "TRECHOS LEGISLATIVOS HIPER-RELEVANTES" not in user_prompt:
