@@ -32,6 +32,7 @@ import WorkspaceRightPanel from './WorkspaceRightPanel';
 import DecisionsTab from './DecisionsTab';
 import SaidasTab from './SaidasTab';
 import ConferenciaTab from './ConferenciaTab';
+import EstacaoOpcionalE3 from './EstacaoOpcionalE3';
 import AIPanel from '@/pages/AI/AIPanel';
 
 type TabKey = 'diagnosis' | 'alertas' | 'acoes' | 'dossier' | 'decisions' | 'commercial' | 'tasks' | 'documents' | 'messages' | 'timeline' | 'ai' | 'saidas';
@@ -241,27 +242,14 @@ export default function ProcessDetail() {
             </button>
           </div>
         )}
-        {/* E3 como ESTAÇÃO OPCIONAL (validação 30/07 — o mínimo pedido): quando o
-            caso pula a Coleta Documental (o gate da E2 manda direto para a E4 se
-            não há documento essencial pendente), clicar nela mostrava uma etapa
-            vazia, sem explicação. Ela não é um degrau perdido: é a porta de
-            entrada do material que a consultora produz depois — relatórios e
-            análises. Sem redesenhar fluxo: uma frase e o caminho do upload. */}
-        {viewingStage === 'coleta_documental' && currentStage !== 'coleta_documental' && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-sky-800 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 rounded-lg px-3 py-2">
-            <span className="min-w-0">
-              <strong>Etapa opcional</strong> — adicione aqui relatórios e análises suas a
-              qualquer momento. Documento anexado depois entra nas próximas leituras da IA.
-            </span>
-            <button
-              type="button"
-              onClick={() => setActiveTab('documents')}
-              className="ml-auto shrink-0 px-2.5 py-1 rounded-lg bg-sky-600 text-white hover:bg-sky-700 transition-colors"
-            >
-              Anexar documento
-            </button>
-          </div>
-        )}
+        {/* E3 como ESTAÇÃO OPCIONAL (validação 30/07). O salto E2→E4 é design
+            (ADR-019) e continua intacto; o que muda é que a etapa pulada nunca
+            fica inalcançável — ver EstacaoOpcionalE3. */}
+        <EstacaoOpcionalE3
+          viewingStage={viewingStage}
+          currentStage={currentStage}
+          onAnexar={() => setActiveTab('documents')}
+        />
       </div>
 
       {/* Área 3 — Barra horizontal de tabs (ex-menu lateral).
