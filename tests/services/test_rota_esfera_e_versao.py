@@ -141,7 +141,7 @@ def test_regeneracao_casa_passo_legado_em_vez_de_duplicar(db_session):
     tenant, rota = _rota_com_passos(db_session, [{
         "titulo": "Recebimento e análise do auto de infração e notificação",
         "orgao": "IBAMA",
-        "dedupe_key": "r{}:chavelegadaantiga0000".format(1),
+        "dedupe_key": f"r{1}:chavelegadaantiga0000",
         "status": RotaPassoStatus.validado,
     }])
     etapas = [Etapa(

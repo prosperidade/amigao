@@ -2428,3 +2428,87 @@ em produção: os pares 7/12 e 8/13 do caso 15, título e órgão idênticos, ch
 distintas. A limpeza manual da enxurrada é que apagava trabalho — "atualizar da
 IA apagou toda a rota" descrevia com precisão o efeito, não o mecanismo. Identidade
 instável não é só ruído de dedupe: vira perda de trabalho humano.
+
+---
+
+## Corpus federal — pacote A e o eixo do tempo (31/07/2026)
+
+### O que a medição provou antes de qualquer reingestão
+
+A assimetria do corpus (785 chunks federais contra 26.505 estaduais, IBAMA com
+106) **não era falha de ingestão**. Cinco hipóteses foram testadas e quatro
+caíram nos números: 64/64 documentos `indexed`, `error_message` vazio em todos,
+**zero** embedding nulo em 28.891 chunks, nenhum documento com texto pobre, e
+`jurisdiction` preenchido em todos os federais. A prova positiva veio da taxa
+`chars/chunk`: federal 1.118, estadual 954–1.484 — o chunker tratou as duas
+esferas igual. Entraram 850 mil caracteres federais contra 32 milhões estaduais
+(37,8:1) e saíram 761 contra 26.505 chunks (34,8:1). As razões batem: o pipeline
+funcionou, foi alimentado com 38× menos texto.
+
+A causa estava no código: `scripts/ingest_federais_canonicos.py` era uma **lista
+curada fixa de 10 diplomas** digitada à mão em 23/04. O corpus federal tinha
+exatamente o tamanho da lista. Os estaduais vieram por outro caminho —
+compêndios agregados de 1 a 3 MB cada. Duas estratégias de aquisição diferentes,
+nunca reconciliadas.
+
+### O que faltava era o direito sancionador, não o material
+
+A lista de abril cobria bem o que é APP e o que é reserva legal. Não cobria o
+rito de uma defesa. O Decreto 6.514/2008 — a norma do art. 18, §1º que fundamenta
+a certidão de embargo do caso 15 — era citado por 102 chunks e **não tinha uma
+linha de texto próprio**. O sistema sabia que o decreto existia e não sabia o que
+ele dizia.
+
+Ingeridos 9 diplomas, 815 chunks, **US$ 0,0030**. Federal + nacional: 785 → 1.600.
+
+### A norma revogada é citável, nunca como vigente
+
+Quatro dos nove são normas **revogadas**, ingeridas de propósito: o auto é de
+2007 e se defende com a norma da época (*tempus regit actum*). ADR-037 institui
+o eixo do tempo (`vigencia_inicio`/`vigencia_fim`/`sucessora_id`/`sucessora_ref`)
+e promove a padrão a regra que resolveu o problema sem tocar em nenhum agente:
+
+> Aviso que mora no prompt de um agente protege **um agente**.
+> Aviso que mora no dado protege **o dado**.
+
+O rótulo de norma histórica é gravado no `title` do chunk na indexação. O
+`_format_rag_context` já monta o cabeçalho a partir do `title` — o aviso chega ao
+modelo com zero linha de diff no agente, e chega igual para o diagnóstico e para
+qualquer agente futuro. Medido no A/B: sem nenhuma instrução sobre vigência no
+prompt, a resposta passou a escrever *"Decreto 3.179/1999, art. 2º (norma
+histórica, revogada em 22/07/2008, sucedida pelo Decreto 6.514/2008)"*.
+
+### O A/B, com o corpus como única variável
+
+Mesma pergunta, mesmo modelo, mesmo escopo federal do ADR-034. **Antes:** os 8
+trechos recuperados eram 5 da IN IBAMA 14/2024 (PRAD) e 3 da Lei 6.938/1981 —
+nenhuma norma sancionadora — e a resposta era uma lista de recusas ("os artigos
+70 e 72 não foram disponibilizados"). **Depois:** 8 de 10 normas do enquadramento
+passaram de "citada por terceiros" a "com texto próprio", e a resposta virou uma
+defesa estruturada por *tempus regit actum*. A resposta encolheu de 4.734 para
+1.541 tokens de saída: com o texto em mãos o modelo para de explicar o que não
+tem e passa a fundamentar.
+
+### Texto corrompido não levanta exceção
+
+Dois defeitos de fidelidade apareceram no caminho, ambos vindos de abril e ambos
+silenciosos. O Planalto responde sem `charset` e o httpx assumia utf-8 sobre
+bytes ISO-8859-1: o corpus guardava `"aplicar� as seguintes san��es"`. E o
+Planalto separa "Art." do número com espaço não-quebrável — `"Art. 18."` não casa
+com `"Art. 18."` em busca nenhuma, nem no Ctrl+F de quem lê a peça pronta.
+Corrigidos para frente (com canário que **recusa** a ingestão acima de 0,05% de
+caracteres de substituição) e registrados como dívidas #95 e #96 para o corpus já
+gravado. A lição é a mesma do storage R2: falha de I/O que devolve algo plausível
+em vez de gritar custa meses.
+
+### 97,3% do corpus não tem fonte rastreável
+
+A auditoria de proveniência (item 0) mediu: **10 dos 64 documentos têm origem
+oficial rastreável, e eles são 1,4% do texto**. Os outros 54 têm apenas
+`file_path` — PDF de disco ou `.md` já compilado por alguém. Os compêndios
+estaduais, que são 83,9% do corpus, não registram quem os compilou nem de que
+fonte. Não existe campo que responda "esta fonte é oficial?". O pacote A grava a
+proveniência em `extra_metadata` e a **deriva da URL**, para que fonte
+desconhecida caia num rótulo explícito e nunca em branco; o campo de primeira
+classe é a dívida #97. Importa porque o sistema cita norma em peça que a
+consultora assina.

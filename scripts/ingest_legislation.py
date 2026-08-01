@@ -114,6 +114,52 @@ def extract_text_from_html(html: str) -> str:
 # Carregamento (URL ou disco)
 # ---------------------------------------------------------------------------
 
+_META_CHARSET_RE = re.compile(rb"""charset=["']?([\w-]+)""", re.I)
+
+
+def _decodificar(resposta) -> str:
+    """Decodifica a resposta HTTP respeitando o charset REAL, não o presumido.
+
+    O planalto.gov.br responde `Content-Type: text/html` — sem charset. O httpx,
+    sem declaração, assume utf-8; os bytes são ISO-8859-1. Resultado: todo acento
+    vira U+FFFD e o corpus guarda "Art. 3� O �rg�o ... aplicar� as
+    seguintes san��es". Foi assim que os diplomas federais de abril
+    entraram, e ninguém viu — texto corrompido não quebra nada, só degrada a
+    citação e o embedding, silenciosamente.
+
+    Ordem: charset declarado no header → <meta charset> do HTML → utf-8 →
+    ISO-8859-1 (que nunca falha, e é o que o Planalto de fato usa).
+    """
+    if resposta.charset_encoding:  # servidor declarou; confiar
+        return resposta.text
+
+    brutos = resposta.content
+    candidatos: list[str] = []
+    achado = _META_CHARSET_RE.search(brutos[:4096])
+    if achado:
+        candidatos.append(achado.group(1).decode("ascii", "ignore"))
+    candidatos += ["utf-8", "iso-8859-1"]
+
+    for codec in candidatos:
+        try:
+            return brutos.decode(codec)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return brutos.decode("iso-8859-1", "replace")
+
+
+def verificar_mojibake(texto: str, *, limite: float = 0.0005) -> float:
+    """Proporção de caracteres de substituição (U+FFFD) no texto.
+
+    Canário: o defeito de encoding passou três meses despercebido porque texto
+    corrompido não levanta exceção. Acima do limite, quem chama recusa a
+    ingestão — melhor não ingerir do que ingerir lixo que a consultora vai citar.
+    """
+    if not texto:
+        return 0.0
+    return texto.count("�") / len(texto)
+
+
 def load_from_url(url: str) -> tuple[str, str]:
     """
     Retorna (content_type, text_extraido).
@@ -144,12 +190,10 @@ def load_from_url(url: str) -> tuple[str, str]:
         if "pdf" in ctype or url.lower().endswith(".pdf"):
             return "pdf", extract_text_from_pdf(r.content)
         elif "html" in ctype or "text" in ctype:
-            # Planalto costuma servir em latin-1 ou iso-8859-1; respeitar o header
-            html = r.text
-            return "html", extract_text_from_html(html)
+            return "html", extract_text_from_html(_decodificar(r))
         else:
             logger.warning("Content-type desconhecido: %s. Tentando como HTML.", ctype)
-            return "unknown", extract_text_from_html(r.text)
+            return "unknown", extract_text_from_html(_decodificar(r))
 
 
 def load_from_pdf_path(path: Path) -> str:
@@ -165,9 +209,19 @@ def load_from_pdf_path(path: Path) -> str:
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
+_ESPACOS_UNICODE = dict.fromkeys(
+    map(ord, "         "), " "
+)
+
+
 def sanitize_text(text: str) -> str:
     """Remove caracteres de controle e normaliza whitespace."""
     text = _CONTROL_CHARS_RE.sub("", text)
+    # Espaço não-quebrável e parentes viram espaço comum. O Planalto separa
+    # "Art." do número com U+00A0: o texto PARECE "Art. 18." e não casa com
+    # "Art. 18." em busca nenhuma — nem na nossa, nem no Ctrl+F de quem lê a
+    # peça pronta. Diferença invisível é a pior de depurar.
+    text = text.translate(_ESPACOS_UNICODE)
     # Normaliza CRLF → LF e múltiplos whitespace
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)

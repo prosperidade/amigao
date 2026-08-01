@@ -1,0 +1,148 @@
+{
+  "rotulo": "antes",
+  "pergunta": "Fundamente a defesa administrativa do auto de infração 484341/D (IBAMA, 2007, Fazenda São Jorge)",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal','nacional') + uf=GO (ADR-034)",
+  "estado_corpus": {
+    "estadual": 28106,
+    "federal": 761,
+    "nacional": 24
+  },
+  "chunks_recuperados": [
+    {
+      "id": 3021,
+      "identifier": "IN IBAMA 14/2024",
+      "title": "Instrução Normativa IBAMA 14/2024 — Projeto de Recuperação de Áreas Degradadas (PRAD)",
+      "section": "Art. 87. Esta Instrução Normativa entra em vigor uma semana após a data de sua publicação. (parte 15)",
+      "jurisdiction": "federal",
+      "similarity": 0.688,
+      "chars": 3199
+    },
+    {
+      "id": 2918,
+      "identifier": "IN IBAMA 14/2024",
+      "title": "Instrução Normativa IBAMA 14/2024 — Projeto de Recuperação de Áreas Degradadas (PRAD)",
+      "section": "Instituto Brasileiro do Meio Ambiente e dos Recursos Naturais Renováveis",
+      "jurisdiction": "federal",
+      "similarity": 0.6717,
+      "chars": 1230
+    },
+    {
+      "id": 2743,
+      "identifier": "Lei 6.938/1981",
+      "title": "Política Nacional do Meio Ambiente (Lei 6.938/1981)",
+      "section": "Art. 17-G.  O",
+      "jurisdiction": "federal",
+      "similarity": 0.6477,
+      "chars": 561
+    },
+    {
+      "id": 2758,
+      "identifier": "Lei 6.938/1981",
+      "title": "Política Nacional do Meio Ambiente (Lei 6.938/1981)",
+      "section": "Art. 17-E. � o",
+      "jurisdiction": "federal",
+      "similarity": 0.6455,
+      "chars": 178
+    },
+    {
+      "id": 2741,
+      "identifier": "Lei 6.938/1981",
+      "title": "Política Nacional do Meio Ambiente (Lei 6.938/1981)",
+      "section": "Art. 17-E.  Fica o",
+      "jurisdiction": "federal",
+      "similarity": 0.6453,
+      "chars": 199
+    },
+    {
+      "id": 2992,
+      "identifier": "IN IBAMA 14/2024",
+      "title": "Instrução Normativa IBAMA 14/2024 — Projeto de Recuperação de Áreas Degradadas (PRAD)",
+      "section": "Art. 72. Excepcionalmente, a critério do Ibama, quando constatada área alterada de até 1 (um) módulo fiscal classificada",
+      "jurisdiction": "federal",
+      "similarity": 0.6432,
+      "chars": 1956
+    },
+    {
+      "id": 2994,
+      "identifier": "IN IBAMA 14/2024",
+      "title": "Instrução Normativa IBAMA 14/2024 — Projeto de Recuperação de Áreas Degradadas (PRAD)",
+      "section": "Art. 74. Se, a qualquer tempo, for constatada piora no cenário ambiental inicial da área, o Ibama deverá notificar o adm",
+      "jurisdiction": "federal",
+      "similarity": 0.6425,
+      "chars": 393
+    },
+    {
+      "id": 3008,
+      "identifier": "IN IBAMA 14/2024",
+      "title": "Instrução Normativa IBAMA 14/2024 — Projeto de Recuperação de Áreas Degradadas (PRAD)",
+      "section": "Art. 87. Esta Instrução Normativa entra em vigor uma semana após a data de sua publicação. (parte 2)",
+      "jurisdiction": "federal",
+      "similarity": 0.6423,
+      "chars": 3200
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 102,
+      "situacao": "apenas_mencao_de_terceiros"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 2,
+      "situacao": "apenas_mencao_de_terceiros"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 57,
+      "situacao": "apenas_mencao_de_terceiros"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 8,
+      "situacao": "apenas_mencao_de_terceiros"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 93,
+      "chunks_por_mencao_de_terceiros": 99,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 134,
+      "chunks_por_mencao_de_terceiros": 1097,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 13,
+      "situacao": "apenas_mencao_de_terceiros"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 0,
+      "situacao": "sem_lastro"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 0,
+      "situacao": "sem_lastro"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 0,
+      "chunks_por_mencao_de_terceiros": 0,
+      "situacao": "sem_lastro"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 0,
+    "recuperado_nesta_busca": false
+  },
+  "resposta": "Prezado(a) Consultor(a),\n\nSegue fundamentação jurídica para a defesa administrativa do Auto de Infração IBAMA nº 484341/D, lavrado em 2007, na Fazenda São Jorge, São João d'Aliança/GO.\n\n---\n\n**DEFESA ADMINISTRATIVA**\n**Auto de Infração IBAMA nº 484341/D**\n**Processo Administrativo nº [Número do Processo, se disponível]**\n**Autuado: [Nome do Autuado]**\n**Fazenda São Jorge, São João d'Aliança/GO**\n\n**I. BREVE RELATO DOS FATOS**\n\nO presente Auto de Infração foi lavrado em 2007 pelo IBAMA, tendo como objeto a supressão de vegetação em Área de Preservação Permanente (APP). O enquadramento legal constante do Julgamento 067-2012 indica: \"Art. 70 c/c 72 da Lei 9.605/98; Art. 25 c/c Art. 2º, II, VII e XI do Decreto 3.179; Art. 2º, c da Lei 4.771/65\". A Certidão de Embargo foi lavrada com base no \"art. 18, §1º do Decreto 6.514, de 22 de julho de 2008\". Houve apresentação de Projeto de Recuperação de Áreas Degradadas (PRAD) e sucessivas prorrogações de prazo entre 2008 e 2017, além de requerimento de adesão ao REFIZ com base no artigo 02 da MPV 780/2017.\n\n**II. DA LEGISLAÇÃO APLICÁVEL À ÉPOCA DOS FATOS E DA AUSÊNCIA DE TEXTOS NORMATIVOS PARA ANÁLISE**\n\nPara a devida análise da legalidade do auto de infração e de seu enquadramento, é fundamental ter acesso aos textos integrais das normas citadas. Contudo, com base nos trechos legislativos recuperados do *corpus*, verifica-se a ausência de diversos dispositivos essenciais para a fundamentação da autuação.\n\n1.  **Em relação à Lei nº 9.605/98 (Lei de Crimes Ambientais):**\n    *   Os artigos 70 e 72, citados no enquadramento do julgamento, não foram disponibilizados nos trechos legislativos. Assim, não é possível analisar a adequação da conduta do autuado a esses dispositivos.\n\n2.  **Em relação ao Decreto nº 3.179 (Regulamenta a Lei nº 9.605/98):**\n    *   Os artigos 25 e 2º, incisos II, VII e XI, citados no enquadramento do julgamento, não foram disponibilizados nos trechos legislativos. Desta forma, não é possível verificar a subsunção dos fatos à tipificação administrativa alegada.\n\n3.  **Em relação à Lei nº 4.771/65 (Código Florestal de 1965):**\n    *   O artigo 2º, alínea \"c\", citado no enquadramento do julgamento, não foi disponibilizado nos trechos legislativos.\n    *   Cumpre ressaltar que a Lei nº 4.771/65 é uma **NORMA HISTÓRICA/REVOGADA**. Ela foi revogada pela Lei nº 12.651, de 25 de maio de 2012 (Novo Código Florestal). Embora a infração tenha ocorrido em 2007, quando a Lei nº 4.771/65 estava em vigor, a ausência do texto impede a análise de sua aplicação ao caso concreto.\n\n4.  **Em relação ao Decreto nº 6.514/2008 (Regulamenta a Lei nº 9.605/98):**\n    *   O artigo 18, §1º, utilizado como base para a lavratura da Certidão de Embargo, não foi disponibilizado nos trechos legislativos.\n    *   Adicionalmente, observa-se que o auto de infração foi lavrado em 2007, enquanto o Decreto nº 6.514/2008 é de 22 de julho de 2008. A aplicação de norma posterior à data da infração para fundamentar o embargo deve ser analisada sob o prisma do princípio da irretroatividade da lei mais gravosa, o que não pode ser feito sem o texto do dispositivo.\n\n**III. DA INAPLICABILIDADE RETROATIVA DA INSTRUÇÃO NORMATIVA IBAMA Nº 14/2024**\n\nA Instrução Normativa IBAMA nº 14, de 1º de julho de 2024 [2], que \"Estabelece procedimentos para elaboração, apresentação, execução e monitoramento de Projeto de Recuperação de Área Degradada ou Área Alterada (PRAD)\", não se aplica aos fatos e procedimentos ocorridos entre 2007 e 2017. Conforme seu próprio texto, em seu Art. 87, \"Esta Instrução Normativa entra em vigor uma semana após a data de sua publicação\" [1], [8]. Portanto, suas disposições não podem retroagir para reger atos administrativos pretéritos.\n\n**IV. DA BOA-FÉ E DA BUSCA PELA REGULARIZAÇÃO AMBIENTAL (PRAD E REFIZ)**\n\nApesar da inaplicabilidade direta da IN IBAMA nº 14/2024 aos fatos, os princípios e a importância do PRAD nela contidos reforçam a conduta proativa do autuado.\n\n1.  **Da Apresentação do PRAD e Sucessivas Prorrogações:**\n    *   O fato de o autuado ter apresentado um PRAD e obtido sucessivas prorrogações de prazo entre 2008 e 2017 demonstra inequívoca boa-fé e compromisso com a recuperação ambiental da área degradada. Essa conduta ativa em buscar a regularização e mitigar o dano ambiental deve ser considerada como fator atenuante na aplicação da penalidade.\n    *   A própria IN IBAMA nº 14/2024, em seu Anexo VI [1], que trata do \"MODELO DE TERMO DE REFERÊNCIA DE EXECUÇÃO IMEDIATA DA RECUPERAÇÃO DE ÁREA ALTERADA EM AMBIENTES TERRESTRES - TR - EXECUÇÃO IMEDIATA\", vincula expressamente a recuperação ambiental a autos de infração e termos de embargo, evidenciando que a apresentação de um plano de recuperação é a medida esperada para a regularização. O objetivo é a \"Recuperação ou recomposição da vegetação nativa\" [1].\n    *   A IN IBAMA nº 14/2024 também prevê, em seu Art. 72, §4º e §5º [6], a apresentação de Relatórios de Monitoramento ou Laudos Técnicos a cada 12 (doze) meses, até a conclusão da recuperação. As sucessivas prorrogações de prazo para o PRAD indicam que o autuado estava engajado no processo de monitoramento e execução das ações de recuperação, conforme as exigências da época.\n\n2.  **Do Requerimento de Adesão ao REFIZ:**\n    *   O requerimento de adesão ao REFIZ, com base no artigo 02 da MPV 780/2017, reforça a intenção do autuado em regularizar sua situação perante o órgão ambiental. Embora o texto da MPV 780/2017 não esteja disponível nos trechos fornecidos, a mera iniciativa de buscar um programa de regularização fiscal e ambiental demonstra a disposição em cumprir as obrigações e resolver o passivo ambiental.\n\n**V. CONCLUSÃO E PEDIDOS**\n\nDiante do exposto, e considerando a ausência dos textos normativos que fundamentaram o auto de infração e o embargo, o que impede uma análise aprofundada da legalidade da autuação, bem como a demonstração de boa-fé e o esforço contínuo do autuado na recuperação ambiental da área e na busca pela regularização, requer-se:\n\n1.  A **anulação do Auto de Infração nº 484341/D** por ausência de base normativa demonstrável para a defesa, ou, subsidiariamente;\n2.  A **revisão da penalidade imposta**, considerando os esforços de recuperação ambiental demonstrados pela apresentação do PRAD e suas prorrogações, bem como o requerimento de adesão ao REFIZ, que configuram atenuantes relevantes;\n3.  A **conversão da multa em serviços de preservação, melhoria e recuperação da qualidade do meio ambiente**, nos termos da legislação aplicável à época dos fatos, em reconhecimento aos esforços já empreendidos na recuperação da área.\n\nNestes termos,\nPede deferimento.\n\n[Local], [Data].\n\n**[Nome do Consultor Ambiental Sênior]**\n**[Assinatura]**",
+  "custo_usd": 0.013015800000000001,
+  "tokens": {
+    "in": 3936,
+    "out": 4734
+  }
+}

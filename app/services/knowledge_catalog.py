@@ -29,6 +29,7 @@ from app.models.knowledge_catalog import KnowledgeChunk
 from app.models.legislation import LegislationDocument
 from app.services.chunking import TextChunk, chunk_text
 from app.services.embeddings import EMBEDDING_DIM, current_model, embed_batch, embed_text
+from app.services.vigencia import titulo_com_vigencia, vigencia_do_documento
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,16 @@ class SearchResult:
     agency: str | None
     identifier: str | None
     similarity: float  # 0.0..1.0 (cosseno; 1.0 = identico)
+
+    # ADR-037 — vigencia da norma. `vigencia_fim=None` = vigente. O rotulo
+    # legivel ja vem embutido no `title`; estes campos existem para quem precisa
+    # decidir em codigo (filtrar, ordenar, colorir na tela) sem parsear texto.
+    vigencia_fim: _date | None = None
+    sucessora_ref: str | None = None
+
+    @property
+    def historica(self) -> bool:
+        return self.vigencia_fim is not None
 
 
 def _vector_literal(values: list[float]) -> str:
@@ -221,12 +232,18 @@ def index_legislation_document(session: Session, doc_id: int) -> int:
         logger.info("knowledge.index skip doc=%d — full_text vazio", doc_id)
         return 0
 
+    # ADR-037 — o rótulo de norma revogada viaja NO DADO. Gravado aqui, no
+    # título do chunk, ele chega a qualquer consumidor do trecho (inclusive ao
+    # cabeçalho que o LegislacaoAgent monta para o modelo) sem que nenhum agente
+    # precise saber que vigência existe.
+    vig = vigencia_do_documento(doc)
+
     return index_text(
         session,
         source_type="legislation",
         source_ref=f"legislation_documents:{doc.id}",
         body=doc.full_text,
-        title=doc.title,
+        title=titulo_com_vigencia(doc.title, vig),
         tenant_id=doc.tenant_id,
         jurisdiction=doc.scope,
         uf=doc.uf,
@@ -237,6 +254,10 @@ def index_legislation_document(session: Session, doc_id: int) -> int:
             "demand_types": doc.demand_types,
             "keywords": doc.keywords,
             "source_type_legislation": doc.source_type,
+            "vigencia_inicio": vig.inicio.isoformat() if vig.inicio else None,
+            "vigencia_fim": vig.fim.isoformat() if vig.fim else None,
+            "sucessora_ref": vig.sucessora_ref,
+            "historica": vig.historica,
         },
     )
 
@@ -252,12 +273,20 @@ def search(
     uf: str | None = None,
     identifier: str | None = None,
     demand_type: str | None = None,
+    vigente_em: _date | None = None,
     min_similarity: float = 0.0,
 ) -> list[SearchResult]:
     """Busca top-k chunks por similaridade cosseno.
 
     `tenant_id`: se informado, retorna chunks do tenant + chunks globais (NULL).
                  se None, retorna apenas globais.
+
+    `vigente_em`: data do FATO. Restringe aos trechos de normas que valiam
+                 naquela data — a defesa de um auto de 2007 recupera o Decreto
+                 3.179/1999, e a consulta sobre um fato de hoje não. Omitido
+                 (padrão), a busca traz tudo: a norma histórica continua
+                 recuperável e chega ROTULADA como tal (ADR-037), porque
+                 escondê-la seria pior que trazê-la avisada.
     """
     if not query or not query.strip():
         return []
@@ -266,7 +295,14 @@ def search(
     vector_literal = _vector_literal(query_vector)
 
     where: list[str] = []
-    join_sql = ""
+    # LEFT JOIN sempre presente: e dele que saem vigencia e demand_types. Chunk
+    # que nao vem de `legislation_documents` (oficio, manual) casa com NULL e
+    # segue no resultado — por isso LEFT, nao INNER.
+    join_sql = (
+        "LEFT JOIN legislation_documents ld "
+        "ON kc.source_type = 'legislation' "
+        "AND kc.source_ref = CONCAT('legislation_documents:', ld.id::text)"
+    )
     params: dict[str, Any] = {"vector": vector_literal, "limit": limit}
 
     if tenant_id is not None:
@@ -303,15 +339,21 @@ def search(
         where.append("kc.identifier = :identifier")
         params["identifier"] = identifier
     if demand_type:
-        join_sql = (
-            "JOIN legislation_documents ld "
-            "ON kc.source_type = 'legislation' "
-            "AND kc.source_ref = CONCAT('legislation_documents:', ld.id::text)"
-        )
+        # O predicado `@>` ja falha em linha NULL, entao o LEFT JOIN se comporta
+        # como INNER aqui — mesmo resultado de antes, sem um segundo JOIN.
         where.append("CAST(ld.demand_types AS jsonb) @> CAST(:demand_types_filter AS jsonb)")
         import json as _json
 
         params["demand_types_filter"] = _json.dumps([demand_type])
+    if vigente_em:
+        # ADR-037 — vigente NA DATA DO FATO. Documento sem vigencia declarada
+        # (todo o corpus anterior a esta coluna) conta como vigente: a ausencia
+        # de curadoria nao pode apagar trecho da busca.
+        where.append(
+            "((ld.vigencia_inicio IS NULL OR ld.vigencia_inicio <= :vigente_em) "
+            "AND (ld.vigencia_fim IS NULL OR ld.vigencia_fim >= :vigente_em))"
+        )
+        params["vigente_em"] = vigente_em
 
     where_sql = " AND ".join(where) if where else "TRUE"
     sql = text(
@@ -319,6 +361,7 @@ def search(
         SELECT
             kc.id, kc.source_type, kc.source_ref, kc.title, kc.section, kc.chunk_text,
             kc.jurisdiction, kc.uf, kc.agency, kc.identifier,
+            ld.vigencia_fim AS vigencia_fim, ld.sucessora_ref AS sucessora_ref,
             1.0 - (kc.embedding <=> CAST(:vector AS vector)) AS similarity
         FROM knowledge_catalog kc
         {join_sql}
@@ -347,6 +390,8 @@ def search(
                 agency=row.agency,
                 identifier=row.identifier,
                 similarity=sim,
+                vigencia_fim=row.vigencia_fim,
+                sucessora_ref=row.sucessora_ref,
             )
         )
     return out

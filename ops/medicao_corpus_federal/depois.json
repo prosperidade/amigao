@@ -1,0 +1,148 @@
+{
+  "rotulo": "depois",
+  "pergunta": "Fundamente a defesa administrativa do auto de infração 484341/D (IBAMA, 2007, Fazenda São Jorge)",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal','nacional') + uf=GO (ADR-034)",
+  "estado_corpus": {
+    "estadual": 28106,
+    "federal": 1576,
+    "nacional": 24
+  },
+  "chunks_recuperados": [
+    {
+      "id": 34572,
+      "identifier": "Decreto 3.179/1999",
+      "title": "Sanções administrativas ao meio ambiente (Decreto 3.179/1999) [NORMA HISTÓRICA — revogada em 22/07/2008, sucedida por Decreto 6.514/2008. Aplicável a fatos anteriores a 22/07/2008 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Art. 2 (parte 3)",
+      "jurisdiction": "federal",
+      "similarity": 0.7129,
+      "chars": 2776
+    },
+    {
+      "id": 34784,
+      "identifier": "IN IBAMA 10/2012",
+      "title": "Apuração de infrações ambientais no IBAMA (IN IBAMA 10/2012) [NORMA HISTÓRICA — revogada em 29/01/2020, sucedida por IN Conjunta MMA/IBAMA/ICMBio 02/2020 (rito atual: IN IBAMA 19/2023). Aplicável a fatos anteriores a 29/01/2020 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Instrução Normativa IBAMA Nº 10 DE 07/12/2012",
+      "jurisdiction": "federal",
+      "similarity": 0.7124,
+      "chars": 1637
+    },
+    {
+      "id": 34370,
+      "identifier": "Decreto 6.514/2008",
+      "title": "Infrações e sanções administrativas ao meio ambiente (Decreto 6.514/2008)",
+      "section": "Art. 55.",
+      "jurisdiction": "federal",
+      "similarity": 0.7038,
+      "chars": 2905
+    },
+    {
+      "id": 34851,
+      "identifier": "IN IBAMA 10/2012",
+      "title": "Apuração de infrações ambientais no IBAMA (IN IBAMA 10/2012) [NORMA HISTÓRICA — revogada em 29/01/2020, sucedida por IN Conjunta MMA/IBAMA/ICMBio 02/2020 (rito atual: IN IBAMA 19/2023). Aplicável a fatos anteriores a 29/01/2020 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Art. 65. As áreas de fiscalização promoverão sempre que couber:",
+      "jurisdiction": "federal",
+      "similarity": 0.6995,
+      "chars": 1367
+    },
+    {
+      "id": 34919,
+      "identifier": "IN IBAMA 10/2012",
+      "title": "Apuração de infrações ambientais no IBAMA (IN IBAMA 10/2012) [NORMA HISTÓRICA — revogada em 29/01/2020, sucedida por IN Conjunta MMA/IBAMA/ICMBio 02/2020 (rito atual: IN IBAMA 19/2023). Aplicável a fatos anteriores a 29/01/2020 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Art. 133. Os procedimentos previstos nos arts. 92, §§ 1º e 2º, e 127 não impedem o imediato ajuizamento de medidas judic",
+      "jurisdiction": "federal",
+      "similarity": 0.6922,
+      "chars": 2135
+    },
+    {
+      "id": 35021,
+      "identifier": "IN IBAMA 19/2023",
+      "title": "Processo administrativo de apuração de infrações ambientais no IBAMA (IN IBAMA 19/2023)",
+      "section": "Art. 54. Caso o responsável pela infração administrativa ou o detentor do imóvel onde foi praticada a infração seja desc",
+      "jurisdiction": "federal",
+      "similarity": 0.6891,
+      "chars": 627
+    },
+    {
+      "id": 34796,
+      "identifier": "IN IBAMA 10/2012",
+      "title": "Apuração de infrações ambientais no IBAMA (IN IBAMA 10/2012) [NORMA HISTÓRICA — revogada em 29/01/2020, sucedida por IN Conjunta MMA/IBAMA/ICMBio 02/2020 (rito atual: IN IBAMA 19/2023). Aplicável a fatos anteriores a 29/01/2020 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Art. 10. Compete à fiscalização do IBAMA:",
+      "jurisdiction": "federal",
+      "similarity": 0.6886,
+      "chars": 1592
+    },
+    {
+      "id": 3021,
+      "identifier": "IN IBAMA 14/2024",
+      "title": "Instrução Normativa IBAMA 14/2024 — Projeto de Recuperação de Áreas Degradadas (PRAD)",
+      "section": "Art. 87. Esta Instrução Normativa entra em vigor uma semana após a data de sua publicação. (parte 15)",
+      "jurisdiction": "federal",
+      "similarity": 0.688,
+      "chars": 3199
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 272,
+      "chunks_por_mencao_de_terceiros": 136,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 70,
+      "chunks_por_mencao_de_terceiros": 3,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 65,
+      "chunks_por_mencao_de_terceiros": 60,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 19,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 93,
+      "chunks_por_mencao_de_terceiros": 115,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 134,
+      "chunks_por_mencao_de_terceiros": 1100,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 144,
+      "chunks_por_mencao_de_terceiros": 13,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 13,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 10,
+      "chunks_por_mencao_de_terceiros": 36,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "resposta": "Defesa administrativa do Auto de Infração IBAMA nº 484341/D (2007, Fazenda São Jorge, São João d'Aliança/GO):\n\n1. **Aplicação da legislação vigente ao tempo do fato (tempus regit actum)**  \nO auto de infração foi lavrado em 2007, portanto, deve-se aplicar a legislação vigente à época dos fatos, conforme o princípio do tempus regit actum. Assim, para a apuração da infração e aplicação das sanções, deve-se considerar o Decreto 3.179/1999, que vigorava até 22/07/2008, e a Lei nº 9.605/1998, além da legislação correlata vigente em 2007.  \n- Decreto 3.179/1999, art. 2º, §§ 9º a 13 (norma histórica, revogada em 22/07/2008, sucedida pelo Decreto 6.514/2008).  \n- Lei nº 9.605/1998, arts. 70 e 72 (enquadramento constante do julgamento).  \n- Lei nº 4.771/1965 (Código Florestal), art. 2º, inciso c (enquadramento constante do julgamento).  \n- Decreto nº 3.179/1999, art. 2º, incisos II, VII e XI (enquadramento constante do julgamento).\n\n2. **Competência do IBAMA e procedimentos administrativos**  \nA fiscalização e autuação foram realizadas pelo IBAMA, órgão competente para autuar infrações ambientais federais, conforme o Decreto 3.179/1999, art. 2º, VIII (competência da autoridade do órgão ambiental integrante do SISNAMA).  \n- IN IBAMA 10/2012 (norma histórica aplicável ao período), art. 10, que disciplina as competências da fiscalização do IBAMA, incluindo a lavratura do auto de infração e comunicação aos órgãos competentes.\n\n3. **Embargo da área e medidas cautelares**  \nO embargo da área foi lavrado com base no art. 18, §1º do Decreto 6.514/2008, que entrou em vigor em 22/07/2008, posterior à autuação. Contudo, o embargo é medida cautelar prevista para proteger o meio ambiente, e sua aplicação é legítima para impedir a continuidade da atividade lesiva, conforme o § 11 do art. 2º do Decreto 3.179/1999 (norma histórica), que determina o embargo imediato em casos de desmatamento ilegal.  \n- Decreto 3.179/1999, art. 2º, § 11 (embargo concomitante à lavratura do auto de infração).  \n- Decreto 6.514/2008, art. 18, § 1º (base para embargo lavrado posteriormente).\n\n4. **Apresentação e prorrogação do PRAD (Projeto de Recuperação de Áreas Degradadas)**  \nO autuado apresentou PRAD e obteve sucessivas prorrogações entre 2008 e 2017, demonstrando boa-fé e compromisso com a recuperação ambiental da área degradada.  \n- IN IBAMA 14/2024 (norma vigente para PRAD, embora posterior, pode ser usada para demonstrar a importância da recuperação ambiental e o acompanhamento técnico).  \n- A defesa pode argumentar que a apresentação do PRAD e o cumprimento das etapas de recuperação atenuam a penalidade e demonstram a reparação do dano ambiental, conforme o disposto no Decreto 3.179/1999, art. 2º, § 10 (obrigação de reparação do dano independentemente de culpa).\n\n5. **Adesão ao REFIZ (Programa de Recuperação Fiscal)**  \nO requerimento de adesão ao REFIZ com base no art. 2º da MPV 780/2017 demonstra a intenção do autuado em regularizar a situação fiscal e ambiental, o que pode ser considerado para fins de parcelamento e redução de multas, conforme previsão legal da MPV 780/2017 (norma não detalhada no corpus, mas mencionada).  \n- FALTA base normativa detalhada no corpus para fundamentar especificamente a adesão ao REFIZ.\n\n6. **Fundamentação jurídica do enquadramento**  \n- Lei nº 9.605/1998, art. 70 c/c art. 72: define as infrações e sanções administrativas ambientais, incluindo a supressão ilegal de vegetação em APP.  \n- Decreto 3.179/1999, art. 2º, incisos II, VII e XI: detalha as infrações e sanções aplicáveis, incluindo embargo e multa.  \n- Lei nº 4.771/1965, art. 2º, inciso c: define as Áreas de Preservação Permanente (APP) e a proteção legal conferida a elas.\n\n7. **Princípios e garantias processuais**  \n- IN IBAMA 10/2012, arts. 65 e 133: regulam a comunicação da autuação aos órgãos competentes e o direito à defesa administrativa, bem como a possibilidade de medidas judiciais paralelas sem suspender o processo administrativo.  \n- A defesa deve requerer o direito ao contraditório e ampla defesa, com base na legislação vigente e na IN IBAMA 10/2012.\n\n---\n\n**Resumo da fundamentação jurídica da defesa administrativa:**\n\n- Aplicação do Decreto 3.179/1999 (art. 2º, §§ 9º a 13) e da Lei nº 9.605/1998 (arts. 70 e 72) para fatos ocorridos em 2007 (tempus regit actum).  \n- Reconhecimento da competência do IBAMA para autuação e fiscalização (Decreto 3.179/1999, art. 2º, VIII; IN IBAMA 10/2012, art. 10).  \n- Validade do embargo da área conforme Decreto 3.179/1999, art. 2º, § 11, e Decreto 6.514/2008, art. 18, § 1º.  \n- Apresentação e cumprimento do PRAD como demonstração de reparação do dano ambiental (Decreto 3.179/1999, art. 2º, § 10; IN IBAMA 14/2024).  \n- Pedido de adesão ao REFIZ (MPV 780/2017) para regularização fiscal e ambiental (falta base normativa detalhada no corpus).  \n- Direito ao contraditório e ampla defesa, com observância dos procedimentos da IN IBAMA 10/2012, arts. 65 e 133.  \n- Enquadramento legal correto conforme Lei nº 4.771/1965, art. 2º, inciso c, e demais dispositivos citados.\n\n---\n\n**Observação:** A defesa deve destacar que a legislação aplicável é a vigente à época da infração (Decreto 3.179/1999), que o autuado adotou medidas de recuperação ambiental (PRAD), e que a adesão ao REFIZ demonstra boa-fé e intenção de regularização, requerendo a consideração dessas circunstâncias para atenuação das penalidades.",
+  "custo_usd": 0.003042,
+  "tokens": {
+    "in": 5281,
+    "out": 1541
+  }
+}
