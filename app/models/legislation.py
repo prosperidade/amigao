@@ -13,6 +13,7 @@ import enum
 
 from sqlalchemy import (
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -75,7 +76,24 @@ class LegislationDocument(Base):
 
     # Datas
     effective_date = Column(DateTime(timezone=True), nullable=True)
+    # `revoked_at` = carimbo de quando NOS superamos este REGISTRO (o ingestor
+    # marca a versao antiga do arquivo ao inserir uma nova). Nao confundir com
+    # `vigencia_fim`, que e a revogacao da NORMA pelo legislador. Ver ADR-037.
     revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Vigencia da NORMA (ADR-037) — o auto de 2007 do caso 15 se defende com o
+    # Decreto 3.179/1999 e a Lei 4.771/1965, revogados hoje e aplicaveis ao fato.
+    # NULL em `vigencia_fim` = vigente. Documento antigo com tudo NULL segue
+    # tratado como vigente (aditivo).
+    vigencia_inicio = Column(Date, nullable=True)
+    vigencia_fim = Column(Date, nullable=True, index=True)
+    sucessora_id = Column(
+        Integer,
+        ForeignKey("legislation_documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Sucessora que nao esta no corpus — nomea-la e melhor que perde-la.
+    sucessora_ref = Column(String(255), nullable=True)
 
     # Armazenamento
     url = Column(String, nullable=True)

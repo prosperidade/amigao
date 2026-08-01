@@ -408,7 +408,67 @@ correta e estável, e a chave persistida fica dessincronizada da fórmula atual.
 Baixo impacto — em produção há 1 rota com 11 passos. **Origem:** item 4 da
 validação Isis 30/07.
 
-**PRÓXIMO LIVRE: 95.**
+### Abertas pelo corpus federal — pacote A (31/07, `feat/corpus-federal-defesa`)
+
+**95. Corpus antigo com mojibake (`U+FFFD`).** O planalto.gov.br responde
+`Content-Type: text/html` **sem charset**; o httpx assume utf-8 sobre bytes
+ISO-8859-1. Os diplomas federais ingeridos em abril entraram com todo acento
+corrompido — o corpus guarda `"Art. 3� O �rg�o ... aplicar� as seguintes
+san��es"` no lugar de `"Art. 3º O órgão ... aplicará as seguintes sanções"`.
+Passou três meses despercebido porque **texto corrompido não levanta exceção**:
+só degrada a citação e o embedding, em silêncio. **Corrigido para ingestões
+novas** (`scripts/ingest_legislation.py:_decodificar`, com canário
+`verificar_mojibake` que recusa acima de 0,05%); os documentos **já gravados não
+foram reprocessados**. **O que destrava:** reingerir os 7 federais de origem
+Planalto (ids 16–25) com o mesmo script — custo de embedding desprezível.
+**Origem:** ADR-037.
+
+**96. Espaço não-quebrável em 998 chunks do corpus antigo.** O Planalto separa
+"Art." do número com `U+00A0`. O texto *parece* `"Art. 18."` e não casa com
+`"Art. 18."` em busca nenhuma — nem na nossa (`chunk_text LIKE '%Art. 18.%'`
+devolvia 0 linhas para um artigo que estava lá), nem no Ctrl+F de quem lê a peça
+pronta. `sanitize_text` passou a normalizar; o já gravado, não. Fecha junto com
+a #95 (mesma reingestão). **Origem:** ADR-037.
+
+**97. Proveniência não tem campo próprio no modelo.** Auditoria de 31/07: **54
+dos 64 documentos (97,3% do texto do corpus) não têm URL** — só `file_path`
+apontando para PDF de disco ou `.md` compilado, e nenhum campo diz se a fonte é
+oficial. Os compêndios estaduais (`MT-NUC01`, 3,0 M chars) não registram quem os
+compilou nem de que fonte. O pacote A grava `fonte_origem`/`fonte_oficial`/
+`fonte_url` em `extra_metadata`, mas isso é convenção, não contrato. **O que
+destrava:** colunas `fonte_origem TEXT`, `fonte_oficial BOOLEAN NOT NULL DEFAULT
+false` e `fonte_conferida_em DATE` em `legislation_documents`, com backfill a
+partir de `url`/`file_path` e `fonte_oficial=false` para tudo que veio de disco.
+Enquanto não existir, o selo do ADR-035 não distingue "fonte oficial" de "PDF que
+estava numa pasta". **Origem:** item 0 da medição de 31/07.
+
+**98. IN IBAMA 10/2012 ingerida de fonte não-oficial.** O portal do IBAMA
+responde 403 a cliente não-browser e o DOU não resolveu para esta norma.
+Ingerida do LegisWeb, marcada `fonte_oficial: false`, com `validation_keyword`
+como guarda — necessária: o mirror óbvio (`legisweb id=245167`) servia uma
+**resolução da SEFAZ-AM**, e a guarda pegou. **Pedido à Isis:** PDF oficial da
+IN 10/2012; ao chegar, reingerir e o metadado vira oficial. **Origem:** ADR-037.
+
+**99. Pacotes B e C do corpus federal — não executar sem decisão.** **B (núcleo
+federal ausente):** ICMBio, ANA, CONAMA de fauna/hídrico/UC, Lei 11.428 (Mata
+Atlântica) — ~12 documentos, ~540 chunks, ~US$ 0,003. **C (rito IBAMA
+completo):** INs de embargo, PRAD, CTF, conversão de multa — ~10 documentos,
+~540 chunks, ~US$ 0,003. O custo de embedding é irrelevante nos dois; o custo
+real é **curadoria humana** da lista de URLs e conferência de vigência.
+**Origem:** medição de 31/07.
+
+**Encaixe com a #85 (vigia de revogação).** O pacote A entrega a metade de baixo
+do #85: o lugar onde a revogação passa a morar (`vigencia_fim` +
+`sucessora_id`/`sucessora_ref`), o rótulo que ela produz no dado e o recorte
+temporal na busca (`search(vigente_em=...)`). Falta ao #85 só o **gatilho** —
+quem descobre a revogação e escreve nesses campos; nenhuma modelagem nova é
+necessária. **Uma consequência de projeto a não esquecer:** como o rótulo é
+gravado no `title` do chunk **na indexação**, marcar uma norma como revogada
+exige **reindexar** seus chunks — o UPDATE na tabela sozinho não muda o que
+chega ao modelo. O vigia precisa disparar `index_legislation_document` para o
+documento que acabou de marcar.
+
+**PRÓXIMO LIVRE: 100.**
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
