@@ -50,9 +50,7 @@ class Vigencia:
         """
         if self.inicio and quando < self.inicio:
             return False
-        if self.fim and quando > self.fim:
-            return False
-        return True
+        return not (self.fim and quando > self.fim)
 
 
 def _br(quando: date) -> str:

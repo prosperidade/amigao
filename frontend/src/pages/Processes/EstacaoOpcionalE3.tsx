@@ -16,6 +16,8 @@
  * um arquivo morto no caso.
  */
 
+import { deveExibirEstacaoOpcional } from './regraEstacaoOpcionalE3';
+
 interface Props {
   /** Etapa que o consultor está visualizando pelo stepper (null = a atual). */
   viewingStage: string | null;
@@ -23,23 +25,6 @@ interface Props {
   currentStage: string;
   /** Leva ao upload à mão (aba Documentos). */
   onAnexar: () => void;
-}
-
-export const ETAPA_COLETA = 'coleta_documental';
-
-/**
- * A faixa aparece quando o consultor olha a Coleta Documental e ela não é a
- * etapa corrente — pulada (o caso já passou) ou ainda não alcançada. Nos dois
- * casos a mensagem é verdadeira: a estação é opcional e está aberta.
- *
- * Quando a E3 É a etapa corrente, o caso está de fato coletando documentos e a
- * tela normal da etapa manda — não há por que chamá-la de opcional ali.
- */
-export function deveExibirEstacaoOpcional(
-  viewingStage: string | null,
-  currentStage: string,
-): boolean {
-  return viewingStage === ETAPA_COLETA && currentStage !== ETAPA_COLETA;
 }
 
 export default function EstacaoOpcionalE3({ viewingStage, currentStage, onAnexar }: Props) {

@@ -4,7 +4,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import EstacaoOpcionalE3, { deveExibirEstacaoOpcional } from './EstacaoOpcionalE3';
+import EstacaoOpcionalE3 from './EstacaoOpcionalE3';
+import { deveExibirEstacaoOpcional } from './regraEstacaoOpcionalE3';
 
 /**
  * Item 12 da validação da Isis (30/07) — "E3 como estação opcional".

@@ -21,7 +21,7 @@ from app.models.macroetapa import MACROETAPA_AGENT_CHAIN, Macroetapa
 
 def test_os_dois_mapas_dizem_a_mesma_coisa():
     derivado = {e.value: c for e, c in MACROETAPA_AGENT_CHAIN.items()}
-    assert MACROETAPA_CHAINS == derivado
+    assert derivado == MACROETAPA_CHAINS
 
 
 def test_toda_macroetapa_esta_no_mapa():
