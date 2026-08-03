@@ -377,6 +377,24 @@ def search(
         LIMIT :limit
         """
     )
+    # O índice de vetor é IVFFlat — busca APROXIMADA. Com o `probes=1` que o
+    # pgvector traz de fábrica, ela varre ~1% dos vetores e devolve vizinhos que
+    # não são os mais próximos, EM SILÊNCIO — porque sempre devolve alguma coisa.
+    # Medido em 03/08 na pergunta de retificação de CAR: o trecho mais similar do
+    # corpus (IN MMA 02/2014, similaridade 0,7286) não estava entre os 8
+    # devolvidos, e o 8º devolvido tinha 0,3996. Não era o corpus que havia
+    # piorado — era o índice que não estava olhando.
+    from app.core.config import settings  # noqa: PLC0415
+
+    _probes = int(getattr(settings, "RAG_IVFFLAT_PROBES", 10) or 0)
+    if _probes > 0:
+        try:
+            # Inteiro interpolado (não bind param): `SET LOCAL` não aceita
+            # parâmetro. O valor vem de settings e é forçado a int acima.
+            session.execute(text(f"SET LOCAL ivfflat.probes = {_probes:d}"))
+        except Exception as exc:  # noqa: BLE001 — banco sem pgvector (testes)
+            logger.debug("knowledge.search: ivfflat.probes não aplicável (%s)", exc)
+
     rows = session.execute(sql, params).all()
 
     out: list[SearchResult] = []

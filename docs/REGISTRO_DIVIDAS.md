@@ -701,7 +701,35 @@ Efeito colateral aceito: uma rota legada que de fato ficou para trás não avisa
 **O que destrava:** regenerar a rota desses casos quando o consultor passar por
 eles — a versão anterior fica guardada (#126). **Origem:** ADR-039.
 
-**PRÓXIMO LIVRE: 113.**
+### Aberta pelo fix do recall vetorial (03/08, `fix/rag-ivfflat-probes`)
+
+**113. Reavaliar `lists`/`probes` do índice vetorial — GATILHO: quando os chunks
+DOBRAREM.** `probes=10` é o remédio para o índice de **hoje**:
+`ix_knowledge_catalog_embedding_cosine`, IVFFlat com `lists=100`, sobre ~31 mil
+chunks. Os dois parâmetros são acoplados — `probes` só faz sentido em relação a
+`lists`, e `lists` só faz sentido em relação ao número de vetores. Crescer o
+corpus sem revisitar os dois traz de volta o mesmo modo de falha.
+
+**Gatilho objetivo, para não virar "revisar um dia":** quando
+`select count(*) from knowledge_catalog` passar de **~62 mil** (o dobro de agora),
+reavaliar `lists` e `probes` **juntos**, medindo recall com a mesma régua usada
+em 03/08 — comparar o top-k devolvido pela busca com o top-k exato obtido por
+varredura sem índice.
+
+**Alternativa a avaliar nessa hora: trocar IVFFlat por HNSW.** O HNSW não tem
+este modo de falha: não existe `probes` para esquecer de ajustar, o recall é
+consistentemente melhor e a latência é comparável na nossa escala. O custo da
+troca é uma reindexação — que **não gasta API**, porque não é reembedding; os
+vetores já estão gravados. Leva minutos.
+
+**Por que adiar não acumula juros:** o `probes=10` já elimina a perda medida, e a
+migração para HNSW não fica mais cara por esperar. O risco de adiar é só um:
+esquecer. Por isso o gatilho está escrito aqui em número, não em intenção.
+
+**Origem:** medição do bloco 2, 03/08 — o defeito apareceu disfarçado de
+regressão de corpus.
+
+**PRÓXIMO LIVRE: 114.**
 
 ---
 
