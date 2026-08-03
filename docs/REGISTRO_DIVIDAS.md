@@ -541,7 +541,7 @@ articulado. **Nada foi reingerido e nada é afirmado além do número.**
 
 ### Abertas pela validação da Isis de 02/08 (`fix/validacao-02-08`)
 
-**102. A Rota da E5 não lê o diagnóstico técnico nem as ações da E4.** Pergunta
+**102. A Rota da E5 não lê o diagnóstico técnico nem as ações da E4.** ✅ **FECHADA em 03/08** (`feat/rota-do-diagnostico`, ADR-038) — ver o fecho no fim desta entrada. Pergunta
 literal da consultora: *"a rota traçada na E5 se direciona pelas ações definidas
 na E4?"* **Não** — e nem pelo diagnóstico. Medido: `materialize_rota`
 (`app/services/rota_materializer.py:480`) monta um `AgentContext` **sem
@@ -604,7 +604,47 @@ worker. **O que destrava:** fixar `@csstools/css-calc` numa versão CJS via
 `overrides` no `package.json`, ou migrar o pool do vitest para `threads`.
 **Origem:** medição de 02/08.
 
-**PRÓXIMO LIVRE: 106.**
+> **✅ FECHAMENTO DA #102 (03/08, `feat/rota-do-diagnostico` · ADR-038).** O
+> insumo da rota passou a ser o diagnóstico ASSINADO + as ações triadas
+> (`tipo_triagem ∈ {tarefa, escopo}`), via `app/services/rota_contexto.py`.
+> O filtro de quais achados dirigem a rota reusa `muda_rota_regulatoria`, que já
+> existia no catálogo e na `RegulatoryIssue` e **ninguém lia** — hierarquia
+> decisão humana > override do caso > default do catálogo. `RotaPasso` ganhou
+> `origem_issue_id`/`origem_acao_id` (SET NULL), fechando a corrente
+> achado → ação → passo → item da proposta. `initial_diagnosis` foi rebaixado a
+> "relato do cliente — não conferido". Sem diagnóstico assinado, a geração é
+> bloqueada com 409 e frase acionável. Diagnóstico que anda depois da rota
+> **avisa**, nunca regenera.
+
+### Abertas pela rota fundamentada (03/08, `feat/rota-do-diagnostico`)
+
+**106. Proveniência do passo depende do LLM declarar `origem_refs`.** O prompt
+lista os achados/ações com rótulos (`ACHADO-<id>`, `ACAO-<id>`) e exige que cada
+etapa devolva de quais nasceu. Referência que não casa com o que existe no caso
+é **descartada com log** (nunca inventada), mas referência OMITIDA produz passo
+sem proveniência — silenciosamente. Hoje não há métrica de quantos passos saem
+sem origem. **O que destrava:** contar `passos_sem_origem` no log de
+`rota_materialized` e, se a taxa for alta, considerar um segundo passe
+determinístico que case passo↔achado por similaridade de título (com o consultor
+confirmando). **Origem:** ADR-038, seção "Consequências".
+
+**107. Achado que dirige a rota pode ficar sem passo.** O prompt pede que cada
+achado seja endereçado; pedido não é garantia. O aviso de reconciliação
+(`fundamento_mudou_desde_a_rota`) pega o caso, mas só DEPOIS de a rota existir e
+só na leitura da aba — não há verificação no momento da geração. **O que
+destrava:** ao materializar, comparar os achados que dirigem contra os
+endereçados e devolver a diferença no `RotaMaterializeOut`, como o
+`orgaos_corrigidos` já faz. **Origem:** ADR-038, seção "Consequências".
+
+**108. Rotas legadas nunca terão proveniência.** Passos gerados antes da ADR-038
+nasceram de um contexto sem achados nem ações; backfill seria inventar origem.
+Ficam NULL — e por isso o aviso de reconciliação se cala quando NENHUM passo da
+rota tem origem (senão todo caso antigo acusaria "desatualizada" para sempre).
+Efeito colateral aceito: uma rota legada que de fato ficou para trás não avisa.
+**O que destrava:** regenerar a rota desses casos quando o consultor passar por
+eles — a versão anterior fica guardada (#126). **Origem:** ADR-038.
+
+**PRÓXIMO LIVRE: 109.**
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
