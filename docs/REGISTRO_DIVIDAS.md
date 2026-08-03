@@ -562,7 +562,8 @@ ser rastreável até o passivo. **Muda desenho — exige ADR e decisão do Andr�
 antes de implementar.** Reportado sem implementar, por instrução. **Origem:**
 item 0 da validação de 02/08.
 
-**103. Não existe transcrição de áudio em lugar nenhum do sistema.** A validação
+**103. ✅ FECHADA em 03/08** (`feat/transcricao-audio` · ADR-060 · ver faixa
+200-299 abaixo). **Não existe transcrição de áudio em lugar nenhum do sistema.** A validação
 de 02/08 pedia áudio na E2; ao medir, descobriu-se que o pipeline que se supunha
 existir na E1 também não existe. `IntakeDraft.audio_url` é gravado e **não é
 lido por serviço algum**; a menção a Whisper em `app/schemas/intake.py:101` é
@@ -573,7 +574,9 @@ destrava:** um worker de transcrição (Whisper via `ai_gateway`) que persista o
 texto em `Document.extracted_text`, e daí o extrator já flui. **Origem:** item 4
 da validação de 02/08.
 
-**104. #91 não pôde ser fechada — falta a leitura em produção.** O relato
+**104. ✅ FECHADA em 03/08** — a leitura em produção foi executada; a hipótese se
+confirmou e apareceu uma segunda causa (dívida #200). Detalhe na faixa 200-299
+abaixo. **#91 não pôde ser fechada — falta a leitura em produção.** O relato
 ("aceitei matrícula, CCIR e ITR e só NIRF/CCIR/INCRA pousaram") foi atacado pela
 causa provável mais forte encontrada no código: `divergencias_devolvidas` voltava
 na resposta e **nunca era renderizada** (corrigido nesta rodada). Mas isso é
@@ -699,6 +702,92 @@ Efeito colateral aceito: uma rota legada que de fato ficou para trás não avisa
 eles — a versão anterior fica guardada (#126). **Origem:** ADR-039.
 
 **PRÓXIMO LIVRE: 113.**
+
+---
+
+## Faixa 200-299 — transcrição de áudio (`feat/transcricao-audio`, 03/08)
+
+> **Convenção nova de numeração.** Esta frente numera dívidas na faixa
+> **200-299** e ADRs a partir de **060**. Motivo: dois agentes escrevendo no mesmo
+> `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
+> livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
+> vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 206.**
+
+> **✅ FECHAMENTO DA #103 (03/08, `feat/transcricao-audio` · ADR-060).** O sistema
+> passou a ouvir. Áudio virou "documento cuja leitura é a transcrição": Whisper
+> via `ai_gateway.transcribe()` (LiteLLM, modelo por env, BYOK respeitado), texto
+> em `Document.extracted_text` — e daí herdando de graça a entrada no diagnóstico,
+> a fonte clicável, a busca, o cache SHA-256, o budget guard e o `AIJob`. Estado
+> visível na tela nos três valores: transcrevendo / pronta (com o texto a um
+> clique) / falhou **com o motivo escrito**, mais botão de tentar de novo. Ao
+> medir apareceu um terceiro furo além dos dois previstos na dívida: a porta de
+> upload do caso recusava `.m4a`/`.mp3` com **400** porque `ALLOWED_EXTENSIONS`
+> nunca ganhou as extensões de áudio — o seletor "🎙️ Áudio de reunião/ligação"
+> estava na tela e não funcionava. Corrigido junto.
+
+> **✅ FECHAMENTO DA #104 (03/08).** A leitura em produção foi executada nesta
+> sessão (Management API do Supabase, `SELECT` no `audit_logs` do processo 16). A
+> hipótese atacada pela #91 se **confirmou**, e havia uma segunda causa junto —
+> ver #200. Detalhe da medição: no lote de 02/08 15:19 a consolidação gravou
+> **zero** campos; 3 voltaram como divergência devolvida e 3 saíram em
+> `ignorados`. Nenhum `consolidar_falhou` em todo o histórico do caso — o
+> caminho do 500 não era o vetor.
+
+**200. `ignorados` mostra o campo descartado, mas não o motivo.** Medido no
+processo 16 em produção (a leitura que fechou a #104). Os três campos que saíram
+em `ignorados` — `imovel.rat_protocolo`, `imovel.modulos_fiscais`,
+`imovel.regulatory_issues` — caem em `staging_consolidation.py:718`, o **único**
+`ignorados.append` que grava só o identificador, sem sufixo de motivo (os outros
+quatro explicam: "sem coluna na base", "valor incoercível", etc.). A tela mostra
+`imovel.rat_protocolo` e o consultor não tem como saber que aquilo significa
+*"este campo não tem destino na base"*. Pior: `rat_protocolo`, `rat_data_emissao`
+e `modulos_fiscais` são campos que a extração produz de verdade e a base não tem
+onde guardar. **O que destrava:** (a) sufixo de motivo nessa linha, como as
+outras quatro já têm; (b) decidir se esses campos ganham coluna ou se a extração
+deve parar de emiti-los. **Origem:** leitura de produção de 03/08 (#104).
+
+**201. Áudio acima de 25 MB não é transcrito.** O provedor recusa arquivos
+maiores; uma reunião de 30 min em WAV, ou em MP3 de bitrate alto, passa disso. A
+task falha com motivo acionável ("divida a gravação ou reenvie em mono, 64 kbps")
+em vez de silêncio — mas o consultor não deveria precisar saber o que é bitrate.
+**O que destrava:** segmentar o áudio no worker (ffmpeg/pydub) e concatenar as
+transcrições, mesmo padrão da rasterização por página no OCR multipágina. Custa
+adicionar `ffmpeg` à imagem Docker (Dockerfile + build do Render), que é mudança
+de infra e ficou fora desta frente. **Origem:** ADR-060.
+
+**202. Consultor BYOK sem chave OpenAI fica sem transcrição.** Dos quatro
+providers suportados, só a OpenAI expõe endpoint de transcrição. Quem configurou
+só Gemini/Anthropic/DeepSeek em Configurações > IA recebe erro explícito
+("Transcrição de áudio exige chave OpenAI") — honesto, e ainda assim uma função a
+menos para ele. **O que destrava:** rota alternativa via Gemini, que aceita áudio
+como entrada multimodal em `generateContent` e cobra por tokens de áudio (~32
+tokens/segundo) em vez de por minuto. Exige segunda implementação no gateway, com
+contrato de custo diferente. **Origem:** ADR-060.
+
+**203. Resumo estruturado da reunião está pronto e desligado.** Decisão 3a da
+Isis, pendente: transcrição bruta ou transcrição + resumo (o que o cliente pediu ·
+o que prometeu enviar · prazos · decisões). Esta rodada entrega a bruta; o resumo
+está implementado e testado atrás de `AUDIO_TRANSCRICAO_RESUMO_ENABLED=false`.
+**O que destrava:** a resposta dela — vira troca de variável, não sprint. Se
+ligar, medir o custo real do acréscimo (uma chamada de LLM sobre um texto longo)
+antes de deixar ligado por default. **Origem:** ADR-060.
+
+**204. Visibilidade "material interno" só afeta o portal do cliente.** Decisão 3b
+implementada no default conservador: `Document.is_internal` esconde o documento da
+listagem do portal, e nada mais. O portal está congelado (ADR-009), então na
+prática a marcação hoje é sobretudo um **rótulo** para o consultor. **O que
+destrava:** definir com a Isis se "interno" deve também sair do dossiê gerado e
+das peças entregues ao cliente — e, se sim, aplicar em `dossier.py` e nos
+geradores de proposta/contrato. **Origem:** ADR-060.
+
+**205. Transcrição não é cronometrada por falante nem por trecho.** O texto sai
+corrido, sem marcas de tempo e sem separação de quem falou. Para achar "onde ele
+disse isso" numa reunião de 30 min, o consultor lê tudo. O Whisper devolve
+`segments` com timestamps no `verbose_json` — hoje descartados. **O que
+destrava:** persistir os segmentos e usá-los para ancorar a citação do
+diagnóstico num minuto do áudio, fechando a fonte clicável até o ponto da fala.
+**Origem:** ADR-060.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 

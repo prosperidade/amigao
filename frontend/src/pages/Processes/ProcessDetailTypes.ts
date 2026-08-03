@@ -51,6 +51,17 @@ export interface Document {
   // Fase 1 (N1, item 3) — nota de processamento ("recebido, não processado
   // (tipo) — revisar: <motivo>"). Null quando o staging cadastral gravou OK.
   extraction_status?: string | null;
+  // Estado da LEITURA do documento — OCR de PDF ou transcrição de áudio
+  // (ADR-060). 'pending' | 'processing' | 'done' | 'failed' | 'not_required'.
+  ocr_status?: string | null;
+  // Motivo legível da última falha de leitura. Falha sem motivo na tela é
+  // silêncio com outro nome.
+  ocr_error?: string | null;
+  // Já existe texto lido? A tela decide se oferece "ver o texto" sem carregar o
+  // conteúdo inteiro na listagem.
+  tem_texto?: boolean;
+  // Material interno do escritório — oculto no portal do cliente (ADR-060).
+  is_internal?: boolean;
   created_at: string;
 }
 

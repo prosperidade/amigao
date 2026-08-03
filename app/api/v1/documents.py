@@ -18,6 +18,8 @@ from app.repositories import DocumentRepository, ProcessRepository
 from app.schemas.document import (
     DocumentConfirmRequest,
     DocumentResponse,
+    DocumentTextResponse,
+    DocumentUpdateRequest,
     DocumentUploadUrlRequest,
     DocumentUploadUrlResponse,
 )
@@ -32,6 +34,12 @@ ALLOWED_EXTENSIONS = {
     "zip", "rar", "7z",
     "dwg", "dxf", "shp", "kml", "kmz", "geojson",
     "txt", "rtf", "odt", "ods",
+    # Áudio de reunião/ligação (dívida #103 · ADR-060). O seletor "🎙️ Áudio de
+    # reunião/ligação" existia na tela do caso desde a rodada anterior, mas a
+    # allowlist do backend nunca ganhou as extensões — o upload morria com
+    # 400 "Extensão '.m4a' não permitida" antes de qualquer transcrição.
+    "mp3", "m4a", "wav", "ogg", "oga", "opus", "webm", "flac", "aac",
+    "mpga", "amr", "wma", "3gp", "aiff", "caf",
 }
 
 MIME_EXTENSION_MAP: dict[str, set[str]] = {
@@ -103,11 +111,20 @@ def list_documents(
     effective_client_id = access_context.client_id if access_context.client_id else client_id
     effective_property_id = None if access_context.client_id else property_id
 
-    return doc_repo.list_scoped(
+    docs = doc_repo.list_scoped(
         client_id=effective_client_id,
         process_id=process_id,
         property_id=effective_property_id,
     )
+
+    # Visibilidade (ADR-060): "material interno" é do escritório. O consultor vê
+    # tudo — inclusive o que ele mesmo marcou como interno, com o rótulo na tela.
+    # O portal do cliente não. Filtrar aqui, e não no repositório, mantém a regra
+    # ao lado de quem conhece o perfil de quem perguntou.
+    if access_context.is_client_portal:
+        docs = [d for d in docs if not getattr(d, "is_internal", False)]
+
+    return docs
 
 
 @router.post("/upload-url", response_model=DocumentUploadUrlResponse)
@@ -258,6 +275,33 @@ def confirm_upload(
         )
         return db_doc
 
+    # Áudio tem leitura PRÓPRIA: transcrição (dívida #103 · ADR-060). A gravação da
+    # reunião é fonte primária do caso — o que o cliente contou, o que prometeu
+    # enviar, o que ficou combinado. Vira texto em `Document.extracted_text` e daí
+    # herda tudo que documento já tem: entrada no diagnóstico, fonte clicável, busca.
+    from app.services.audio_files import is_audio  # noqa: PLC0415
+    if is_audio(body.filename, body.content_type, body.document_type):
+        try:
+            from app.workers.audio_tasks import transcribe_audio_document  # noqa: PLC0415
+            transcribe_audio_document.delay(
+                doc_id=db_doc.id,
+                tenant_id=access_context.tenant_id,
+                user_id=access_context.user.id,
+            )
+            logger.info("Pipeline de transcrição enfileirado para document_id=%s", db_doc.id)
+        except Exception as exc:
+            logger.warning(
+                "Falha ao enfileirar transcrição para document_id=%s: %s", db_doc.id, exc
+            )
+        record_document_upload(
+            "client_portal" if access_context.is_client_portal else "internal", "success"
+        )
+        logger.info(
+            "Documento #%s confirmado (áudio) | tenant=%s | '%s'",
+            db_doc.id, access_context.tenant_id, body.filename,
+        )
+        return db_doc
+
     # Pipeline de extração textual. PDFs passam pelo OCR cascata (pypdf → Gemini →
     # OpenAI Vision) que persiste `Document.extracted_text` antes de despachar o
     # agente extrator. Outros formatos extraíveis (imagens) caem direto no extrator
@@ -312,26 +356,104 @@ def get_download_url(
     return {"download_url": url, "expires_in": 300}
 
 
+@router.get("/{document_id}/text", response_model=DocumentTextResponse)
+def get_document_text(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Texto lido do documento — OCR de PDF ou transcrição de áudio (ADR-060).
+
+    Rota separada da listagem de propósito: transcrição de reunião de 30 min tem
+    dezenas de milhares de caracteres, e carregar isso em toda listagem de
+    documentos pagaria o custo para quem só queria ver os nomes dos arquivos.
+
+    Interna apenas. O texto de uma reunião pode conter o que o cliente disse em
+    conversa; abrir isso ao portal seria decisão de produto, não detalhe de rota.
+    """
+    from app.services.audio_files import TRANSCRICAO_ORIGEM_LABEL  # noqa: PLC0415
+
+    doc_repo = DocumentRepository(db, current_user.tenant_id)
+    doc = doc_repo.get_scoped(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    texto = doc.extracted_text or ""
+    return DocumentTextResponse(
+        document_id=doc.id,
+        filename=doc.original_file_name or doc.filename,
+        ocr_status=doc.ocr_status.value if doc.ocr_status else None,
+        ocr_error=doc.ocr_error,
+        eh_transcricao=TRANSCRICAO_ORIGEM_LABEL in texto,
+        chars=len(texto),
+        text=texto or None,
+    )
+
+
+@router.patch("/{document_id}", response_model=DocumentResponse)
+def update_document(
+    document_id: int,
+    body: DocumentUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Edita campos do documento. Hoje: visibilidade (ADR-060, decisão 3b).
+
+    Marcar/desmarcar "material interno" é decisão do consultor e fica registrada
+    no audit do documento — o cliente deixar de ver uma peça do próprio caso não
+    pode ser um evento sem rastro.
+    """
+    doc_repo = DocumentRepository(db, current_user.tenant_id)
+    doc = doc_repo.get_scoped(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    if body.is_internal is not None and bool(doc.is_internal) != body.is_internal:
+        doc.is_internal = body.is_internal
+        db.add(doc)
+        doc_repo.add_audit(
+            user_id=current_user.id,
+            document=doc,
+            action="visibility_changed",
+            details=(
+                "Marcado como material interno (oculto no portal do cliente)"
+                if body.is_internal
+                else "Desmarcado como material interno (visível no portal do cliente)"
+            ),
+        )
+        db.commit()
+        db.refresh(doc)
+
+    return doc
+
+
 @router.post("/{document_id}/reprocess-ocr")
 def reprocess_ocr(
     document_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ):
-    """Re-dispara o OCR de um documento (failed ou preso). Funciona para docs de
+    """Re-dispara a LEITURA de um documento (failed ou preso). Funciona para docs de
     PROCESSO e de RASCUNHO (intake_draft) — o consultor não fica preso a um
     `failed` permanente após falha transitória (ex.: storage/region). force=True
-    ignora cache e re-baixa do storage."""
+    ignora cache e re-baixa do storage.
+
+    PDF → OCR; áudio → transcrição (ADR-060). Mesma rota, mesmo botão na tela: do
+    ponto de vista do consultor a ação é uma só, "tentar ler de novo".
+    """
     from app.models.document import OcrStatus  # noqa: PLC0415
+    from app.services.audio_files import is_audio  # noqa: PLC0415
 
     doc_repo = DocumentRepository(db, current_user.tenant_id)
     doc = doc_repo.get_scoped(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado")
-    if (doc.content_type or "") != "application/pdf":
+
+    ehaudio = is_audio(doc.filename, doc.mime_type or doc.content_type, doc.document_type)
+    if not ehaudio and (doc.content_type or "") != "application/pdf":
         raise HTTPException(
             status_code=422,
-            detail="Reprocesso de OCR disponível apenas para PDFs.",
+            detail="Reprocesso de leitura disponível apenas para PDFs e áudios.",
         )
 
     doc.ocr_status = OcrStatus.processing
@@ -341,20 +463,30 @@ def reprocess_ocr(
 
     task = None
     try:
-        from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
-        task = ocr_then_extract.delay(
-            doc_id=doc.id,
-            tenant_id=current_user.tenant_id,
-            user_id=current_user.id,
-            draft_id=doc.intake_draft_id,
-            force=True,
-        )
+        if ehaudio:
+            from app.workers.audio_tasks import transcribe_audio_document  # noqa: PLC0415
+            task = transcribe_audio_document.delay(
+                doc_id=doc.id,
+                tenant_id=current_user.tenant_id,
+                user_id=current_user.id,
+                draft_id=doc.intake_draft_id,
+                force=True,
+            )
+        else:
+            from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
+            task = ocr_then_extract.delay(
+                doc_id=doc.id,
+                tenant_id=current_user.tenant_id,
+                user_id=current_user.id,
+                draft_id=doc.intake_draft_id,
+                force=True,
+            )
         logger.info(
-            "Reprocesso OCR enfileirado para document_id=%s task=%s",
-            doc.id, getattr(task, "id", None),
+            "Reprocesso de leitura (%s) enfileirado para document_id=%s task=%s",
+            "transcrição" if ehaudio else "OCR", doc.id, getattr(task, "id", None),
         )
     except Exception as exc:
-        logger.warning("Falha ao enfileirar reprocesso OCR doc=%s: %s", doc.id, exc)
+        logger.warning("Falha ao enfileirar reprocesso doc=%s: %s", doc.id, exc)
         raise HTTPException(status_code=503, detail="Não foi possível enfileirar o reprocesso.") from exc
 
     return {

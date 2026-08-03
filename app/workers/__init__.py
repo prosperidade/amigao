@@ -5,6 +5,7 @@ from app.workers.agent_tasks import (  # noqa: F401
     vigia_all_tenants,
     vigia_scheduled_check,
 )
+from app.workers.audio_tasks import transcribe_audio_document  # noqa: F401
 from app.workers.knowledge_indexer import (  # noqa: F401
     index_arbitrary_text_task,
     index_legislation_document_task,

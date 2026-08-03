@@ -78,7 +78,7 @@ Esquema completo do banco do Regente Ambiental. Toda mudança aqui passa por mig
 
 | Entidade | Tabela | Função |
 |---|---|---|
-| `Document` | `documents` | Metadado + referência MinIO. Tem `extracted_text` (cache de OCR) e `document_type` (ver doc_types canônicos abaixo). |
+| `Document` | `documents` | Metadado + referência MinIO. Tem `extracted_text` (leitura do arquivo: OCR de PDF **ou transcrição de áudio** — ADR-060), `ocr_status`/`ocr_error` (estado e motivo da falha dessa leitura), `is_internal` (material interno do escritório: oculto no portal do cliente, valendo para consultor e diagnóstico) e `document_type` (ver doc_types canônicos abaixo). |
 | `DocumentCategory` | `document_categories` | Taxonomia de categorias documentais. |
 
 #### doc_types canônicos do intake (Ficha 01 / FASE 2)

@@ -576,11 +576,45 @@ def extract_process_documents(
     jobs: list[ProcessExtractJob] = []
     pending_ocr: list[ProcessExtractJob] = []
 
+    from app.services.audio_files import is_audio  # noqa: PLC0415
     from app.workers.agent_tasks import run_agent  # noqa: PLC0415
+    from app.workers.audio_tasks import transcribe_audio_document  # noqa: PLC0415
     from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
 
     for doc in docs:
         has_text = bool((doc.extracted_text or "").strip())
+
+        # Áudio tem leitura PRÓPRIA (ADR-060): transcrição, não OCR. E nunca
+        # despacha o `extrator` — conversa de reunião não é documento cadastral,
+        # e garimpar matrícula/área em fala espontânea encheria o staging de
+        # campo inventado. Já transcrito e sem force: nada a fazer.
+        if is_audio(doc.filename, doc.mime_type or doc.content_type, doc.document_type):
+            if has_text and not body.force:
+                continue
+            try:
+                t = transcribe_audio_document.delay(
+                    doc_id=doc.id,
+                    tenant_id=current_user.tenant_id,
+                    user_id=current_user.id,
+                    draft_id=None,
+                    force=body.force,
+                )
+                pending_ocr.append(
+                    ProcessExtractJob(
+                        document_id=doc.id,
+                        filename=doc.filename,
+                        document_type=doc.document_type,
+                        method="transcricao_audio",
+                        task_id=getattr(t, "id", None),
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "extract_process_documents: falha ao enfileirar transcrição doc=%s: %s",
+                    doc.id, exc,
+                )
+            continue
+
         if has_text and not body.force:
             try:
                 t = run_agent.delay(

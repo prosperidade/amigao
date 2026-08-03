@@ -73,6 +73,28 @@ def _normalize_finish_reason(raw: object) -> str:
     return s
 
 
+@dataclass
+class AITranscriptionResponse:
+    """Resultado de uma transcrição de áudio (dívida #103 · ADR-060).
+
+    Espelha ``AIResponse`` no que faz sentido para áudio. ``tokens_in/out`` não
+    existem em transcrição — o que se cobra é DURAÇÃO —, então o campo que sustenta
+    custo e auditoria é ``audio_seconds``.
+    """
+
+    text: str
+    model_used: str
+    provider: str
+    cost_usd: float
+    duration_ms: int
+    audio_seconds: float
+    # "provedor" quando a duração veio do próprio retorno da API (custo exato);
+    # "estimada" quando foi inferida do tamanho do arquivo (custo aproximado).
+    # Nunca colapsar os dois: custo estimado apresentado como medido é auditoria
+    # mentindo (Princípio 2).
+    duracao_fonte: str = "provedor"
+
+
 AI_HOURLY_COST_LIMIT_USD = 5.0  # limite padrão por tenant por hora
 
 
@@ -468,4 +490,172 @@ def complete(
     raise AIGatewayError(
         message=f"Todos os providers falharam. Último erro: {last_error}",
         last_error=last_error,
+    )
+
+
+# ----------------------------------------------------------------------
+# Transcrição de áudio (dívida #103 · ADR-060)
+# ----------------------------------------------------------------------
+
+# Bitrate assumido quando o provedor não devolve a duração do áudio. 64 kbps mono
+# é o perfil típico de gravador de celular / nota de voz — a estimativa erra para
+# mais em WAV (não comprimido) e para menos em áudio de alta qualidade. Só serve
+# para NÃO registrar custo 0.0 num job que gastou; quem consome a estimativa é
+# avisado por `duracao_fonte="estimada"`.
+_BITRATE_ASSUMIDO_BPS = 64_000
+
+
+def _resolve_transcription_key(settings, user_preferences: Optional[dict]) -> tuple[str, bool]:
+    """Devolve (api_key, é_chave_do_consultor) para a transcrição.
+
+    BYOK: se o consultor configurou OpenAI com chave própria, transcrever na conta
+    dele. Providers que não fazem transcrição (Gemini/Anthropic/DeepSeek) NÃO caem
+    silenciosamente na chave do sistema — devolvem a chave global só se ela existir,
+    e o chamador recebe erro explícito quando não existe.
+    """
+    prefs = user_preferences or {}
+    if (prefs.get("provider") or "").strip() == "openai" and (prefs.get("api_key") or "").strip():
+        return prefs["api_key"].strip(), True
+    return (settings.OPENAI_API_KEY or ""), False
+
+
+def transcribe(
+    audio_bytes: bytes,
+    *,
+    filename: str,
+    model: Optional[str] = None,
+    language: Optional[str] = None,
+    prompt: Optional[str] = None,
+    max_cost_override_usd: Optional[float] = None,
+    user_preferences: Optional[dict] = None,
+) -> AITranscriptionResponse:
+    """Transcreve áudio via litellm (Whisper por default), na MESMA camada dos
+    demais modelos — nenhum serviço fala com provedor direto e nenhuma chave nova
+    entra em código (tudo vem de settings/BYOK).
+
+    Diferente de ``complete()``, aqui **não há cadeia de fallback entre providers**:
+    dos quatro providers suportados só a OpenAI expõe endpoint de transcrição. Sem
+    chave OpenAI a função levanta ``AIGatewayError`` com mensagem acionável, em vez
+    de tentar um Gemini que recusaria o formato da requisição.
+
+    Custo é calculado por DURAÇÃO (o litellm não precifica transcrição): duração
+    real quando o provedor devolve ``duration`` no ``verbose_json``, estimada pelo
+    tamanho do arquivo quando não devolve — e a diferença viaja em ``duracao_fonte``.
+    """
+    import io  # noqa: PLC0415
+
+    import litellm  # noqa: PLC0415
+
+    from app.core.config import settings  # noqa: PLC0415
+
+    if not audio_bytes:
+        raise AIGatewayError(message="Áudio vazio — nada a transcrever.")
+
+    api_key, user_scoped = _resolve_transcription_key(settings, user_preferences)
+    if not api_key:
+        raise AIGatewayError(
+            message=(
+                "Transcrição de áudio exige chave OpenAI (é o único provedor "
+                "suportado hoje). Configure OPENAI_API_KEY ou a chave OpenAI do "
+                "consultor em Configurações > IA."
+            ),
+            last_error="sem_chave_openai",
+        )
+
+    _model = model or settings.AUDIO_TRANSCRIPTION_MODEL
+    _language = language if language is not None else (settings.AUDIO_TRANSCRIPTION_LANGUAGE or None)
+    _timeout = settings.AUDIO_TRANSCRIPTION_TIMEOUT_SECONDS or 300.0
+
+    # O SDK identifica o formato pelo NOME do arquivo — um BytesIO sem `.name`
+    # chega como `application/octet-stream` e é recusado. Daí o buffer nomeado.
+    buffer = io.BytesIO(audio_bytes)
+    buffer.name = filename or "audio.mp3"
+
+    t0 = time.monotonic()
+    try:
+        kwargs: dict = {
+            "model": _model,
+            "file": buffer,
+            "api_key": api_key,
+            "timeout": _timeout,
+            # verbose_json traz `duration` — é o que torna o custo MEDIDO em vez
+            # de estimado. Provedor que ignore o formato cai na estimativa.
+            "response_format": "verbose_json",
+        }
+        if _language:
+            kwargs["language"] = _language
+        if prompt:
+            kwargs["prompt"] = prompt
+        response = litellm.transcription(**kwargs)
+    except Exception as exc:
+        if user_scoped and _is_auth_error(exc):
+            raise AIGatewayError(
+                message="Credenciais de IA do consultor inválidas; revise em Configurações > IA",
+                last_error=str(exc),
+            ) from exc
+        logger.warning("ai_gateway.transcribe falhou model=%s error=%s", _model, exc)
+        raise AIGatewayError(
+            message=f"Falha na transcrição de áudio: {exc}",
+            last_error=str(exc),
+            model_used=_model,
+        ) from exc
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+    text = (getattr(response, "text", None) or "").strip()
+    raw_duration = getattr(response, "duration", None)
+    if raw_duration is None and isinstance(response, dict):
+        raw_duration = response.get("duration")
+    try:
+        audio_seconds = float(raw_duration) if raw_duration is not None else 0.0
+    except (TypeError, ValueError):
+        audio_seconds = 0.0
+
+    duracao_fonte = "provedor"
+    if audio_seconds <= 0:
+        audio_seconds = (len(audio_bytes) * 8) / _BITRATE_ASSUMIDO_BPS
+        duracao_fonte = "estimada"
+        logger.info(
+            "ai_gateway.transcribe provedor não devolveu duração — estimando "
+            "%.1fs a partir de %d bytes", audio_seconds, len(audio_bytes),
+        )
+
+    cost = (audio_seconds / 60.0) * float(settings.AUDIO_TRANSCRIPTION_USD_PER_MINUTE)
+
+    max_per_job = (
+        max_cost_override_usd
+        if max_cost_override_usd is not None
+        else settings.AI_MAX_COST_PER_JOB_USD_TRANSCRICAO
+    )
+    if max_per_job > 0 and cost > max_per_job:
+        logger.error(
+            "ai_gateway.transcribe cost exceeded max per job: cost=%.4f max=%.4f "
+            "audio_s=%.1f model=%s",
+            cost, max_per_job, audio_seconds, _model,
+        )
+        raise AIGatewayError(
+            message=(
+                f"Áudio longo demais para o teto de custo: ${cost:.4f} passa de "
+                f"${max_per_job:.4f}. Divida a gravação ou aumente o teto."
+            ),
+            last_error=f"cost_exceeded model={_model}",
+            cost_usd=cost,
+            model_used=_model,
+        )
+
+    provider = _model.split("/")[0] if "/" in _model else "openai"
+
+    logger.info(
+        "ai_gateway.transcribe model=%s chars=%d audio_s=%.1f (%s) cost_usd=%.6f ms=%d",
+        _model, len(text), audio_seconds, duracao_fonte, cost, elapsed_ms,
+    )
+
+    return AITranscriptionResponse(
+        text=text,
+        model_used=_model,
+        provider=provider,
+        cost_usd=cost,
+        duration_ms=elapsed_ms,
+        audio_seconds=audio_seconds,
+        duracao_fonte=duracao_fonte,
     )

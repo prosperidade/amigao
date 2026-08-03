@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { FileText, Download, Sparkles, Trash2, Info } from 'lucide-react';
+import { useState } from 'react';
+import {
+  FileText, Download, Sparkles, Trash2, Info, Loader2, RefreshCw,
+  AlertTriangle, EyeOff, Eye, X,
+} from 'lucide-react';
 import { Document } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
 import ProcessChecklist from './ProcessChecklist';
@@ -25,12 +29,42 @@ function ehAudio(doc: Document): boolean {
   return doc.document_type === 'audio_entrevista' || doc.document_category === 'audio';
 }
 
+/** Texto lido do documento — OCR de PDF ou transcrição de áudio (ADR-060). */
+interface DocumentText {
+  document_id: number;
+  filename?: string | null;
+  ocr_status?: string | null;
+  ocr_error?: string | null;
+  eh_transcricao: boolean;
+  chars: number;
+  text?: string | null;
+}
+
 interface DocumentsTabProps {
   processId: number;
 }
 
+/**
+ * Estado da transcrição na tela (dívida #103).
+ *
+ * A Isis subia a gravação e a tela dizia "transcrição não disponível" — honesto
+ * enquanto não existia pipeline, e mentiroso a partir de agora. O contrato aqui é
+ * o mesmo do resto do sistema: **nunca silêncio**. Ou está processando, ou está
+ * pronta, ou falhou COM O MOTIVO na cara e um botão para tentar de novo.
+ *
+ * `not_required` não aparece para áudio (nada dispensa a leitura de um áudio); se
+ * aparecer, cai no ramo de "sem leitura" com o mesmo aviso do pendente.
+ */
+function estadoTranscricao(doc: Document): 'processando' | 'pronta' | 'falhou' {
+  if (doc.ocr_status === 'failed') return 'falhou';
+  if (doc.tem_texto && doc.ocr_status === 'done') return 'pronta';
+  return 'processando';
+}
+
 export default function DocumentsTab({ processId }: DocumentsTabProps) {
   const queryClient = useQueryClient();
+  const [textoAberto, setTextoAberto] = useState<DocumentText | null>(null);
+
   const { data: documents, refetch: refetchDocuments } = useQuery({
     queryKey: ['documents', processId],
     queryFn: async () => {
@@ -38,6 +72,61 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
       return res.data as Document[];
     },
     enabled: !!processId,
+    // Transcrição de uma reunião leva de segundos a alguns minutos. Sem este
+    // polling o consultor fica olhando "Transcrevendo…" para sempre e precisa
+    // dar F5 para descobrir que já acabou (o WebSocket cobre parte dos casos,
+    // mas não a aba aberta antes do evento chegar).
+    refetchInterval: (query) => {
+      const docs = (query.state.data ?? []) as Document[];
+      const emCurso = docs.some(
+        d => d.ocr_status === 'pending' || d.ocr_status === 'processing',
+      );
+      return emCurso ? 5000 : false;
+    },
+  });
+
+  // Transcrição pronta: abre o texto num painel. Buscado sob demanda — uma
+  // reunião de 30 min tem dezenas de milhares de caracteres e não pode viajar
+  // junto da listagem de documentos.
+  const verTextoMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      const res = await api.get(`/documents/${docId}/text`);
+      return res.data as DocumentText;
+    },
+    onSuccess: (data) => setTextoAberto(data),
+    onError: () => toast.error('Não foi possível abrir o texto do documento.'),
+  });
+
+  // "Tentar de novo" — mesma rota do reprocesso de OCR: para o consultor a ação
+  // é uma só ("ler de novo"), independente de ser PDF ou áudio.
+  const reprocessarMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      await api.post(`/documents/${docId}/reprocess-ocr`);
+    },
+    onSuccess: () => {
+      toast.success('Transcrição reenviada. Isso leva alguns minutos.');
+      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? 'Não foi possível reenviar a transcrição.';
+      toast.error(msg);
+    },
+  });
+
+  const visibilidadeMutation = useMutation({
+    mutationFn: async ({ docId, interno }: { docId: number; interno: boolean }) => {
+      await api.patch(`/documents/${docId}`, { is_internal: interno });
+    },
+    onSuccess: (_data, vars) => {
+      toast.success(
+        vars.interno
+          ? 'Marcado como material interno — o cliente não vê no portal.'
+          : 'Desmarcado — volta a ser documento do caso.',
+      );
+      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+    },
+    onError: () => toast.error('Não foi possível alterar a visibilidade.'),
   });
 
   const deleteMutation = useMutation({
@@ -149,18 +238,46 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                           <Sparkles className="w-3 h-3" /> Campos extraidos
                         </span>
                       )}
-                      {/* Dívida #103 — honestidade do áudio. A consultora sobe a
-                          gravação da reunião achando que o sistema ouve; hoje o
-                          arquivo fica guardado e ninguém o transcreve (não existe
-                          pipeline de transcrição em lugar nenhum). Mesmo espírito
-                          do aviso de geometria "sem leitura de texto": o arquivo
-                          está salvo, e a tela diz o que ele NÃO é. */}
-                      {ehAudio(doc) && (
+                      {/* Dívida #103 — o áudio agora é ouvido de verdade. A tela
+                          mostra em que pé está a transcrição: processando, pronta
+                          (com o texto a um clique) ou falhou COM O MOTIVO. O que
+                          não pode voltar a existir é o silêncio: a consultora subia
+                          a gravação achando que o sistema ouvia. */}
+                      {ehAudio(doc) && estadoTranscricao(doc) === 'processando' && (
                         <span
-                          title="O arquivo está guardado no caso. A transcrição automática ainda não existe — registre os pontos da conversa à mão."
-                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30"
+                          title="A transcrição está na fila. Reunião de meia hora costuma levar poucos minutos."
+                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30"
                         >
-                          🎙️ Áudio anexado — transcrição não disponível
+                          <Loader2 className="w-3 h-3 animate-spin" /> Transcrevendo o áudio…
+                        </span>
+                      )}
+                      {ehAudio(doc) && estadoTranscricao(doc) === 'pronta' && (
+                        <button
+                          onClick={() => verTextoMutation.mutate(doc.id)}
+                          disabled={verTextoMutation.isPending}
+                          title="Abrir a transcrição da reunião"
+                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                        >
+                          🎙️ Transcrição pronta — ver texto
+                        </button>
+                      )}
+                      {ehAudio(doc) && estadoTranscricao(doc) === 'falhou' && (
+                        <button
+                          onClick={() => reprocessarMutation.mutate(doc.id)}
+                          disabled={reprocessarMutation.isPending}
+                          title={doc.ocr_error ?? 'A transcrição falhou. Clique para tentar de novo.'}
+                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/30 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${reprocessarMutation.isPending ? 'animate-spin' : ''}`} />
+                          Transcrição falhou — tentar de novo
+                        </button>
+                      )}
+                      {doc.is_internal && (
+                        <span
+                          title="Material interno do escritório — não aparece para o cliente no portal."
+                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/15"
+                        >
+                          <EyeOff className="w-3 h-3" /> Material interno
                         </span>
                       )}
                     </div>
@@ -173,8 +290,37 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                         <span>{doc.extraction_status}</span>
                       </p>
                     )}
+                    {/* O motivo da falha em TEXTO, não só no tooltip do chip. A
+                        pergunta que o consultor faz é "por que não leu?", e a
+                        resposta não pode depender de ele passar o mouse no lugar
+                        certo — nem de alguém abrir o log por ele. */}
+                    {doc.ocr_status === 'failed' && doc.ocr_error && (
+                      <p className="flex items-start gap-1.5 mt-1 text-xs text-red-600 dark:text-red-400">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>{doc.ocr_error}</span>
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {/* Visibilidade (ADR-060, decisão 3b): default é documento do
+                        caso; esconder do cliente é ato explícito do consultor e
+                        fica registrado no audit. */}
+                    <button
+                      onClick={() =>
+                        visibilidadeMutation.mutate({ docId: doc.id, interno: !doc.is_internal })
+                      }
+                      disabled={visibilidadeMutation.isPending}
+                      title={
+                        doc.is_internal
+                          ? 'Material interno — clique para voltar a exibir ao cliente no portal'
+                          : 'Visível ao cliente no portal — clique para marcar como material interno'
+                      }
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 text-sm transition-all disabled:opacity-40"
+                    >
+                      {doc.is_internal
+                        ? <EyeOff className="w-3.5 h-3.5" />
+                        : <Eye className="w-3.5 h-3.5" />}
+                    </button>
                     <button
                       onClick={() => handleDownload(doc.id, doc.filename || doc.original_file_name || 'download')}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 text-sm transition-all"
@@ -208,6 +354,52 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Painel da transcrição. A reunião é fonte primária do caso — o consultor
+          precisa poder LER o que foi dito, não só saber que existe um áudio. O
+          texto vem com o cabeçalho de origem já embutido pelo backend, então a
+          procedência viaja com o conteúdo mesmo se ele for copiado daqui. */}
+      {textoAberto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setTextoAberto(null)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[80vh] flex flex-col rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/10 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 p-4 border-b border-gray-100 dark:border-white/10">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">
+                  {textoAberto.eh_transcricao ? 'Transcrição da reunião' : 'Texto do documento'}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-slate-500 truncate">
+                  {textoAberto.filename} · {textoAberto.chars.toLocaleString('pt-BR')} caracteres
+                </p>
+              </div>
+              <button
+                onClick={() => setTextoAberto(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4">
+              {textoAberto.text
+                ? (
+                  <pre className="whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-slate-300 font-sans">
+                    {textoAberto.text}
+                  </pre>
+                )
+                : (
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    {textoAberto.ocr_error ?? 'Este documento ainda não tem texto lido.'}
+                  </p>
+                )}
+            </div>
+          </div>
         </div>
       )}
     </div>
