@@ -68,6 +68,15 @@ class Document(Base):
     confidence_score = Column(Float, nullable=True)
     review_required = Column(Boolean, default=False)
 
+    # Visibilidade (dívida #103 · ADR-060) — "material interno" do escritório.
+    # Nasceu com a transcrição de áudio: a gravação registra o que o cliente
+    # contou numa conversa, e nem toda conversa deve voltar para ele pelo portal.
+    # Default conservador e explícito: FALSE — o áudio entra como documento normal
+    # do caso. Marcado como interno, some da listagem do portal do cliente; segue
+    # valendo integralmente para o consultor e para o diagnóstico (é material de
+    # trabalho dele, não material que o sistema esconde de quem trabalha).
+    is_internal = Column(Boolean, default=False, nullable=False, server_default="false")
+
     uploaded_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Sprint 2 — vínculo com item de checklist e validade documental
@@ -83,6 +92,14 @@ class Document(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def tem_texto(self) -> bool:
+        """Este documento já tem leitura (OCR ou transcrição) disponível?
+
+        Exposto no `DocumentResponse` para a tela saber se vale abrir o texto sem
+        precisar carregá-lo na listagem inteira."""
+        return bool((self.extracted_text or "").strip())
 
     tenant = relationship("Tenant")
     process = relationship("Process")
