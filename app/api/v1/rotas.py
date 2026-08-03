@@ -50,6 +50,10 @@ from app.schemas.rota import (
     RotaVersaoOut,
 )
 from app.services.audit_hash import stamp_audit_hash
+from app.services.rota_contexto import (
+    DiagnosticoNaoFundamentado,
+    fundamento_mudou_desde_a_rota,
+)
 from app.services.rota_materializer import materialize_rota
 
 process_router = APIRouter()
@@ -138,15 +142,26 @@ def get_rota(
     process_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
-) -> Rota | None:
+) -> RotaOut | None:
     """Rota do processo (com passos ordenados). ``null`` se ainda não materializada."""
-    _get_process_or_404(db, process_id, current_user.tenant_id)
-    return (
+    process = _get_process_or_404(db, process_id, current_user.tenant_id)
+    rota = (
         db.query(Rota)
         .filter(Rota.process_id == process_id, Rota.tenant_id == current_user.tenant_id)
         .order_by(Rota.id.desc())
         .first()
     )
+    if rota is None:
+        return None
+
+    # ADR-038 — o diagnóstico andou depois da rota? Só AVISA. Regenerar sozinha
+    # apagaria classificação, ordem e passos manuais por causa de um evento que
+    # o consultor talvez nem tenha visto.
+    saida = RotaOut.model_validate(rota)
+    saida.aviso_fundamento = fundamento_mudou_desde_a_rota(
+        db, process=process, tenant_id=current_user.tenant_id
+    )
+    return saida
 
 
 @process_router.post(
@@ -165,6 +180,15 @@ def gerar_rota(
         result = materialize_rota(
             db, process=process, tenant_id=current_user.tenant_id, user_id=current_user.id
         )
+    except DiagnosticoNaoFundamentado as exc:
+        # ADR-038 — bloqueio de FLUXO, não falha de sistema. Precisa vir ANTES do
+        # `except RuntimeError` (a exceção herda dele): virar 502 "falha ao gerar
+        # a rota" mandaria o consultor procurar defeito onde só falta um passo
+        # dele. A mensagem sobe inteira, com o próximo movimento nomeado.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

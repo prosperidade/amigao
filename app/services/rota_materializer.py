@@ -53,6 +53,12 @@ from app.schemas.stage_output import Etapa, SourceRef
 
 logger = get_logger(__name__)
 
+# Proveniência declarada por etapa, indexada por `id()` do objeto — a `Etapa` é
+# `extra=forbid` e não aceita campo novo, e criar um schema paralelo só para
+# carregar duas strings custaria mais do que este mapa de vida curta (existe
+# entre `_etapa_from_raw` e `_reconcile_passos`, na mesma chamada).
+_ORIGEM_REFS: dict[int, list[str]] = {}
+
 
 @dataclass
 class RotaMaterializeResult:
@@ -144,7 +150,7 @@ def _etapa_from_raw(raw: Any) -> Etapa | None:
 
     ordem = _coerce_int(raw.get("ordem")) or 1
     try:
-        return Etapa(
+        etapa = Etapa(
             ordem=max(ordem, 1),
             titulo=titulo,
             descricao=(raw.get("descricao") or None),
@@ -153,6 +159,13 @@ def _etapa_from_raw(raw: Any) -> Etapa | None:
             sources=sources,
             prazo_fonte=prazo_fonte,
         )
+        # ADR-038 — a proveniência declarada pelo modelo viaja ao lado da Etapa
+        # tipada (que é `extra=forbid` e não a comportaria). Fica crua aqui; quem
+        # valida contra os achados/ações REAIS é `_reconcile_passos`.
+        _ORIGEM_REFS[id(etapa)] = [
+            str(r) for r in (raw.get("origem_refs") or []) if str(r).strip()
+        ]
+        return etapa
     except Exception:  # noqa: BLE001 — etapa malformada não derruba a materialização
         logger.warning("rota_materializer: etapa descartada (malformada)", extra={"titulo": titulo})
         return None
@@ -252,7 +265,8 @@ def _passo_dedupe_key(rota_id: int, norma_ref: str | None, orgao: str | None, ti
 # ---------------------------------------------------------------------------
 
 def _run_legislacao(
-    db: Session, *, process: Process, tenant_id: int, user_id: int | None, demand_type: str
+    db: Session, *, process: Process, tenant_id: int, user_id: int | None, demand_type: str,
+    bloco_fundamento: str = "",
 ) -> tuple[list[Etapa], str, str | None, int | None]:
     """Roda a ``LegislacaoAgent`` e devolve (etapas típadas, caminho, órgão, ai_job_id)."""
     ctx = AgentContext(
@@ -260,7 +274,10 @@ def _run_legislacao(
         user_id=user_id,
         process_id=process.id,
         session=db,
-        metadata={"demand_type": demand_type},
+        # ADR-038: o diagnóstico fundamentado e as ações triadas entram AQUI.
+        # Era esta chamada — sem `chain_data`, com metadata só de `demand_type` —
+        # que fazia a rota nascer cega ao que o caso apurou.
+        metadata={"demand_type": demand_type, "bloco_fundamento": bloco_fundamento},
     )
     result = AgentRegistry.create("legislacao", ctx).run()
     if not result.success:
@@ -376,7 +393,7 @@ def _upsert_rota(
 
 
 def _reconcile_passos(
-    *, rota: Rota, tenant_id: int, etapas: list[Etapa]
+    *, rota: Rota, tenant_id: int, etapas: list[Etapa], contexto: Any = None
 ) -> tuple[int, int, bool]:
     """Reconcilia as ``etapas`` da IA contra os ``RotaPasso`` existentes.
 
@@ -429,6 +446,22 @@ def _reconcile_passos(
                 status=RotaPassoStatus.proposto,
                 dedupe_key=key,
             )
+            # ADR-038 — proveniência: de qual achado e/ou ação este passo nasceu.
+            # Só referência que casa com o que EXISTE neste caso é aceita; o
+            # resto é descartado com log. Passo sem origem é honesto; passo com
+            # origem inventada corromperia a corrente inteira.
+            if contexto is not None:
+                for ref in _ORIGEM_REFS.get(id(etapa), []):
+                    issue_id, acao_id = contexto.resolver_ref(ref)
+                    if issue_id is not None and passo.origem_issue_id is None:
+                        passo.origem_issue_id = issue_id
+                    elif acao_id is not None and passo.origem_acao_id is None:
+                        passo.origem_acao_id = acao_id
+                    elif issue_id is None and acao_id is None:
+                        logger.warning(
+                            "rota: origem declarada não existe neste caso — descartada",
+                            extra={"rota_id": rota.id, "ref": ref, "passo": etapa.titulo},
+                        )
             # Anexa à relação (não db.add + rota_id): mantém rota.passos coerente
             # em memória logo após a materialização, sem exigir refresh.
             rota.passos.append(passo)
@@ -477,8 +510,17 @@ def materialize_rota(
         db, rota=rota_atual, tenant_id=tenant_id, user_id=user_id
     ) if rota_atual is not None else None
 
+    # ── Guard do ADR-038: sem diagnóstico assinado, a rota NÃO é traçada ────
+    # Gerar mesmo assim produziria uma peça formal fundamentada no relato do
+    # cliente — plausível, assinável e errada. `DiagnosticoNaoFundamentado` sobe
+    # até o endpoint e vira a frase que o consultor lê, com o próximo movimento.
+    from app.services.rota_contexto import montar_contexto_rota  # noqa: PLC0415
+
+    contexto = montar_contexto_rota(db, process=process, tenant_id=tenant_id)
+
     etapas, caminho, orgao, ai_job_id = _run_legislacao(
-        db, process=process, tenant_id=tenant_id, user_id=user_id, demand_type=demand_type
+        db, process=process, tenant_id=tenant_id, user_id=user_id,
+        demand_type=demand_type, bloco_fundamento=contexto.bloco_prompt(),
     )
 
     # ADR-034 na Rota (validação 30/07): a esfera vem de QUEM autuou, não da UF.
@@ -511,7 +553,7 @@ def materialize_rota(
         ai_job_id=ai_job_id,
     )
     created, matched, is_diff = _reconcile_passos(
-        rota=rota, tenant_id=tenant_id, etapas=etapas
+        rota=rota, tenant_id=tenant_id, etapas=etapas, contexto=contexto
     )
 
     # Ficha §9: se a rota JÁ estava validada e a IA trouxe diferença, NÃO
