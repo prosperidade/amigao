@@ -468,7 +468,72 @@ exige **reindexar** seus chunks — o UPDATE na tabela sozinho não muda o que
 chega ao modelo. O vigia precisa disparar `index_legislation_document` para o
 documento que acabou de marcar.
 
-**PRÓXIMO LIVRE: 100.**
+### Abertas pela validação da Isis de 02/08 (`fix/validacao-02-08`)
+
+**100. A Rota da E5 não lê o diagnóstico técnico nem as ações da E4.** Pergunta
+literal da consultora: *"a rota traçada na E5 se direciona pelas ações definidas
+na E4?"* **Não** — e nem pelo diagnóstico. Medido: `materialize_rota`
+(`app/services/rota_materializer.py:480`) monta um `AgentContext` **sem
+`chain_data`** (`:258-264`) e a `LegislacaoAgent` consome apenas `demand_type`,
+campos do imóvel, o texto livre `process.initial_diagnosis`, o corpus (RAG) e os
+órgãos derivados de documentos de fiscalização (`_bloco_passivos_esfera`).
+`Acao` e `RegulatoryIssue`/`RegulatoryDiagnosis` têm **zero ocorrências** no
+caminho da rota. Pior: `initial_diagnosis` é escrito **só no intake**
+(`app/api/v1/intake.py:85,242,457`) e a coluna se declara "pré-diagnóstico por
+regras" (`app/models/process.py:132`) — o `DiagnosticoAgent` lê e nunca escreve
+de volta. Ou seja, a rota enxerga o palpite do minuto 1 do caso, congelado, e
+tudo que foi construído da E2 à E4 passa ao largo. **Diverge da própria Ficha
+07** §8.1 ("desenhada pela Legislação a partir do **diagnóstico fundamentado**")
+e §5 (E4 "Ações: refinadas e finais" → E5 "a aba Ações assume a forma de rota").
+**O que destrava:** alimentar a `LegislacaoAgent` com diagnóstico fundamentado +
+ações da E4, e dar ao `RotaPasso` a origem (`derivado_de_acao_id`) para a rota
+ser rastreável até o passivo. **Muda desenho — exige ADR e decisão do André
+antes de implementar.** Reportado sem implementar, por instrução. **Origem:**
+item 0 da validação de 02/08.
+
+**101. Não existe transcrição de áudio em lugar nenhum do sistema.** A validação
+de 02/08 pedia áudio na E2; ao medir, descobriu-se que o pipeline que se supunha
+existir na E1 também não existe. `IntakeDraft.audio_url` é gravado e **não é
+lido por serviço algum**; a menção a Whisper em `app/schemas/intake.py:101` é
+comentário, não código. O commit `feat(áudio)` desta rodada igualou as duas
+portas de **upload** — o arquivo chega, fica anexado ao caso e visível. Mas
+"gravar/transcrever áudio" continua sendo trabalho manual do consultor. **O que
+destrava:** um worker de transcrição (Whisper via `ai_gateway`) que persista o
+texto em `Document.extracted_text`, e daí o extrator já flui. **Origem:** item 4
+da validação de 02/08.
+
+**102. #91 não pôde ser fechada — falta a leitura em produção.** O relato
+("aceitei matrícula, CCIR e ITR e só NIRF/CCIR/INCRA pousaram") foi atacado pela
+causa provável mais forte encontrada no código: `divergencias_devolvidas` voltava
+na resposta e **nunca era renderizada** (corrigido nesta rodada). Mas isso é
+hipótese medida em código, **não** confirmação do caso dela. Esta sessão não tem
+MCP do Supabase nem credenciais de produção. **O que destrava** — rodar em prod,
+com o `process_id` do caso dela:
+
+```sql
+SELECT created_at, action, details
+FROM audit_logs
+WHERE entity_type = 'process' AND entity_id = <PROCESS_ID>
+  AND action IN ('consolidar', 'consolidar_falhou')
+ORDER BY created_at DESC;
+```
+
+`consolidar_falhou` (do #126) traz `erro_tipo`/`erro`; `consolidar` traz
+`ignorados`, `divergencias_devolvidas` e `writes` — juntos dizem exatamente por
+qual dos três caminhos cada aceite saiu. **Origem:** item 2 da validação de
+02/08.
+
+**103. Suíte do frontend acusa 10 erros de worker (não relacionados ao código).**
+`npx vitest run` reporta `Test Files 11 passed / Tests 86 passed / Errors 10`.
+Causa raiz: `@asamuzakjp/css-color` (CJS, dependência transitiva do jsdom) faz
+`require()` de `@csstools/css-calc`, que é ESM puro — `ERR_REQUIRE_ESM` na
+partida de alguns workers. **Verificado idêntico na `main`** (mesma contagem),
+portanto não é regressão desta rodada. Os testes passam porque o pool recria o
+worker. **O que destrava:** fixar `@csstools/css-calc` numa versão CJS via
+`overrides` no `package.json`, ou migrar o pool do vitest para `threads`.
+**Origem:** medição de 02/08.
+
+**PRÓXIMO LIVRE: 104.**
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
