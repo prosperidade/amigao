@@ -37,7 +37,7 @@ fluxo. Duas políticas, por posição do caso:
   declara feito o que não se sabe feito).
 
 Revision ID: b4c8d1e6a293
-Revises: a3e71c0d5f28
+Revises: b5c92fa4d7e1
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "b4c8d1e6a293"
-down_revision = "a3e71c0d5f28"
+down_revision = "b5c92fa4d7e1"
 branch_labels = None
 depends_on = None
 
