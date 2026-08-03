@@ -62,6 +62,13 @@ interface PropertyHubHeader {
   matriculas_contiguas: boolean | null;
   matriculas_count: number;
   area_total_nota: string | null;
+  // Validação 02/08 — o que o imóvel herda das matrículas consolidadas.
+  // Agregação: valor único quando concordam, "349,9022 | 660,6561" quando
+  // divergem, null quando ninguém tem. Nunca um número escolhido/fabricado.
+  cartorio: string | null;
+  codigo_incra_sncr: string | null;
+  denominacao_imovel: string | null;
+  area_ha_por_matricula: string | null;
 }
 
 // CAM2IH-010 (Sprint H) — labels pt-BR das 6 categorias canônicas Regente.
@@ -596,6 +603,17 @@ function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringCon
           <InfoField label="Localização" value={header.municipality && header.state ? `${header.municipality}/${header.state}` : null} />
           <InfoField label="Bioma" value={header.biome} source={src.biome} />
           <InfoField label="Embargo" value={header.has_embargo ? 'Sim' : 'Não'} />
+          {/* Herdados das matrículas consolidadas do caso. O imóvel é a entidade
+              permanente: o que foi gravado na base continua aqui depois que o
+              caso fecha. Com mais de uma matrícula os valores vêm lado a lado. */}
+          <InfoField label="Denominação" value={header.denominacao_imovel} />
+          <InfoField label="Cartório" value={header.cartorio} />
+          <InfoField label="INCRA / SNCR" value={header.codigo_incra_sncr} />
+          <InfoField
+            label="Área por matrícula"
+            value={header.area_ha_por_matricula ? `${header.area_ha_por_matricula} ha` : null}
+            sub={header.matriculas_count > 1 ? 'cada matrícula, na ordem' : undefined}
+          />
         </div>
         {/* Sprint 4 (Ficha 07 §9) — declaração de contiguidade (tri-state) */}
         <div
@@ -748,6 +766,25 @@ interface MatriculaRow {
   denominacao_imovel: string | null;
   vigencia: string;
   superseded_by_id: number | null;
+  // Validação 02/08: a linha da matrícula mostrava só número, denominação e
+  // área — então um imóvel recém-consolidado aparecia como "duas matrículas sem
+  // dados", embora cartório, INCRA, NIRF e CCIR já estivessem gravados.
+  cartorio: string | null;
+  codigo_incra_sncr: string | null;
+  nirf_cib: string | null;
+  numero_ccir: string | null;
+  registro_livro_folha_ficha: string | null;
+}
+
+/** Pares "rótulo: valor" de uma matrícula, omitindo o que ainda não foi lido. */
+function dadosRegistrais(m: MatriculaRow): Array<[string, string]> {
+  return ([
+    ['Cartório', m.cartorio],
+    ['Livro/Folha', m.registro_livro_folha_ficha],
+    ['INCRA/SNCR', m.codigo_incra_sncr],
+    ['NIRF/CIB', m.nirf_cib],
+    ['CCIR', m.numero_ccir],
+  ] as Array<[string, string | null]>).filter((par): par is [string, string] => !!par[1]);
 }
 
 /**
@@ -800,6 +837,20 @@ function MatriculasLinhagem({ propertyId }: { propertyId: number }) {
               <p className="text-xs text-gray-400 dark:text-slate-500">
                 {m.denominacao_imovel ?? '—'} · {m.area_ha != null ? `${m.area_ha} ha` : 'área —'}
               </p>
+              {dadosRegistrais(m).length > 0 ? (
+                <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-500 dark:text-slate-400">
+                  {dadosRegistrais(m).map(([rotulo, valor]) => (
+                    <div key={rotulo} className="flex gap-1">
+                      <dt className="text-gray-400 dark:text-slate-500">{rotulo}:</dt>
+                      <dd className="font-medium text-gray-600 dark:text-slate-300">{valor}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="mt-1 text-[11px] text-gray-400 dark:text-slate-500">
+                  Sem dados registrais lidos — consolide o caso na Conferência.
+                </p>
+              )}
             </div>
             <span className="text-[10px] px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30">
               vigente

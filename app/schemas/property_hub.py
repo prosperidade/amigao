@@ -43,6 +43,22 @@ class PropertyHubHeader(BaseModel):
     matriculas_count: int = 0
     area_total_nota: Optional[str] = None
 
+    # Validação 02/08 — o que o IMÓVEL herda das matrículas consolidadas.
+    # A consultora consolidou no caso e o imóvel continuou mostrando "as duas
+    # matrículas sem dados": o dado existia na Matricula e o cabeçalho do imóvel
+    # só lia as colunas cruas de Property, que a consolidação não escreve.
+    # Regra de agregação (dela): valor único quando as matrículas concordam,
+    # "349,9022 | 660,6561" quando divergem, vazio quando ninguém tem — nunca
+    # escolher uma matrícula nem fabricar um número (ver
+    # `Property.agregar_das_matriculas`).
+    cartorio: Optional[str] = None
+    codigo_incra_sncr: Optional[str] = None
+    denominacao_imovel: Optional[str] = None
+    # As áreas matrícula a matrícula, lado a lado. Convive com `total_area_ha`
+    # (a soma anotada da ADR-023, que dimensiona porte/exigência): a soma diz
+    # quanto o conjunto tem; esta diz de quem é cada parcela.
+    area_ha_por_matricula: Optional[str] = None
+
 
 class PropertyFieldValidateRequest(BaseModel):
     fields: list[str]  # nomes dos campos que o humano está validando

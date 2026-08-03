@@ -507,8 +507,11 @@ def get_property_hub_summary(
     # (área é derivada; matrícula vive em Matricula). Sem derivar aqui, o Hub
     # mostrava "—" mesmo após consolidar (furo apontado pela Isis 16/06).
     mats = list(prop.matriculas or [])
-    nums = [m.numero_matricula for m in mats if m.numero_matricula]
-    registry_number = prop.registry_number or ("; ".join(nums) if nums else None)
+    # Regra de agregação da consultora (02/08): campo de imóvel com N matrículas
+    # mostra os valores lado a lado ("349,9022 | 660,6561") ou nada — nunca um
+    # número escolhido/fabricado. O "; ".join anterior só cobria a matrícula e
+    # ainda misturava matrícula histórica na lista.
+    registry_number = prop.registry_number or prop.agregar_das_matriculas("numero_matricula")
     area_matriculas = prop.area_total_matriculas() if mats else 0.0
     total_area_ha = prop.total_area_ha if prop.total_area_ha else (area_matriculas or None)
     # Sprint 4 (Ficha 07 §9): quando a "Área total" exibida é a soma derivada e a
@@ -522,8 +525,16 @@ def get_property_hub_summary(
         client_id=prop.client_id,
         client_name=client.full_name if client else None,
         registry_number=registry_number,
-        ccir=prop.ccir,
-        nirf=prop.nirf,
+        # Herança caso→imóvel: a consolidação grava CCIR/NIRF/INCRA na MATRÍCULA
+        # (`_MATRICULA_FIELDS`), não nas colunas de Property. O cabeçalho lia só
+        # as colunas cruas e por isso aparecia vazio depois de consolidar.
+        # A coluna própria do imóvel, quando preenchida, continua tendo precedência.
+        ccir=prop.ccir or prop.agregar_das_matriculas("numero_ccir"),
+        nirf=prop.nirf or prop.agregar_das_matriculas("nirf_cib"),
+        cartorio=prop.agregar_das_matriculas("cartorio"),
+        codigo_incra_sncr=prop.agregar_das_matriculas("codigo_incra_sncr"),
+        denominacao_imovel=prop.agregar_das_matriculas("denominacao_imovel"),
+        area_ha_por_matricula=prop.agregar_das_matriculas("area_ha"),
         car_code=prop.car_code,
         car_status=prop.car_status,
         total_area_ha=total_area_ha,
