@@ -159,7 +159,7 @@ def _etapa_from_raw(raw: Any) -> Etapa | None:
             sources=sources,
             prazo_fonte=prazo_fonte,
         )
-        # ADR-038 — a proveniência declarada pelo modelo viaja ao lado da Etapa
+        # ADR-039 — a proveniência declarada pelo modelo viaja ao lado da Etapa
         # tipada (que é `extra=forbid` e não a comportaria). Fica crua aqui; quem
         # valida contra os achados/ações REAIS é `_reconcile_passos`.
         _ORIGEM_REFS[id(etapa)] = [
@@ -274,7 +274,7 @@ def _run_legislacao(
         user_id=user_id,
         process_id=process.id,
         session=db,
-        # ADR-038: o diagnóstico fundamentado e as ações triadas entram AQUI.
+        # ADR-039: o diagnóstico fundamentado e as ações triadas entram AQUI.
         # Era esta chamada — sem `chain_data`, com metadata só de `demand_type` —
         # que fazia a rota nascer cega ao que o caso apurou.
         metadata={"demand_type": demand_type, "bloco_fundamento": bloco_fundamento},
@@ -446,7 +446,7 @@ def _reconcile_passos(
                 status=RotaPassoStatus.proposto,
                 dedupe_key=key,
             )
-            # ADR-038 — proveniência: de qual achado e/ou ação este passo nasceu.
+            # ADR-039 — proveniência: de qual achado e/ou ação este passo nasceu.
             # Só referência que casa com o que EXISTE neste caso é aceita; o
             # resto é descartado com log. Passo sem origem é honesto; passo com
             # origem inventada corromperia a corrente inteira.
@@ -510,7 +510,7 @@ def materialize_rota(
         db, rota=rota_atual, tenant_id=tenant_id, user_id=user_id
     ) if rota_atual is not None else None
 
-    # ── Guard do ADR-038: sem diagnóstico assinado, a rota NÃO é traçada ────
+    # ── Guard do ADR-039: sem diagnóstico assinado, a rota NÃO é traçada ────
     # Gerar mesmo assim produziria uma peça formal fundamentada no relato do
     # cliente — plausível, assinável e errada. `DiagnosticoNaoFundamentado` sobe
     # até o endpoint e vira a frase que o consultor lê, com o próximo movimento.

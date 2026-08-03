@@ -1,0 +1,148 @@
+{
+  "rotulo": "depois_nucleo06",
+  "pergunta": "Fundamente a defesa administrativa do auto de infração 484341/D (IBAMA, 2007, Fazenda São Jorge)",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal','nacional') + uf=GO (ADR-034)",
+  "estado_corpus": {
+    "estadual": 28106,
+    "federal": 2264,
+    "nacional": 24
+  },
+  "chunks_recuperados": [
+    {
+      "id": 36211,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "Art. 101. Constatada a infração ambiental, o agente autuante, no uso do seu poder de polícia, (parte 1)",
+      "jurisdiction": "federal",
+      "similarity": 0.7387,
+      "chars": 3200
+    },
+    {
+      "id": 36195,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "ADVOCACIA-GERAL DA UNIÃO (parte 10)",
+      "jurisdiction": "federal",
+      "similarity": 0.7384,
+      "chars": 3199
+    },
+    {
+      "id": 36214,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "Art. 101. Constatada a infração ambiental, o agente autuante, no uso do seu poder de polícia, (parte 4)",
+      "jurisdiction": "federal",
+      "similarity": 0.7274,
+      "chars": 3199
+    },
+    {
+      "id": 34572,
+      "identifier": "Decreto 3.179/1999",
+      "title": "Sanções administrativas ao meio ambiente (Decreto 3.179/1999) [NORMA HISTÓRICA — revogada em 22/07/2008, sucedida por Decreto 6.514/2008. Aplicável a fatos anteriores a 22/07/2008 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Art. 2 (parte 3)",
+      "jurisdiction": "federal",
+      "similarity": 0.7129,
+      "chars": 2776
+    },
+    {
+      "id": 34784,
+      "identifier": "IN IBAMA 10/2012",
+      "title": "Apuração de infrações ambientais no IBAMA (IN IBAMA 10/2012) [NORMA HISTÓRICA — revogada em 29/01/2020, sucedida por IN Conjunta MMA/IBAMA/ICMBio 02/2020 (rito atual: IN IBAMA 19/2023). Aplicável a fatos anteriores a 29/01/2020 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Instrução Normativa IBAMA Nº 10 DE 07/12/2012",
+      "jurisdiction": "federal",
+      "similarity": 0.7124,
+      "chars": 1637
+    },
+    {
+      "id": 34370,
+      "identifier": "Decreto 6.514/2008",
+      "title": "Infrações e sanções administrativas ao meio ambiente (Decreto 6.514/2008)",
+      "section": "Art. 55.",
+      "jurisdiction": "federal",
+      "similarity": 0.7038,
+      "chars": 2905
+    },
+    {
+      "id": 36186,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "ADVOCACIA-GERAL DA UNIÃO (parte 1)",
+      "jurisdiction": "federal",
+      "similarity": 0.7028,
+      "chars": 3199
+    },
+    {
+      "id": 34851,
+      "identifier": "IN IBAMA 10/2012",
+      "title": "Apuração de infrações ambientais no IBAMA (IN IBAMA 10/2012) [NORMA HISTÓRICA — revogada em 29/01/2020, sucedida por IN Conjunta MMA/IBAMA/ICMBio 02/2020 (rito atual: IN IBAMA 19/2023). Aplicável a fatos anteriores a 29/01/2020 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Art. 65. As áreas de fiscalização promoverão sempre que couber:",
+      "jurisdiction": "federal",
+      "similarity": 0.6995,
+      "chars": 1367
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 272,
+      "chunks_por_mencao_de_terceiros": 171,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 70,
+      "chunks_por_mencao_de_terceiros": 4,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 65,
+      "chunks_por_mencao_de_terceiros": 60,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 42,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 94,
+      "chunks_por_mencao_de_terceiros": 117,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 134,
+      "chunks_por_mencao_de_terceiros": 1100,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 144,
+      "chunks_por_mencao_de_terceiros": 26,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 13,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 10,
+      "chunks_por_mencao_de_terceiros": 36,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "resposta": "Defesa administrativa do Auto de Infração IBAMA nº 484341/D (2007, Fazenda São Jorge, São João d'Aliança/GO):\n\n1. **Aplicação da legislação vigente ao tempo do fato (tempus regit actum)**  \nO auto de infração foi lavrado em 2007, portanto, aplicam-se as normas vigentes à época dos fatos, conforme o princípio tempus regit actum. Assim, para o enquadramento das infrações e sanções, deve-se considerar o Decreto 3.179/1999, que regula as sanções administrativas ao meio ambiente até 22/07/2008, data de sua revogação pelo Decreto 6.514/2008 (NORMA HISTÓRICA, conforme trecho [4]).  \n- Art. 2º, incisos II, IV, VII e XI do Decreto 3.179/1999 (enquadramento constante do julgamento 067-2012).  \n- Art. 18, §1º do Decreto 6.514/2008 para o embargo lavrado (aplicável por força do princípio tempus regit actum, pois o embargo foi lavrado após 2008).  \n\n2. **Enquadramento legal da infração**  \n- Lei nº 9.605/1998 (Lei de Crimes Ambientais), artigos 70 e 72, que tratam da supressão de vegetação em Área de Preservação Permanente (APP) e das sanções penais e administrativas aplicáveis (conforme julgamento 067-2012).  \n- Lei nº 4.771/1965 (Código Florestal), art. 2º, inciso c, que define as Áreas de Preservação Permanente (APP) e sua proteção.  \n\n3. **Medidas administrativas e poder de polícia do IBAMA**  \nConforme a Orientação Jurídica Normativa 06/2009 da PFE-IBAMA (trechos [1], [3] e [7]):  \n- O agente autuante, no uso do poder de polícia, pode adotar medidas administrativas para prevenir novas infrações e garantir a recuperação ambiental (Art. 101, OJN 06/2009).  \n- A medida de embargo, prevista no art. 18, §1º do Decreto 6.514/2008, é medida cautelar para impedir a continuidade da infração e resguardar o meio ambiente.  \n- A apreensão e o embargo são medidas cautelares e, portanto, imprescritíveis quanto à sua finalidade reparatória, conforme entendimento do STF no RE 654833 (trecho [1], item 87 e trecho [3], item 93).  \n\n4. **Prescrição da pretensão punitiva e executória**  \n- O IBAMA dispõe, em regra, de cinco anos para lavrar o auto de infração e concluir o processo administrativo punitivo, contados a partir do cometimento da infração, conforme OJN 06/2009 (trecho [7], item IV e trecho [2]).  \n- A prescrição pode ser interrompida por atos inequívocos de apuração do fato, como a lavratura do auto de infração, análise da defesa, homologação do auto, e requerimentos do autuado (trecho [2], itens 3 e 4).  \n- No caso, houve apresentação de PRAD e sucessivas prorrogações de prazo entre 2008 e 2017, o que demonstra o andamento do processo e a interrupção da prescrição intercorrente, conforme art. 65 da Lei nº 9.784/1999 (trecho [1], item 16).  \n- O requerimento de adesão ao REFIZ com base na MPV 780/2017 (art. 2º) também pode ser considerado ato interruptivo da prescrição executória, pois demonstra reconhecimento do débito e interesse na regularização.  \n\n5. **Regularidade do procedimento administrativo**  \n- O processo administrativo seguiu o rito previsto na Instrução Normativa IBAMA nº 10/2012 (NORMA HISTÓRICA, aplicável por ser anterior a 29/01/2020), que disciplina a apuração de infrações ambientais, defesa e cobrança de multas (trecho [5]).  \n- Houve comunicação e acompanhamento dos atos administrativos, conforme art. 65 da IN IBAMA 10/2012 (trecho [8]).  \n\n6. **Regularização ambiental e PRAD**  \n- A apresentação do Plano de Recuperação de Área Degradada (PRAD) e as prorrogações de prazo demonstram a boa-fé do autuado e o interesse em reparar o dano ambiental, o que deve ser considerado para fins de atenuação da penalidade, conforme princípios gerais do direito ambiental e administrativo.  \n- O Decreto 6.514/2008, art. 55, prevê a possibilidade de suspensão da multa diária durante o prazo para apresentação do termo de compromisso de regularização da reserva legal (trecho [6]).  \n\n**Conclusão:**  \nA defesa administrativa deve ser fundamentada nos seguintes pontos jurídicos:  \n- Aplicação do Decreto 3.179/1999 para o enquadramento da infração, por ser norma vigente à época do fato (NORMA HISTÓRICA).  \n- Aplicação do Decreto 6.514/2008 para o embargo, medida cautelar imprescritível, conforme art. 18, §1º.  \n- Reconhecimento da prescrição da pretensão punitiva e executória não ocorrida, pois houve atos interruptivos e o processo administrativo está em curso desde 2007, com apresentação de PRAD e prorrogações, conforme OJN 06/2009 e art. 65 da Lei 9.784/1999.  \n- Consideração da adesão ao REFIZ (MPV 780/2017, art. 2º) como ato interruptivo da prescrição executória.  \n- Valorização da boa-fé do autuado e do esforço de recuperação ambiental para eventual atenuação da penalidade.  \n- Observância do devido processo legal e do rito previsto na IN IBAMA 10/2012 (NORMA HISTÓRICA).  \n\n**Falta base normativa específica para eventual discussão sobre a aplicação do REFIZ no âmbito ambiental, além do art. 2º da MPV 780/2017, que deve ser complementada conforme o caso concreto.**\n\n---\n\n**Normas citadas com dispositivos:**  \n- Decreto 3.179/1999 (NORMA HISTÓRICA): art. 2º, incisos II, IV, VII, XI; §§ 9 a 13 do art. 2º (trecho [4])  \n- Decreto 6.514/2008: art. 18, §1º (embargo); art. 55 e §§ (regularização reserva legal) (trechos [4], [6])  \n- Lei nº 9.605/1998: arts. 70 e 72 (trecho do julgamento 067-2012)  \n- Lei nº 4.771/1965: art. 2º, inciso c (trecho do julgamento 067-2012)  \n- Lei nº 9.784/1999: art. 65 (revisão do processo administrativo) (trecho [1])  \n- Lei nº 9.873/1999: artigos 1º a 4º (prazo prescricional de 5 anos) (trecho [2])  \n- MPV 780/2017: art. 2º (REFIZ)  \n- OJN 06/2009 PFE-IBAMA: art. 101 e considerações sobre prescrição e medidas cautelares (trechos [1], [2], [3], [7])  \n- IN IBAMA 10/2012 (NORMA HISTÓRICA): art. 65 (procedimentos administrativos) (trecho [8])  \n\n---\n\nEssa fundamentação jurídica demonstra a legalidade do auto de infração, a regularidade do processo administrativo, a imprescritibilidade das medidas cautelares (embargo) e a inexistência de prescrição da pretensão punitiva e executória, reforçando a legitimidade da autuação e a necessidade de continuidade do processo para a reparação ambiental.",
+  "custo_usd": 0.0056932,
+  "tokens": {
+    "in": 7185,
+    "out": 1762
+  }
+}

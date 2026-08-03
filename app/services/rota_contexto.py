@@ -1,4 +1,4 @@
-"""O insumo da Rota (E5): diagnóstico fundamentado + ações triadas (ADR-038).
+"""O insumo da Rota (E5): diagnóstico fundamentado + ações triadas (ADR-039).
 
 Até aqui a Rota era desenhada a partir de ``process.initial_diagnosis`` — o
 **pré-diagnóstico por regras do intake**, escrito no minuto 1 do caso e nunca
@@ -234,7 +234,7 @@ class ContextoRota:
 def _diagnostico_fundamentado(
     db: Session, tenant_id: int, process_id: int
 ) -> RegulatoryDiagnosis:
-    """A versão mais recente ASSINADA. Sem ela não há rota (guard do ADR-038)."""
+    """A versão mais recente ASSINADA. Sem ela não há rota (guard do ADR-039)."""
     assinado = (
         db.query(RegulatoryDiagnosis)
         .filter(
@@ -436,7 +436,7 @@ def fundamento_mudou_desde_a_rota(
     if not orfaos:
         return None
 
-    # Passo antigo (anterior ao ADR-038) não tem proveniência: sem isso, TODO
+    # Passo antigo (anterior ao ADR-039) não tem proveniência: sem isso, TODO
     # achado pareceria órfão e o aviso apareceria sempre, para todo caso — o
     # tipo de alarme que se aprende a ignorar. Se nenhum passo tem origem, a
     # rota é de antes do carimbo e não dá para afirmar que ficou para trás.

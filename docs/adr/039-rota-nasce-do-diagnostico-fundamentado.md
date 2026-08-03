@@ -1,9 +1,15 @@
-# ADR-038 — A rota nasce do diagnóstico fundamentado e das ações validadas
+# ADR-039 — A rota nasce do diagnóstico fundamentado e das ações validadas
 
 - **Status:** aceita
 - **Data:** 2026-08-03
 - **Contexto:** validação da Isis de 02/08 (item 0) · dívida #102
 - **Substitui:** nada. **Corrige:** a implementação da E5, que divergia da Ficha 07.
+
+> **Nota de numeração.** Esta ADR nasceu como 038 e virou 039 no merge: o
+> PR #131 (corpus dirigido por manifesto curado) chegou à `main` primeiro e
+> ficou com o 038. Dois agentes escrevendo no mesmo repositório leram o
+> "próximo livre" ao mesmo tempo. Quem chega depois renumera — ADR é
+> referência citável e não pode ter dois donos.
 
 ---
 

@@ -301,7 +301,7 @@ class RotaPasso(Base):
     # de aprendizado futuro (auto-RAG de fundamento é follow-on).
     origem_manual_nota = Column(Text, nullable=True)
 
-    # ── Proveniência do passo (ADR-038, dívida #102) ────────────────────────
+    # ── Proveniência do passo (ADR-039, dívida #102) ────────────────────────
     # De qual ACHADO do diagnóstico e/ou de qual AÇÃO triada este passo nasceu.
     # Fecha a corrente inteira: achado → ação → passo da rota → item da proposta
     # (`ProposalScopeItem.rota_passo_id`, S5-A). Cada elo com FK, nada sem

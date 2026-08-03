@@ -42,7 +42,7 @@ class RotaPassoOut(BaseModel):
     classificacao: RotaPassoClassificacao | None
     origem: RotaPassoOrigem
     origem_manual_nota: str | None
-    # ADR-038 — proveniência: de qual achado e/ou ação triada este passo nasceu.
+    # ADR-039 — proveniência: de qual achado e/ou ação triada este passo nasceu.
     # NULL é legítimo (passo manual, passo de rito, ou passo anterior ao ADR).
     origem_issue_id: int | None = None
     origem_acao_id: int | None = None
@@ -77,7 +77,7 @@ class RotaOut(BaseModel):
     created_at: datetime | None
     updated_at: datetime | None
     passos: list[RotaPassoOut] = Field(default_factory=list)
-    # ADR-038 — aviso de que o diagnóstico andou depois da rota. Informativo:
+    # ADR-039 — aviso de que o diagnóstico andou depois da rota. Informativo:
     # NUNCA regenera nem rebaixa o status sozinho (quem assina decide).
     aviso_fundamento: str | None = None
 

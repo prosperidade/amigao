@@ -144,7 +144,10 @@ def _formatar_trechos(chunks: list) -> str:
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--rotulo", required=True, choices=["antes", "depois"])
+    # Rótulo livre: cada rodada de corpus deixa a sua medição ao lado das
+    # anteriores (antes → depois → depois_nucleo06 → ...). Lista fechada
+    # obrigaria a editar o script a cada bloco novo.
+    p.add_argument("--rotulo", required=True)
     p.add_argument("--out-dir", type=Path, default=Path("ops/medicao_corpus_federal"))
     p.add_argument("--top-k", type=int, default=None, help="default: LEGISLATION_RAG_TOP_K")
     p.add_argument("--sem-llm", action="store_true", help="só recuperação, sem chamar o modelo")

@@ -154,7 +154,7 @@ def get_rota(
     if rota is None:
         return None
 
-    # ADR-038 — o diagnóstico andou depois da rota? Só AVISA. Regenerar sozinha
+    # ADR-039 — o diagnóstico andou depois da rota? Só AVISA. Regenerar sozinha
     # apagaria classificação, ordem e passos manuais por causa de um evento que
     # o consultor talvez nem tenha visto.
     saida = RotaOut.model_validate(rota)
@@ -181,7 +181,7 @@ def gerar_rota(
             db, process=process, tenant_id=current_user.tenant_id, user_id=current_user.id
         )
     except DiagnosticoNaoFundamentado as exc:
-        # ADR-038 — bloqueio de FLUXO, não falha de sistema. Precisa vir ANTES do
+        # ADR-039 — bloqueio de FLUXO, não falha de sistema. Precisa vir ANTES do
         # `except RuntimeError` (a exceção herda dele): virar 502 "falha ao gerar
         # a rota" mandaria o consultor procurar defeito onde só falta um passo
         # dele. A mensagem sobe inteira, com o próximo movimento nomeado.

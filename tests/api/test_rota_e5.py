@@ -68,7 +68,7 @@ def _seed_case(db_session, *, tenant: Tenant):
     )
     db_session.add(process)
     db_session.flush()
-    # ADR-038: sem diagnóstico ASSINADO a rota não é traçada (409). Estes testes
+    # ADR-039: sem diagnóstico ASSINADO a rota não é traçada (409). Estes testes
     # exercitam o ciclo de vida da rota — gerar, reordenar, validar, fechar —,
     # não o guard, que tem cobertura própria em tests/services/test_rota_contexto.py.
     db_session.add(RegulatoryDiagnosis(

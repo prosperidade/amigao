@@ -157,7 +157,7 @@ class LegislacaoAgent(BaseAgent):
         if bloco_esfera:
             user_prompt += "\n\n" + bloco_esfera
 
-        # ADR-038 (dívida #102) — a rota nasce do diagnóstico FUNDAMENTADO e das
+        # ADR-039 (dívida #102) — a rota nasce do diagnóstico FUNDAMENTADO e das
         # ações triadas pelo consultor, não do relato do intake. O bloco vem
         # pronto do `rota_contexto`, que o materializer monta e injeta aqui pelo
         # metadata. Ausente (chamada avulsa do agente, fora do fluxo da E5), o

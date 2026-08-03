@@ -109,7 +109,7 @@ def _seed_process(db_session) -> tuple[Tenant, Process]:
     )
     db_session.add(process)
     db_session.flush()
-    # ADR-038: a rota só é traçada sobre diagnóstico ASSINADO. Antes desta ADR o
+    # ADR-039: a rota só é traçada sobre diagnóstico ASSINADO. Antes desta ADR o
     # contexto era montado sem nada disso e a rota nascia do relato do intake —
     # é justamente o que o guard passou a impedir. O diagnóstico entra aqui para
     # que estes testes sigam exercitando a MATERIALIZAÇÃO, e não o guard (que

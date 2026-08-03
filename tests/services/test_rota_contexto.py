@@ -1,11 +1,11 @@
-"""A rota nasce do diagnóstico fundamentado, não do relato do intake (ADR-038).
+"""A rota nasce do diagnóstico fundamentado, não do relato do intake (ADR-039).
 
 A consultora perguntou: *"a rota traçada na E5 se direciona pelas ações definidas
 na E4?"* A medição disse não — e nem pelo diagnóstico. `materialize_rota` montava
 o contexto sem `chain_data` e a Legislação lia `process.initial_diagnosis`, o
 **pré-diagnóstico por regras do intake**. A rota saía do que o CLIENTE CONTOU.
 
-Estes testes trancam as quatro decisões da ADR-038:
+Estes testes trancam as quatro decisões da ADR-039:
 
 * quem entra no contexto (diagnóstico assinado + achados que dirigem + ações
   triadas), e quem fica de fora sem sumir;
@@ -136,7 +136,7 @@ def test_usa_a_versao_assinada_mais_recente(caso) -> None:
 
 
 # ---------------------------------------------------------------------------
-# O filtro — a hierarquia da ADR-038
+# O filtro — a hierarquia da ADR-039
 # ---------------------------------------------------------------------------
 
 def test_catalogo_decide_quando_nao_ha_override(caso) -> None:
