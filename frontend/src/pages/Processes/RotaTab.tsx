@@ -330,7 +330,12 @@ export default function RotaTab({ processId }: RotaTabProps) {
   const fechada = rota.status === 'validada';
   const desatualizada = rota.status === 'desatualizada';
   const pendentes = rota.passos.filter(p => p.status !== 'validado').length;
-  const podeFechar = !fechada && !desatualizada && rota.passos.length > 0 && pendentes === 0;
+  // Validação 02/08 — `desatualizada` NÃO pode travar sozinha. Ela também é
+  // marcada quando a IA REMOVE um passo: aí não nasce passo novo, não há o que
+  // validar, e a rota nunca saía desse estado. O botão ficava desabilitado para
+  // sempre com o rodapé dizendo "todos os passos validados" — a E5 virava beco
+  // sem saída. O que trava é ter passo PENDENTE, não o rótulo do estado.
+  const podeFechar = !fechada && rota.passos.length > 0 && pendentes === 0;
 
   return (
     <div className="space-y-5">
@@ -429,7 +434,14 @@ export default function RotaTab({ processId }: RotaTabProps) {
               <ShieldCheck className="w-4 h-4" /> Rota assinada — registrada na trilha de auditoria.
             </span>
           ) : pendentes > 0 ? (
-            `${pendentes} passo(s) pendente(s) de validação.`
+            desatualizada
+              ? `A IA trouxe mudanças: ${pendentes} passo(s) esperam sua validação.`
+              : `${pendentes} passo(s) pendente(s) de validação.`
+          ) : desatualizada ? (
+            // Diff sem passo novo (remoção): não há o que validar — o aceite é o
+            // próprio fechamento. Dizer "todos validados" aqui seria verdadeiro e
+            // inútil: não explicaria por que a rota ainda não está fechada.
+            `A rota mudou desde a última assinatura — feche de novo para reassinar.`
           ) : (
             `Todos os passos validados.`
           )}
@@ -439,7 +451,7 @@ export default function RotaTab({ processId }: RotaTabProps) {
             type="button"
             onClick={fechar}
             disabled={!podeFechar || fecharMut.isPending}
-            title={podeFechar ? 'Fechar e assinar a rota' : 'Valide todos os passos primeiro'}
+            title={podeFechar ? 'Fechar e assinar a rota' : `${pendentes} passo(s) ainda não validado(s)`}
             className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
           >
             {fecharMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}

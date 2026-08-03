@@ -198,10 +198,18 @@ def descrever_pendencia_rota(db: Session, tenant_id: int, process_id: int) -> st
     sem_classificacao = [p for p in nao_validados if p.classificacao is None]
 
     if rota.status == RotaStatus.desatualizada:
+        if nao_validados:
+            return (
+                f"A IA trouxe passos novos depois que você fechou a rota: "
+                f"{len(nao_validados)} passo(s) esperam sua conferência na aba Rota. "
+                "Valide-os (ou remova) e feche a rota de novo."
+            )
+        # Diff sem passo novo (a IA REMOVEU passo). Não há o que validar — e a
+        # frase antiga mandava validar o que não existe, deixando a consultora
+        # sem próximo movimento (validação 02/08).
         return (
-            f"A IA trouxe passos novos depois que você fechou a rota: "
-            f"{len(nao_validados)} passo(s) esperam sua conferência na aba Rota. "
-            "Valide-os (ou remova) e feche a rota de novo."
+            "A rota mudou desde a última assinatura, mas não há passo pendente: "
+            'abra a aba Rota e clique em "Fechar rota" para reassinar.'
         )
     partes: list[str] = []
     if sem_classificacao:

@@ -419,20 +419,32 @@ def fechar_rota(
 
     Rota ``desatualizada`` → 409 até o consultor validar os novos passos (aceitar
     o diff). O fechamento grava um ``AuditLog`` com hash chain (Princípio 2).
+
+    Validação 02/08 — o impasse da E5. ``desatualizada`` também é marcada quando
+    a IA REMOVE um passo (``is_diff`` cobre ``removed_by_ia``, ver
+    ``rota_materializer._reconcile_passos``). Nesse caso não nasce passo novo:
+    não há o que validar, ``validar_passo`` nunca dispara, a rota nunca sai de
+    ``desatualizada`` e o 409 abaixo passava a valer para sempre. A consultora
+    ficava presa na E5 com a tela dizendo "todos os passos validados" e o botão
+    recusando — sem maçaneta nenhuma.
+
+    Por isso o 409 agora exige TER o que validar. Com zero passos pendentes,
+    clicar em "Fechar rota" É o aceite do diff — a decisão continua sendo humana
+    e explícita, e vai para a auditoria como qualquer fechamento.
     """
     rota = _get_rota_or_404(db, rota_id, current_user.tenant_id)
 
-    if rota.status == RotaStatus.desatualizada:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Rota desatualizada: valide os novos passos antes de fechar.",
-        )
     if not rota.passos:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Rota sem passos — nada a fechar.",
         )
     pendentes = [p for p in rota.passos if p.status != RotaPassoStatus.validado]
+    if rota.status == RotaStatus.desatualizada and pendentes:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Rota desatualizada: valide os novos passos antes de fechar.",
+        )
     if pendentes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
