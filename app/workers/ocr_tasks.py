@@ -29,11 +29,15 @@ from app.db.session import SessionLocal
 logger = logging.getLogger(__name__)
 
 
-def _mark_ocr_failed(doc_id: int, tenant_id: int, reason: str) -> None:
+def mark_leitura_failed(doc_id: int, tenant_id: int, reason: str) -> None:
     """Marca o documento como failed com motivo legível, em sessão LIMPA.
 
     Usado quando os retries se esgotam (o doc não pode ficar preso em
-    'processing'). Best-effort: nunca levanta."""
+    'processing'). Best-effort: nunca levanta.
+
+    Público (era `_mark_ocr_failed`) porque o pipeline de ÁUDIO usa o mesmo
+    contrato de estado — ADR-060: áudio é documento cuja leitura é a transcrição,
+    então o estado da leitura é um só, não dois paralelos."""
     from app.models.document import Document, OcrStatus  # noqa: PLC0415
 
     db = SessionLocal()
@@ -111,7 +115,7 @@ def ocr_then_extract(
                 "ocr_then_extract: doc=%s é geoespacial (%s) — OCR dispensado (gap D1)",
                 doc_id, doc.filename,
             )
-            _emit_ocr_event(
+            emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="not_required", method="geoespacial",
                 chars=0, cost_usd=0.0,
@@ -124,7 +128,7 @@ def ocr_then_extract(
                 "ocr_then_extract: doc=%s cache_hit_self chars=%d",
                 doc_id, len(doc.extracted_text),
             )
-            _emit_ocr_event(
+            emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="completed", method="cache_self",
                 chars=len(doc.extracted_text), cost_usd=0.0,
@@ -158,7 +162,7 @@ def ocr_then_extract(
                 "ocr_then_extract: storage_key=%s erro de download [%s]: %s",
                 doc.storage_key, exc.code, exc,
             )
-            _emit_ocr_event(
+            emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="failed", method="none",
                 chars=0, cost_usd=0.0, error=f"storage_error:{exc.code}",
@@ -174,7 +178,7 @@ def ocr_then_extract(
                 "ocr_then_extract: storage_key=%s objeto ausente (NoSuchKey)",
                 doc.storage_key,
             )
-            _emit_ocr_event(
+            emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="failed", method="none",
                 chars=0, cost_usd=0.0, error="no_bytes",
@@ -206,7 +210,7 @@ def ocr_then_extract(
                 "ocr_then_extract: doc=%s é shapefile zipado (%s) — OCR dispensado (gap D1)",
                 doc_id, doc.filename,
             )
-            _emit_ocr_event(
+            emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="not_required", method="geoespacial",
                 chars=0, cost_usd=0.0,
@@ -243,7 +247,7 @@ def ocr_then_extract(
                 "ocr_then_extract: doc=%s cache_hit_twin twin=%s chars=%d",
                 doc_id, twin.id, len(twin.extracted_text),
             )
-            _emit_ocr_event(
+            emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="completed", method="cache_twin",
                 chars=len(twin.extracted_text), cost_usd=0.0,
@@ -268,7 +272,7 @@ def ocr_then_extract(
                 "ocr_then_extract: budget guard rejeitou tenant=%s doc=%s: %s",
                 tenant_id, doc_id, exc,
             )
-            _emit_ocr_event(
+            emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="skipped_budget", method="none",
                 chars=0, cost_usd=0.0, error=str(exc),
@@ -349,7 +353,7 @@ def ocr_then_extract(
             result.duration_ms, ai_job.id,
         )
 
-        _emit_ocr_event(
+        emit_leitura_event(
             publish_realtime_event, tenant_id, doc,
             status_label="completed" if result.text else "failed",
             method=result.method,
@@ -380,7 +384,7 @@ def ocr_then_extract(
             raise self.retry(exc=exc, countdown=30)
         except MaxRetriesExceededError:
             # Retries esgotados → marca failed com motivo (nunca deixa 'processing').
-            _mark_ocr_failed(doc_id, tenant_id, f"OCR falhou após retries: {exc}")
+            mark_leitura_failed(doc_id, tenant_id, f"OCR falhou após retries: {exc}")
             return {"status": "error", "doc_id": doc_id, "error": str(exc)}
     finally:
         db.close()
@@ -402,7 +406,7 @@ def _dispatch_extrator(run_agent, doc, draft_id, tenant_id, user_id) -> None:
     )
 
 
-def _emit_ocr_event(
+def emit_leitura_event(
     publish_realtime_event,
     tenant_id: int,
     doc,
@@ -417,7 +421,13 @@ def _emit_ocr_event(
 ) -> None:
     """Emite document.ocr.completed (sucesso/cache) ou document.ocr.failed.
 
-    Falha de publicação é logada e absorvida — nunca derruba a task de OCR.
+    Falha de publicação é logada e absorvida — nunca derruba a task de leitura.
+
+    Compartilhado com o pipeline de ÁUDIO (ADR-060). O nome do evento continua
+    `document.ocr.*` de propósito: o frontend já escuta esse canal e o significado
+    é o mesmo ("a leitura deste documento terminou"), independente de a leitura ter
+    sido OCR ou transcrição. Criar um evento paralelo obrigaria a tela a saber a
+    diferença sem ganhar nada.
     """
     event_type = "document.ocr.failed" if status_label in ("failed", "skipped_budget") else "document.ocr.completed"
     payload: dict[str, Any] = {

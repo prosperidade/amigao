@@ -79,7 +79,9 @@ class ProcessExtractJob(BaseModel):
     document_id: int
     filename: Optional[str] = None
     document_type: Optional[str] = None
-    method: Literal["extract", "ocr_then_extract"]
+    # "transcricao_audio" (ADR-060): o áudio é lido por transcrição, não por OCR,
+    # e não passa pelo extrator ao fim.
+    method: Literal["extract", "ocr_then_extract", "transcricao_audio"]
     task_id: Optional[str] = None
 
 
@@ -92,7 +94,10 @@ class ProcessExtractResponse(BaseModel):
     )
     pending_ocr: list[ProcessExtractJob] = Field(
         default_factory=list,
-        description="Docs sem texto — chain ocr_then_extract que dispara extrator ao fim.",
+        description=(
+            "Docs sem texto — chain ocr_then_extract que dispara extrator ao fim, "
+            "ou transcrição de áudio em andamento."
+        ),
     )
     skipped: list[dict[str, Any]] = Field(
         default_factory=list,

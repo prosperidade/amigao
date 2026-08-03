@@ -930,9 +930,31 @@ def import_draft_documents(
 
     task_ids: list[str] = []
     skipped_geo = 0
+    from app.services.audio_files import is_audio  # noqa: PLC0415
     from app.services.geo_files import GEOSPATIAL_DOCUMENT_TYPE, is_geospatial  # noqa: PLC0415
+    from app.workers.audio_tasks import transcribe_audio_document  # noqa: PLC0415
     from app.workers.ocr_tasks import ocr_then_extract  # noqa: PLC0415
     for doc in docs:
+        # Áudio da entrevista: leitura por TRANSCRIÇÃO (dívida #103 · ADR-060).
+        # Era exatamente aqui que o áudio do wizard morria — o arquivo chegava,
+        # ficava anexado, e nenhum serviço o lia.
+        if is_audio(doc.filename, doc.mime_type, doc.document_type):
+            doc.ocr_status = OcrStatus.pending
+            db.add(doc)
+            try:
+                t = transcribe_audio_document.delay(
+                    doc_id=doc.id,
+                    tenant_id=current_user.tenant_id,
+                    user_id=current_user.id,
+                    draft_id=draft_id,
+                )
+                task_ids.append(t.id)
+            except Exception as exc:
+                logger.warning(
+                    "Falha ao enfileirar transcrição para doc_id=%s: %s", doc.id, exc
+                )
+            continue
+
         # Guard geoespacial: KML/KMZ/SHP/GeoJSON/GPX são GEOMETRIA, não documento.
         # Roteamos para fora do OCR — antes deste guard um .kml caía na cascata
         # pypdf→Gemini→OpenAI e estourava "Unsupported MIME type". O arquivo fica
