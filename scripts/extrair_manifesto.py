@@ -43,6 +43,54 @@ PADROES_REFERENCIA = (
     "areas-embargadas", "atendimento-ao-manual", "/consultas/",
 )
 
+# Sinal MAIS FORTE que a URL: a própria curadoria classifica cada linha na coluna
+# "Tipo normativo / sistema". Quando ela diz "Sistema", "Base geoespacial",
+# "Portal" ou "Plano", está dizendo que aquilo não é texto de norma — e ela sabe
+# melhor do que qualquer heurística nossa sobre o formato da URL.
+#
+# Calibrado no bloco 2: os núcleos 02/03 apontam para SIGEF, acervo fundiário do
+# INCRA, malhas do IBGE, CNUC, WebAmbiente. Nenhum casava com os padrões de URL
+# do núcleo 06 e todos são inequívocos na coluna de tipo.
+TIPOS_REFERENCIA = (
+    "sistema", "base geoespacial", "base geográfica", "base cartográfica",
+    "base pública", "portal", "serviço", "plano federal", "dados abertos",
+    "base temática",
+)
+
+# A espécie normativa nomeada no tipo desempata quando a URL não denuncia um
+# portal: "Portaria / serviço" é uma PORTARIA (a IBAMA 15/2026) que por acaso
+# também tem página de serviço.
+ESPECIES_NORMATIVAS = (
+    "lei", "decreto", "instrução normativa", "portaria", "resolução",
+    "medida provisória", "constituição", "orientação jurídica",
+)
+
+
+def _classificar(url: str, tipo_curadoria: str) -> str:
+    """`norma` ou `referencia_operacional`.
+
+    Ordem de precedência, e ela importa — as duas primeiras versões desta função
+    erraram por inverter:
+
+    1. **A URL manda.** É ela que vai ser baixada; o que ela aponta é o que
+       entraria no corpus. "Decreto federal / sistema" cuja URL é a consulta de
+       áreas embargadas baixaria a página de consulta, não o decreto.
+    2. **Espécie normativa no tipo desempata.** Sem sinal de portal na URL,
+       "Portaria / serviço" é portaria.
+    3. **Tipo de referência.** "Sistema", "Base geoespacial", "Portal".
+    4. Na dúvida, norma — o dry-run e a `validation_keyword` pegam o engano, e
+       errar para o lado de conferir é mais barato que errar para o lado de
+       excluir em silêncio.
+    """
+    url_l, tipo_l = url.lower(), (tipo_curadoria or "").lower()
+    if any(pat in url_l for pat in PADROES_REFERENCIA):
+        return "referencia_operacional"
+    if any(e in tipo_l for e in ESPECIES_NORMATIVAS):
+        return "norma"
+    if any(t in tipo_l for t in TIPOS_REFERENCIA):
+        return "referencia_operacional"
+    return "norma"
+
 COLUNAS = [
     "identifier", "titulo", "url", "bloco", "orgao", "esfera", "uf", "tipo",
     "status_fonte", "fonte_oficial", "vigencia_inicio", "vigencia_fim",
@@ -97,6 +145,7 @@ def main() -> int:
     col_status = "Status da fonte"
     col_orgao = "Ente federado / órgão normativo"
     col_tema = "Macrotema"
+    col_tipo = "Tipo normativo / sistema"
 
     por_url: OrderedDict[str, dict] = OrderedDict()
     for d in dados:
@@ -106,7 +155,8 @@ def main() -> int:
         ato = str(d.get(col_ato) or "").strip()
         if url not in por_url:
             ident, keyword = _identificador(ato, url)
-            eh_ref = any(pat in url for pat in PADROES_REFERENCIA)
+            tipo_linha = _classificar(url, str(d.get(col_tipo) or ""))
+            eh_ref = tipo_linha == "referencia_operacional"
             por_url[url] = {
                 "identifier": ident or ato[:60],
                 "titulo": ato[:300],

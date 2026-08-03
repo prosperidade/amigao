@@ -758,7 +758,73 @@ o modelo de cada vetor — a informação para a trava já está gravada.
 Google × OpenAI, que já nasce com a trava pronta. **Origem:** levantado ao
 preparar o experimento de embeddings, 03/08.
 
-**PRÓXIMO LIVRE: 115.**
+### Abertas pelo Bloco 2 do corpus (03/08, `feat/corpus-bloco2-territorial-florestal`)
+
+**115. O interpretativo federal é INALCANÇÁVEL por robô — e é onde mora o
+ganho.** Das 10 URLs de material interpretativo dos núcleos 02 e 03, **zero**
+baixam como texto de norma: `car.gov.br` fecha a conexão TLS (IN MMA 02/2014); o
+portal do INCRA devolve HTML numa URL terminada em `.pdf` (IN 77/2013); o Manual
+de Georreferenciamento é **página de notícia** e ainda responde 401; a Receita
+tem certificado que não valida (IN RFB 2.203/2024); o IBAMA responde 403 (IN
+21/2014); três INs do IBAMA linkam **posts de notícia** em vez do ato; e o BCB
+devolve *"Essa pagina depende do javascript"* (Res. CMN 5.193/2024).
+
+No núcleo 06 o material apontava para o Planalto, que serve HTML puro. Aqui ele
+mora em **portais de agência**. **O que destrava:** a pasta de INs que a Isis vai
+enviar — que por isso entra **antes** dos blocos 3–5. **Origem:** sondagem do
+bloco 2.
+
+**116. Links do Sisconama por `id=` não são confiáveis — não usar.** Conferidos
+três, todos serviram outro ato: `id=594` (pedido CONAMA 411/2009) devolve **Moção
+102/2009**; `id=586` (pedido 406/2009) devolve **Resolução 412/2009**; `id=452`
+(pedido 369/2006) não contém "369". Já havia registro do mesmo em abril
+(`id=745`, `id=489`). A `validation_keyword` pegou os três. A 369/2006 está no
+corpus desde abril por um espelho da CETESB, justamente porque o Sisconama
+falhou. **O que destrava:** a Isis fornecer identificador estável ou espelho de
+órgão. **Origem:** sondagem do bloco 2.
+
+**117. O chunker perde a fronteira do artigo em PDF de compêndio.** O corte
+estrutural usa `^\s*Art\.\s*\d+` em MULTILINE. Em PDF de compêndio o "Art."
+seguinte frequentemente **não começa em início de linha**, e a fatia engole o
+resto do documento até o próximo match válido. Medido: `Art. 51.` do MT-NUC01
+virou **374 pedaços somando 298.580 tokens** — não é artigo grande, é o documento
+inteiro sob um rótulo só.
+
+**A consequência é pior que o corte:** os 374 pedaços carregam todos o `section`
+`"Art. 51. (parte N)"`. Um trecho de outra norma está **etiquetado como Art. 51**
+— metadado ativamente errado, não apenas ausente. E é esse campo que a #107
+propõe usar como âncora.
+
+Números: **5.442 chunks (17,4%)** têm marca `(parte N)`, dos quais **5.117 são
+estaduais**. No federal, de HTML limpo, o quadro é sadio: mediana 138 tokens,
+p95 800, máximo 1.498.
+
+**Atenção ao medir:** os 17,4% misturam artigo genuinamente grande cortado por
+tamanho (legítimo — `Art. 61-A` do Código Florestal, 4.644 tokens) com fronteira
+perdida engolindo o documento (defeito). **Separar os dois antes de qualquer
+experimento de chunking**; medir sobre a mistura mediria o defeito, não a
+estratégia. **Origem:** levantamento de 03/08.
+
+**118. `MAX_TOKENS=1500` é escolha nossa, não limite do modelo.** O
+`text-embedding-3-small` aceita **8.191 tokens**; nosso teto é 1.500. Os artigos
+que se partem por tamanho no federal caberiam folgados: `Art. 19` da Lei 6.938
+(6.289), `Art. 100` da Constituição (5.578), `Art. 61-A` do Código Florestal
+(4.644). **Consequência para o experimento de embedding:** "janela maior do
+provedor X" resolveria gargalo que não temos — nem a janela atual está sendo
+usada. **Origem:** levantamento de 03/08.
+
+**119. A estrutura determinística da norma é jogada fora.** Três coisas que o
+texto entrega de graça e o corpus não guarda: **(a) hierarquia** — o chunker usa
+o padrão mais granular que corta e, ao cortar por artigo, descarta capítulo e
+título; medido, só **12 chunks de 3.192 federais** têm rótulo hierárquico;
+**(b) referências cruzadas explícitas** — 329 chunks federais com *"na forma do
+art."* (27), *"nos termos do art."* (64), *"previsto/disposto no art."* (238),
+arestas de grafo viradas texto corrido; **(c) identidade do dispositivo** — 93,1%
+dos chunks federais mencionam um artigo, e o número não está em campo
+consultável. **É dado, não inferência** — e pode ser solução mais elegante que
+trocar de provedor. Parente da #107. **Origem:** levantamento de 03/08.
+
+**PRÓXIMO LIVRE: 120.**
 
 ---
 

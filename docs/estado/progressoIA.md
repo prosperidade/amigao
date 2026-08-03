@@ -2831,3 +2831,67 @@ hipótese não deve ser "o mundo piorou", e sim "meu instrumento está mentindo"
 Foi consultar o chunk **fora** do `search()` que desmontou o engano — a mesma
 manobra de conferir a fonte por outro caminho que já tinha achado o mojibake e
 a Constituição truncada.
+
+---
+
+## Bloco 2 do corpus — o que o canônico não resolve (03/08/2026)
+
+### O resultado honesto primeiro
+
+Ingeridos **25 documentos canônicos** dos núcleos 02 (Territorial/Cadastro) e 03
+(Florestal/CAR/PRA): 973 chunks, US$ 0,0043, federal+nacional de 2.288 para 3.192.
+
+Medido com `probes=10` nos dois lados, na pergunta de retificação de CAR:
+**os mesmos 8 trechos, idênticos, antes e depois.** Nenhum documento novo entrou
+na resposta.
+
+**Este bloco não foi ganho de resposta.** Foi (a) a espinha fundiária que faltava
+— Lei 10.267/2001, Decreto 4.449/2002, Lei 6.015/1973, SIRGAS2000 — para
+perguntas que ainda não fizemos, e (b) as fontes quebradas **nomeadas** em vez de
+invisíveis.
+
+### O aprendizado que reorienta os próximos blocos
+
+> **O canônico responde "o que a lei exige". O interpretativo responde "como se
+> faz".** Pergunta de procedimento só melhora com material de procedimento.
+
+A pergunta do CAR é de procedimento. Quem a responderia são as INs do Serviço
+Florestal e do INCRA sobre o rito — e **nenhuma é alcançável por robô**. Das 10
+URLs interpretativas destes núcleos, zero entregam o texto do ato: TLS quebrado,
+portal devolvendo HTML numa URL `.pdf`, página de notícia no lugar da norma, 403,
+certificado inválido, JavaScript obrigatório.
+
+No núcleo 06 o interpretativo estava no Planalto e funcionou — a OJN 06/2009
+dominou a recuperação. Aqui ele mora em portais de agência. **Consequência: a
+pasta de INs da Isis entra antes dos blocos 3–5.**
+
+### O levantamento do chunking, que reformula o experimento de embedding
+
+Ao preparar o experimento "provedor × estratégia de chunking", a medição mostrou
+que as duas variáveis não têm o mesmo peso:
+
+- **O teto de 1.500 tokens é nosso, não do modelo.** O `text-embedding-3-small`
+  aceita 8.191. "Janela maior do provedor X" resolveria um gargalo que não temos.
+- **17,4% dos chunks (5.442) têm marca `(parte N)`** — mas isso mistura duas
+  coisas: artigo genuinamente grande cortado por tamanho, e **fronteira perdida**.
+  Em PDF de compêndio o "Art." seguinte não começa em início de linha, e a fatia
+  engole o resto do documento: `Art. 51.` do MT-NUC01 virou **374 pedaços com
+  298.580 tokens**, todos etiquetados `"Art. 51. (parte N)"`. **Metadado
+  ativamente errado**, no campo que a #107 quer usar como âncora.
+- **A estrutura determinística é descartada**: só 12 de 3.192 chunks federais
+  guardam hierarquia; 329 referências cruzadas explícitas viram texto corrido;
+  93,1% mencionam artigo sem que o número esteja em campo consultável.
+
+Ou seja: o chunking estrutural por dispositivo **não depende de provedor**, ataca
+a #107 na raiz e é medível com o índice atual. O provedor entra depois, contra um
+baseline saudável — em vez de comparar dois provedores sobre um chunking que já
+sabemos defeituoso.
+
+### Um erro meu, detectado e revertido
+
+Sobrescrevi a Lei 6.938/1981 **anotada** pela **compilada** — o extrator gerou a
+URL da planilha e eu não peguei na curadoria. Restaurada.
+
+Vale o registro do porquê o manifesto existe: a decisão de curadoria virou **dado
+verificável**, então a substituição foi detectável por uma consulta de URL e
+reversível por uma reingestão. Se fosse comentário em conversa, teria passado.
