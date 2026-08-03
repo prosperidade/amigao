@@ -90,3 +90,10 @@ normas novas de texto sancionador** (mais a CF e uma histórica). A matriz é
 analítica e o corpus já cobre boa parte do canônico federal — o valor dos
 próximos blocos provavelmente também não será volume. Melhor saber agora do que
 descobrir no bloco 5.
+
+**Critério de curadoria para os próximos (ADR-038, item 6):** priorizar material
+**interpretativo** — OJNs, pareceres normativos, notas técnicas de procuradoria,
+INs de rito — sobre o canônico já coberto. A medição do bloco 1 mostrou por quê:
+a OJN 06/2009 da PFE-IBAMA ocupou 4 das 8 vagas de recuperação, à frente do
+próprio Decreto 6.514/2008. O decreto diz o que a lei determina; a OJN diz como o
+órgão a aplica — e é ela que vincula quem vai julgar o recurso.

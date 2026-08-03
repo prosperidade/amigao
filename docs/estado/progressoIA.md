@@ -2649,3 +2649,19 @@ texto dele traz o **art. 205** (educação) à frente. Não é defeito da ingest
 um documento de 495 artigos onde cada um disputa com os outros 494. Fica como
 dívida — parente da regra de identidade do ADR-036, agora aplicada dentro de um
 mesmo documento.
+
+### Dois registros que a rodada deixou como método
+
+**Material interpretativo vale tanto quanto o texto legal.** A OJN 06/2009 da
+PFE-IBAMA ocupou 4 das 8 vagas de recuperação, à frente do próprio Decreto
+6.514/2008. É a diferença entre citar a lei e saber **como o órgão a aplica** — e
+a OJN vincula os procuradores que vão julgar o recurso. Vira critério de
+curadoria para os blocos seguintes (ADR-038, item 6): OJNs, pareceres normativos
+e notas técnicas entram com prioridade igual ou maior que o canônico já coberto.
+
+**Diluição por documento gigante é uma classe nova.** A CF em 495 chunks afoga o
+próprio art. 225. Não é só a CF: vale para toda norma-mãe extensa. A hipótese
+registrada na dívida #107 é enriquecer o chunk com a identificação do artigo no
+`title` — **metadado no chunk vale mais que reranking depois**, que é a mesma
+lição do rótulo de vigência: informação gravada no dado chega a todo consumidor
+sem que nenhum precise saber que ela existe.

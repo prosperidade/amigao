@@ -617,14 +617,23 @@ compensa a duplicação. Enquanto isso a escolha está **codificada no manifesto
 as três dão `skip` por hash idêntico a cada rodada, o que torna a decisão
 verificável em vez de comentada. **Origem:** ADR-038.
 
-**107. A Constituição compete consigo mesma na busca.** A CF entrou íntegra: 495
-chunks, **72% de todo o núcleo 06**. O art. 225 é recuperável quando a consulta o
-**nomeia** (similaridade 0,69), mas uma paráfrase do próprio texto dele — *"todos
-têm direito ao meio ambiente ecologicamente equilibrado"* — traz o **art. 205**
+**107. DILUIÇÃO POR DOCUMENTO GIGANTE — a norma-mãe compete consigo mesma.**
+Classe nova de falha, nomeada em 03/08. A CF entrou íntegra: 495 chunks, **72% de
+todo o núcleo 06**. O art. 225 é recuperável quando a consulta o **nomeia**
+(similaridade 0,69), mas uma paráfrase do próprio texto dele — *"todos têm
+direito ao meio ambiente ecologicamente equilibrado"* — traz o **art. 205**
 (educação) à frente. Não é defeito de ingestão: é um documento de 495 artigos
-onde cada um disputa com os outros 494. **O que destrava:** reforço ou filtro por
-dispositivo quando a citação nomeia artigo — parente da regra de identidade do
-ADR-036, aplicada agora *dentro* de um mesmo documento. Medido em 03/08.
+onde cada dispositivo disputa com os outros 494, e o dispositivo que importa
+afoga. Vale para toda norma-mãe extensa (CF, Código Florestal, Decreto 6.514).
+
+**Hipótese a testar quando atacarmos:** enriquecer o chunk com a identificação do
+artigo no `title` — mesmo princípio do rótulo de vigência do ADR-037, **metadado
+no chunk vale mais que reranking depois**. O rótulo histórico já provou que
+informação gravada no dado chega a todo consumidor sem que nenhum deles precise
+saber que ela existe; a identificação de dispositivo tende a se comportar igual.
+Parente também da regra de identidade do ADR-036, aplicada *dentro* de um mesmo
+documento. **Não implementado nesta rodada** — a hipótese fica registrada para
+não se perder.
 
 **108. Frente própria: os 165 alertas da curadoria.** A aba `Alertas_Regente` da
 planilha traz 165 linhas de "gatilho → ação sugerida". **Isso não é corpus, é

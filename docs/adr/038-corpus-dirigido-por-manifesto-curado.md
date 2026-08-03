@@ -68,6 +68,22 @@ curadoria precisa saber — revogação não sinalizada, URL truncada, portal qu
 responde 403 — fica no manifesto, versionado, e sai no relatório. Não é
 comentário de código: é recado para a especialista.
 
+**6. Material INTERPRETATIVO vale tanto quanto o texto legal.** Critério de
+curadoria firmado em 03/08, a partir do que a primeira medição mostrou: a
+**Orientação Jurídica Normativa 06/2009 da PFE-IBAMA** passou a ocupar 4 das 8
+vagas de trecho recuperado na pergunta de defesa — à frente do próprio Decreto
+6.514/2008.
+
+Faz sentido, e é a diferença que interessa ao consultor: o decreto diz o que a
+lei determina; a OJN diz **como o órgão a aplica**, e é vinculante para os
+procuradores que vão julgar o recurso. Citar a lei sem saber a interpretação do
+órgão é entregar metade da defesa.
+
+Portanto, na curadoria dos blocos seguintes: OJNs, pareceres normativos, notas
+técnicas de procuradoria e instruções normativas de rito entram com a **mesma
+prioridade** do texto legal canônico — e, onde o canônico já está coberto (que é
+a regra, medida no bloco 1), com prioridade **maior**.
+
 ## Consequências
 
 O primeiro uso já se pagou duas vezes, e as duas com o mesmo mecanismo — a
