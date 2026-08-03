@@ -293,6 +293,17 @@ class Settings(BaseSettings):
     # marginal em Flash, ROI alto na precisão das citações.
     LEGISLATION_RAG_TOP_K: int = 8
 
+    # Quantas listas do índice IVFFlat a busca vetorial percorre.
+    # `ix_knowledge_catalog_embedding_cosine` é IVFFlat com lists=100 — busca
+    # APROXIMADA. No default do pgvector (`probes=1`) ela varre ~1% dos vetores e
+    # devolve vizinhos que NÃO são os mais próximos, em silêncio, porque sempre
+    # devolve alguma coisa. Medido em 03/08 na pergunta de retificação de CAR: o
+    # trecho mais similar do corpus (IN MMA 02/2014, 0,7286) não aparecia entre
+    # os 8 devolvidos, e o 8º tinha 0,3996. Com probes=10 o top-5 real volta
+    # exato; 50 e 100 não melhoram — 10 basta para lists=100 (≈ sqrt(lists)).
+    # Ao DOBRAR o número de chunks, reavaliar lists e probes juntos (dívida #110).
+    RAG_IVFFLAT_PROBES: int = 10
+
     # ADR-033 — modo da rota regulatória servida pela Análise Legal.
     #   "shadow" (default do piloto): o agente continua rodando e o output segue
     #      inteiro em `AIJob.result`, mas a API NÃO serve etapas/prazos/caminho —

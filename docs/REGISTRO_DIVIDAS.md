@@ -701,7 +701,64 @@ Efeito colateral aceito: uma rota legada que de fato ficou para trás não avisa
 **O que destrava:** regenerar a rota desses casos quando o consultor passar por
 eles — a versão anterior fica guardada (#126). **Origem:** ADR-039.
 
-**PRÓXIMO LIVRE: 113.**
+### Aberta pelo fix do recall vetorial (03/08, `fix/rag-ivfflat-probes`)
+
+**113. Reavaliar `lists`/`probes` do índice vetorial — GATILHO: quando os chunks
+DOBRAREM.** `probes=10` é o remédio para o índice de **hoje**:
+`ix_knowledge_catalog_embedding_cosine`, IVFFlat com `lists=100`, sobre ~31 mil
+chunks. Os dois parâmetros são acoplados — `probes` só faz sentido em relação a
+`lists`, e `lists` só faz sentido em relação ao número de vetores. Crescer o
+corpus sem revisitar os dois traz de volta o mesmo modo de falha.
+
+**Gatilho objetivo, para não virar "revisar um dia":** quando
+`select count(*) from knowledge_catalog` passar de **~62 mil** (o dobro de agora),
+reavaliar `lists` e `probes` **juntos**, medindo recall com a mesma régua usada
+em 03/08 — comparar o top-k devolvido pela busca com o top-k exato obtido por
+varredura sem índice.
+
+**Alternativa a avaliar nessa hora: trocar IVFFlat por HNSW.** O HNSW não tem
+este modo de falha: não existe `probes` para esquecer de ajustar, o recall é
+consistentemente melhor e a latência é comparável na nossa escala. O custo da
+troca é uma reindexação — que **não gasta API**, porque não é reembedding; os
+vetores já estão gravados. Leva minutos.
+
+**Por que adiar não acumula juros:** o `probes=10` já elimina a perda medida, e a
+migração para HNSW não fica mais cara por esperar. O risco de adiar é só um:
+esquecer. Por isso o gatilho está escrito aqui em número, não em intenção.
+
+**Origem:** medição do bloco 2, 03/08 — o defeito apareceu disfarçado de
+regressão de corpus.
+
+**114. TRAVA DE ESPAÇO VETORIAL — provider de embedding escolhido por presença de
+chave é risco vivo.** `app/services/embeddings.py:_select_provider()` decide o
+provider assim: se há `OPENAI_API_KEY`, OpenAI; senão, Gemini. Isso significa que
+**chave ausente, cota estourada ou deploy sem a variável trocaria o espaço
+vetorial da CONSULTA** contra um índice construído no outro provedor.
+
+Embeddings de provedores diferentes não são intercambiáveis — são espaços
+distintos. A busca não falharia: devolveria 8 trechos com similaridades de
+aparência normal, **todos ruído**. É pior que o `probes=1` da #113: lá eram
+vizinhos subótimos do mesmo espaço; aqui seriam distâncias entre coisas
+incomparáveis. Fallback automático de provider, aqui, é bug — não resiliência.
+
+**Medido em 03/08 (antes de qualquer conclusão):** o corpus está **homogêneo** —
+31.298 chunks, todos `text-embedding-3-small` a 768 dimensões, de 14/05 a 03/08.
+Uma linha só no `group by embedding_model`. **A mistura ainda NÃO aconteceu.** O
+risco é real e não materializado.
+
+**O que destrava:** (a) a busca declara qual `embedding_model` espera e **recusa
+com erro claro e log alto** se o vetor da consulta vier de modelo diferente do
+dos chunks — nunca mistura em silêncio; (b) o provider passa a ser **explícito
+por configuração**, não inferido por presença de chave, e a ausência da chave
+configurada vira **falha ruidosa** em vez de troca de provider; (c) teste que
+prova a recusa. A coluna `knowledge_catalog.embedding_model` já existe e guarda
+o modelo de cada vetor — a informação para a trava já está gravada.
+
+**Ordem:** PR próprio e pequeno, depois do bloco 2 e **antes** do experimento
+Google × OpenAI, que já nasce com a trava pronta. **Origem:** levantado ao
+preparar o experimento de embeddings, 03/08.
+
+**PRÓXIMO LIVRE: 115.**
 
 ---
 

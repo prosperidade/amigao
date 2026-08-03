@@ -2777,3 +2777,57 @@ Colidimos duas vezes em dois dias (ver a nota de renumeração no topo da ADR-03
 `AudioTranscript` própria seria mais limpa no papel e exigiria reimplementar
 cinco integrações para ganhar uma tabela. O teste
 `test_transcricao_entra_no_diagnostico.py` existe para quebrar se alguém tentar.
+## O índice que não estava olhando (03/08/2026)
+
+Um bug de recuperação que existia desde a Sprint U e só apareceu porque uma
+medição de corpus deu o resultado errado.
+
+### O sintoma parecia regressão de corpus
+
+Depois de ingerir o bloco 2, a pergunta de retificação de CAR **piorou**: antes,
+os 8 trechos recuperados eram todos de IN MMA 02/2014, Decreto 8.235/2014 e
+Decreto 7.830/2012, com similaridades de 0,70 a 0,73. Depois, o topo caiu para
+0,69 e a lista trazia Lei 5.868/1972 (ITR), art. 191 da Constituição (usucapião)
+e o art. 58 do Decreto 6.514 (uso de fogo) — o último com **0,3996**.
+
+A leitura óbvia era "o corpus novo diluiu o material bom". Estava errada.
+
+### O que era
+
+O índice `ix_knowledge_catalog_embedding_cosine` é **IVFFlat com lists=100** —
+busca **aproximada**. O pgvector traz `ivfflat.probes = 1` de fábrica: a busca
+percorre **uma** das 100 listas, ~1% dos vetores, e devolve o melhor que achar
+ali. Não erra com alarme: erra devolvendo alguma coisa.
+
+A prova veio de consultar o chunk diretamente. O trecho de similaridade **0,7286**
+continuava lá, com a mesma pontuação — e o `search()` simplesmente não o via.
+Crescer o corpus mudou quais listas a sonda única alcançava, e por isso o
+sintoma apareceu junto com a ingestão.
+
+| `probes` | topo | 8º devolvido |
+|---|---|---|
+| **1** (produção) | 0,6936 | 0,3996 |
+| **10** | **0,7286** | 0,6999 |
+| 50 e 100 | 0,7286 | idêntico a 10 |
+
+### O que mudou
+
+`RAG_IVFFLAT_PROBES = 10`, aplicado com `SET LOCAL` antes de cada busca. Dez
+porque é ≈ √lists e porque 50 e 100 não melhoram — não há por que pagar mais
+varredura. Degrada com elegância: onde `ivfflat.probes` não existe, a busca segue.
+
+O efeito não é do corpus federal: **vale para todos os agentes**, hoje.
+
+### O que isso ensina sobre medir
+
+As medições de corpus anteriores (`antes`, `depois`, `depois_nucleo06`) foram
+tiradas com `probes=1`. Não se jogam fora — a direção que apontam continua
+válida, porque a comparação era entre dois estados medidos com a mesma régua
+torta. O que era falso era o **teto**: o corpus sempre teve mais a oferecer do
+que a busca mostrava.
+
+E fica a lição de método: quando uma medição contraria o esperado, a primeira
+hipótese não deve ser "o mundo piorou", e sim "meu instrumento está mentindo".
+Foi consultar o chunk **fora** do `search()` que desmontou o engano — a mesma
+manobra de conferir a fonte por outro caminho que já tinha achado o mojibake e
+a Constituição truncada.
