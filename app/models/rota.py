@@ -301,6 +301,32 @@ class RotaPasso(Base):
     # de aprendizado futuro (auto-RAG de fundamento é follow-on).
     origem_manual_nota = Column(Text, nullable=True)
 
+    # ── Proveniência do passo (ADR-038, dívida #102) ────────────────────────
+    # De qual ACHADO do diagnóstico e/ou de qual AÇÃO triada este passo nasceu.
+    # Fecha a corrente inteira: achado → ação → passo da rota → item da proposta
+    # (`ProposalScopeItem.rota_passo_id`, S5-A). Cada elo com FK, nada sem
+    # origem — do diagnóstico ao contrato.
+    #
+    # `SET NULL` pelo mesmo motivo do S5-A: a rota é peça assinada e sobrevive
+    # ao desaparecimento da origem. Perder o ponteiro é aceitável; perder o
+    # passo que o consultor validou, não.
+    #
+    # Ambos NULL é legítimo e frequente: passo manual do consultor, ou passo que
+    # a IA propôs sem conseguir declarar de onde veio. Nunca se inventa a origem
+    # — referência que não casa com achado/ação reais deste caso é descartada.
+    origem_issue_id = Column(
+        Integer,
+        ForeignKey("regulatory_issues.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    origem_acao_id = Column(
+        Integer,
+        ForeignKey("acoes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     status = Column(
         Enum(RotaPassoStatus, name="rota_passo_status"),
         nullable=False,
