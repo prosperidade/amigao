@@ -22,7 +22,6 @@ e a busca não quebra onde `SET LOCAL ivfflat.probes` não existe.
 """
 
 import pytest
-from sqlalchemy import text
 
 from app.core.config import settings
 
@@ -36,22 +35,34 @@ def test_default_de_probes_e_maior_que_um():
     )
 
 
-def test_probes_e_aplicado_na_sessao_da_busca(db_session, monkeypatch):
+def test_probes_de_settings_chega_ao_sql(db_session, monkeypatch):
     """O valor de settings tem de CHEGAR ao banco — não basta existir.
 
-    Confere lendo de volta o parâmetro depois de uma busca real.
+    Confere o SQL emitido, não o parâmetro lido de volta. A primeira versão
+    deste teste fazia `SHOW ivfflat.probes` depois da busca e passava sozinha,
+    mas quebrava na suíte completa: `SET LOCAL` é escopo de TRANSAÇÃO, e uma
+    busca de outro teste já havia deixado o valor default na mesma conexão.
+    O teste media o estado do banco, que é compartilhado; o contrato é o SQL
+    emitido, que é só desta chamada.
     """
     import app.services.knowledge_catalog as kc
 
     monkeypatch.setattr(kc, "embed_text", lambda *a, **k: [0.1] * 768)
     monkeypatch.setattr(settings, "RAG_IVFFLAT_PROBES", 7, raising=False)
 
+    emitidos: list[str] = []
+    original = db_session.execute
+
+    def _espiao(sentenca, *a, **k):
+        emitidos.append(str(sentenca))
+        return original(sentenca, *a, **k)
+
+    monkeypatch.setattr(db_session, "execute", _espiao)
     kc.search(db_session, "qualquer consulta", source_type="legislation")
 
-    lido = db_session.execute(text("SHOW ivfflat.probes")).scalar()
-    assert int(lido) == 7, (
-        "o `SET LOCAL` não chegou à sessão — a busca seguiria com o default 1"
-    )
+    sets = [s for s in emitidos if "ivfflat.probes" in s]
+    assert sets, "a busca não emitiu `SET LOCAL ivfflat.probes` — seguiria no default 1"
+    assert "= 7" in sets[0], f"o valor de settings não chegou ao SQL: {sets[0]!r}"
 
 
 def test_probes_zero_desliga_sem_quebrar(db_session, monkeypatch):
