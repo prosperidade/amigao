@@ -34,6 +34,10 @@ class PropertyHubHeader(BaseModel):
     area_documental_ha: Optional[float] = None
     area_grafica_ha: Optional[float] = None
     tipologia: Optional[str] = None                 # agricultura | pecuaria | misto | outro
+    # Dívida #200 — módulos fiscais decide PORTE, e porte decide as exceções do
+    # Código Florestal que o diagnóstico aplica. Fracionário de propósito (3,7 MF;
+    # o limiar de 4 MF depende justamente da fração).
+    modulos_fiscais: Optional[float] = None
     strategic_notes: Optional[str] = None
 
     # Sprint 4 (Ficha 07 §9) — declaração de contiguidade + honestidade da soma.
