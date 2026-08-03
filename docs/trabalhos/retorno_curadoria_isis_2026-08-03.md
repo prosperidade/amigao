@@ -106,3 +106,80 @@ Efeito medido na mesma pergunta de sempre (a defesa do auto 484341/D): a
 Orientação Jurídica Normativa da procuradoria do IBAMA passou a aparecer entre os
 trechos mais relevantes, ocupando 4 das 8 vagas. É interpretação vinculante sobre
 o rito sancionador — exatamente o tipo de material que faltava.
+
+---
+
+# Segunda rodada — núcleos 02 e 03 (Territorial/Cadastro e Florestal/CAR/PRA)
+
+Isis, esta rodada tem um recado principal e ele é sobre **onde vale a pena
+investir o seu tempo de curadoria**.
+
+## O achado que muda a prioridade
+
+Separamos o seu mapa em dois grupos antes de ingerir:
+
+- **Canônico** — as leis e decretos: "o que a lei exige"
+- **Interpretativo** — INs, manuais, notas técnicas: "como se faz na prática"
+
+Ingerimos 25 documentos canônicos novos e medimos o efeito numa pergunta de
+procedimento: *"quais são os requisitos e o procedimento para retificação do CAR
+de um imóvel rural em Goiás?"*.
+
+**O resultado foi zero.** Os mesmos 8 trechos antes e depois, idênticos. Nenhum
+dos 25 documentos novos entrou na resposta.
+
+Não é que eles sejam inúteis — a Lei 10.267/2001, o Decreto 4.449/2002 e a Lei
+6.015/1973 são a espinha fundiária que faltava, e vão responder perguntas de
+georreferenciamento e registro que ainda não fizemos. Mas **pergunta de
+procedimento só melhora com material de procedimento**.
+
+## E o material de procedimento é justamente o que não conseguimos baixar
+
+Das 10 fontes interpretativas do seu mapa nesses dois núcleos, **nenhuma** entrega
+o texto da norma:
+
+| norma | o que o link entrega |
+|---|---|
+| IN MMA 02/2014 (SICAR) | o site `car.gov.br` derruba a conexão |
+| IN INCRA 77/2013 | o endereço termina em `.pdf` mas devolve uma página |
+| Manual de Georreferenciamento | página de **notícia** sobre o manual, e pede senha |
+| IN RFB 2.203/2024 | certificado de segurança da Receita não é aceito |
+| IN IBAMA 21/2014 (Sinaflor) | portal bloqueia acesso automatizado |
+| IN IBAMA 16/2022, 11/2025, 14/2024 | páginas de **notícia**, não o ato |
+| Res. CMN 5.193/2024 | página do Banco Central exige JavaScript |
+| Res. CONAMA 411/2009 | o link do Sisconama entrega **outra resolução** |
+
+**Por isso a sua pasta de INs tem prioridade sobre os próximos blocos.** Ela vale
+mais que todo o restante do mapa canônico — e é a única forma de alcançar esse
+material.
+
+## Sobre os links do CONAMA (Sisconama)
+
+Conferimos três links do tipo `sisconama...id=NNN` e **os três entregaram ato
+diferente do pedido**:
+
+| você pediu | o link entregou |
+|---|---|
+| Resolução 411/2009 | Moção nº 102/2009 |
+| Resolução 406/2009 | Resolução nº 412/2009 |
+| Resolução 369/2006 | um texto sem o número 369 |
+
+Já tínhamos visto isso em abril com outros dois. **Sugestão: não usar links do
+Sisconama por número de id** — eles parecem apontar para um arquivo e apontam
+para outro. Onde precisar de resolução do CONAMA, um espelho de órgão estadual
+(a CETESB, por exemplo) tem servido melhor. A 369/2006 já está no nosso acervo
+por esse caminho, desde abril.
+
+## O que entrou
+
+25 documentos: 12 do núcleo territorial (Lei 10.267/2001, Decreto 4.449/2002,
+Lei 6.015/1973, Lei 5.868/1972, as resoluções do IBGE sobre SIRGAS2000, entre
+outros) e 14 do florestal (Lei 11.428/2006 da Mata Atlântica e seu decreto, as
+alterações do PRA pelas Leis 13.887/2019 e 14.595/2023, o decreto da CRA, a
+Política de Pagamento por Serviços Ambientais).
+
+Outros 15 links do seu mapa são **sistemas e portais** — SIGEF, acervo fundiário
+do INCRA, malhas do IBGE, CNUC, WebAmbiente, consulta do SICAR. Ficaram
+registrados, mas **fora do acervo de fundamentação**: eles dizem *onde fazer*,
+não *o que a lei diz*. Vão ser usados noutro lugar — são o "onde protocolar,
+onde consultar" que o editor de rota do consultor vai precisar.
