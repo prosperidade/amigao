@@ -105,25 +105,74 @@ def transcrever_audio(
     """Transcreve o áudio e devolve o texto já marcado com a origem.
 
     Guardas ANTES de gastar a chamada, cada uma com motivo legível para a tela:
-    arquivo vazio, formato que o provedor não aceita, arquivo acima do teto do
-    provedor. Falha nunca é silêncio — sempre volta em `error`.
+    arquivo vazio, arquivo que nem depois de comprimido cabe no provedor, formato
+    que ninguém consegue ler. Falha nunca é silêncio — sempre volta em `error`.
+
+    Dívida #201: tamanho e formato deixaram de ser problema da consultora. Quando
+    o arquivo não cabe **ou** o provedor não lê aquele formato, o sistema converte
+    sozinho (mp3 mono ~64 kbps, de sobra para fala) e segue. Ela só ouve falar
+    disso se, mesmo comprimido, ainda não couber — e aí a instrução é sobre a
+    gravação, não sobre codec.
     """
     from app.core.ai_gateway import AIGatewayError, transcribe  # noqa: PLC0415
     from app.core.config import settings  # noqa: PLC0415
+    from app.services.audio_convert import converter_para_mp3, ffmpeg_disponivel  # noqa: PLC0415
 
     if not audio_bytes:
         return _falha("Arquivo de áudio vazio ou não recuperado do storage.")
 
-    if not formato_suportado(filename, mime_type):
-        return _falha(motivo_formato_nao_suportado(filename))
-
     teto = int(settings.AUDIO_TRANSCRIPTION_MAX_BYTES)
-    if len(audio_bytes) > teto:
-        return _falha(
-            f"Áudio de {len(audio_bytes) / 1024 / 1024:.1f} MB passa do limite de "
-            f"{teto / 1024 / 1024:.0f} MB do provedor de transcrição. Divida a "
-            "gravação em partes ou reenvie em qualidade menor (mono, 64 kbps)."
+    grande_demais = len(audio_bytes) > teto
+    formato_ilegivel = not formato_suportado(filename, mime_type)
+
+    if grande_demais or formato_ilegivel:
+        if not ffmpeg_disponivel():
+            # Sem a ferramenta, volta ao comportamento anterior — mas dizendo o
+            # que é: limitação da instalação, não erro do arquivo dela.
+            if formato_ilegivel:
+                return _falha(motivo_formato_nao_suportado(filename))
+            return _falha(
+                f"A gravação tem {len(audio_bytes) / 1024 / 1024:.1f} MB e passa do "
+                f"limite de {teto / 1024 / 1024:.1f} MB do serviço de transcrição. "
+                "A compressão automática não está disponível nesta instalação — "
+                "divida a gravação em duas partes e reenvie."
+            )
+
+        # O teto viaja junto: é ele que define o bitrate. Sem isso a conversão
+        # sairia a 64 kbps fixos e uma reunião de 1 hora ainda estouraria
+        # (27,6 MB contra 25 MB — medido em 03/08).
+        conv = converter_para_mp3(audio_bytes, filename=filename, teto_bytes=teto)
+        if conv.audio is None:
+            return _falha(
+                f"{conv.erro} Se o arquivo abrir normalmente no seu computador, "
+                "reenvie-o; se não abrir, a gravação pode ter vindo corrompida."
+            )
+
+        logger.info(
+            "transcricao_audio: '%s' convertido %.1f MB → %.1f MB (−%.0f%%) antes de transcrever",
+            filename, conv.bytes_antes / 1024 / 1024,
+            conv.bytes_depois / 1024 / 1024, conv.reducao_pct,
         )
+        audio_bytes = conv.audio
+        filename = f"{filename.rsplit('.', 1)[0] if '.' in filename else filename}.mp3"
+
+        if len(audio_bytes) > teto:
+            # Só AQUI ela é incomodada, e só quando a gravação passa do que cabe
+            # no piso de qualidade (~2h20 medidas). A conta é em HORAS — unidade
+            # que ela tem como avaliar olhando a própria gravação — e o limite
+            # sugerido vem do teto real, não de um número escolhido a dedo.
+            from app.services.audio_convert import duracao_maxima_suportada  # noqa: PLC0415
+            limite_h = duracao_maxima_suportada(teto)
+            duracao_txt = (
+                f"cerca de {conv.duracao_segundos / 3600:.1f} horas de gravação"
+                if conv.duracao_segundos > 0
+                else f"{len(audio_bytes) / 1024 / 1024:.0f} MB"
+            )
+            return _falha(
+                f"Mesmo depois de comprimida, a gravação ({duracao_txt}) passa do "
+                f"limite do serviço de transcrição. Divida-a em partes de até "
+                f"{limite_h:.0f} horas e envie cada uma separadamente."
+            )
 
     try:
         resp = transcribe(

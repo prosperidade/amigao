@@ -181,6 +181,18 @@ docker compose exec redis redis-cli -a redispass2026
 
 Mais rápido para iterar em Python mas exige instalar Postgres/Redis/MinIO local. Geralmente vale a pena só se Docker estiver lento na sua máquina.
 
+> **`ffmpeg` (dívida #201).** A compressão automática de áudio de reunião usa o
+> binário `ffmpeg`, que **vai na imagem Docker** mas não é instalado pelo
+> `requirements.txt`. Rodando nativo sem ele, a transcrição continua funcionando
+> para os arquivos que já cabem no limite do provedor; áudio grande ou em formato
+> que o provedor não lê (`.amr`, `.wma`) falha com a mensagem *"a compressão
+> automática não está disponível nesta instalação"* — honesta, e é o
+> comportamento esperado. Para ter a função completa: `apt install ffmpeg`,
+> `brew install ffmpeg` ou `winget install ffmpeg`. Os testes **não** dependem
+> dele: a conversão é mockada, e `ffmpeg_disponivel` é fixado explicitamente nos
+> casos que medem o caminho sem a ferramenta — sem isso o mesmo teste passaria no
+> Windows do dev e falharia no runner do CI, medindo a máquina em vez do código.
+
 ### Backend
 
 ```bash
