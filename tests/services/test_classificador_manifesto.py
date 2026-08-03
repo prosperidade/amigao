@@ -19,7 +19,6 @@ cada erro tinha um custo diferente:
 """
 
 import pytest
-
 from scripts.extrair_manifesto import _classificar
 
 NORMA = "norma"
