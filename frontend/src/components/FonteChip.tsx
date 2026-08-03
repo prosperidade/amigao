@@ -37,6 +37,36 @@ export interface FonteRef {
   pagina?: number | null;
   /** Texto literal da norma — preenchido na fundamentação (biblioteca). */
   trecho?: string | null;
+  /** De onde veio o texto desta norma (dívida #97). */
+  fonte_origem?: string | null;
+  /** A origem foi conferida como oficial? */
+  fonte_oficial?: boolean | null;
+}
+
+/**
+ * Procedência da norma, em uma linha, sem alarmismo.
+ *
+ * Oficial não vira selo verde de destaque: é o esperado, e transformar o normal
+ * em troféu treina o olho a ignorá-lo. O que precisa saltar é a exceção — fonte
+ * não conferida —, e mesmo essa é informação, não alarme: hoje é um único
+ * documento do corpus (a IN IBAMA 10/2012, de agregador, aguardando o PDF
+ * oficial). Ver ADR-035.
+ */
+function Procedencia({ fonte }: { fonte: FonteRef }) {
+  if (!fonte.fonte_origem) return null;
+  const oficial = fonte.fonte_oficial === true;
+  return (
+    <span
+      title={fonte.fonte_origem}
+      className={`basis-full mt-0.5 text-[10px] truncate ${
+        oficial
+          ? 'text-gray-500 dark:text-slate-400'
+          : 'text-amber-700 dark:text-amber-400'
+      }`}
+    >
+      {oficial ? 'fonte oficial' : 'fonte não conferida'} — {fonte.fonte_origem}
+    </span>
+  );
 }
 
 const BASE =
@@ -125,6 +155,7 @@ export default function FonteChip({ fonte }: { fonte: FonteRef }) {
           <BookOpen className="w-3 h-3 shrink-0" />
           <span className="truncate">{rotulo}</span>
         </button>
+        <Procedencia fonte={fonte} />
         {aberto && (
           <p className="basis-full mt-1 text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded p-2 max-h-64 overflow-auto">
             {fonte.trecho}

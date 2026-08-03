@@ -12,6 +12,7 @@ from __future__ import annotations
 import enum
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -20,7 +21,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 
 from app.models.base import Base
 from app.models.types import PortableJSON
@@ -94,6 +95,15 @@ class LegislationDocument(Base):
     )
     # Sucessora que nao esta no corpus — nomea-la e melhor que perde-la.
     sucessora_ref = Column(String(255), nullable=True)
+
+    # Proveniencia (divida #97) — o sistema cita norma em peca que a consultora
+    # assina; "de onde veio esse texto" precisa ter resposta. `fonte_oficial` e
+    # NOT NULL DEFAULT false de proposito: o que ninguem conferiu nao se
+    # apresenta como oficial. `fonte_conferida_em` distingue "conferido por uma
+    # pessoa" de "deduzido pela URL".
+    fonte_origem = Column(Text, nullable=True)
+    fonte_oficial = Column(Boolean, nullable=False, server_default=text("false"))
+    fonte_conferida_em = Column(Date, nullable=True)
 
     # Armazenamento
     url = Column(String, nullable=True)
