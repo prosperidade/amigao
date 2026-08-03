@@ -27,8 +27,8 @@ from app.models.property import Property
 from app.models.regulatory import (
     DecisaoConsultor,
     ProcessIssueDecision,
-    RegulatoryDiagnosis,
     RegulatoryAlertFactibilidade,
+    RegulatoryDiagnosis,
     RegulatoryFamilia,
     RegulatoryIssue,
     RegulatoryIssueCatalog,
