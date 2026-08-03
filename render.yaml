@@ -208,6 +208,24 @@ envVarGroups:
       - key: EMBEDDING_PROVIDER
         value: openai
 
+      # --- Transcrição de áudio de reunião (dívida #103 · ADR-060) ---
+      # Declaradas aqui para que trocar o modelo em produção seja edição de
+      # variável no dashboard, e não deploy de código — a lição do
+      # gemini-2.0-flash descontinuado, que derrubou o worker duas vezes.
+      - key: AUDIO_TRANSCRIPTION_MODEL
+        value: whisper-1
+      - key: AUDIO_TRANSCRIPTION_USD_PER_MINUTE
+        value: "0.006"
+      - key: AUDIO_TRANSCRIPTION_MAX_BYTES
+        value: "26214400"
+      - key: AUDIO_TRANSCRIPTION_LANGUAGE
+        value: pt
+      - key: AI_MAX_COST_PER_JOB_USD_TRANSCRICAO
+        value: "1.00"
+      # Decisão 3a da Isis, pendente (dívida #203). Ligar = trocar para "true".
+      - key: AUDIO_TRANSCRICAO_RESUMO_ENABLED
+        value: "false"
+
       # --- Alerts operacionais ---
       # Deixar URL vazia até integrar destino (Slack/PagerDuty/BetterStack).
       - key: ALERT_WEBHOOK_URL
