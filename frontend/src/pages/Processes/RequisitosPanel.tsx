@@ -28,11 +28,19 @@ interface RequisitoDocumental {
   pendente: boolean;
 }
 
+interface DocumentoSemRequisito {
+  id: number;
+  filename: string | null;
+  document_type: string | null;
+  ocr_status: string | null;
+}
+
 interface RequisitosResponse {
   process_id: number;
   requisitos: RequisitoDocumental[];
   pendentes: number;
   total: number;
+  nao_classificados: DocumentoSemRequisito[];
 }
 
 const STATUS_CFG: Record<
@@ -156,6 +164,35 @@ export default function RequisitosPanel({ processId }: { processId: number }) {
           );
         })}
       </div>
+
+      {/* Validação 02/08 — o arquivo que o sistema não soube encaixar tem de
+          aparecer mesmo assim. A consultora subiu o CAR e a Conferência seguiu
+          dizendo que faltava: o documento existia, só não tinha `document_type`
+          ainda (o OCR classifica depois) e sumia da conta em silêncio. Agora ele
+          é nomeado, com o motivo, e o requisito continua honesto. */}
+      {(data.nao_classificados?.length ?? 0) > 0 && (
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-amber-50/40 dark:bg-amber-500/5">
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            {data.nao_classificados.length} documento
+            {data.nao_classificados.length === 1 ? '' : 's'} anexado
+            {data.nao_classificados.length === 1 ? '' : 's'} sem requisito reconhecido
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {data.nao_classificados.map(doc => (
+              <li key={doc.id} className="text-xs text-amber-700 dark:text-amber-400/90">
+                {doc.filename ?? `documento #${doc.id}`}
+                {' — '}
+                {doc.ocr_status === 'pending' || doc.ocr_status === 'processing'
+                  ? 'o sistema ainda está lendo o arquivo'
+                  : doc.document_type
+                    ? `classificado como "${doc.document_type}", que não é um dos 6`
+                    : 'sem tipo reconhecido — informe o tipo em Documentos'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

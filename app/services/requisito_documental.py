@@ -250,6 +250,63 @@ def _georref_embutido(campos_por_doc: dict[int, set[str]], docs_matricula: list[
     return None
 
 
+def _doc_type_por_item_do_checklist(
+    db: Session, process_id: int, tenant_id: int
+) -> dict[Optional[str], Optional[str]]:
+    """Mapa ``checklist_item_id`` → ``doc_type`` do item, para o processo.
+
+    É a intenção declarada pelo consultor no momento do upload ("este arquivo é
+    o CAR"), disponível antes de o OCR terminar. Devolve ``{}`` quando o processo
+    não tem checklist — o caminho por conteúdo segue valendo sozinho.
+    """
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+
+    checklists = (
+        db.query(ProcessChecklist)
+        .filter(
+            ProcessChecklist.process_id == process_id,
+            ProcessChecklist.tenant_id == tenant_id,
+        )
+        .all()
+    )
+    mapa: dict[Optional[str], Optional[str]] = {}
+    for cl in checklists:
+        for item in (cl.items or []):
+            if isinstance(item, dict) and item.get("id"):
+                mapa[str(item["id"])] = item.get("doc_type")
+    return mapa
+
+
+def documentos_sem_requisito(
+    db: Session, process_id: int, tenant_id: int
+) -> list[Document]:
+    """Documentos do caso que não servem a nenhum dos 6 — nem por tipo, nem por
+    vínculo de checklist.
+
+    Existe para que a tela possa DIZER que eles estão lá. Documento que o sistema
+    não soube encaixar não pode simplesmente desaparecer da contagem: era assim
+    que o painel dava a impressão de base vazia com arquivos anexados (P12).
+    """
+    intencao = _doc_type_por_item_do_checklist(db, process_id, tenant_id)
+    documentos = (
+        db.query(Document)
+        .filter(
+            Document.process_id == process_id,
+            Document.tenant_id == tenant_id,
+            Document.deleted_at.is_(None),
+        )
+        .all()
+    )
+    orfaos: list[Document] = []
+    for doc in documentos:
+        if requisito_de_doc_type(doc.document_type):
+            continue
+        if requisito_de_doc_type(intencao.get(doc.checklist_item_id)):
+            continue
+        orfaos.append(doc)
+    return orfaos
+
+
 def avaliar_requisitos(
     db: Session,
     process_id: int,
@@ -292,9 +349,27 @@ def avaliar_requisitos(
                 campos_por_doc.setdefault(doc_id, set()).add(field_name)
 
     # Agrupa documentos por requisito, traduzindo o vocabulário.
+    #
+    # Validação 02/08: a consultora subiu o CAR na E3, re-rodou o agente e a
+    # Conferência seguiu dizendo que faltava. A causa está nesta linha, não no
+    # upload: o agrupamento é feito por `document_type`, e `document_type` só é
+    # preenchido DEPOIS que o OCR roda e a classificação por conteúdo acerta.
+    # Enquanto isso o documento não caía em requisito nenhum — era descartado em
+    # silêncio — e o requisito ficava AUSENTE com o arquivo visível na tela ao
+    # lado. Isto quebrava a promessa que este módulo faz no próprio docstring
+    # (P12: "o consultor nunca vê 'ausente' com o documento visível na tela").
+    #
+    # O remédio é usar a INTENÇÃO DECLARADA como segunda via: quando o consultor
+    # sobe o arquivo contra um item do checklist, o vínculo (`checklist_item_id`)
+    # já diz a que requisito ele serve — sem depender do OCR ter terminado. Isso
+    # não inventa classificação: só honra o que a pessoa afirmou ao anexar.
+    intencao_por_item = _doc_type_por_item_do_checklist(db, process_id, tenant_id)
+
     docs_por_requisito: dict[str, list[Document]] = {r.key: [] for r in REQUISITOS_BASE}
     for doc in documentos:
         key = requisito_de_doc_type(doc.document_type)
+        if key is None:
+            key = requisito_de_doc_type(intencao_por_item.get(doc.checklist_item_id))
         if key:
             docs_por_requisito[key].append(doc)
 

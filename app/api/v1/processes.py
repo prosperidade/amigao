@@ -64,6 +64,7 @@ from app.schemas.process import (
     ProcessUpdate,
 )
 from app.schemas.requisito_documental import (
+    DocumentoSemRequisitoOut,
     RequisitoDocumentalOut,
     RequisitosDocumentaisResponse,
 )
@@ -84,6 +85,7 @@ from app.services.macroetapa_engine import (
 from app.services.requisito_documental import (
     REQUISITOS_BASE,
     avaliar_requisitos,
+    documentos_sem_requisito,
     contar_pendentes,
     contar_pendentes_checklist,
 )
@@ -346,6 +348,15 @@ def get_requisitos_documentais(
             for k in ordem
         ],
         pendentes=contar_pendentes(resultados),
+        nao_classificados=[
+            DocumentoSemRequisitoOut(
+                id=d.id,
+                filename=d.filename,
+                document_type=d.document_type,
+                ocr_status=d.ocr_status.value if d.ocr_status else None,
+            )
+            for d in documentos_sem_requisito(db, process.id, access_context.tenant_id)
+        ],
     )
 
 

@@ -34,8 +34,23 @@ class RequisitoDocumentalOut(BaseModel):
     pendente: bool = Field(description="Conta como pendência de COLETA (só quando ausente)")
 
 
+class DocumentoSemRequisitoOut(BaseModel):
+    """Arquivo anexado que o sistema ainda não soube encaixar em nenhum dos 6."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: Optional[str] = None
+    document_type: Optional[str] = None
+    ocr_status: Optional[str] = None
+
+
 class RequisitosDocumentaisResponse(BaseModel):
     process_id: int
     requisitos: list[RequisitoDocumentalOut]
     pendentes: int = Field(description="Quantos dos 6 realmente faltam coletar")
     total: int = 6
+    # Validação 02/08 — nada some calado. Documento anexado que não casou com
+    # requisito nenhum (tipo ainda não classificado, ou tipo fora dos 6) volta
+    # nomeado, para a tela não sugerir base vazia com arquivos na mesa.
+    nao_classificados: list[DocumentoSemRequisitoOut] = Field(default_factory=list)
