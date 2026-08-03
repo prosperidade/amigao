@@ -183,6 +183,7 @@ def generate_acoes_from_diagnosis(
         acao = Acao(
             tenant_id=tenant_id,
             process_id=process.id,
+            macroetapa=process.macroetapa,
             titulo=item["titulo"],
             origem=AcaoOrigem.diagnostico,
             origem_descricao=item["passivo_desc"] or None,
@@ -309,6 +310,7 @@ def generate_acoes_from_divergencias(
         acao = Acao(
             tenant_id=tenant_id,
             process_id=process.id,
+            macroetapa=process.macroetapa,
             titulo=titulo,
             origem=AcaoOrigem.consolidacao,
             origem_descricao=(origem_descricao or None) and origem_descricao[:255],
@@ -430,6 +432,7 @@ def generate_acao_oficializacao(
     acao = Acao(
         tenant_id=tenant_id,
         process_id=process.id,
+        macroetapa=process.macroetapa,
         titulo=f"Atualização de arquivos oficiais — {rotulo}",
         origem=AcaoOrigem.oficializacao,
         origem_descricao=(

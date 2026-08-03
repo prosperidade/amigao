@@ -46,9 +46,17 @@ def test_hub_deriva_matricula_e_area_das_matriculas(client: TestClient, db_sessi
     r = client.get(f"/api/v1/properties/{prop.id}/summary", headers=h)
     assert r.status_code == 200, r.text
     header = r.json()["header"]
-    # Matrícula e Área DERIVADAS — fim dos "—"
-    assert header["registry_number"] == "4698; 6776"
+    # Matrícula e Área DERIVADAS — fim dos "—".
+    # O separador mudou de "; " para " | " na validação de 02/08: é a forma que a
+    # consultora ditou para campo de imóvel com N matrículas ("349,9022 |
+    # 660,6561"). Era detalhe de implementação — nenhum consumidor faz parse
+    # desta string, ela só é exibida —, e agora é regra de domínio única
+    # (`Property.agregar_das_matriculas`), aplicada a TODOS os campos herdados.
+    assert header["registry_number"] == "4698 | 6776"
+    # A soma anotada da ADR-023 continua intacta: ela dimensiona porte/exigência.
     assert header["total_area_ha"] == 1010.5583
+    # E agora as parcelas aparecem lado a lado, sem virar um número inventado.
+    assert header["area_ha_por_matricula"] == "660,6561 | 349,9022"
 
 
 def test_hub_sem_matriculas_mantem_none(client: TestClient, db_session):

@@ -109,6 +109,41 @@ class Property(Base):
         total = sum((m.area_ha or 0.0) for m in self.matriculas_vigentes())
         return round(total, 4)
 
+    def agregar_das_matriculas(self, campo: str) -> "str | None":
+        """Um campo de MATRÍCULA visto no nível do IMÓVEL (regra Isis, 02/08).
+
+        O imóvel é a entidade permanente, mas quase todo dado registral vive na
+        matrícula — e um imóvel tem N. Ao subir esse dado para o cabeçalho do
+        imóvel havia três saídas possíveis e só uma é honesta:
+
+        * escolher uma das matrículas → INVENTA (a outra some sem aviso);
+        * somar/concatenar em um número novo → INVENTA (349,9022 + 660,6561 não
+          é "o" número de nada);
+        * mostrar as duas → é o que a regra manda: ``"349,9022 | 660,6561"``.
+
+        Portanto: valor único quando todas as matrículas vigentes concordam;
+        os valores separados por ``" | "`` quando divergem; ``None`` quando
+        ninguém tem o dado. Nunca um valor fabricado.
+
+        Só matrículas VIGENTES entram (ficha histórica é linhagem, não estado
+        atual — Dívida #60). Float sai em formato BR (vírgula decimal), que é
+        como a consultora lê e digita área.
+        """
+        vistos: list[str] = []
+        for m in self.matriculas_vigentes():
+            bruto = getattr(m, campo, None)
+            if bruto is None or (isinstance(bruto, str) and not bruto.strip()):
+                continue
+            if isinstance(bruto, float):
+                texto = f"{round(bruto, 4):.4f}".rstrip("0").rstrip(".").replace(".", ",")
+            else:
+                texto = str(bruto).strip()
+            if texto and texto not in vistos:
+                vistos.append(texto)
+        if not vistos:
+            return None
+        return vistos[0] if len(vistos) == 1 else " | ".join(vistos)
+
     def nota_soma_matriculas(self) -> "str | None":
         """Anotação de honestidade da soma (Sprint 4 / Ficha 07 §9).
 

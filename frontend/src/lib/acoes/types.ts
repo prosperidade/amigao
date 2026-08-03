@@ -41,6 +41,11 @@ export interface Acao {
   prioridade: AcaoPrioridade;
   status: AcaoStatus;
   tipo_triagem: AcaoTipoTriagem;
+  /** Etapa em que a ação nasceu. null = criada antes deste carimbo.
+   *  Opcional no tipo: a API sempre devolve o campo, mas fixtures de teste e
+   *  respostas de versões anteriores do backend não o trazem — e o consumidor já
+   *  trata a ausência (`acao.macroetapa ?? 'sem etapa'`). */
+  macroetapa?: string | null;
   created_by_user_id: number | null;
   concluida_at: string | null;
   created_at: string | null;

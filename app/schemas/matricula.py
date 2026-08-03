@@ -12,6 +12,12 @@ class MatriculaBase(BaseModel):
     registro_livro_folha_ficha: Optional[str] = None
     codigo_incra_sncr: Optional[str] = None
     nirf_cib: Optional[str] = None
+    # Validação 02/08: a consolidação já GRAVAVA `numero_ccir`/`exercicio_ccir`
+    # na matrícula (`_MATRICULA_FIELDS` em staging_consolidation.py) mas o schema
+    # não os expunha — o dado pousava no banco e a API nunca o devolvia. Do ponto
+    # de vista da consultora, o CCIR aceito na Conferência simplesmente sumia.
+    numero_ccir: Optional[str] = None
+    exercicio_ccir: Optional[int] = None
     area_ha: Optional[float] = None
     denominacao_imovel: Optional[str] = None
     geo_certificacao_codigo: Optional[str] = None
@@ -53,6 +59,8 @@ class Matricula(MatriculaBase):
     property_id: int
     # Vigência da cadeia (#60): 'vigente' soma/gera lacuna; 'historica' é linhagem.
     vigencia: str = "vigente"
+    # Selo por campo (ADR "field_sources") — a tela mostra de onde veio cada dado.
+    field_sources: dict[str, Any] = {}
     superseded_by_id: Optional[int] = None
     deactivated_at: Optional[datetime] = None
     created_at: datetime
