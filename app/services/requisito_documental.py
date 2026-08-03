@@ -150,6 +150,10 @@ REQUISITOS_POR_KEY: dict[str, Requisito] = {r.key: r for r in REQUISITOS_BASE}
 # (Ficha §7.2). São os mesmos que o extrator emite para `matricula` e `sigef`.
 _GEORREF_EMBUTIDO_FIELDS = frozenset({"codigo_certificacao", "numero_geo"})
 
+# Categorias que nunca concorrem aos 6 obrigatórios — não são "documento
+# faltando", são outro tipo de insumo do caso.
+_CATEGORIAS_NAO_DOCUMENTAIS = frozenset({"audio"})
+
 
 def requisito_de_doc_type(doc_type: Optional[str]) -> Optional[str]:
     """Mapa doc_type → requisito. ``None`` quando o tipo não serve a nenhum dos 6.
@@ -302,6 +306,11 @@ def documentos_sem_requisito(
         if requisito_de_doc_type(doc.document_type):
             continue
         if requisito_de_doc_type(intencao.get(doc.checklist_item_id)):
+            continue
+        # Áudio de reunião nunca foi candidato a um dos 6 (é insumo do intake,
+        # Ficha 07 §3.2). Listá-lo como "sem requisito" transformaria o aviso em
+        # ruído recorrente e ensinaria o consultor a ignorá-lo.
+        if (doc.document_category or "").strip().lower() in _CATEGORIAS_NAO_DOCUMENTAIS:
             continue
         orfaos.append(doc)
     return orfaos

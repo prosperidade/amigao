@@ -23,6 +23,12 @@ const DOC_TYPES = [
   { value: 'licenca',     label: '📜 Licença' },
   { value: 'planta',      label: '🏗️ Planta/Croqui' },
   { value: 'foto',        label: '📷 Fotos' },
+  // Validação 02/08 — o áudio da reunião só tinha porta no wizard de Entrada
+  // (E1). A ligação com o cliente acontece ao longo do caso, não só na abertura,
+  // e a aba Documentos é a boca de entrada de TODAS as etapas (Ficha 07 §3.2,
+  // que lista o áudio entre os documentos do caso). Mesmo tipo do intake
+  // (`audio_entrevista`) para as duas portas caírem no mesmo lugar.
+  { value: 'audio_entrevista', label: '🎙️ Áudio de reunião/ligação' },
   { value: 'contrato',    label: '📝 Contrato' },
   { value: 'declaracao',  label: '📃 Declaração' },
   { value: 'carta_banco', label: '🏦 Carta Bancária' },
@@ -217,6 +223,7 @@ function _inferCategory(docType: string): string {
     planta: 'tecnico', foto: 'tecnico',
     notificacao: 'administrativo', auto_infracao: 'administrativo',
     carta_banco: 'bancario', caf: 'fundiario',
+    audio_entrevista: 'audio',
   };
   return map[docType] || 'geral';
 }
