@@ -286,22 +286,32 @@ def get_stage_agents(etapa: Macroetapa) -> dict[str, list[str]]:
 # ---------------------------------------------------------------------------
 
 DEFAULT_ACTIONS: dict[Macroetapa, list[dict]] = {
+    # E1 — ENTRADA. Ficha 07 §5: "Documentos: primeiros uploads + checklist;
+    # Dados: cadastro básico"; §7: a saída da E1 é "mínimo essencial recebido +
+    # agentes do intake rodados". Ou seja, a CONVERSA e a CLASSIFICAÇÃO da
+    # demanda são trabalho da Entrada — é delas que o intake se alimenta.
     Macroetapa.entrada_demanda: [
-        {"id": "ed_01", "label": "Registrar dados básicos do cliente"},
+        {"id": "ed_01", "label": "Registrar dados básicos do cliente (e verificar duplicidade)"},
         {"id": "ed_02", "label": "Identificar canal de entrada"},
         {"id": "ed_03", "label": "Vincular imóvel ao caso"},
-        {"id": "ed_04", "label": "Registrar demanda inicial"},
-        {"id": "ed_05", "label": "Verificar cliente existente (deduplicação)"},
+        {"id": "ed_04", "label": "Realizar ligação/reunião aplicando o roteiro de perguntas"},
+        {"id": "ed_05", "label": "Subir e transcrever o áudio da conversa"},
+        {"id": "ed_06", "label": "Registrar a demanda e a intenção do empreendedor"},
+        {"id": "ed_07", "label": "Subir os documentos do mínimo essencial"},
+        {"id": "ed_08", "label": "Rodar os agentes do intake (tipo de demanda e urgência)"},
     ],
+    # E2 — DIAGNÓSTICO PRELIMINAR. Ficha 07 §5: "Conferência: campos do intake
+    # (protagonista); Dados: base consolidada; Visão geral: nasce o diagnóstico
+    # preliminar; Ações: remediação + divergências + pendências"; §7: a saída é
+    # "diagnóstico gerado + base consolidada (Consolidação rodou)".
     Macroetapa.diagnostico_preliminar: [
-        {"id": "dp_01", "label": "Realizar ligação/reunião"},
-        {"id": "dp_02", "label": "Aplicar roteiro de perguntas"},
-        {"id": "dp_03", "label": "Gravar/transcrever áudio"},
-        {"id": "dp_04", "label": "Identificar tipo de demanda"},
-        {"id": "dp_05", "label": "Classificar urgência"},
-        {"id": "dp_06", "label": "Validar objetivo real do cliente"},
-        {"id": "dp_07", "label": "Consolidar ficha inicial do caso"},
-        {"id": "dp_08", "label": "Identificar lacunas de informação"},
+        {"id": "dp_01", "label": "Conferir os campos lidos dos documentos (Conferência)"},
+        {"id": "dp_02", "label": "Resolver as divergências apontadas"},
+        {"id": "dp_03", "label": "Gravar na base (Consolidação)"},
+        {"id": "dp_04", "label": "Ler o diagnóstico preliminar na Visão geral"},
+        {"id": "dp_05", "label": "Validar objetivo real do cliente"},
+        {"id": "dp_06", "label": "Triar as ações de remediação propostas"},
+        {"id": "dp_07", "label": "Identificar lacunas e documentos essenciais pendentes"},
     ],
     Macroetapa.coleta_documental: [
         {"id": "cd_01", "label": "Gerar checklist documental"},
