@@ -13,6 +13,18 @@ import {
   isDocTypeNaoClassificado,
 } from '@/lib/labels/docLabels';
 
+/**
+ * O documento é um áudio? (dívida #103)
+ *
+ * Reconhece pelas duas portas que existem hoje: o tipo declarado no upload do
+ * caso (`audio_entrevista`) e a categoria vinda do intake (`audio`). Nome de
+ * arquivo NÃO entra na conta — "reuniao.pdf" não é áudio e "gravacao" sem
+ * extensão não prova nada.
+ */
+function ehAudio(doc: Document): boolean {
+  return doc.document_type === 'audio_entrevista' || doc.document_category === 'audio';
+}
+
 interface DocumentsTabProps {
   processId: number;
 }
@@ -135,6 +147,20 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                       {extractedDocIds.has(doc.id) && (
                         <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
                           <Sparkles className="w-3 h-3" /> Campos extraidos
+                        </span>
+                      )}
+                      {/* Dívida #103 — honestidade do áudio. A consultora sobe a
+                          gravação da reunião achando que o sistema ouve; hoje o
+                          arquivo fica guardado e ninguém o transcreve (não existe
+                          pipeline de transcrição em lugar nenhum). Mesmo espírito
+                          do aviso de geometria "sem leitura de texto": o arquivo
+                          está salvo, e a tela diz o que ele NÃO é. */}
+                      {ehAudio(doc) && (
+                        <span
+                          title="O arquivo está guardado no caso. A transcrição automática ainda não existe — registre os pontos da conversa à mão."
+                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30"
+                        >
+                          🎙️ Áudio anexado — transcrição não disponível
                         </span>
                       )}
                     </div>
