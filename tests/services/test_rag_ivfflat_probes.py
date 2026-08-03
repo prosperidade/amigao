@@ -23,12 +23,12 @@ e a busca não quebra onde `SET LOCAL ivfflat.probes` não existe.
 
 import pytest
 
-from app.core.config import settings
-
 
 def test_default_de_probes_e_maior_que_um():
     """`probes=1` é o default do pgvector e o defeito. O nosso default não pode
     ser 1 nunca — é o valor que produz o modo de falha silenciosa."""
+    from app.core.config import settings
+
     assert settings.RAG_IVFFLAT_PROBES > 1
     assert settings.RAG_IVFFLAT_PROBES >= 10, (
         "10 ≈ sqrt(lists) para lists=100; abaixo disso o recall medido cai"
@@ -48,7 +48,13 @@ def test_probes_de_settings_chega_ao_sql(db_session, monkeypatch):
     import app.services.knowledge_catalog as kc
 
     monkeypatch.setattr(kc, "embed_text", lambda *a, **k: [0.1] * 768)
-    monkeypatch.setattr(settings, "RAG_IVFFLAT_PROBES", 7, raising=False)
+    # Remendo pelo CAMINHO, não pelo objeto importado no topo deste módulo:
+    # `override_settings` (usado em tests/core/test_encryption.py) SUBSTITUI
+    # `app.core.config.settings` por outra instância. Quem guardou a referência
+    # antiga remenda um objeto que ninguém mais lê — e o `search()`, que importa
+    # no momento da chamada, continuava vendo o default. Passava sozinho e
+    # quebrava na suíte, dependendo da ordem.
+    monkeypatch.setattr("app.core.config.settings.RAG_IVFFLAT_PROBES", 7)
 
     emitidos: list[str] = []
     original = db_session.execute
@@ -71,7 +77,7 @@ def test_probes_zero_desliga_sem_quebrar(db_session, monkeypatch):
     import app.services.knowledge_catalog as kc
 
     monkeypatch.setattr(kc, "embed_text", lambda *a, **k: [0.1] * 768)
-    monkeypatch.setattr(settings, "RAG_IVFFLAT_PROBES", 0, raising=False)
+    monkeypatch.setattr("app.core.config.settings.RAG_IVFFLAT_PROBES", 0)
 
     resultados = kc.search(db_session, "qualquer consulta", source_type="legislation")
     assert isinstance(resultados, list)
@@ -107,4 +113,6 @@ def test_valores_que_nao_deveriam_virar_default(valor):
     1 é o default do pgvector — e o defeito. 0 e negativos desligam o ajuste.
     Nenhum dos três serve como configuração de produção.
     """
+    from app.core.config import settings
+
     assert valor != settings.RAG_IVFFLAT_PROBES
