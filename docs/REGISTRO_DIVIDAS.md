@@ -604,7 +604,52 @@ worker. **O que destrava:** fixar `@csstools/css-calc` numa versão CJS via
 `overrides` no `package.json`, ou migrar o pool do vitest para `threads`.
 **Origem:** medição de 02/08.
 
-**PRÓXIMO LIVRE: 106.**
+### Abertas pelo ingestor curado — Bloco 0 + núcleo 06 (03/08, `feat/ingestor-curado-nucleo06`)
+
+**106. Avaliar a versão COMPILADA como camada adicional do corpus.** A planilha
+da Isis aponta as versões *compiladas* de Decreto 6.514/2008, Lei 12.651/2012 e
+Lei 6.938/1981; o corpus tem as **anotadas**. Decisão de 03/08: manter as
+anotadas — são elas que trazem `"Redação dada pelo Decreto nº 12.189, de 2024"`
+inline, e é isso que sustenta *tempus regit actum* (ADR-037). A compilada
+responde melhor "o que vale hoje" e polui menos o chunk; ter as duas dobraria o
+texto dessas três normas. **O que destrava:** decisão da Isis sobre se o ganho
+compensa a duplicação. Enquanto isso a escolha está **codificada no manifesto** —
+as três dão `skip` por hash idêntico a cada rodada, o que torna a decisão
+verificável em vez de comentada. **Origem:** ADR-038.
+
+**107. A Constituição compete consigo mesma na busca.** A CF entrou íntegra: 495
+chunks, **72% de todo o núcleo 06**. O art. 225 é recuperável quando a consulta o
+**nomeia** (similaridade 0,69), mas uma paráfrase do próprio texto dele — *"todos
+têm direito ao meio ambiente ecologicamente equilibrado"* — traz o **art. 205**
+(educação) à frente. Não é defeito de ingestão: é um documento de 495 artigos
+onde cada um disputa com os outros 494. **O que destrava:** reforço ou filtro por
+dispositivo quando a citação nomeia artigo — parente da regra de identidade do
+ADR-036, aplicada agora *dentro* de um mesmo documento. Medido em 03/08.
+
+**108. Frente própria: os 165 alertas da curadoria.** A aba `Alertas_Regente` da
+planilha traz 165 linhas de "gatilho → ação sugerida". **Isso não é corpus, é
+spec de motor de diagnóstico** — e o Auditor já tem ~40 alertas implementados.
+**O que destrava:** comparar os 165 com os 40 atuais, mapear sobreposição e
+lacuna, implementar em ondas. Não misturar com corpus: são coisas diferentes que
+só parecem próximas por virem na mesma planilha. **Origem:** entrega do mapa
+normativo, 02/08.
+
+**109. Referências operacionais são o embrião do "onde protocolar".** As 10
+linhas `referencia_operacional` do núcleo 06 (FAQ do auto, consulta de áreas
+embargadas, obter certidão de embargo, REGULARIZE/PGFN, impedimentos do Manual de
+Crédito Rural) são exatamente o que o **editor de rota do consultor** (#86)
+precisa consumir: onde se protocola, onde se consulta, onde se obtém. Hoje estão
+versionadas no manifesto e não são exibidas em lugar nenhum. **O que destrava:**
+o editor de rota ler o manifesto por bloco. **Origem:** ADR-038.
+
+**#98 — pedido à Isis, ampliado.** Agora com quatro itens, todos com a mesma
+causa nos dois últimos: (a) PDF oficial da IN IBAMA 10/2012; (b) os `.md`
+originais do Acre (`AC-N04`, `AC-N05`, `AC-N10`); (c) PDF oficial da **IN IBAMA
+21/2023**; (d) PDF oficial da **Portaria IBAMA 15/2026**. O portal do IBAMA
+responde 403 a cliente não-browser. Retorno completo em
+`docs/trabalhos/retorno_curadoria_isis_2026-08-03.md`.
+
+**PRÓXIMO LIVRE: 110.**
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
