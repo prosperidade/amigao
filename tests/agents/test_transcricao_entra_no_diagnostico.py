@@ -7,6 +7,15 @@ transforma a citação em fonte clicável.
 
 Se um dia alguém trocar a transcrição por uma entidade paralela (`AudioTranscript`
 com tabela própria), este teste quebra — e é para quebrar mesmo.
+
+**Correção de 03/08 (2ª rodada).** A fixture original foi escrita à mão como
+``"Consultor: … Cliente: …"`` — formato que o Whisper **NÃO produz**. O teste
+afirmava coisa verdadeira sobre premissa falsa: quem o lesse para construir o
+resumo estruturado (#203) partiria do lugar errado, achando que existe atribuição
+de falante. Medido em 03/08 com duas vozes: os `segments` do `verbose_json` têm
+`id/start/end/text/tokens/…` e **não têm `speaker`**; a saída é bloco corrido.
+A fixture agora reproduz a saída real, e um teste guarda essa verdade
+explicitamente (ver ``test_transcricao_real_nao_tem_atribuicao_de_falante``).
 """
 
 from __future__ import annotations
@@ -21,11 +30,16 @@ from app.models.process import Process, ProcessStatus
 from app.models.tenant import Tenant
 from app.services.audio_files import TRANSCRICAO_ORIGEM_LABEL, marcar_origem
 
+# Saída REAL do Whisper: bloco corrido, sem rótulo de falante, sem quebra na troca
+# de turno. Copiada da medição de 03/08 (duas vozes distintas no áudio, uma única
+# sequência de texto na saída). Repare que a promessa — "e eu te mando o recibo do
+# CAR" — vem colada na frase anterior, dita por OUTRA pessoa: é exatamente por
+# isso que o resumo estruturado do #203 está bloqueado.
 TRANSCRICAO = marcar_origem(
-    "Consultor: e o CAR do lote 1-C, foi retificado? "
-    "Cliente: foi, mas o técnico anterior fez errado. Ele mandou o "
-    "shapefile da fazenda inteira. Vou te mandar o recibo do CAR e o ITR "
-    "até sexta-feira.",
+    "Então, Leonardo, sobre a Fazenda São Jorge, o CAR do lote 1C foi retificado "
+    "no ano passado, mas o técnico anterior fez errado. Ele mandou o shapefile da "
+    "fazenda inteira em vez de só do lote. Aí veio o auto de infração. Certo. E eu "
+    "te mando o recibo do CAR e a matrícula do lote 1B até sexta-feira.",
     nome_arquivo="reuniao-2026-08-03.m4a",
 )
 
@@ -85,7 +99,7 @@ def test_transcricao_entra_no_contexto_do_diagnostico_com_conteudo(cenario):
     assert audio.id in por_id, "a transcrição não chegou ao contexto do diagnóstico"
     trecho = por_id[audio.id]["trecho"]
     assert "o técnico anterior fez errado" in trecho
-    assert "recibo do CAR e o ITR" in trecho
+    assert "recibo do CAR e a matrícula do lote 1B" in trecho
     # A ORIGEM viaja no próprio texto: o LLM sabe que isso foi DITO, não escrito
     # num documento oficial. Peso probatório diferente.
     assert TRANSCRICAO_ORIGEM_LABEL in trecho
@@ -128,3 +142,28 @@ def test_audio_ainda_sem_transcricao_aparece_marcado_nao_some(cenario):
 
     assert item["sem_leitura"] is True
     assert "SEM texto extraído" in item["nota"]
+
+
+def test_transcricao_real_nao_tem_atribuicao_de_falante():
+    """A transcrição NÃO diz quem falou — e isto é um teste, não um comentário.
+
+    Medido em 03/08 com duas vozes distintas: o `whisper-1` não faz diarização.
+    Os `segments` do `verbose_json` trazem `id/start/end/text/tokens/…` e **não
+    trazem `speaker`**. A saída é um bloco corrido onde a troca de turno não
+    aparece nem como quebra de linha.
+
+    Por que isto merece teste próprio: a fixture deste arquivo já foi escrita à
+    mão como ``"Consultor: … Cliente: …"``, e quem a lesse construiria o resumo
+    estruturado (#203) sobre uma atribuição que não existe. Resumo com dono
+    errado é pior que resumo nenhum — vira Ação interna do consultor onde era
+    pendência do cliente, e prazo atribuído a quem não assumiu.
+
+    Quando a atribuição existir de verdade (dívida #206), este teste muda junto
+    com a promessa — de propósito.
+    """
+    assert "Consultor:" not in TRANSCRICAO
+    assert "Cliente:" not in TRANSCRICAO
+    # O corpo (fora do cabeçalho de origem) é uma sequência só: a promessa do
+    # cliente vem colada na fala do consultor, sem marca de quem é qual.
+    corpo = TRANSCRICAO.split("]", 1)[1].strip()
+    assert "Aí veio o auto de infração. Certo. E eu te mando" in corpo
