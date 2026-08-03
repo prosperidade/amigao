@@ -31,8 +31,6 @@ from typing import Iterable
 
 import httpx
 
-from app.core.config import settings
-
 logger = logging.getLogger(__name__)
 
 EMBEDDING_DIM = 768
@@ -97,7 +95,13 @@ def _select_provider() -> str:
     da CHAVE desse provider vira falha ruidosa em `_openai_key()`/`_gemini_key()`,
     não troca silenciosa.
     """
-    escolhido = (getattr(settings, "EMBEDDING_PROVIDER", "") or "").strip().lower()
+    # Lê settings VIVO, não a referência de import: `override_settings` troca o
+    # objeto `app.core.config.settings`, e um módulo que guardou a referência
+    # antiga passa a ler configuração que ninguém mais usa. Já quebrou duas vezes
+    # nesta série — uma no teste, outra aqui.
+    from app.core.config import settings as _settings  # noqa: PLC0415
+
+    escolhido = (getattr(_settings, "EMBEDDING_PROVIDER", "") or "").strip().lower()
     if not escolhido:
         return DEFAULT_PROVIDER
     if escolhido not in PROVIDERS:
@@ -125,7 +129,9 @@ EMBEDDING_MODEL = PROVIDERS[_select_provider()]
 # ---------------------------------------------------------------------------
 
 def _openai_key() -> str:
-    key = (settings.OPENAI_API_KEY or "").strip()
+    from app.core.config import settings as _settings  # noqa: PLC0415
+
+    key = (_settings.OPENAI_API_KEY or "").strip()
     if not key:
         raise EmbeddingError(
             "OPENAI_API_KEY ausente — provider 'openai' selecionado mas chave não setada."
@@ -223,7 +229,9 @@ def _openai_embed_single(text: str) -> list[float]:
 # ---------------------------------------------------------------------------
 
 def _gemini_key() -> str:
-    key = (settings.GEMINI_API_KEY or "").strip()
+    from app.core.config import settings as _settings  # noqa: PLC0415
+
+    key = (_settings.GEMINI_API_KEY or "").strip()
     if not key:
         raise EmbeddingError(
             "GEMINI_API_KEY ausente — provider 'gemini' selecionado mas chave não setada."

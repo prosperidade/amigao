@@ -29,7 +29,6 @@ from app.services.embeddings import (
     EspacoVetorialIncompativel,
 )
 
-
 # --------------------------------------------------------------------------
 # O provider é EXPLÍCITO, nunca inferido por presença de chave
 # --------------------------------------------------------------------------
