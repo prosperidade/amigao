@@ -48,7 +48,7 @@ class _ImovelFake:
         self.matriculas = list(matriculas)
 
 
-def _imovel(*matriculas) -> "_ImovelFake":
+def _imovel(*matriculas) -> _ImovelFake:
     return _ImovelFake(matriculas)
 
 

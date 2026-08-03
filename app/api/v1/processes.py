@@ -86,9 +86,9 @@ from app.services.macroetapa_engine import (
 from app.services.requisito_documental import (
     REQUISITOS_BASE,
     avaliar_requisitos,
-    documentos_sem_requisito,
     contar_pendentes,
     contar_pendentes_checklist,
+    documentos_sem_requisito,
 )
 
 router = APIRouter()
