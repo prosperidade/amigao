@@ -337,6 +337,38 @@ class Settings(BaseSettings):
     AI_MAX_COST_PER_JOB_USD_LEGISLACAO: float = 0.30
     AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG: float = 5.00
 
+    # ------------------------------------------------------------------
+    # Transcrição de áudio (dívida #103 · ADR-060)
+    # ------------------------------------------------------------------
+    # Modelo de transcrição, SEMPRE por env (o hardcode de `gemini-2.0-flash`
+    # derrubou o worker em prod duas vezes quando o Google descontinuou o modelo;
+    # o próximo deprecation aqui deve ser troca de variável, não de código).
+    AUDIO_TRANSCRIPTION_MODEL: str = "whisper-1"
+    # Preço de tabela do modelo acima, USD por MINUTO de áudio. Usado para calcular
+    # o custo real da chamada: o litellm não devolve custo para transcrição, e
+    # deixar `cost_usd=0.0` mentiria na auditoria (Princípio 2) e na soma do teto
+    # mensal do tenant. whisper-1 = $0.006/min (tabela OpenAI).
+    AUDIO_TRANSCRIPTION_USD_PER_MINUTE: float = 0.006
+    # Teto de tamanho do arquivo aceito pelo provedor (OpenAI recusa acima de 25 MB).
+    # Acima disso a task falha com motivo legível ANTES de gastar a chamada.
+    AUDIO_TRANSCRIPTION_MAX_BYTES: int = 25 * 1024 * 1024
+    # Timeout da chamada de transcrição. Áudio longo demora: uma reunião de 30 min
+    # leva ~40-90s no Whisper. O worker é pool=solo — uma task pendurada bloqueia a
+    # fila —, então o teto é explícito e não o default do provedor.
+    AUDIO_TRANSCRIPTION_TIMEOUT_SECONDS: float = 300.0
+    # Cost guard dedicado: o teto global por job ($0.10) reprovaria uma reunião de
+    # 20 min ($0.12). $1.00 cobre ~2h45 de áudio com folga.
+    AI_MAX_COST_PER_JOB_USD_TRANSCRICAO: float = 1.00
+    # Idioma dominante das reuniões. Informar o idioma melhora a acurácia e evita
+    # que o Whisper "traduza" trechos. Vazio = detecção automática.
+    AUDIO_TRANSCRIPTION_LANGUAGE: str = "pt"
+    # GANCHO do resumo estruturado (decisão 3a da Isis, pendente). Ligado, a task
+    # roda UMA chamada extra ao LLM sobre a transcrição pronta e prefixa ao texto
+    # um bloco com o que o cliente pediu, o que prometeu enviar, prazos e decisões.
+    # Default `false`: nesta rodada entrega-se a transcrição BRUTA; a resposta dela
+    # vira troca de variável, não sprint nova.
+    AUDIO_TRANSCRICAO_RESUMO_ENABLED: bool = False
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
