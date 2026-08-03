@@ -144,5 +144,7 @@
   "tokens": {
     "in": 5281,
     "out": 1541
-  }
+  },
+  "ressalva_metodologica": "MEDIDO COM ivfflat.probes=1 (default do pgvector), ANTES do fix de 03/08. O índice IVFFlat percorria ~1% dos vetores e devolvia vizinhos que não eram os mais próximos — o trecho mais similar do corpus podia ficar de fora sem nenhum sinal. Esta medição NÃO é descartada: a comparação com as demais da série usou a mesma régua, então a DIREÇÃO que ela aponta continua válida. O que era falso é o TETO — o corpus sempre teve mais a oferecer do que a busca mostrava. Ver dívida #113 e o PR fix/rag-ivfflat-probes.",
+  "ivfflat_probes": 1
 }

@@ -35,11 +35,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 logger = logging.getLogger("medir_defesa")
 
-# A pergunta. Literal, idêntica nas duas rodadas — é o controle do experimento.
-PERGUNTA = (
-    "Fundamente a defesa administrativa do auto de infração 484341/D "
-    "(IBAMA, 2007, Fazenda São Jorge)"
-)
+# As perguntas. Literais e idênticas entre rodadas — são o controle do
+# experimento. Cada bloco de corpus acrescenta a sua medição à série.
+#
+# `defesa` é a pergunta histórica (desde o pacote A); `car` entrou no bloco 2,
+# que ingeriu o núcleo territorial/florestal — é nela que esse bloco deveria
+# aparecer, se o ganho for real.
+PERGUNTAS = {
+    "defesa": (
+        "Fundamente a defesa administrativa do auto de infração 484341/D "
+        "(IBAMA, 2007, Fazenda São Jorge)"
+    ),
+    "car": (
+        "Quais são os requisitos e o procedimento para retificação do "
+        "Cadastro Ambiental Rural (CAR) de um imóvel rural em Goiás?"
+    ),
+}
+PERGUNTA = PERGUNTAS["defesa"]  # compat com as medições já gravadas
 
 # Contexto factual do caso 15, extraído dos documentos reais (docs 331 e 338 em
 # produção). Fixo nas duas rodadas — o corpus é a única variável.
@@ -53,6 +65,14 @@ de 22 de julho de 2008".
 Houve requerimento de adesão ao REFIZ com base no artigo 02 da MPV 780/2017.
 Objeto: supressão de vegetação em Área de Preservação Permanente; PRAD
 apresentado e sucessivas prorrogações de prazo entre 2008 e 2017."""
+
+CONTEXTO_CAR = """Imóvel rural em Goiás com CAR já inscrito e necessidade de RETIFICAÇÃO do
+cadastro: área declarada divergente da matrícula, perímetro a corrigir e
+Reserva Legal a reposicionar. Interessa o rito: quem analisa, que documentos
+instruem o pedido, qual a base normativa federal do SICAR e da retificação, e
+como isso se relaciona com o georreferenciamento e a certificação do imóvel."""
+
+CONTEXTOS = {"defesa": CONTEXTO_CASO, "car": CONTEXTO_CAR}
 
 SYSTEM = """\
 Você é um consultor ambiental sênior. Fundamente juridicamente a defesa
@@ -148,6 +168,8 @@ def main() -> int:
     # anteriores (antes → depois → depois_nucleo06 → ...). Lista fechada
     # obrigaria a editar o script a cada bloco novo.
     p.add_argument("--rotulo", required=True)
+    p.add_argument("--pergunta", default="defesa", choices=sorted(PERGUNTAS),
+                   help="qual pergunta do experimento (defesa = a série histórica)")
     p.add_argument("--out-dir", type=Path, default=Path("ops/medicao_corpus_federal"))
     p.add_argument("--top-k", type=int, default=None, help="default: LEGISLATION_RAG_TOP_K")
     p.add_argument("--sem-llm", action="store_true", help="só recuperação, sem chamar o modelo")
@@ -159,6 +181,8 @@ def main() -> int:
     from app.db.session import SessionLocal
     from app.services.knowledge_catalog import search
 
+    pergunta = PERGUNTAS[args.pergunta]
+    contexto = CONTEXTOS[args.pergunta]
     top_k = args.top_k or getattr(settings, "LEGISLATION_RAG_TOP_K", 8)
     modelo = settings.GEMINI_LEGAL_MODEL
 
@@ -178,7 +202,7 @@ def main() -> int:
         estado_corpus = {r.j: int(r.n) for r in corpus}
 
         # --- recuperação: esfera FEDERAL, exatamente como o ADR-034 escopa ----
-        consulta = f"{PERGUNTA}\n\n{CONTEXTO_CASO}"
+        consulta = f"{pergunta}\n\n{contexto}"
         chunks = search(
             session,
             consulta,
@@ -238,7 +262,8 @@ def main() -> int:
 
         resultado = {
             "rotulo": args.rotulo,
-            "pergunta": PERGUNTA,
+            "pergunta": pergunta,
+            "perfil_pergunta": args.pergunta,
             "modelo": modelo,
             "top_k": top_k,
             "escopo": "jurisdiction IN ('federal','nacional') + uf=GO (ADR-034)",
@@ -255,11 +280,11 @@ def main() -> int:
         if not args.sem_llm:
             from app.core.ai_gateway import complete
 
-            contexto = _formatar_trechos(chunks) or "(nenhum trecho recuperado)"
+            trechos = _formatar_trechos(chunks) or "(nenhum trecho recuperado)"
             user = (
-                f"{CONTEXTO_CASO}\n\n"
-                f"PERGUNTA: {PERGUNTA}\n\n"
-                f"TRECHOS LEGISLATIVOS RECUPERADOS DO CORPUS:\n{contexto}"
+                f"{contexto}\n\n"
+                f"PERGUNTA: {pergunta}\n\n"
+                f"TRECHOS LEGISLATIVOS RECUPERADOS DO CORPUS:\n{trechos}"
             )
             resp = complete(
                 user,
