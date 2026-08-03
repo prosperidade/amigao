@@ -56,6 +56,19 @@ interface ConsolidationResult {
   // nunca os mostrou — e foi assim que o NIRF e o VTN do caso 15 sumiram em
   // silêncio depois de o consultor ter aceitado os dois.
   ignorados: string[];
+  // Validação 02/08 — o TERCEIRO caminho do aceite que não vira dado, e o único
+  // que ainda era mudo. Quando dois documentos trazem valores completos e
+  // conflitantes para o MESMO destino, a consolidação não desempata: devolve as
+  // linhas a `divergente_transcricao`, LIMPA a decisão e cria uma Ação. Correto
+  // — mas, da cadeira da consultora, o aceite dela simplesmente evaporava. Era o
+  // mesmo furo que o `ignorados` fechou em 26/07, deixado pela metade.
+  divergencias_devolvidas: Array<{
+    entity: string;
+    matricula_hint: string | null;
+    field: string;
+    valores: unknown[];
+    staging_ids: number[];
+  }>;
 }
 
 const STATUS_CLS: Record<string, string> = {
@@ -159,9 +172,11 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
       // que de fato falhou — a ressalva vem em âmbar, junto do número gravado,
       // apontando o detalhe. Sinalizar sem alarmar.
       const ignorados = res.ignorados?.length ?? 0;
+      const devolvidas = res.divergencias_devolvidas?.length ?? 0;
+      const naoGravados = ignorados + devolvidas;
       const base = `Gravado na base: ${res.campos_gravados} campo(s)${res.acoes_criadas > 0 ? ` · ${res.acoes_criadas} ação(ões)` : ''}.`;
-      if (ignorados > 0) {
-        toast(`${base} ${ignorados} aceite(s) não tinham onde pousar — veja o detalhe abaixo.`, {
+      if (naoGravados > 0) {
+        toast(`${base} ${naoGravados} aceite(s) não viraram dado — veja o detalhe abaixo.`, {
           icon: '⚠️',
           style: { background: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d' },
           duration: 6000,
@@ -318,6 +333,29 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
           <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
             {consolidated.ignorados.map((motivo, i) => (
               <li key={i}>· {motivo}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Aceite devolvido por conflito — some do valor gravado, mas não da tela. */}
+      {consolidated && (consolidated.divergencias_devolvidas?.length ?? 0) > 0 && (
+        <div className="rounded-lg bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 p-3 space-y-1">
+          <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
+            {consolidated.divergencias_devolvidas.length} campo(s) aceito(s) voltaram como divergência
+          </p>
+          <p className="text-xs text-orange-700 dark:text-orange-400">
+            Dois documentos trazem valores diferentes para o mesmo campo. A base não
+            escolhe por você: o valor não foi gravado e cada caso virou uma Ação.
+          </p>
+          <ul className="text-xs text-orange-700 dark:text-orange-400 space-y-0.5 pt-1">
+            {consolidated.divergencias_devolvidas.map((d, i) => (
+              <li key={i}>
+                · <strong>{d.field}</strong>
+                {d.matricula_hint ? ` (matrícula ${d.matricula_hint})` : ''}
+                {': '}
+                {d.valores.map(v => String(v)).join('  ×  ')}
+              </li>
             ))}
           </ul>
         </div>
