@@ -134,6 +134,46 @@ def _digitos(valor: Any) -> str:
     return "".join(ch for ch in str(valor or "") if ch.isdigit())
 
 
+# Um número no texto: dígitos com separador de milhar opcional (ponto, espaço ou
+# espaço não-quebrável — o Planalto usa os três). "6.514", "6 514", "12.651".
+_RE_NUMERO = re.compile(r"\d[\d.   ]*\d|\d")
+
+# O que vem ANTES de um número e prova que ele é dispositivo, não norma.
+# "Art. 18" é o artigo 18; nenhuma lei se identifica por ele.
+_RE_DISPOSITIVO = re.compile(
+    r"(?:art(?:igo)?s?\.?|§{1,2}|inc(?:iso)?s?\.?|al[íi]neas?|par[áa]grafos?|"
+    r"itens?|item|anexos?)\s*[ \s]*$",
+    re.I,
+)
+
+
+def _numeros_de_norma(texto: str) -> set[str]:
+    """Números presentes no texto que podem identificar uma NORMA.
+
+    Devolve a forma só-dígitos de cada um. Dois cuidados que a versão anterior
+    não tinha, e que são a diferença entre conferir identidade e chutar:
+
+    1. **Token, não substring.** Antes, os dígitos de `identifier + title +
+       chunk_text` viravam UMA string e a busca era por substring. Para o trecho
+       `Decreto 6.514/2008 · "Art. 18. O descumprimento..."` isso dava
+       `6514200818`, e então `"65142"` e `"142"` — que não são norma nenhuma ali
+       — passavam por atravessar a fronteira entre lei, ano e artigo.
+
+    2. **Dispositivo não é norma.** `"Art. 18"` fazia o guard confirmar uma
+       citação à "norma 18". O número do artigo nunca identifica a norma que o
+       contém.
+    """
+    achados: set[str] = set()
+    for m in _RE_NUMERO.finditer(texto):
+        antes = texto[max(0, m.start() - 24):m.start()]
+        if _RE_DISPOSITIVO.search(antes):
+            continue
+        digitos = _digitos(m.group(0))
+        if digitos:
+            achados.add(digitos)
+    return achados
+
+
 def chunk_confere_com_a_norma(chunk: Any, numero: str, ano: int) -> bool:
     """O trecho recuperado É, de fato, a norma citada?
 
@@ -160,8 +200,9 @@ def chunk_confere_com_a_norma(chunk: Any, numero: str, ano: int) -> bool:
             getattr(chunk, "chunk_text", None),
         )
     )
-    digitos_campos = _digitos(campos)
-    if num not in digitos_campos:
+    # Comparação por TOKEN: o número da norma tem de aparecer inteiro, e não como
+    # pedaço de uma sequência maior. Ver `_numeros_de_norma`.
+    if num not in _numeros_de_norma(campos):
         return False
     # Ano confirma quando aparece; ausência não reprova (nem todo corpus o traz).
     ano_txt = str(ano)
@@ -270,6 +311,11 @@ def lookup_enquadramento(
                 "identificador": confere.identifier,
                 "titulo": confere.title,
                 "jurisdicao": confere.jurisdiction,
+                # Proveniência (#97) — a citação localizada diz de ONDE veio o
+                # texto que a sustenta. É o único ponto do fluxo em que o chunk
+                # é conhecido; adiante só há o texto livre do modelo.
+                "fonte_origem": getattr(confere, "fonte_origem", None),
+                "fonte_oficial": bool(getattr(confere, "fonte_oficial", False)),
             })
             continue
 

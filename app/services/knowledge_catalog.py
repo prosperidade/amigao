@@ -56,6 +56,12 @@ class SearchResult:
     vigencia_fim: _date | None = None
     sucessora_ref: str | None = None
 
+    # Proveniencia (divida #97) — de onde veio o texto desta norma, e se a fonte
+    # foi conferida. Viaja junto do trecho para que a tela possa dize-lo sem uma
+    # segunda consulta.
+    fonte_origem: str | None = None
+    fonte_oficial: bool = False
+
     @property
     def historica(self) -> bool:
         return self.vigencia_fim is not None
@@ -362,6 +368,7 @@ def search(
             kc.id, kc.source_type, kc.source_ref, kc.title, kc.section, kc.chunk_text,
             kc.jurisdiction, kc.uf, kc.agency, kc.identifier,
             ld.vigencia_fim AS vigencia_fim, ld.sucessora_ref AS sucessora_ref,
+            ld.fonte_origem AS fonte_origem, ld.fonte_oficial AS fonte_oficial,
             1.0 - (kc.embedding <=> CAST(:vector AS vector)) AS similarity
         FROM knowledge_catalog kc
         {join_sql}
@@ -392,6 +399,8 @@ def search(
                 similarity=sim,
                 vigencia_fim=row.vigencia_fim,
                 sucessora_ref=row.sucessora_ref,
+                fonte_origem=row.fonte_origem,
+                fonte_oficial=bool(row.fonte_oficial),
             )
         )
     return out
