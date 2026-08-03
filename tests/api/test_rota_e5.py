@@ -12,6 +12,8 @@ A ``LegislacaoAgent`` é substituída por um fake (não hitamos LLM em teste).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 
 from app.agents.base import AgentResult
@@ -19,6 +21,7 @@ from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
+from app.models.regulatory import RegulatoryDiagnosis
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services import rota_materializer as mat
@@ -64,6 +67,14 @@ def _seed_case(db_session, *, tenant: Tenant):
         demand_type=DemandType.car,
     )
     db_session.add(process)
+    db_session.flush()
+    # ADR-039: sem diagnóstico ASSINADO a rota não é traçada (409). Estes testes
+    # exercitam o ciclo de vida da rota — gerar, reordenar, validar, fechar —,
+    # não o guard, que tem cobertura própria em tests/services/test_rota_contexto.py.
+    db_session.add(RegulatoryDiagnosis(
+        tenant_id=tenant.id, process_id=process.id, version=1,
+        validated_at=datetime.now(UTC), content={},
+    ))
     db_session.flush()
     return process
 

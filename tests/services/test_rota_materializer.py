@@ -10,6 +10,8 @@ Cobre o essencial pedido no sprint:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
@@ -17,6 +19,7 @@ from app.agents.base import AgentResult
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
+from app.models.regulatory import RegulatoryDiagnosis
 from app.models.rota import (
     RotaPassoClassificacao,
     RotaPassoOrigem,
@@ -105,6 +108,16 @@ def _seed_process(db_session) -> tuple[Tenant, Process]:
         demand_type=DemandType.car,
     )
     db_session.add(process)
+    db_session.flush()
+    # ADR-039: a rota só é traçada sobre diagnóstico ASSINADO. Antes desta ADR o
+    # contexto era montado sem nada disso e a rota nascia do relato do intake —
+    # é justamente o que o guard passou a impedir. O diagnóstico entra aqui para
+    # que estes testes sigam exercitando a MATERIALIZAÇÃO, e não o guard (que
+    # tem cobertura própria em tests/services/test_rota_contexto.py).
+    db_session.add(RegulatoryDiagnosis(
+        tenant_id=tenant.id, process_id=process.id, version=1,
+        validated_at=datetime.now(UTC), content={},
+    ))
     db_session.flush()
     return tenant, process
 

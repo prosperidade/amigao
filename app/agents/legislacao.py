@@ -157,6 +157,16 @@ class LegislacaoAgent(BaseAgent):
         if bloco_esfera:
             user_prompt += "\n\n" + bloco_esfera
 
+        # ADR-039 (dívida #102) — a rota nasce do diagnóstico FUNDAMENTADO e das
+        # ações triadas pelo consultor, não do relato do intake. O bloco vem
+        # pronto do `rota_contexto`, que o materializer monta e injeta aqui pelo
+        # metadata. Ausente (chamada avulsa do agente, fora do fluxo da E5), o
+        # comportamento antigo segue valendo — o guard de bloqueio vive no
+        # materializer, que é quem sabe que está traçando uma rota.
+        bloco_fundamento = self.ctx.metadata.get("bloco_fundamento") or ""
+        if bloco_fundamento:
+            user_prompt += "\n\n" + bloco_fundamento
+
         # Vocabulário da consultora (Isis, 30/07): na tela dela, "pendência" é o
         # que resta resolver; "passivo" é o fato consumado que gerou a autuação.
         # Vale para a prosa, não para os nomes das chaves do JSON.
