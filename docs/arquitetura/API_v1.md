@@ -200,6 +200,36 @@ Convenção: query string aceita filtros simples (`?status=execucao&demand_type=
 
 Resposta continua `202 Accepted` (extração OCR é enfileirada como antes).
 
+### Leitura do documento — OCR e transcrição (ADR-060)
+
+O roteamento em `confirm-upload` tem três saídas, decididas nesta ordem:
+
+| arquivo | pipeline | agente extrator ao fim? |
+|---|---|---|
+| geoespacial (KML/KMZ/SHP/…) | nenhum — `ocr_status=not_required` | não |
+| **áudio** (mp3/m4a/wav/ogg/…) | `workers.transcribe_audio_document` | **não** (ADR-060) |
+| PDF | `workers.ocr_then_extract` | sim |
+| outros tipos extraíveis | `run_agent('extrator')` direto | sim |
+
+A transcrição pousa em `Document.extracted_text`, a mesma coluna do OCR — o áudio
+é "um documento cuja leitura é a transcrição". Estado e falha usam
+`ocr_status`/`ocr_error` (nomes mantidos: o significado real da coluna sempre foi
+"em que pé está a leitura deste arquivo").
+
+Endpoints relacionados:
+
+- `GET /documents/{id}/text` → `DocumentTextResponse`. Texto lido do documento,
+  em rota separada porque uma reunião de 30 min tem dezenas de milhares de
+  caracteres e não pode viajar na listagem. `eh_transcricao` diz se veio de áudio.
+  **Interno apenas.**
+- `PATCH /documents/{id}` → `is_internal`. Marca o documento como material interno
+  do escritório: some da listagem do **portal do cliente**, continua valendo para
+  o consultor e para o diagnóstico. Grava `AuditLog` (`visibility_changed`).
+- `POST /documents/{id}/reprocess-ocr` passou a aceitar **áudio** além de PDF
+  (dispara re-transcrição com `force=True`). Outros tipos seguem devolvendo 422.
+
+`DocumentResponse` ganhou `ocr_error`, `tem_texto` e `is_internal`.
+
 ### Endpoints regulatórios (`/processes/{id}/diagnoses`, `/properties/{id}/issues`)
 
 `app/api/v1/regulatory.py` — versionamento de `RegulatoryDiagnosis` por processo +

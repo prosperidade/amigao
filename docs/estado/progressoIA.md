@@ -2665,3 +2665,115 @@ registrada na dívida #107 é enriquecer o chunk com a identificação do artigo
 `title` — **metadado no chunk vale mais que reranking depois**, que é a mesma
 lição do rótulo de vigência: informação gravada no dado chega a todo consumidor
 sem que nenhum precise saber que ela existe.
+
+---
+
+## O sistema passou a ouvir — transcrição de áudio (03/08/2026)
+
+**Frente:** `feat/transcricao-audio` · dívidas #103 e #104 · ADR-060 ·
+faixa nova de numeração 200-299.
+
+### O que se descobriu ao medir
+
+A dívida #103 dizia que faltava o worker de transcrição. Faltava — e mais duas
+coisas que só apareceram olhando o caminho inteiro do arquivo:
+
+1. `IntakeDraft.audio_url` era gravado e **não era lido por serviço algum**. A
+   menção a Whisper em `app/schemas/intake.py:101` era comentário.
+2. Na porta do **caso** (`POST /documents/confirm-upload`), o upload de áudio
+   morria com **400** antes de qualquer discussão sobre transcrição:
+   `ALLOWED_EXTENSIONS` nunca ganhou `mp3`/`m4a`/`wav`. O seletor "🎙️ Áudio de
+   reunião/ligação" existia na tela e não funcionava.
+
+Ou seja: a consultora subia a gravação, e ora o arquivo era recusado, ora ficava
+guardado sem que ninguém o lesse. O que se perdia é a **fonte primária do caso** —
+o que o cliente contou, o que prometeu enviar, o que ficou combinado. Isso não
+está em documento nenhum.
+
+### A decisão (ADR-060)
+
+**O áudio não ganhou pipeline paralelo.** Ele entrou no pipeline que já existia,
+com outra forma de leitura: é um `Document`, e a transcrição pousa em
+`Document.extracted_text` — a mesma coluna onde o OCR de um PDF pousa.
+
+O que isso herdou sem uma linha de código nova: entrada no contexto do
+diagnóstico (`_documentos_com_trecho`), o `id` que faz a citação virar fonte
+clicável (ADR-035), o cache SHA-256 self/twin, o budget guard mensal, o `AIJob`
+de auditoria e o evento `document.ocr.*` que a tela já escutava.
+
+O que ela deliberadamente **não** faz: despachar o agente `extrator`. Fala
+espontânea não é documento cadastral — deixar o extrator garimpar matrícula e
+área numa conversa encheria o staging de campo inventado a partir de *"acho que é
+uns quatrocentos hectares"*.
+
+### Custo
+
+Whisper (`whisper-1`) via `ai_gateway.transcribe()` — LiteLLM, modelo por env,
+BYOK do consultor respeitado. O LiteLLM **não precifica transcrição**, então o
+custo é calculado por duração: `$0.006/min` × minutos, com a duração real vinda
+do `verbose_json` do provedor. Quando o provedor não devolve a duração, ela é
+estimada pelo tamanho do arquivo e o campo `duracao_fonte` registra a diferença —
+custo estimado apresentado como medido seria auditoria mentindo.
+
+**Medido de verdade** (35,4 s de diálogo em pt-BR passados pelo caminho de
+produção, 03/08), não estimado de tabela:
+
+| áudio | custo | tempo de processamento |
+|---|---|---|
+| 35,4 s (medido) | $0,003542 | 3,1 s |
+| 1 min | $0,006 | ~5 s |
+| reunião de 30 min | **$0,18** | ~2,7 min |
+| 10 reuniões/mês | $1,80 | — |
+
+`duracao_fonte = provedor`: o `verbose_json` devolve `duration`, então o custo
+gravado no `AIJob` é medido, e não inferido do tamanho do arquivo.
+
+**A medição pegou um erro que a leitura de código não pegaria.** Na primeira
+rodada, *"auto de infração"* saiu **"alto de infração"** — justo o termo que
+dispara prazo de defesa, esfera e rota. Termo errado quebra a busca do consultor e
+empurra o diagnóstico para a leitura errada. A correção foi passar o vocabulário
+do domínio no parâmetro `prompt` do Whisper (auto de infração, CAR, SICAR, RAT,
+averbação, reserva legal, NIRF, CCIR, SIGEF, módulo fiscal, PRAD, SEMAD…). Segunda
+rodada: termo correto, **ao mesmo custo** — a cobrança é por duração do áudio e
+não por tokens, então vocabulário de domínio sai de graça. Vale como padrão para
+qualquer transcrição que o sistema venha a fazer.
+
+Sem cadeia de fallback entre providers, diferente do `complete()`: dos quatro
+suportados, só a OpenAI expõe endpoint de transcrição. Sem chave OpenAI o erro é
+explícito e acionável, não um Gemini tentando recusar o formato (dívida #202).
+
+### O que a Isis vê de diferente
+
+O chip que dizia "🎙️ Áudio anexado — transcrição não disponível" virou três
+estados, e nenhum deles é silêncio: **Transcrevendo o áudio…** (com polling, sem
+precisar de F5) · **Transcrição pronta — ver texto** (abre o texto completo) ·
+**Transcrição falhou — tentar de novo** (com o motivo escrito embaixo, não só no
+tooltip). Mais o interruptor de "material interno", que esconde a peça do portal
+do cliente e grava `AuditLog`.
+
+### Leitura de produção que fechou a #104
+
+Executada nesta sessão pela Management API do Supabase, no `audit_logs` do
+processo 16. A hipótese que a #91 atacou **se confirmou**: no lote de 02/08 às
+15:19 a consolidação gravou **zero** campos — 3 voltaram como
+`divergencias_devolvidas` (`nirf_cib` com dois valores conflitantes, `vtn`,
+`rat_data_emissao`) e 3 saíram em `ignorados`. Nenhum `consolidar_falhou` em todo
+o histórico do caso; o caminho do 500 não era o vetor.
+
+E apareceu uma **segunda causa**, que a correção da #91 não cobre: `ignorados`
+tem cinco pontos de emissão, e quatro explicam o motivo no texto — o quinto
+(`staging_consolidation.py:718`) grava só `imovel.rat_protocolo`. O consultor lê
+isso e não tem como saber que significa "este campo não tem coluna na base".
+Dívida #200.
+
+### Registro de método
+
+**Faixa de numeração por frente.** Dívidas 200-299 e ADRs a partir de 060. Dois
+agentes escrevendo no mesmo `REGISTRO_DIVIDAS.md` leem o "próximo número livre"
+ao mesmo tempo — "próximo livre" resolve conflito sequencial, não simultâneo.
+Colidimos duas vezes em dois dias (ver a nota de renumeração no topo da ADR-039).
+
+**A modelagem que herda vale mais que a modelagem que descreve.** Uma entidade
+`AudioTranscript` própria seria mais limpa no papel e exigiria reimplementar
+cinco integrações para ganhar uma tabela. O teste
+`test_transcricao_entra_no_diagnostico.py` existe para quebrar se alguém tentar.
