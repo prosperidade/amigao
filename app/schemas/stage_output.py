@@ -150,6 +150,12 @@ class SourceRef(_StrictModel):
     valor: str | None = Field(default=None, description="O dado conferido/citado, quando aplicável (ex.: área, denominação)")
     confianca: str | None = Field(default=None, description="alta | media | baixa")
     sem_fonte: bool = Field(default=False, description="True = sem fonte identificável (não inventar)")
+    # Proveniência (dívida #97) — de onde veio o TEXTO que sustenta a fonte, e se
+    # essa origem foi conferida. "Nenhuma afirmação sem fonte" ganha o segundo
+    # andar: e de onde veio a fonte. Hoje só a legislação preenche (é onde o
+    # chunk é conhecido); os demais tipos seguem None e a tela nada mostra.
+    fonte_origem: str | None = Field(default=None, description="De onde veio o texto (Planalto, DOU, curadoria, agregador)")
+    fonte_oficial: bool | None = Field(default=None, description="True = origem oficial (conferida ou de domínio oficial)")
 
 
 class Afirmacao(_StrictModel):

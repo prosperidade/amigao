@@ -115,3 +115,40 @@ def test_texto_limpo_passa_intacto():
 
 def test_none_passa_reto():
     assert normalizar_invisiveis(None) is None
+
+
+# --------------------------------------------------------------------------
+# #97 — a proveniência chega até a fonte que a tela renderiza
+# --------------------------------------------------------------------------
+
+def test_source_ref_carrega_proveniencia():
+    """O contrato comum (`SourceRef`) precisa ter os campos, senão a informação
+    morre no caminho.
+
+    A primeira versão desta rodada gravou a proveniência no retorno de
+    `lookup_enquadramento` e a renderizou no `FonteChip` — mas `SourceRef`, que é
+    a ponte entre os dois, não tinha os campos. A mudança de UI ficou órfã e
+    nenhum teste teria notado.
+    """
+    from app.schemas.stage_output import SourceRef
+
+    fonte = SourceRef(
+        tipo="legislacao",
+        ref="4211",
+        descricao="Decreto 6.514/2008, Art. 18",
+        fonte_origem="Planalto — Presidência da República (oficial)",
+        fonte_oficial=True,
+    )
+    dados = fonte.model_dump()
+    assert dados["fonte_origem"] == "Planalto — Presidência da República (oficial)"
+    assert dados["fonte_oficial"] is True
+
+
+def test_source_ref_sem_proveniencia_fica_none_e_a_tela_nao_mostra_nada():
+    """Fonte que não é norma (documento, relato) não tem proveniência de corpus.
+    `None` — e o chip simplesmente não renderiza a linha."""
+    from app.schemas.stage_output import SourceRef
+
+    fonte = SourceRef(tipo="documento", ref="331", descricao="Certidão de embargo")
+    assert fonte.fonte_origem is None
+    assert fonte.fonte_oficial is None

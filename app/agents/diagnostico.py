@@ -1173,6 +1173,11 @@ class DiagnosticoAgent(BaseAgent):
                         tipo="legislacao",
                         ref=str(enq.get("chunk_id")) if enq.get("chunk_id") else None,
                         descricao=_rotulo_norma(enq),
+                        # Dívida #97 — a citação localizada diz de ONDE veio o
+                        # texto que a sustenta. É o último ponto do fluxo em que
+                        # o chunk é conhecido; adiante só há texto livre.
+                        fonte_origem=enq.get("fonte_origem"),
+                        fonte_oficial=enq.get("fonte_oficial"),
                     ))
                 elif enq.get("cobertura_insuficiente"):
                     # Item 10 (sugestão da Isis) — a lacuna é da BASE, não da
