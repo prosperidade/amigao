@@ -468,7 +468,78 @@ exige **reindexar** seus chunks — o UPDATE na tabela sozinho não muda o que
 chega ao modelo. O vigia precisa disparar `index_legislation_document` para o
 documento que acabou de marcar.
 
-**PRÓXIMO LIVRE: 100.**
+### Saneamento do corpus (01/08, `fix/saneamento-corpus`)
+
+**#95 — mojibake: FECHADA para os 7 federais, ABERTA para 3 do Acre.**
+`scripts/sanear_corpus.py --mojibake` rebaixou da URL de origem, conferiu que
+saiu limpo e reindexou: Lei 12.651/2012, Lei 9.605/1998, Lei 9.985/2000, Lei
+6.938/1981, LC 140/2011, Decreto 7.830/2012 e Decreto 8.235/2014 — de ~4% de
+U+FFFD para **0%**, 433 chunks refeitos, 0 embedding nulo. O `UPDATE` é no mesmo
+`id` (não supersede), o que preserva quem aponta para o documento via
+`sucessora_id`. Restam **41 chunks** em 3 documentos do Acre (`AC-N10` 0,51%,
+`AC-N04` 0,044%, `AC-N05` 0,012%): vieram de `.md` em disco, não têm URL, e rede
+não resolve — entram no pedido à Isis junto do #98. Nota: os dois últimos estão
+**abaixo do limiar do canário** (0,05%), então nem um reprocesso automático os
+pegaria; precisam do arquivo original.
+
+**#96 — invisíveis: dry-run pronto, execução aguardando aval.** 651 chunks em 25
+documentos com `U+00A0`/`U+200B`/`U+FEFF`. Remediação por `UPDATE` **in-place**,
+sem reembedar: o caractere é semanticamente invisível, então o vetor não muda de
+forma relevante e o que se recupera é a busca **literal** — `chunk_text LIKE
+'%Art. 18.%'` devolvia ZERO para um artigo que estava no corpus. **Custo de
+embedding: US$ 0,00.** O `content_hash` é recalculado no mesmo passo (sem isso, a
+próxima reindexação não reconheceria o texto e duplicaria tudo). Rodar com
+`--invisiveis --executar`.
+
+**#97 — proveniência: FECHADA.** Migration `b5c92fa4d7e1` com `fonte_origem`,
+`fonte_oficial` (NOT NULL DEFAULT **false** — o que ninguém conferiu não se
+apresenta como oficial) e `fonte_conferida_em`. Backfill medido: **54 documentos**
+de disco → oficial por curadoria da Isis, com data 01/08/2026; **18** com URL de
+domínio oficial → oficial deduzido, sem data; **1** (LegisWeb) → não-oficial. A
+regra vive em `app/services/proveniencia.py`, testável, e a migration a espelha.
+A proveniência viaja no `SearchResult` e chega à citação localizada de
+`lookup_enquadramento` — o único ponto do fluxo em que o chunk é conhecido; daí
+em diante só há o texto livre do modelo. UI: `FonteChip` mostra "fonte oficial —
+X" em cinza e "fonte não conferida — X" em âmbar. Oficial **não** virou selo
+verde de destaque: transformar o normal em troféu treina o olho a ignorá-lo.
+
+**#98 — pedido à Isis (ampliado).** (a) PDF oficial da IN IBAMA 10/2012; (b) os
+`.md` originais do Acre (`AC-N04`, `AC-N05`, `AC-N10`), para fechar a #95.
+
+**100. A fresta do guard de identidade — FECHADA nesta rodada.** O guard do
+ADR-036 usava `_digitos()`, que concatenava os dígitos de `identifier + title +
+chunk_text` numa string única e fazia busca de **substring**. Para o trecho
+`Decreto 6.514/2008 · "Art. 18. O descumprimento..."` isso dava `6514200818`, e
+**"65142"**, **"142"** e **"18"** — nenhum deles norma daquele trecho — eram
+confirmados. Fresta mais estreita que o bug original do ADR-036, e da mesma
+família: fonte falsa com aparência de rigor, em peça assinada. Corrigido com
+comparação por **token** de número (`_numeros_de_norma`), que além disso rejeita
+número precedido de `Art.`/`§`/`inciso` — dispositivo nunca identifica a norma
+que o contém — e tolera `U+00A0` como separador de milhar. 11 testes; a
+regressão do ADR-036 (compêndio do MT confirmando lei federal) segue rejeitando.
+**Origem:** sonda do saneamento, 31/07.
+
+**101. Integridade dos compêndios agregados — MEDIDA, não resolvida.** Origem
+oficial (confirmada pelo André em 01/08) **não garante integridade**: o compêndio
+pode ter perdido artigo, ementa ou vigência **na compilação**. Sinal medido
+(normas distintas citadas × articulados presentes, via `Art. 1º`):
+
+| compêndio | normas citadas | com articulado |
+|---|---:|---:|
+| MS-NUC04-licenciamento | 62 | 36 |
+| AC-N05-hidrico | 35 | 15 |
+| Portaria SEMAD-GO 501/2024 | 53 | 39 |
+| MT-NUC01-constitucional | 101 | 151 |
+| MT-NUC08-biomas | 178 | 197 |
+
+Os MT vêm com mais articulados que normas citadas (compilação farta); MS-NUC04 e
+AC-N05 vêm ao contrário. **O sinal é FRACO e não prova truncamento**: compêndio
+cita norma correlata sem reproduzi-la o tempo todo, e isso é legítimo. Para virar
+prova seria preciso confrontar o índice declarado de cada compêndio com o que tem
+articulado. **Nada foi reingerido e nada é afirmado além do número.**
+**Origem:** item de integridade do saneamento, 01/08.
+
+**PRÓXIMO LIVRE: 102.**
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 
