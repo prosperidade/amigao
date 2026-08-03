@@ -151,11 +151,13 @@ def create_acao(
     current_user: User = Depends(get_current_internal_user),
 ) -> Acao:
     """Criação **manual** de ação (consultor cria do zero — Ficha 07 §2)."""
-    _get_process_or_404(db, process_id, current_user.tenant_id)
+    process = _get_process_or_404(db, process_id, current_user.tenant_id)
 
     acao = Acao(
         tenant_id=current_user.tenant_id,
         process_id=process_id,
+        # Carimba a etapa em que a ação nasceu (validação 02/08 — histórico por etapa).
+        macroetapa=process.macroetapa,
         titulo=payload.titulo,
         descricao=payload.descricao,
         origem=AcaoOrigem.manual,

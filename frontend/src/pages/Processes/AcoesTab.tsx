@@ -16,6 +16,7 @@ import {
   type AcaoStatus,
   type AcaoTipoTriagem,
 } from '@/lib/acoes/types';
+import { MACROETAPA_LABELS } from './quadro-types';
 import AcaoCard from './AcaoCard';
 import RotaTab from './RotaTab';
 
@@ -60,6 +61,36 @@ function AcoesList({ processId }: { processId: number }) {
       return true;
     });
   }, [acoes, statusFilter, triagemFilter, showDispensadas]);
+
+  // Validação 02/08 — as Fichas descrevem as ações de cada etapa registradas e
+  // visíveis conforme o caso avança. A lista era plana: dava para filtrar, não
+  // para LER o caso como sequência de trabalho. Agrupa na ordem do fluxo; as
+  // ações sem carimbo (anteriores à coluna) vão para o fim, nomeadas — não se
+  // inventa a etapa de quem nasceu antes do registro existir.
+  const grupos = useMemo(() => {
+    const porEtapa = new Map<string, typeof filtered>();
+    for (const acao of filtered) {
+      const chave = acao.macroetapa ?? '__sem_etapa__';
+      const atual = porEtapa.get(chave) ?? [];
+      atual.push(acao);
+      porEtapa.set(chave, atual);
+    }
+    const ordem = Object.keys(MACROETAPA_LABELS);
+    return [...porEtapa.entries()]
+      .sort(([a], [b]) => {
+        const ia = a === '__sem_etapa__' ? ordem.length : ordem.indexOf(a);
+        const ib = b === '__sem_etapa__' ? ordem.length : ordem.indexOf(b);
+        return ia - ib;
+      })
+      .map(([chave, itens]) => ({
+        chave,
+        label: chave === '__sem_etapa__'
+          ? 'Etapa não registrada'
+          : MACROETAPA_LABELS[chave] ?? chave,
+        itens,
+        concluidas: itens.filter(a => a.status === 'concluida').length,
+      }));
+  }, [filtered]);
 
   const pendentesCount = (acoes ?? []).filter(a => a.tipo_triagem === 'pendente').length;
   const dispensadasCount = (acoes ?? []).filter(a => a.tipo_triagem === 'dispensada').length;
@@ -190,9 +221,24 @@ function AcoesList({ processId }: { processId: number }) {
             : 'Nenhuma ação para os filtros selecionados.'}
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map(acao => (
-            <AcaoCard key={acao.id} acao={acao} processId={processId} />
+        <div className="space-y-6">
+          {grupos.map(grupo => (
+            <section key={grupo.chave}>
+              <div className="flex items-baseline gap-2 mb-2 px-1">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                  {grupo.label}
+                </h4>
+                <span className="text-[11px] text-gray-400 dark:text-slate-500">
+                  {grupo.itens.length} ação(ões)
+                  {grupo.concluidas > 0 && ` · ${grupo.concluidas} concluída(s)`}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {grupo.itens.map(acao => (
+                  <AcaoCard key={acao.id} acao={acao} processId={processId} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}

@@ -41,6 +41,8 @@ export interface Acao {
   prioridade: AcaoPrioridade;
   status: AcaoStatus;
   tipo_triagem: AcaoTipoTriagem;
+  /** Etapa em que a ação nasceu. null = criada antes deste carimbo. */
+  macroetapa: string | null;
   created_by_user_id: number | null;
   concluida_at: string | null;
   created_at: string | null;

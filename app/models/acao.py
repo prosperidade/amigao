@@ -186,6 +186,12 @@ class Acao(Base):
         default=AcaoTipoTriagem.pendente,
     )
 
+    # Validação 02/08 — a etapa em que a ação NASCEU. As Fichas descrevem as
+    # ações registradas e visíveis por etapa conforme o caso avança; sem este
+    # carimbo a aba Ações era uma lista plana e o histórico do caso se perdia.
+    # NULL = ação anterior a esta coluna (não se inventa a etapa retroativamente).
+    macroetapa = Column(String, nullable=True, index=True)
+
     # Idempotência da geração (NULL para criação manual).
     dedupe_key = Column(String(120), nullable=True)
 

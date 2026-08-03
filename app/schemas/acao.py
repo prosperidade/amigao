@@ -44,6 +44,8 @@ class AcaoOut(BaseModel):
     prioridade: AcaoPrioridade
     status: AcaoStatus
     tipo_triagem: AcaoTipoTriagem
+    # Etapa em que a ação nasceu (None = anterior ao carimbo).
+    macroetapa: str | None = None
     created_by_user_id: int | None
     concluida_at: datetime | None
     created_at: datetime | None
