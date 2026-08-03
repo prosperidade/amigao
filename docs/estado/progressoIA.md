@@ -2512,3 +2512,66 @@ proveniência em `extra_metadata` e a **deriva da URL**, para que fonte
 desconhecida caia num rótulo explícito e nunca em branco; o campo de primeira
 classe é a dívida #97. Importa porque o sistema cita norma em peça que a
 consultora assina.
+
+---
+
+## Saneamento do corpus — a trava e o corpus se encontram (01/08/2026)
+
+### A premissa que caiu
+
+A rodada nasceu de uma hipótese do André: o espaço não-quebrável do Planalto
+estaria quebrando o guard de identidade do ADR-036, fazendo o sistema declarar
+"cobertura insuficiente" **tendo** a norma na base. Testado direto, com e sem
+`U+00A0`, o guard aceita nos dois casos — `_digitos()` remove todo caractere
+não-dígito antes de comparar, então o invisível é invisível também para ele.
+Nenhuma norma estava sendo rejeitada por esse motivo. A premissa era razoável e
+estava errada, e medir custou menos que implementar a correção de um problema
+que não existia.
+
+### A fresta que existia
+
+A mesma sonda achou outra coisa, pior. `_digitos()` concatenava os dígitos de
+`identifier + title + chunk_text` numa string única e fazia busca de
+**substring**. Para `Decreto 6.514/2008 · "Art. 18. O descumprimento..."` isso
+produzia `6514200818` — e `"65142"`, `"142"` e `"18"` eram confirmados como
+sendo aquela norma. O ADR-036 fechou a porta grande (o compêndio do MT
+confirmando lei federal) e deixou aberta uma fresta da mesma família: fonte
+falsa com aparência de rigor, em peça que a consultora assina.
+
+Corrigido com comparação por **token** de número, mais uma regra de domínio que
+faltava: número precedido de `Art.`, `§` ou `inciso` é **dispositivo**, e
+dispositivo nunca identifica a norma que o contém.
+
+### O passivo de texto
+
+Os 7 diplomas federais que entraram em abril com ~4% de caracteres corrompidos
+foram rebaixados da origem e reindexados: **0% de U+FFFD**, 433 chunks refeitos.
+Sobram 3 documentos do Acre que vieram de `.md` em disco — rede não resolve, e
+dois deles estão **abaixo do limiar do canário**, então nem um reprocesso
+automático os pegaria. Viram pedido à Isis.
+
+Para os invisíveis, a remediação barata: `UPDATE` in-place, **US$ 0,00** de
+embedding, porque o caractere não muda o vetor de forma relevante — o que se
+recupera é a busca literal. Com o cuidado de recalcular o `content_hash` no
+mesmo passo, senão a próxima reindexação não reconhece o texto e duplica tudo.
+
+### Proveniência: três coisas que não são a mesma
+
+A auditoria de 31/07 mediu 97,3% do corpus sem origem rastreável. Agora há
+campo, e ele distingue **oficial deduzido** (o domínio da URL prova),
+**oficial conferido** (uma pessoa afirmou — e carrega a data) e **não
+conferido**. A distinção não é preciosismo: é o que separa "o robô deduziu" de
+"alguém olhou". Medido: 54 documentos de curadoria da Isis, 18 de domínio
+oficial, 1 de agregador.
+
+Na tela, oficial **não** virou selo verde de destaque. É o esperado, e
+transformar o normal em troféu treina o olho a ignorá-lo; o que precisa saltar é
+a exceção.
+
+### O teste que se derrubou sozinho
+
+O teste do espaço invisível falhou porque a constante `NBSP` do arquivo de teste
+tinha virado um espaço comum no caminho — o caractere colado não sobreviveu à
+escrita. Ficou como regra: invisível se declara por **codepoint**, nunca colado
+como literal. É difícil imaginar demonstração melhor do problema que a dívida
+descreve.
