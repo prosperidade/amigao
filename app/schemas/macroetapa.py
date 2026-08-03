@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.macroetapa import Macroetapa
 
@@ -88,6 +88,12 @@ class CanAdvanceResponse(BaseModel):
     current_macroetapa: Optional[str] = None
     current_state: Optional[str] = None
     next_macroetapa: Optional[str] = None
+    # Validação 02/08 — o ramo da E2 tem DUAS saídas legítimas (Ficha 07 §6:
+    # "E2 → E3 há documentos essenciais a coletar" e "E2 → E4 sem coleta"). O
+    # painel só oferecia a recomendada, então a consultora que queria a outra
+    # clicava na aba direto — contornando o gate, a confirmação e a auditoria.
+    # Aqui vêm os destinos alternativos, já validados como transição.
+    next_macroetapa_alternativas: list[str] = Field(default_factory=list)
     blockers: list[str] = []              # impeditivos (travam avanço)
     gaps: list[str] = []                  # CAM3WS-005 (Sprint K) — lacunas informativas (não travam)
     objective: Optional[str] = None

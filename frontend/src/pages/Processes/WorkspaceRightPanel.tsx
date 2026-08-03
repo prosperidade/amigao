@@ -26,6 +26,10 @@ interface CanAdvance {
   current_macroetapa: string | null;
   current_state: string | null;
   next_macroetapa: string | null;
+  // Ficha 07 §6 — o ramo da E2 tem duas saídas legítimas. A recomendada vem em
+  // `next_macroetapa`; a(s) outra(s) aqui, para a tela oferecer a segunda porta
+  // em vez de obrigar o consultor a clicar na aba e contornar o gate.
+  next_macroetapa_alternativas: string[];
   blockers: string[];
   gaps: string[];                 // CAM3WS-005 (Sprint K) — lacunas informativas
   objective: string | null;
@@ -105,13 +109,24 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
   // para a auditoria com o que estava pendente no momento.
   const [confirmandoAvanco, setConfirmandoAvanco] = useState(false);
 
-  const pedirAvanco = () => {
-    if (!gate?.next_macroetapa) return;
-    if (gate.avisos && gate.avisos.length > 0) {
+  // Destino escolhido pelo consultor quando a etapa ramifica (null = o recomendado).
+  const [destinoEscolhido, setDestinoEscolhido] = useState<string | null>(null);
+  const destinoAvanco = destinoEscolhido ?? gate?.next_macroetapa ?? null;
+
+  const pedirAvanco = (destino?: string) => {
+    const alvo = destino ?? destinoAvanco;
+    if (!alvo) {
+      // Nunca sair em silêncio: antes o clique caía num `return` mudo e a tela
+      // não dizia nada — o botão parecia quebrado (validação 02/08).
+      toast.error('Esta etapa não tem próxima etapa definida — é o fim do fluxo.');
+      return;
+    }
+    setDestinoEscolhido(alvo);
+    if (gate?.avisos && gate.avisos.length > 0) {
       setConfirmandoAvanco(true);
       return;
     }
-    advanceMutation.mutate(gate.next_macroetapa);
+    advanceMutation.mutate(alvo);
   };
 
   // Fase 0.2 — "Rodar os agentes da etapa" (Ficha 07 §2/§6). Dispara a chain da
@@ -223,7 +238,7 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
       {gate.next_macroetapa && (
         <button
           type="button"
-          onClick={pedirAvanco}
+          onClick={() => pedirAvanco(gate.next_macroetapa ?? undefined)}
           disabled={!gate.can_advance || advanceMutation.isPending}
           className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold transition-colors ${
             gate.can_advance
@@ -249,6 +264,27 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
               : 'Aguardando requisitos'}
           </span>
         </button>
+      )}
+
+      {/* Segunda porta do ramo (Ficha 07 §6). Saindo da E2 o destino recomendado
+          depende de haver documento essencial pendente — mas os dois caminhos são
+          válidos, e quem decide é o consultor. Sem isto ela clicava na aba para ir
+          à Coleta, contornando gate, guard-rail e auditoria. */}
+      {gate.can_advance && (gate.next_macroetapa_alternativas?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1">
+          <span className="text-xs text-gray-400 dark:text-slate-500">ou ir para:</span>
+          {gate.next_macroetapa_alternativas.map(alt => (
+            <button
+              key={alt}
+              type="button"
+              onClick={() => pedirAvanco(alt)}
+              disabled={advanceMutation.isPending}
+              className="text-xs font-medium underline underline-offset-2 text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 disabled:opacity-40"
+            >
+              {MACROETAPA_LABELS[alt] ?? alt}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Modal do guard-rail: declara em texto claro o que NÃO foi feito. */}
@@ -290,7 +326,8 @@ export default function WorkspaceRightPanel({ processId, onValidateAction }: Pro
                 type="button"
                 onClick={() => {
                   setConfirmandoAvanco(false);
-                  if (gate.next_macroetapa) advanceMutation.mutate(gate.next_macroetapa);
+                  // Confirma o destino ESCOLHIDO (pode ser a segunda porta do ramo).
+                  if (destinoAvanco) advanceMutation.mutate(destinoAvanco);
                 }}
                 className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium"
               >

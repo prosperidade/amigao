@@ -13,6 +13,7 @@ from app.models.macroetapa import (
     MACROETAPA_LABELS,
     MACROETAPA_METADATA,
     MACROETAPA_ORDER,
+    MACROETAPA_TRANSITIONS,
     Macroetapa,
     MacroetapaChecklist,
     MacroetapaState,
@@ -852,6 +853,18 @@ def _compute_can_advance(
     )
     next_etapa = next_macro.value if next_macro else None
 
+    # Validação 02/08 — a recomendação não pode ser a ÚNICA porta. Saindo da E2 a
+    # Ficha 07 §6 prevê dois destinos legítimos (E3 quando há documento essencial
+    # a coletar; E4 quando não há), e `MACROETAPA_TRANSITIONS` já aceita ambos. O
+    # painel só mostrava o recomendado, então a consultora que precisava do outro
+    # clicava na aba direto — e isso contorna o gate, o guard-rail e a auditoria.
+    # As alternativas viajam nomeadas para a tela poder oferecer a segunda porta.
+    alternativas = [
+        m.value
+        for m in MACROETAPA_TRANSITIONS.get(current_etapa, [])
+        if current_etapa is not None and m.value != next_etapa
+    ]
+
     meta = MACROETAPA_METADATA.get(current_etapa, {}) if current_etapa else {}
 
     # CAM3WS-005 (Sprint K) — lacunas informativas (nice-to-have, não travam avanço).
@@ -909,6 +922,7 @@ def _compute_can_advance(
         current_macroetapa=current_etapa.value if current_etapa else None,
         current_state=state_value,
         next_macroetapa=next_etapa,
+        next_macroetapa_alternativas=alternativas,
         blockers=blockers,
         gaps=gaps,
         objective=meta.get("objective"),
