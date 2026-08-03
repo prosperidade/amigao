@@ -2575,3 +2575,93 @@ tinha virado um espaço comum no caminho — o caractere colado não sobreviveu 
 escrita. Ficou como regra: invisível se declara por **codepoint**, nunca colado
 como literal. É difícil imaginar demonstração melhor do problema que a dívida
 descreve.
+
+---
+
+## Ingestor dirigido por curadoria — Bloco 0 e núcleo 06 (03/08/2026)
+
+### O que muda de fundo
+
+O corpus deixa de ser dirigido por uma **lista escrita à mão dentro do código** e
+passa a ser dirigido por **manifesto CSV versionado**, extraído do mapa normativo
+da Isis. A diferença não é de conveniência: a medição de 31/07 mostrou que o
+corpus federal tinha exatamente o tamanho da lista digitada em abril, e ninguém
+sabia — parecia falha de ingestão, era escopo não declarado. Curadoria dentro de
+código-fonte não é auditável por quem cura.
+
+A planilha (18 MB) fica fora do repo. O que se versiona é o CSV, e o **diff dele**
+passa a ser a forma de auditar o que a curadoria mudou entre duas rodadas.
+
+### A matriz é analítica, e isso muda a conta
+
+43 linhas do núcleo 06 → **26 URLs distintas** → **16 normativas** → **7 novas**.
+A mesma norma aparece em várias linhas, examinada por ângulos diferentes: o
+Decreto 6.514/2008 ocupa 7 (embargo, apreensão, suspensão, reincidência...).
+Ingerir linha a linha baixaria o mesmo decreto sete vezes.
+
+E 10 das 26 URLs são **páginas de serviço** do gov.br — FAQ do auto de infração,
+"obter certidão de embargo", parcelamento da PGFN. Úteis, e não fundamentação:
+vetorizadas, competiriam com lei na busca por similaridade e virariam fonte de
+peça assinada. Entram no manifesto como `referencia_operacional` e ficam fora do
+corpus vetorial.
+
+### O Bloco 0 se pagou duas vezes no primeiro uso
+
+Ambas pela mesma peça, a `validation_keyword`:
+
+**A Constituição da planilha vinha truncada.** O endereço devolve texto que para
+no art. 24, §4º — e a linha da curadoria invoca o **art. 225, §3º**, que não está
+lá. Sessenta mil caracteres, baixa limpo, parece certo. Com a keyword `art. 225`,
+o ingestor recusou; entrou a versão íntegra (686.756 chars). Sem a guarda, o
+sistema teria uma Constituição sem o artigo ambiental — e **texto truncado não
+levanta exceção**, exatamente a física do mojibake.
+
+**A guarda também pega curadoria descuidada.** A LC 140/2011 reprovou porque a
+keyword que EU escrevi foi `140/2011`, e o Planalto grafa "LEI COMPLEMENTAR Nº
+140, DE 8 DE DEZEMBRO DE 2011". Erro de quem curou, não da fonte — barrado igual.
+
+### Decisão codificada, não comentada
+
+A escolha de manter a versão **anotada** (e não a compilada) das três normas que a
+planilha aponta virou URL no manifesto. Elas dão `skip` por hash idêntico a cada
+rodada — a decisão fica verificável toda vez que o ingestor roda, em vez de virar
+um comentário que alguém esquece. Vale como padrão.
+
+### Efeito medido
+
+Mesma pergunta do A/B (defesa do auto 484341/D), corpus federal 1.600 → 2.288:
+
+| rodada | trechos recuperados |
+|---|---|
+| antes | IN IBAMA 14/2024 (PRAD), Lei 6.938/1981 |
+| depois (pacote A) | Dec. 3.179/1999, Dec. 6.514/2008, IN IBAMA 10/2012, IN 19/2023 |
+| **depois núcleo 06** | **OJN 06/2009 PFE-IBAMA (4 de 8 vagas)**, Dec. 3.179/1999, Dec. 6.514/2008, IN IBAMA 10/2012 |
+
+A Orientação Jurídica Normativa da procuradoria do IBAMA passou a dominar a
+recuperação. É interpretação vinculante sobre o rito sancionador — o tipo de
+material que nenhuma das rodadas anteriores tinha.
+
+### Um limite que a medição expôs
+
+A Constituição entrou íntegra e é **495 chunks — 72% de todo o bloco**. O art. 225
+é recuperável quando a consulta o nomeia (0,69), mas uma paráfrase do próprio
+texto dele traz o **art. 205** (educação) à frente. Não é defeito da ingestão: é
+um documento de 495 artigos onde cada um disputa com os outros 494. Fica como
+dívida — parente da regra de identidade do ADR-036, agora aplicada dentro de um
+mesmo documento.
+
+### Dois registros que a rodada deixou como método
+
+**Material interpretativo vale tanto quanto o texto legal.** A OJN 06/2009 da
+PFE-IBAMA ocupou 4 das 8 vagas de recuperação, à frente do próprio Decreto
+6.514/2008. É a diferença entre citar a lei e saber **como o órgão a aplica** — e
+a OJN vincula os procuradores que vão julgar o recurso. Vira critério de
+curadoria para os blocos seguintes (ADR-038, item 6): OJNs, pareceres normativos
+e notas técnicas entram com prioridade igual ou maior que o canônico já coberto.
+
+**Diluição por documento gigante é uma classe nova.** A CF em 495 chunks afoga o
+próprio art. 225. Não é só a CF: vale para toda norma-mãe extensa. A hipótese
+registrada na dívida #107 é enriquecer o chunk com a identificação do artigo no
+`title` — **metadado no chunk vale mais que reranking depois**, que é a mesma
+lição do rótulo de vigência: informação gravada no dado chega a todo consumidor
+sem que nenhum precise saber que ela existe.
