@@ -28,7 +28,13 @@ from sqlalchemy.orm import Session
 from app.models.knowledge_catalog import KnowledgeChunk
 from app.models.legislation import LegislationDocument
 from app.services.chunking import TextChunk, chunk_text
-from app.services.embeddings import EMBEDDING_DIM, current_model, embed_batch, embed_text
+from app.services.embeddings import (
+    EMBEDDING_DIM,
+    EspacoVetorialIncompativel,
+    current_model,
+    embed_batch,
+    embed_text,
+)
 from app.services.vigencia import titulo_com_vigencia, vigencia_do_documento
 
 logger = logging.getLogger(__name__)
@@ -102,6 +108,7 @@ def _insert_chunks(
     embeddings: list[list[float]],
     base_metadata: dict[str, Any],
     extra_metadata: dict[str, Any] | None,
+    embedding_model: str,
 ) -> int:
     """Insere chunks novos via SQL puro (necessario para a coluna vector)."""
     if not chunks:
@@ -150,7 +157,7 @@ def _insert_chunks(
             "identifier": base_metadata.get("identifier"),
             "effective_date": base_metadata.get("effective_date"),
             "embedding": _vector_literal(vector),
-            "embedding_model": current_model(),
+            "embedding_model": embedding_model,
             "embedding_dim": EMBEDDING_DIM,
             "content_hash": _hash_chunk(source_type, source_ref, chunk.index, chunk.text),
             "extra_metadata": _json.dumps(extra_metadata) if extra_metadata else None,
@@ -180,8 +187,16 @@ def index_text(
     identifier: str | None = None,
     effective_date: _date | None = None,
     extra_metadata: dict[str, Any] | None = None,
+    embedding_model: str | None = None,
 ) -> int:
-    """Indexa texto avulso (oficio, manual, etc). Retorna chunks inseridos."""
+    """Indexa texto avulso (oficio, manual, etc). Retorna chunks inseridos.
+
+    `embedding_model` declara EM QUE ESPAÇO VETORIAL este texto está sendo
+    escrito. Omitido, usa o provider configurado. Existe para o white-label
+    (ADR-040): corpus com dois provedores significa dois índices, e a escrita
+    precisa dizer qual está alimentando — nunca deduzir.
+    """
+    modelo = embedding_model or current_model()
     chunks = chunk_text(body)
     if not chunks:
         return 0
@@ -221,6 +236,7 @@ def index_text(
         embeddings=embeddings,
         base_metadata=base_metadata,
         extra_metadata=extra_metadata,
+        embedding_model=modelo,
     )
     logger.info(
         "knowledge.index ok source=%s ref=%s inserted=%d skipped=%d",
@@ -280,6 +296,7 @@ def search(
     identifier: str | None = None,
     demand_type: str | None = None,
     vigente_em: _date | None = None,
+    embedding_model: str | None = None,
     min_similarity: float = 0.0,
 ) -> list[SearchResult]:
     """Busca top-k chunks por similaridade cosseno.
@@ -297,10 +314,21 @@ def search(
     if not query or not query.strip():
         return []
 
+    # TRAVA DE ESPAÇO VETORIAL (dívida #114). O vetor da consulta e os vetores
+    # do índice PRECISAM vir do mesmo modelo: embeddings de provedores diferentes
+    # são espaços distintos, e comparar distâncias entre eles não falha — devolve
+    # trechos com similaridade de aparência normal e conteúdo aleatório. Pior que
+    # o `probes=1` da #113: lá eram vizinhos subótimos do MESMO espaço.
+    #
+    # A busca passa a MIRAR um espaço: filtra pelo modelo esperado. Quem quiser
+    # consultar outro índice (white-label, experimento) passa `embedding_model`
+    # explicitamente — nunca por acidente de configuração.
+    modelo = embedding_model or current_model()
+
     query_vector = embed_text(query, task_type="RETRIEVAL_QUERY")
     vector_literal = _vector_literal(query_vector)
 
-    where: list[str] = []
+    where: list[str] = ["kc.embedding_model = :embedding_model"]
     # LEFT JOIN sempre presente: e dele que saem vigencia e demand_types. Chunk
     # que nao vem de `legislation_documents` (oficio, manual) casa com NULL e
     # segue no resultado — por isso LEFT, nao INNER.
@@ -309,7 +337,9 @@ def search(
         "ON kc.source_type = 'legislation' "
         "AND kc.source_ref = CONCAT('legislation_documents:', ld.id::text)"
     )
-    params: dict[str, Any] = {"vector": vector_literal, "limit": limit}
+    params: dict[str, Any] = {
+        "vector": vector_literal, "limit": limit, "embedding_model": modelo,
+    }
 
     if tenant_id is not None:
         where.append("(kc.tenant_id IS NULL OR kc.tenant_id = :tenant_id)")
@@ -396,6 +426,35 @@ def search(
             logger.debug("knowledge.search: ivfflat.probes não aplicável (%s)", exc)
 
     rows = session.execute(sql, params).all()
+
+    # Corpus POVOADO e nenhum vetor no espaço da consulta = configuração trocada.
+    # Devolver lista vazia aqui seria a falha silenciosa que a #114 existe para
+    # impedir: o agente diria "não encontrei fundamentação" quando o problema é
+    # estar perguntando no idioma errado. Recusa alto, com o que fazer.
+    if not rows:
+        modelos = [
+            (m, n) for m, n in session.execute(
+                text(
+                    "SELECT embedding_model, count(*) FROM knowledge_catalog "
+                    "GROUP BY 1 ORDER BY 2 DESC"
+                )
+            ).all()
+        ]
+        outros = [m for m, _ in modelos if m and m != modelo]
+        if outros:
+            total = sum(n for _, n in modelos)
+            logger.error(
+                "knowledge.search ESPACO VETORIAL INCOMPATIVEL: consulta em %r, "
+                "corpus tem %d chunks em %s. Ajuste EMBEDDING_PROVIDER ou reindexe.",
+                modelo, total, ", ".join(sorted(outros)),
+            )
+            raise EspacoVetorialIncompativel(
+                f"A busca foi feita no espaço vetorial {modelo!r}, mas o corpus "
+                f"está indexado em {', '.join(sorted(outros))}. Vetores de modelos "
+                "diferentes não são comparáveis — a busca devolveria ruído com "
+                "aparência de resultado. Ajuste EMBEDDING_PROVIDER para o modelo "
+                "do índice, ou reindexe o corpus no modelo desejado."
+            )
 
     out: list[SearchResult] = []
     for row in rows:

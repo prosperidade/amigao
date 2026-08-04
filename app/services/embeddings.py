@@ -31,11 +31,14 @@ from typing import Iterable
 
 import httpx
 
-from app.core.config import settings
-
 logger = logging.getLogger(__name__)
 
 EMBEDDING_DIM = 768
+
+# Provider assumido quando `EMBEDDING_PROVIDER` não está configurado. É o que
+# construiu o corpus inteiro (31.298 chunks, todos text-embedding-3-small 768d,
+# medido em 03/08). NUNCA inferir por presença de chave — ver `_select_provider`.
+DEFAULT_PROVIDER = "openai"
 
 # OpenAI
 OPENAI_EMBED_URL = "https://api.openai.com/v1/embeddings"
@@ -63,26 +66,62 @@ class EmbeddingError(RuntimeError):
     """Falha ao gerar embedding."""
 
 
+PROVIDERS = {"openai": OPENAI_MODEL, "gemini": GEMINI_MODEL}
+
+
+class EspacoVetorialIncompativel(EmbeddingError):
+    """Consulta e índice em espaços vetoriais diferentes.
+
+    Erro de recusa, não de indisponibilidade: é melhor não responder do que
+    responder comparando distâncias entre coisas incomparáveis.
+    """
+
+
 def _select_provider() -> str:
-    """Decide qual provedor usar. Settings explícito vence; senão OpenAI > Gemini."""
-    explicit = (getattr(settings, "EMBEDDING_PROVIDER", "") or "").strip().lower()
-    if explicit in ("openai", "gemini"):
-        return explicit
-    if (settings.OPENAI_API_KEY or "").strip():
-        return "openai"
-    return "gemini"
+    """Qual provedor de embedding usar. EXPLÍCITO, nunca inferido.
+
+    Antes, a decisão era: se há `OPENAI_API_KEY`, OpenAI; senão, Gemini. Isso
+    fazia com que **chave ausente, cota estourada ou deploy sem a variável
+    trocasse o espaço vetorial da consulta** contra um índice construído no
+    outro provedor.
+
+    Embeddings de provedores diferentes não são intercambiáveis — são espaços
+    distintos. A busca não falharia: devolveria trechos com similaridades de
+    aparência normal, **todos ruído**. Fallback automático de provider, aqui, é
+    bug — não resiliência (dívida #114).
+
+    Sem `EMBEDDING_PROVIDER` configurado, assume o default do produto
+    (`openai`, que é o que construiu os 31 mil chunks do corpus) — e a ausência
+    da CHAVE desse provider vira falha ruidosa em `_openai_key()`/`_gemini_key()`,
+    não troca silenciosa.
+    """
+    # Lê settings VIVO, não a referência de import: `override_settings` troca o
+    # objeto `app.core.config.settings`, e um módulo que guardou a referência
+    # antiga passa a ler configuração que ninguém mais usa. Já quebrou duas vezes
+    # nesta série — uma no teste, outra aqui.
+    from app.core.config import settings as _settings  # noqa: PLC0415
+
+    escolhido = (getattr(_settings, "EMBEDDING_PROVIDER", "") or "").strip().lower()
+    if not escolhido:
+        return DEFAULT_PROVIDER
+    if escolhido not in PROVIDERS:
+        raise EmbeddingError(
+            f"EMBEDDING_PROVIDER={escolhido!r} inválido. "
+            f"Use um de: {', '.join(sorted(PROVIDERS))}."
+        )
+    return escolhido
 
 
 def current_model() -> str:
     """Nome do modelo do provider atualmente selecionado. Persistido por chunk
-    em `knowledge_catalog.embedding_model` para auditoria e diagnóstico de
-    incompatibilidade entre lotes."""
-    return OPENAI_MODEL if _select_provider() == "openai" else GEMINI_MODEL
+    em `knowledge_catalog.embedding_model` para auditoria e para a trava de
+    espaço vetorial da busca."""
+    return PROVIDERS[_select_provider()]
 
 
 # Alias mantido por compat — callers antigos importam EMBEDDING_MODEL diretamente.
 # Avaliado em import time, então reflete o provider escolhido no startup.
-EMBEDDING_MODEL = OPENAI_MODEL if (settings.OPENAI_API_KEY or "").strip() else GEMINI_MODEL
+EMBEDDING_MODEL = PROVIDERS[_select_provider()]
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +129,9 @@ EMBEDDING_MODEL = OPENAI_MODEL if (settings.OPENAI_API_KEY or "").strip() else G
 # ---------------------------------------------------------------------------
 
 def _openai_key() -> str:
-    key = (settings.OPENAI_API_KEY or "").strip()
+    from app.core.config import settings as _settings  # noqa: PLC0415
+
+    key = (_settings.OPENAI_API_KEY or "").strip()
     if not key:
         raise EmbeddingError(
             "OPENAI_API_KEY ausente — provider 'openai' selecionado mas chave não setada."
@@ -188,7 +229,9 @@ def _openai_embed_single(text: str) -> list[float]:
 # ---------------------------------------------------------------------------
 
 def _gemini_key() -> str:
-    key = (settings.GEMINI_API_KEY or "").strip()
+    from app.core.config import settings as _settings  # noqa: PLC0415
+
+    key = (_settings.GEMINI_API_KEY or "").strip()
     if not key:
         raise EmbeddingError(
             "GEMINI_API_KEY ausente — provider 'gemini' selecionado mas chave não setada."

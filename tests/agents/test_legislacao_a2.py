@@ -32,6 +32,7 @@ from app.agents.legislacao import (
 )
 from app.models.legislation import LegislationDocument
 from app.schemas.stage_output import Source
+from app.services.embeddings import current_model
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -396,16 +397,20 @@ class TestStructuredDemandTypeRag:
                 ) VALUES
                     ('legislation', :car_ref, 0, 'Norma CAR', 'chunk car',
                      2, 'federal', 'CAR-1', CAST(:vector AS vector),
-                     'test', 768, 'car-hash'),
+                     :modelo, 768, 'car-hash'),
                     ('legislation', :lic_ref, 0, 'Norma Licenciamento', 'chunk lic',
                      2, 'federal', 'LIC-1', CAST(:vector AS vector),
-                     'test', 768, 'lic-hash')
+                     :modelo, 768, 'lic-hash')
                 """
             ),
             {
                 "car_ref": f"legislation_documents:{car_doc.id}",
                 "lic_ref": f"legislation_documents:{lic_doc.id}",
                 "vector": vector,
+                # O modelo REAL, não um rótulo inventado: a busca filtra por
+                # espaço vetorial (ADR-040) e vetor de modelo desconhecido é
+                # justamente o que ela recusa comparar.
+                "modelo": current_model(),
             },
         )
         db_session.flush()

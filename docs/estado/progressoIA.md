@@ -2895,3 +2895,50 @@ URL da planilha e eu não peguei na curadoria. Restaurada.
 Vale o registro do porquê o manifesto existe: a decisão de curadoria virou **dado
 verificável**, então a substituição foi detectável por uma consulta de URL e
 reversível por uma reingestão. Se fosse comentário em conversa, teria passado.
+
+---
+
+## A trava de espaço vetorial (03/08/2026)
+
+Prevenção, não reparo — e vale registrar a diferença, porque ela mudou a urgência.
+
+### O risco
+
+`_select_provider()` decidia o provedor de embedding **por presença de chave**:
+havendo `OPENAI_API_KEY`, OpenAI; senão, Gemini. Parece resiliência e é o
+oposto: embeddings de provedores diferentes são **espaços vetoriais distintos**,
+e comparar uma consulta de um espaço contra um índice do outro não produz erro —
+produz oito trechos com similaridades de aparência normal e conteúdo aleatório.
+
+É pior que o `probes=1` da #113. Lá os vizinhos eram subótimos, mas do mesmo
+espaço: erravam por pouco. Aqui seriam distâncias entre coisas incomparáveis, e
+o consultor receberia fundamentação inventada com cara de resultado.
+
+O gatilho era banal: chave expirada, cota estourada, deploy sem a variável.
+
+### O que a medição mudou
+
+Antes de concluir qualquer coisa, medimos: **31.298 chunks, todos
+`text-embedding-3-small` 768d, uma única linha no `group by`**. A mistura nunca
+aconteceu. Isso transformou o trabalho de "limpar corpus contaminado" em "fechar
+porta antes que alguém passe" — e a informação de que a trava precisa já estava
+gravada desde a Sprint U, na coluna `embedding_model`. Faltava alguém lê-la.
+
+### A decisão que se toma agora para não ser tomada errado depois
+
+ADR-040: a escolha de provedor é **por tenant, na implantação** — não seletor de
+runtime. Corpus com dois provedores significa **dois índices**: os mesmos chunks
+embarcados duas vezes, custando reindexação a cada mudança. A capacidade fica
+construída (busca e escrita aceitam o modelo) e **desligada** até haver cliente
+que exija.
+
+### O padrão que se repete
+
+Quatro defeitos nesta série, todos da mesma família: o mojibake que não levantava
+exceção, a Constituição truncada que baixava limpa, o índice que devolvia oito
+trechos errados sem reclamar, e agora o provider que trocaria de espaço em
+silêncio. **Nenhum deles falhava — todos respondiam.**
+
+A defesa que funcionou nos quatro foi a mesma: conferir por um segundo caminho, e
+fazer o sistema **recusar** em vez de responder quando não pode responder direito.
+Indisponibilidade honesta vale mais que disponibilidade mentirosa.

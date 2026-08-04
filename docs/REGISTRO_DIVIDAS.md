@@ -729,36 +729,28 @@ esquecer. Por isso o gatilho está escrito aqui em número, não em intenção.
 **Origem:** medição do bloco 2, 03/08 — o defeito apareceu disfarçado de
 regressão de corpus.
 
-**114. TRAVA DE ESPAÇO VETORIAL — provider de embedding escolhido por presença de
-chave é risco vivo.** `app/services/embeddings.py:_select_provider()` decide o
-provider assim: se há `OPENAI_API_KEY`, OpenAI; senão, Gemini. Isso significa que
-**chave ausente, cota estourada ou deploy sem a variável trocaria o espaço
-vetorial da CONSULTA** contra um índice construído no outro provedor.
+**114. ✅ FECHADA em 03/08** (`fix/trava-espaco-vetorial` · ADR-040).
+**Provider de embedding escolhido por presença de chave era risco vivo.**
+`_select_provider()` decidia: se há `OPENAI_API_KEY`, OpenAI; senão, Gemini —
+então chave ausente, cota estourada ou deploy sem a variável trocaria o espaço
+vetorial da CONSULTA contra um índice do outro provedor. A busca não falharia:
+devolveria trechos com similaridade de aparência normal, **todos ruído**. Pior
+que o `probes=1` da #113 — lá eram vizinhos subótimos do MESMO espaço.
 
-Embeddings de provedores diferentes não são intercambiáveis — são espaços
-distintos. A busca não falharia: devolveria 8 trechos com similaridades de
-aparência normal, **todos ruído**. É pior que o `probes=1` da #113: lá eram
-vizinhos subótimos do mesmo espaço; aqui seriam distâncias entre coisas
-incomparáveis. Fallback automático de provider, aqui, é bug — não resiliência.
+**Medido antes de concluir:** corpus homogêneo, 31.298 chunks, todos
+`text-embedding-3-small` 768d. **A mistura nunca aconteceu** — a trava é
+prevenção, não reparo.
 
-**Medido em 03/08 (antes de qualquer conclusão):** o corpus está **homogêneo** —
-31.298 chunks, todos `text-embedding-3-small` a 768 dimensões, de 14/05 a 03/08.
-Uma linha só no `group by embedding_model`. **A mistura ainda NÃO aconteceu.** O
-risco é real e não materializado.
-
-**O que destrava:** (a) a busca declara qual `embedding_model` espera e **recusa
-com erro claro e log alto** se o vetor da consulta vier de modelo diferente do
-dos chunks — nunca mistura em silêncio; (b) o provider passa a ser **explícito
-por configuração**, não inferido por presença de chave, e a ausência da chave
-configurada vira **falha ruidosa** em vez de troca de provider; (c) teste que
-prova a recusa. A coluna `knowledge_catalog.embedding_model` já existe e guarda
-o modelo de cada vetor — a informação para a trava já está gravada.
-
-**Ordem:** PR próprio e pequeno, depois do bloco 2 e **antes** do experimento
-Google × OpenAI, que já nasce com a trava pronta. **Origem:** levantado ao
-preparar o experimento de embeddings, 03/08.
-
-### Abertas pelo Bloco 2 do corpus (03/08, `feat/corpus-bloco2-territorial-florestal`)
+**Como ficou:** (a) provider EXPLÍCITO com default do produto, e ausência da
+chave configurada vira falha ruidosa em vez de troca; (b) a busca **mira** um
+espaço (`embedding_model`) e **recusa** com `EspacoVetorialIncompativel` quando
+o corpus está povoado em outro — devolver vazio faria o agente dizer "não
+encontrei fundamentação" quando o problema é perguntar no idioma errado;
+(c) a escrita declara o espaço (`index_text(embedding_model=...)`), capacidade
+para o white-label sem ligar segundo índice; (d) 8 testes, incluindo o controle
+de que falta de chave NÃO troca de provider e a distinção entre vazio legítimo e
+espaço trocado. **A escolha é por tenant, na implantação — não seletor de
+runtime (ADR-040).**
 
 **115. O interpretativo federal é INALCANÇÁVEL por robô — e é onde mora o
 ganho.** Das 10 URLs de material interpretativo dos núcleos 02 e 03, **zero**
