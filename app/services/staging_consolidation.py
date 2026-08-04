@@ -1106,29 +1106,32 @@ def motivo_sem_destino(entity: str, target_field: Optional[str]) -> Optional[str
         recusa = _IMOVEL_RECUSA_DECLARADA.get(target)
         if recusa:
             return f"não entra na ficha: {recusa}"
-        modelo, fields, alias, onde = Property, _IMOVEL_FIELDS, _IMOVEL_ALIAS, "ficha do imóvel"
+        # `onde` já carrega a preposição: "cadastro" é masculino e "ficha" é
+        # feminino, então um "na {onde}" fixo produzia "na cadastro do cliente"
+        # na cara da consultora.
+        modelo, fields, alias, onde = Property, _IMOVEL_FIELDS, _IMOVEL_ALIAS, "na ficha do imóvel"
     elif entity == "cliente":
-        modelo, fields, alias, onde = Client, _CLIENTE_FIELDS, _CLIENTE_ALIAS, "cadastro do cliente"
+        modelo, fields, alias, onde = Client, _CLIENTE_FIELDS, _CLIENTE_ALIAS, "no cadastro do cliente"
     elif entity == "matricula":
-        modelo, fields, alias, onde = Matricula, _MATRICULA_FIELDS, _MATRICULA_ALIAS, "ficha da matrícula"
+        modelo, fields, alias, onde = Matricula, _MATRICULA_FIELDS, _MATRICULA_ALIAS, "na ficha da matrícula"
     else:
         return f"destino desconhecido ('{entity or '—'}') — não há onde gravar '{target}'"
 
     col = alias.get(target, target) if target in alias else target
     if col is None:
         return (
-            f"'{target}' não tem correspondente na {onde} — a informação fica "
+            f"'{target}' não tem correspondente {onde} — a informação fica "
             "registrada no documento, mas não vai para o cadastro"
         )
     if col not in modelo.__table__.columns:
         return (
-            f"a base ainda não tem campo para '{target}' na {onde} — o valor fica "
+            f"a base ainda não tem campo para '{target}' {onde} — o valor fica "
             "guardado no documento e aqui na Conferência, mas não aparece no "
             "cadastro. Se ele deveria aparecer, é campo a pedir"
         )
     if col not in fields:
         return (
-            f"'{target}' existe na {onde} mas não é preenchido pela consolidação "
+            f"'{target}' existe {onde}, mas não é preenchido pela consolidação "
             "— se este valor deveria pousar no cadastro, é ajuste a pedir"
         )
     return None
