@@ -1,0 +1,50 @@
+{
+  "modelo": "text-embedding-3-small",
+  "documentos": 102,
+  "chunks_removidos": 30104,
+  "chunks_gravados": 30550,
+  "tokens_embarcados": 11799344,
+  "custo_estimado_usd": 0.236,
+  "duracao_s": 3240.8,
+  "ligaduras_normalizadas": 8974,
+  "fingerprint_inicio": {
+    "total_chunks": 31298,
+    "por_source_type": {
+      "legislation": 30104,
+      "norma_procedural": 953,
+      "matriz_ipe": 175,
+      "manual_ipe": 48,
+      "gabarito_laudo": 15,
+      "other": 3
+    },
+    "legislation_documents": 102,
+    "max_id_legislation_documents": 188,
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31298
+      }
+    ]
+  },
+  "fingerprint_fim": {
+    "total_chunks": 31744,
+    "por_source_type": {
+      "legislation": 30550,
+      "norma_procedural": 953,
+      "matriz_ipe": 175,
+      "manual_ipe": 48,
+      "gabarito_laudo": 15,
+      "other": 3
+    },
+    "legislation_documents": 102,
+    "max_id_legislation_documents": 188,
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31744
+      }
+    ]
+  }
+}

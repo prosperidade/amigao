@@ -240,3 +240,72 @@ deixar de medir e passar a refletir.
 **Custo:** o dry-run estimou **US$ 0,1852** (9.259.633 tokens a US$ 0,020/1M),
 contra os ~US$ 0,58 previstos na abertura da frente. A estimativa antiga fica
 registrada como divergência **sem procedência conhecida** — não foi investigada.
+
+---
+
+# RESULTADO DA FASE 4 (05/08) — estrutura corrigida, recuperação não melhorada
+
+Corpus pós-reindexação: **31.744 chunks / 102 docs / max id 188**, espaço
+`text-embedding-3-small` 768d. A previsão declarada antes de executar
+(`b4c0bf8`) bateu **exata** — 30.550 chunks de legislação. Custo real:
+**US$ 0,2360**.
+
+## As 5 perguntas, antes × depois
+
+| pergunta | baseline `2e78917` | pós-Fase 4 | veredito |
+|---|---|---|---|
+| **`art71`** (controle) | #1, sim 0,7974 | #1, sim **0,7974** | **aceite PASSA** — idêntico |
+| **`art61a`** | #2, sim 0,7764 | **#29**, sim **0,6601** | **REGRESSÃO** |
+| **`defesa`** | pos 32, sim 0,6686 | pos **37**, sim 0,6687 | **não corrigido** |
+| **`compensacao_rl_go`** | aceite ok, 5 membros | aceite ok, 5 membros | **previsão confirmada** |
+| `car` | 3 identificadores | 4 identificadores | sem alvo |
+
+## A refutação
+
+**"Artigo inteiro = melhor recuperação" está REFUTADO por medição.** O art. 61-A
+passou de `partido_em 7` para `0` — e caiu 27 posições. Um vetor de 2.837 tokens
+representa tudo vagamente; o fragmento focado casava melhor com a pergunta.
+
+**Escala:** 490 chunks são artigos inteiros acima de 1.500 tokens — **1,60% do
+corpus**. É cauda. Mas o 61-A está no miolo dela: a regressão é **típica da
+faixa**.
+
+A #118 segue justificada por **outro** motivo: o consultor recebia o dispositivo
+em cacos, e peça se escreve sobre artigo inteiro. **Ganho de entrega, com custo
+medido de recuperação.** Nada revertido.
+
+## O defeito que quase escondeu isso
+
+A métrica de aceite dizia `recuperado` para o art. 61-A. Ela procurava o texto
+`"art. 61-A"` **no corpo do chunk**, e os chunks do 61-**B** o mencionam —
+mediu **menção**, não **identidade**. Corrigida com o campo `dispositivo` da
+Fase 3, criado exatamente para isso.
+
+**Sem essa correção, a fase teria sido reportada como sucesso.** O instrumento de
+aceite tinha o mesmo defeito que a fase inteira combatia (#123).
+
+## O que melhorou, e é real — sem inflar
+
+- chunks de artigo **partidos por tamanho: 4.935 → 67**
+- **3.380 rótulos falsos** de artigo eliminados
+- **hierarquia em 93,0%**, **dispositivo em 84,9%**, **2.235 referências** como dado
+- na `defesa`, o **rótulo mentiroso saiu do top-8**: dois chunks alegavam ser
+  `Art. 101` e eram prosa doutrinária; hoje aparecem como
+  `[trecho não articulado]`
+
+O último é **ganho de confiabilidade** — o consultor deixa de receber parecer
+etiquetado como artigo de lei. É o que a peça assinada exige.
+
+## O que NÃO melhorou, com todas as letras
+
+**Nenhum dos dois alvos de recuperação foi batido.** O art. 18 do 6.514 continua
+fora do top-8, e a causa ficou visível: a OJN 06/2009 (parecer) ocupa 6 das 8
+vagas — não é chunking, é material interpretativo dominando a norma (#121/#126).
+E o art. 61-A **piorou**.
+
+**A previsão de GO acertou:** não moveu, exatamente como registrado antes de
+medir. A previsão certa vale como validação do nosso entendimento das duas
+dívidas — o problema lá é dispersão, não corte.
+
+**A Fase 4 encerra como: estrutura corrigida, recuperação não melhorada, uma
+regressão medida e declarada.**

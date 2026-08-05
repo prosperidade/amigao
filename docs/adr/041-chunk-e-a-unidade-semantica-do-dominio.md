@@ -188,3 +188,47 @@ descoberta.
 
 **A Fase 2 é ajustada, não invalidada.** Depois da troca: maior chunk do corpus
 **6.871 tokens reais**, zero acima do teto da API.
+
+---
+
+## Adendo de 05/08 (2) — "artigo inteiro = melhor recuperação" está REFUTADO
+
+A aposta central da Fase 2 era que juntar o dispositivo melhoraria a
+recuperação. **Medido depois da reindexação única, o contrário aconteceu.**
+
+**Art. 61-A do Código Florestal**, o caso escolhido para provar a tese:
+
+| | baseline (2e78917) | pós-Fase 4 |
+|---|---|---|
+| `partido_em_pedacos` | 7 | **0** |
+| posição no ranking | **#2** | **#29** |
+| similaridade | **0,7764** | **0,6601** |
+
+O artigo passou a entrar inteiro — exatamente o que a #118 pedia — e **caiu 27
+posições**. Os dois chunks do 61-A hoje têm 2.837 e 2.641 tokens.
+
+**O mecanismo é o que esta própria ADR descreve, agora medido contra nós:** um
+vetor de 2.837 tokens representa **tudo vagamente**. O fragmento focado casava
+melhor com a pergunta do que o artigo completo. Escrevemos isso como argumento
+para não deixar o chunk crescer, e não aplicamos a nós mesmos quando o chunk que
+crescia era o artigo.
+
+**Escala da troca:** **490 chunks** são artigos inteiros acima de 1.500 tokens —
+**1,60% do corpus** (p50 2.304, p90 4.302, máx 6.871). É **cauda, não sintoma
+sistemático**. Mas o 61-A está no miolo dessa faixa: a regressão é **típica da
+faixa**, não um extremo dela.
+
+### A #118 continua justificada — por OUTRO motivo, declarado
+
+Não pelo ganho de recuperação, que **não existe**. Pelo que o consultor recebe:
+antes, o art. 61-A chegava em **quatro cacos** no top-8, e a metade que ficava de
+fora podia ser a que continha a condição. Peça se escreve sobre **artigo
+inteiro**.
+
+**É benefício de ENTREGA, com custo medido de RECUPERAÇÃO.** Os dois são reais e
+não se cancelam. Registrado sem suavizar: a fase entregou estrutura correta e
+**piorou** a recuperação no caso que escolhemos para prová-la.
+
+**Nada foi revertido.** A requalificação do teto — se e como — exige decidir o
+que vale mais para a peça assinada, e isso não se decide dentro da fase que
+produziu o número.

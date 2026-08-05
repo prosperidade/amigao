@@ -15,6 +15,24 @@ estrategias de chunking misturadas no mesmo indice. Pior que nao reindexar.
 
 Por isso aqui a passada e **apagar e reescrever**, e por isso ela exige backup.
 
+## Duas etapas: preparar FORA, escrever DENTRO
+
+A primeira versao mantinha UMA transacao aberta durante as ~30 mil chamadas de
+embedding. Isso salvou o corpus tres vezes em 05/08 — e impediu a passada de
+terminar: qualquer soluco de rede no meio de dez minutos de HTTP jogava tudo
+fora, e a terceira tentativa morreu em "peer closed connection".
+
+A licao: **a atomicidade e do CORPO da substituicao, nao da geracao dos
+vetores.** Chamada de rede dentro de transacao e antipadrao — a transacao fica
+refem da rede e o banco segura linhas sujas por minutos.
+
+  ETAPA 1 (fora de transacao): chunk + embed de tudo, com retry classificado.
+  CHECKPOINT: confere o que esta em memoria ANTES de tocar no banco.
+  ETAPA 2 (transacao unica, segundos): delete + insert.
+
+Vetor faltando descoberto DEPOIS do delete seria o pior caso possivel; o
+checkpoint existe para que isso nao possa acontecer.
+
 ## Travas
 
 - **Fingerprint de partida por IGUALDADE** (nao piso): corpus fora do estado
@@ -104,6 +122,79 @@ def _exigir_espaco_vetorial() -> str:
     return modelo
 
 
+def _inserir_preparado(session, *, doc, vig, chunks, vetores, modelo, hash_fn) -> int:
+    """Insere chunks JA embarcados. Nenhuma chamada de rede aqui dentro.
+
+    Replica o que `index_legislation_document` monta de metadado — inclusive o
+    rotulo de vigencia no titulo (ADR-037), que viaja NO DADO.
+    """
+    import json as _json
+
+    from sqlalchemy import text as _sql
+
+    from app.services.vigencia import titulo_com_vigencia
+
+    sql = _sql(
+        """
+        INSERT INTO knowledge_catalog (
+            tenant_id, source_type, source_ref, chunk_index,
+            title, section, chunk_text, chunk_tokens,
+            dispositivo, dispositivo_origem, hierarquia, referencias,
+            jurisdiction, uf, agency, identifier, effective_date,
+            embedding, embedding_model, embedding_dim,
+            content_hash, extra_metadata
+        ) VALUES (
+            :tenant_id, 'legislation', :source_ref, :chunk_index,
+            :title, :section, :chunk_text, :chunk_tokens,
+            :dispositivo, :dispositivo_origem,
+            CAST(:hierarquia AS jsonb), CAST(:referencias AS jsonb),
+            :jurisdiction, :uf, :agency, :identifier, :effective_date,
+            CAST(:embedding AS vector), :embedding_model, :embedding_dim,
+            :content_hash, CAST(:extra_metadata AS jsonb)
+        )
+        ON CONFLICT (content_hash) DO NOTHING
+        """
+    )
+    source_ref = f"legislation_documents:{doc.id}"
+    titulo = titulo_com_vigencia(doc.title, vig)
+    extra = _json.dumps({
+        "demand_types": doc.demand_types,
+        "keywords": doc.keywords,
+        "source_type_legislation": doc.source_type,
+        "vigencia_inicio": vig.inicio.isoformat() if vig.inicio else None,
+        "vigencia_fim": vig.fim.isoformat() if vig.fim else None,
+        "sucessora_ref": vig.sucessora_ref,
+        "historica": vig.historica,
+    })
+    inseridos = 0
+    for c, v in zip(chunks, vetores, strict=True):
+        r = session.execute(sql, {
+            "tenant_id": doc.tenant_id,
+            "source_ref": source_ref,
+            "chunk_index": c.index,
+            "title": titulo,
+            "section": c.section,
+            "chunk_text": c.text,
+            "chunk_tokens": c.tokens,
+            "dispositivo": c.dispositivo,
+            "dispositivo_origem": c.dispositivo_origem,
+            "hierarquia": _json.dumps(c.hierarquia) if c.hierarquia else None,
+            "referencias": _json.dumps(c.referencias) if c.referencias else None,
+            "jurisdiction": doc.scope,
+            "uf": doc.uf,
+            "agency": doc.agency,
+            "identifier": doc.identifier,
+            "effective_date": doc.effective_date.date() if doc.effective_date else None,
+            "embedding": "[" + ",".join(f"{x:.7f}" for x in v) + "]",
+            "embedding_model": modelo,
+            "embedding_dim": len(v),
+            "content_hash": hash_fn("legislation", source_ref, c.index, c.text),
+            "extra_metadata": extra,
+        })
+        inseridos += r.rowcount or 0
+    return inseridos
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--executar", action="store_true", help="escreve (padrao: dry-run)")
@@ -182,22 +273,95 @@ def main() -> int:
             print("DRY-RUN — nada foi escrito. Use --executar para valer.")
             return 0
 
-        # --- escrita ----------------------------------------------------------
-        from app.services.knowledge_catalog import index_legislation_document
+        # === ETAPA 1 — preparar FORA da transacao =============================
+        # Chunk + embed de tudo, com retry classificado. Nada e escrito aqui:
+        # transacao aberta durante centenas de chamadas HTTP fica refem da rede.
+        from app.models.legislation import LegislationDocument
+        from app.services.embeddings import EMBEDDING_DIM, embed_batch
+        from app.services.knowledge_catalog import _hash_chunk
+        from app.services.vigencia import vigencia_do_documento
 
         t0 = time.time()
+        preparados: list[dict] = []
+        for i, linha in enumerate(docs, 1):
+            doc = session.get(LegislationDocument, linha.id)
+            vig = vigencia_do_documento(doc)
+            pedacos = chunk_text(normalizar(doc.full_text))
+            if not pedacos:
+                continue
+            vetores = embed_batch([c.text for c in pedacos])
+            preparados.append({
+                "doc": doc,
+                "vig": vig,
+                "chunks": pedacos,
+                "vetores": vetores,
+            })
+            if i % 10 == 0:
+                total = sum(len(p["chunks"]) for p in preparados)
+                print(f"  embarcados {i}/{len(docs)} documentos | {total} chunks")
+
+        # === CHECKPOINT — conferir ANTES de tocar no banco ====================
+        # Vetor faltando descoberto DEPOIS do delete seria o pior caso possivel.
+        problemas: list[str] = []
+        total_chunks = total_vetores = 0
+        for p in preparados:
+            ref = p["doc"].identifier or p["doc"].title
+            total_chunks += len(p["chunks"])
+            total_vetores += len(p["vetores"])
+            if len(p["chunks"]) != len(p["vetores"]):
+                problemas.append(
+                    f"{ref}: {len(p['chunks'])} chunks vs {len(p['vetores'])} vetores"
+                )
+            for v in p["vetores"]:
+                if not v:
+                    problemas.append(f"{ref}: vetor vazio")
+                    break
+                if len(v) != EMBEDDING_DIM:
+                    problemas.append(f"{ref}: dim {len(v)} != {EMBEDDING_DIM}")
+                    break
+        if total_chunks != chunks_previstos:
+            problemas.append(
+                f"total de chunks {total_chunks} != previsto {chunks_previstos}"
+            )
+        if problemas:
+            raise Abortar(
+                "checkpoint reprovou — nada foi tocado no banco: "
+                + "; ".join(problemas[:10])
+            )
+        print(
+            f"CHECKPOINT ok: {total_chunks} chunks, {total_vetores} vetores, "
+            f"dim {EMBEDDING_DIM}, modelo {modelo}"
+        )
+
+        # Fingerprint conferido DE NOVO: a janela entre a partida e a escrita
+        # agora e longa (minutos de embedding).
+        fp_antes_escrita = _fingerprint(session)
+        if any(
+            fp_antes_escrita.get(c) != fp_inicio.get(c)
+            for c in ("total_chunks", "legislation_documents",
+                      "max_id_legislation_documents")
+        ):
+            raise Abortar(
+                "o corpus MUDOU durante a preparacao — nada foi escrito. "
+                f"partida={fp_inicio} agora={fp_antes_escrita}"
+            )
+
+        # === ETAPA 2 — escrever DENTRO de uma transacao, em segundos ==========
+        t_escrita = time.time()
         removidos = session.execute(
             _sql("DELETE FROM knowledge_catalog WHERE source_type = 'legislation'")
         ).rowcount
-        session.flush()
-        print(f"removidos: {removidos} chunks")
 
         gravados = 0
-        for i, d in enumerate(docs, 1):
-            gravados += index_legislation_document(session, d.id)
-            if i % 10 == 0:
-                print(f"  {i}/{len(docs)} documentos | {gravados} chunks gravados")
+        for p in preparados:
+            doc, vig = p["doc"], p["vig"]
+            gravados += _inserir_preparado(
+                session, doc=doc, vig=vig, chunks=p["chunks"],
+                vetores=p["vetores"], modelo=modelo, hash_fn=_hash_chunk,
+            )
         session.commit()
+        print(f"removidos {removidos} / gravados {gravados} em "
+              f"{time.time() - t_escrita:.1f}s de transacao")
 
         fp_fim = _fingerprint(session)
         resultado = {

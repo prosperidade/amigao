@@ -858,6 +858,24 @@ estratégia. **Origem:** levantamento de 03/08.
 > Base declarada nos artefatos (`legislation_documents`, 30.104 — não os 31.298
 > do catálogo inteiro). Sem reindexação.
 >
+> **⚠️ RESULTADO DA FASE 4 (05/08): o ganho de recuperação NÃO existe — houve
+> PERDA.** Medido depois da reindexação única, no caso escolhido para provar a
+> tese: o **art. 61-A** passou de `partido_em 7` para `0` (entrou inteiro, como a
+> dívida pedia) e **caiu da posição 2 para a 29**, similaridade **0,7764 →
+> 0,6601**. O fragmento focado casava melhor com a pergunta que o artigo
+> completo — o mecanismo de diluição que a ADR-041 descreve, agora medido contra
+> nós.
+>
+> Escala: **490 chunks** são artigos inteiros acima de 1.500 tokens, **1,60% do
+> corpus** (p50 2.304, p90 4.302). É cauda; mas o 61-A (2.837 e 2.641 tokens)
+> está no miolo dela — a regressão é típica da faixa, não um extremo.
+>
+> **A dívida permanece justificada por OUTRO motivo, declarado:** o consultor
+> recebia o dispositivo em cacos — o 61-A chegava em quatro pedaços no top-8 — e
+> peça se escreve sobre artigo inteiro. **Benefício de ENTREGA, com custo medido
+> de RECUPERAÇÃO.** Nada foi revertido; a requalificação do teto é decisão
+> separada, fora da fase que produziu o número.
+>
 > **Efeito colateral medido:** dos 362 chunks de artigo acima de 1.500 tokens,
 > **81 são absorvedores de vigência abaixo do limiar de 8.000** — viraram blobs
 > únicos. Menos rótulo falso, mais diluição. O sinal que os pega é semântico (o
@@ -1058,6 +1076,22 @@ fallback, esse sinal é capturado de quem o tem — os próprios avisos do gatew
 e gravado em `gateway.tentativas_transitorias` / `gateway.fallbacks_acionados`:
 timeout recorrente num modelo é sinal operacional e não pode morrer no terminal.
 
+**TERCEIRO EXEMPLAR — o instrumento de aceite tinha o defeito que a fase
+combatia (05/08).** A métrica que julgaria o sucesso da remediação dizia que o
+art. 61-A continuava `recuperado` depois da reindexação. **Estava errada.**
+
+Ela procurava o texto `"art. 61-A"` **no corpo do chunk** — e os chunks do art.
+61-**B** *mencionam* o 61-A. A métrica capturava **menção**, não **identidade**,
+e por isso deu positivo para um artigo que havia **saído do top-8**.
+
+É literalmente a #121 (o mesmo texto sob identidade errada) cometida pelo
+medidor. Toda a Fase 3 existiu para separar identidade de menção — e o
+instrumento de aceite continuava misturando as duas.
+
+Corrigido usando o campo `dispositivo`, que a Fase 3 criou exatamente para isso.
+Com a identidade correta, o número real apareceu: **posição 2 → 29, similaridade
+0,7764 → 0,6601**. Sem a correção, a fase teria sido reportada como sucesso.
+
 **Família.** Mesmo mecanismo da #117 (fronteira perdida em silêncio), do
 `probes=1` (#113), do fallback de provider por presença de chave (#114) e do
 `content_hash` mascarado por ligadura (#121/#122). **O sistema não falha:
@@ -1131,17 +1165,82 @@ honestidade — impede a etiqueta falsa — mas não decide o que o documento é
 ao texto que transcreve é a mesma família — documento cuja natureza (compilação,
 plano, manual) não é declarada e por isso é tratada como se fosse a norma.
 
+**HIPÓTESE REFORÇADA pela Fase 4 (05/08) — registrada, sem abrir frente.** Na
+pergunta da `defesa`, o art. 18 do Decreto 6.514 continuou fora do top-8 mesmo
+depois de toda a remediação. A causa ficou **visível**: a **OJN 06/2009
+PFE-IBAMA** — um parecer doutrinário — ocupa **6 das 8 vagas**. O problema ali
+nunca foi chunking.
+
+Isso sugere que o corpus precisa distinguir **NORMA de INTERPRETAÇÃO na
+RECUPERAÇÃO**, não só no rótulo: material interpretativo é semanticamente mais
+próximo de uma pergunta em linguagem natural do que o texto seco do dispositivo,
+e por isso ganha a disputa por similaridade — justamente quando o consultor
+precisa da norma. **Hipótese, não conclusão.**
+
 Registrado, **não resolvido agora**. **Origem:** Fase 1 da remediação do
 chunking, 04/08.
 
-**PRÓXIMO LIVRE: 127.**
+**127. Metadado do chunk de legislação é preenchido em dois lugares.**
+`index_legislation_document()` e `scripts/reindexar_chunking.py:_inserir_preparado()`
+montam **o mesmo** conjunto de metadados — `source_ref`, título, `tenant_id`,
+`scope`, `uf`, `agency`, `identifier`, `effective_date` e o `extra_metadata` com
+`demand_types`, `keywords`, `vigencia_inicio/fim`, `sucessora_ref` e `historica`.
+
+A duplicação foi **necessária** em 05/08: a rota original embarca e insere na
+mesma chamada, e a reindexação da Fase 4 precisou separar as duas coisas
+(embedding fora de transação, escrita dentro). Não havia como reusar sem
+reescrever a original no meio de uma passada de escrita.
+
+**Mas duplicação diverge com o tempo, e o candidato óbvio já está apontado:** o
+rótulo de vigência do ADR-037 (`titulo_com_vigencia`) é exatamente o detalhe que
+alguém atualiza num lugar só. Ele viaja **no dado** justamente para não depender
+de ninguém lembrar — e passaria a depender de alguém lembrar de dois lugares.
+
+**Conserto:** extrair o preenchimento de metadado para uma função única,
+consumida pelas duas rotas. **Não fazer agora.** **Origem:** Fase 4 da
+remediação do chunking, 05/08.
+
+**PRÓXIMO LIVRE: 128.**
 
 ---
 
 ## Faixa 300-399 — infraestrutura do repositório
 
 > Faixa própria pelo mesmo motivo das outras: dois agentes lendo "próximo livre"
-> ao mesmo tempo colidem. **Próximo livre nesta faixa: 303.**
+> ao mesmo tempo colidem. **Próximo livre nesta faixa: 304.**
+
+**303. Troca de provider não dispara auditoria de premissas.** Trocar o provider
+de embedding altera **tokenização, limites duros, dimensionalidade e custo** — e
+**nada no processo obriga a reconferir o que dependia do provider anterior**.
+
+Não é descuido individual. É **ausência de gatilho**: cada uma das premissas
+abaixo foi escrita corretamente, com evidência, na época em que valia. Todas
+sobreviveram intactas à migração Gemini → OpenAI da Sprint W, e nenhuma foi
+reconferida — até serem descobertas por acidente, **três no mesmo dia**.
+
+| premissa | escrita quando | como foi descoberta |
+|---|---|---|
+| régua de token `len//4`, *"confirmado contra Gemini tokenizer"* | Sprint 0 | reindexação abortou: `maximum input length is 8192 tokens`. Erro real de 1,22× na mediana, **2,44× no máximo** |
+| `embedding_model` gravado em toda linha | Sprint U | levantamento da #114 — a coluna existia, **ninguém lia**; a busca não filtrava por espaço vetorial |
+| `model_used` exposto no `AIResponse` | — | baseline gravava o modelo **pedido** como se fosse o realizado (#123); o campo com o modelo real já estava ali |
+
+**O padrão comum:** o dado existia e ninguém foi olhar. As três só apareceram
+porque algo quebrou alto — a régua porque a API recusou, as outras duas porque
+alguém foi medir por outro motivo. Nenhuma teria aparecido sozinha.
+
+**Proposta — registrada, NÃO implementada:**
+
+1. **Checklist obrigatório de troca de provider**, cobrindo no mínimo:
+   tokenização e contagem, limites duros de entrada, dimensionalidade do vetor,
+   tabela de preço, nomes de modelo persistidos, e **reindexação necessária ou
+   não**.
+2. **Comentário de calibração no código**: toda constante calibrada contra um
+   provider específico declara **qual provider e quando** — como
+   `# calibrado contra cl100k_base (OpenAI), 05/08`. Sem isso, a constante
+   parece universal e sobrevive à troca sem que ninguém desconfie.
+
+**Origem:** três achados independentes na Fase 4 da remediação do chunking,
+05/08. Correlatas: #114, #123, #124, ADR-040, ADR-041 (adendo).
 
 **302. 🔴 ABERTA — dev com grafo de alembic inconsistente (duas frentes
 paralelas).** O `alembic_version` do `amigao_db` está em **`b4e1d70c9a35`**,

@@ -157,14 +157,52 @@ def _openai_post(
     for attempt in range(_MAX_RETRIES + 1):
         try:
             response = client.post(OPENAI_EMBED_URL, headers=headers, json=payload)
+        except httpx.TransportError as exc:
+            # TRANSITORIO: conexao fechada pelo peer, timeout, DNS, reset. A
+            # requisicao nao chegou a ser respondida — repetir tem chance real.
+            # Foi aqui que a reindexacao de 05/08 morreu: "peer closed
+            # connection without sending complete message body".
+            if attempt < _MAX_RETRIES:
+                delay = _RETRY_BASE_SECONDS * (2**attempt)
+                logger.warning(
+                    "embeddings.falha classificacao=TRANSITORIA tipo=%s "
+                    "tentativa=%d/%d retry_em=%.1fs err=%s",
+                    type(exc).__name__, attempt + 1, _MAX_RETRIES, delay, exc,
+                )
+                time.sleep(delay)
+                continue
+            logger.error(
+                "embeddings.falha classificacao=TRANSITORIA esgotou %d tentativas: %s",
+                _MAX_RETRIES, exc,
+            )
+            raise EmbeddingError(
+                f"Falha de rede ao embedar (openai) apos {_MAX_RETRIES} "
+                f"tentativas: {exc}"
+            ) from exc
         except httpx.HTTPError as exc:
+            # DETERMINISTICO: repetir nao muda o resultado — so queima tempo e
+            # dinheiro. Retry cego aqui seria repetir sem olhar a causa.
+            logger.error(
+                "embeddings.falha classificacao=DETERMINISTICA tipo=%s err=%s",
+                type(exc).__name__, exc,
+            )
             raise EmbeddingError(f"Falha HTTP ao embedar (openai): {exc}") from exc
+
+        if response.status_code == 400:
+            logger.error(
+                "embeddings.falha classificacao=DETERMINISTICA http=400 body=%s",
+                response.text[:400],
+            )
+            raise EmbeddingError(
+                f"Requisicao invalida ao embedar (openai): {response.text[:400]}"
+            )
 
         if response.status_code == 429 or response.status_code >= 500:
             if attempt < _MAX_RETRIES:
                 delay = _RETRY_BASE_SECONDS * (2 ** attempt)
                 logger.warning(
-                    "openai %d (rate limit/instavel), retry %d/%d em %.1fs",
+                    "embeddings.falha classificacao=TRANSITORIA http=%d "
+                    "tentativa=%d/%d retry_em=%.1fs",
                     response.status_code, attempt + 1, _MAX_RETRIES, delay,
                 )
                 time.sleep(delay)
@@ -257,6 +295,15 @@ def _gemini_embed_single(
             response = client.post(GEMINI_EMBED_URL, params={"key": key}, json=payload)
         except httpx.HTTPError as exc:
             raise EmbeddingError(f"Falha HTTP ao embedar (gemini): {exc}") from exc
+
+        if response.status_code == 400:
+            logger.error(
+                "embeddings.falha classificacao=DETERMINISTICA http=400 body=%s",
+                response.text[:400],
+            )
+            raise EmbeddingError(
+                f"Requisicao invalida ao embedar (openai): {response.text[:400]}"
+            )
 
         if response.status_code == 429 or response.status_code >= 500:
             if attempt < _MAX_RETRIES:

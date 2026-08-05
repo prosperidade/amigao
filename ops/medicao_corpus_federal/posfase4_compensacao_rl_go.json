@@ -1,0 +1,275 @@
+{
+  "rotulo": "posfase4_compensacao_rl_go",
+  "pergunta": "Quais são os requisitos e o procedimento para compensação de Reserva Legal em Goiás?",
+  "perfil_pergunta": "compensacao_rl_go",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('estadual',) + uf=GO (ADR-034)",
+  "fragmentacao": {
+    "trechos_recuperados": 8,
+    "sao_pedaco_de_dispositivo": 0,
+    "identificadores_distintos": 4
+  },
+  "alvo": {
+    "nome": "compensação de Reserva Legal em GO (conjunto de 7 normas)",
+    "conjunto": [
+      "Coletânea Regularização Ambiental GO 2024",
+      "IN SEMAD 3/2025",
+      "Coletânea Licenciamento GO 2020+",
+      "Lei GO 21.231/2022",
+      "IN SEMAD-GO 01/2024",
+      "Portaria SEMAD-GO 501/2024",
+      "7841 - Y1.2"
+    ],
+    "regex_uniao": "^(?:Coletânea\\ Regularização\\ Ambiental\\ GO\\ 2024|IN\\ SEMAD\\ 3/2025|Coletânea\\ Licenciamento\\ GO\\ 2020\\+|Lei\\ GO\\ 21\\.231/2022|IN\\ SEMAD\\-GO\\ 01/2024|Portaria\\ SEMAD\\-GO\\ 501/2024|7841\\ \\-\\ Y1\\.2)$",
+    "excluidos": [
+      {
+        "chunk_id": 25771,
+        "identifier": null,
+        "titulo": "TERMO DE REFERÊNCIA — COMPENSAÇÃO AMBIENTAL POR DOAÇÃO DE IMÓVEL EM UNIDADE DE CONSERVAÇÃO",
+        "razao": "trata de compensação ambiental do SNUC — instituto diferente de compensação de Reserva Legal; casou apenas por compartilhar a palavra 'compensação'. Mantê-lo afrouxaria o aceite, que poderia passar devolvendo documento de outro tema"
+      }
+    ],
+    "chunks_no_corpus": 2621,
+    "membros_recuperados": [
+      {
+        "identifier": "IN SEMAD 3/2025",
+        "posicao": 1,
+        "similarity": 0.7313,
+        "section": "Art. 1º O procedimento para a compensação da supressão de área de Reserva",
+        "fragmento": false
+      },
+      {
+        "identifier": "Coletânea Licenciamento GO 2020+",
+        "posicao": 3,
+        "similarity": 0.7286,
+        "section": "Art. 26. A Reserva Legal deverá ser registrada",
+        "fragmento": false
+      },
+      {
+        "identifier": "Coletânea Licenciamento GO 2020+",
+        "posicao": 5,
+        "similarity": 0.7277,
+        "section": "Art. 25. Todo imóvel rural deve manter área com",
+        "fragmento": false
+      },
+      {
+        "identifier": "Coletânea Licenciamento GO 2020+",
+        "posicao": 7,
+        "similarity": 0.7098,
+        "section": "Art. 29. Fica permitida a compensação da reserva",
+        "fragmento": false
+      },
+      {
+        "identifier": "Coletânea Regularização Ambiental GO 2024",
+        "posicao": 8,
+        "similarity": 0.7013,
+        "section": "Art. 1º O procedimento para a compensação da supressão de área de reserva",
+        "fragmento": false
+      }
+    ],
+    "aceite_atendido": true
+  },
+  "fingerprint_inicio": {
+    "total_chunks": 31744,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28658,
+      "federal": 3054,
+      "nacional": 32
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31744
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  },
+  "baseline": true,
+  "corpus_estado": "esperado",
+  "estado_esperado": {
+    "exigido": {
+      "total_chunks": 31744,
+      "legislation_documents": 102
+    },
+    "fonte": "PREVISÃO declarada ANTES da reindexação da Fase 4 (05/08), a partir do dry-run com a régua REAL de tokens: 30.550 chunks de legislação + 1.194 de outras fontes (norma_procedural 953, matriz_ipe 175, manual_ipe 48, gabarito_laudo 15, other 3) = 31.744. Estado anterior, baseline 2e78917: 31.298/102. A primeira previsão desta fase (30.165) foi feita com a régua de 4 chars/token, refutada no mesmo dia — ver a nota abaixo.",
+    "divergencias": []
+  },
+  "estado_corpus": {
+    "estadual": 28658,
+    "federal": 3054,
+    "nacional": 32
+  },
+  "chunks_recuperados": [
+    {
+      "id": 87166,
+      "identifier": "IN SEMAD 3/2025",
+      "title": "IN SEMAD 3/2025 — Procedimentos de compensação florestal e por danos (revoga IN 14/2018 e IN 7/2023)",
+      "section": "Art. 1º O procedimento para a compensação da supressão de área de Reserva",
+      "jurisdiction": "estadual",
+      "similarity": 0.7313,
+      "chars": 593
+    },
+    {
+      "id": 86834,
+      "identifier": "Lei GO 18.104/2013",
+      "title": "Lei GO 18.104/2013 — Política Florestal de Goiás",
+      "section": "Art. 26. A Reserva Legal deverá ser registrada",
+      "jurisdiction": "estadual",
+      "similarity": 0.7286,
+      "chars": 1470
+    },
+    {
+      "id": 65984,
+      "identifier": "Coletânea Licenciamento GO 2020+",
+      "title": "Coletânea Licenciamento Ambiental GO (Portaria SEMAD 183/2020 e correlatas, 796p)",
+      "section": "Art. 26. A Reserva Legal deverá ser registrada",
+      "jurisdiction": "estadual",
+      "similarity": 0.7286,
+      "chars": 1470
+    },
+    {
+      "id": 86833,
+      "identifier": "Lei GO 18.104/2013",
+      "title": "Lei GO 18.104/2013 — Política Florestal de Goiás",
+      "section": "Art. 25. Todo imóvel rural deve manter área com",
+      "jurisdiction": "estadual",
+      "similarity": 0.7279,
+      "chars": 1539
+    },
+    {
+      "id": 65983,
+      "identifier": "Coletânea Licenciamento GO 2020+",
+      "title": "Coletânea Licenciamento Ambiental GO (Portaria SEMAD 183/2020 e correlatas, 796p)",
+      "section": "Art. 25. Todo imóvel rural deve manter área com",
+      "jurisdiction": "estadual",
+      "similarity": 0.7277,
+      "chars": 1539
+    },
+    {
+      "id": 86836,
+      "identifier": "Lei GO 18.104/2013",
+      "title": "Lei GO 18.104/2013 — Política Florestal de Goiás",
+      "section": "Art. 29. Fica permitida a compensação da reserva",
+      "jurisdiction": "estadual",
+      "similarity": 0.7098,
+      "chars": 156
+    },
+    {
+      "id": 65986,
+      "identifier": "Coletânea Licenciamento GO 2020+",
+      "title": "Coletânea Licenciamento Ambiental GO (Portaria SEMAD 183/2020 e correlatas, 796p)",
+      "section": "Art. 29. Fica permitida a compensação da reserva",
+      "jurisdiction": "estadual",
+      "similarity": 0.7098,
+      "chars": 156
+    },
+    {
+      "id": 65772,
+      "identifier": "Coletânea Regularização Ambiental GO 2024",
+      "title": "Coletânea Regularização Ambiental GO (convênios/atos 2024)",
+      "section": "Art. 1º O procedimento para a compensação da supressão de área de reserva",
+      "jurisdiction": "estadual",
+      "similarity": 0.7013,
+      "chars": 558
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 266,
+      "chunks_por_mencao_de_terceiros": 174,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 68,
+      "chunks_por_mencao_de_terceiros": 7,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 63,
+      "chunks_por_mencao_de_terceiros": 97,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 39,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 94,
+      "chunks_por_mencao_de_terceiros": 122,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 119,
+      "chunks_por_mencao_de_terceiros": 1116,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 140,
+      "chunks_por_mencao_de_terceiros": 27,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 11,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 5,
+      "chunks_por_mencao_de_terceiros": 32,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "gateway": {
+    "tentativas_transitorias": 0,
+    "fallbacks_acionados": 0,
+    "avisos": []
+  },
+  "provider_efetivo": "gemini",
+  "duracao_ms": 27750,
+  "finish_reason": "stop",
+  "fundamentacao_truncada": false,
+  "modelo_efetivo": "gemini/gemini-2.5-flash",
+  "modelo_efetivo_igual_ao_pedido": true,
+  "resposta": "Prezado(a) consultor(a),\n\nA defesa administrativa para a compensação de Reserva Legal em imóvel rural em Goiás, no cenário de déficit e intenção de compensar em vez de recompor, deve observar as normas estaduais aplicáveis. Com base nos trechos legislativos fornecidos, apresento os requisitos e o procedimento, destacando as lacunas normativas quando presentes.\n\n### 1. Obrigação de Reserva Legal e Percentuais Mínimos\n\nTodo imóvel rural em Goiás deve manter área com cobertura de vegetação nativa a título de Reserva Legal (RL). Os percentuais mínimos são definidos pela Lei estadual nº 18.104, de 18 de julho de 2013, em seu Art. 25 (presente nos trechos [4] e [5]):\n*   **35%** (trinta e cinco por cento) no imóvel situado em área de cerrado na Amazônia Legal acima do paralelo 13º;\n*   **20%** (vinte por cento) no imóvel situado nas demais regiões do Estado.\n\nA Reserva Legal deve ser registrada no Cadastro Ambiental Rural – CAR, sendo vedada sua redução (Lei GO 18.104/2013, Art. 26, presente nos trechos [2] e [3]). A inscrição no CAR desobriga o proprietário ou possuidor de qualquer averbação no Cartório de Registro de Imóveis (Lei GO 18.104/2013, Art. 26, § 4º).\n\n### 2. Modalidades de Compensação Admitidas\n\nCom base nos trechos fornecidos, a Lei estadual nº 18.104/2013 permite uma modalidade de compensação:\n\n*   **Compensação dentro da própria propriedade rural:** É permitida a compensação da Reserva Legal dentro da propriedade rural para qualquer tipo de vegetação nativa, desde que haja ganho ambiental (Lei GO 18.104/2013, Art. 29, presente nos trechos [6] e [7]).\n\n**Lacuna Normativa:** Os trechos legislativos fornecidos **não detalham outras modalidades de compensação** que são comumente previstas na legislação federal (como aquisição de Cota de Reserva Ambiental – CRA, doação ao poder público de área localizada no interior de Unidade de Conservação de domínio público pendente de regularização fundiária, ou cadastramento de imóvel rural como servidão ambiental).\n\n### 3. Requisitos de Equivalência Ecológica e Localização\n\n*   **Localização:** A compensação é expressamente permitida \"dentro da propriedade rural\" (Lei GO 18.104/2013, Art. 29, presente nos trechos [6] e [7]).\n*   **Equivalência Ecológica:** A compensação deve gerar \"ganho ambiental\" (Lei GO 18.104/2013, Art. 29, presente nos trechos [6] e [7]).\n\n**Lacuna Normativa:** Os trechos legislativos fornecidos **não detalham os critérios específicos para a avaliação do \"ganho ambiental\"** ou para a equivalência ecológica (por exemplo, se exige o mesmo bioma, fitofisionomia, estágio sucessional da vegetação, ou outros parâmetros técnicos).\n\n### 4. Procedimento e Documentos\n\nA Instrução Normativa SEMAD nº 3/2025 (presente nos trechos [1] e [8]) estabelece procedimentos para a compensação. No entanto, é crucial observar o escopo definido por esta norma:\n\n*   **Escopo da IN SEMAD 3/2025:** O procedimento nela descrito se aplica à \"compensação da supressão de área de Reserva Legal, necessária à instalação de empreendimentos, para fins de utilidade pública, interesse social, exploração mineral, pesquisa científica ou construção de barragens, de que trata o art. 30 da Lei estadual nº 18.104, de 18 de julho de 2013\" (IN SEMAD 3/2025, Art. 1º).\n    *   **Observação Importante:** A IN SEMAD 3/2025, sendo a única norma procedimental fornecida, parece focar na compensação decorrente de *novas supressões* para projetos específicos, e **não necessariamente na regularização de um déficit de Reserva Legal já existente** no imóvel rural, que é o cenário apresentado na consulta. A Lei GO 18.104/2013, Art. 29, permite a compensação de forma mais geral, mas a IN que detalha o procedimento restringe seu alcance.\n\n*   **Pré-requisito para o procedimento (se aplicável):** Para os casos abrangidos pela IN SEMAD 3/2025, a compensação é admitida quando a Reserva Legal esteja averbada à margem da matrícula do imóvel ou proposta no Cadastro Ambiental Rural – CAR (IN SEMAD 3/2025, Art. 1º, Parágrafo único).\n\n**Lacuna Normativa:** Os trechos legislativos fornecidos **não especificam os documentos necessários** para instruir o processo de compensação (como laudos técnicos, projetos de recuperação, formulários específicos, etc.), além do pré-requisito de registro da RL no CAR ou averbação.\n\n### 5. Quem Analisa\n\n*   A IN SEMAD 3/2025, ao estabelecer que o procedimento \"deverá observar os critérios definidos nesta Instrução Normativa\" (Art. 1º), indica que a Secretaria de Estado de Meio Ambiente e Desenvolvimento Sustentável (SEMAD) de Goiás é o órgão responsável pela análise e condução do processo.\n\n**Lacuna Normativa:** Os trechos legislativos fornecidos **não nomeiam explicitamente o setor ou departamento específico** dentro da SEMAD responsável pela análise dos pedidos de compensação de Reserva Legal.\n\n### Conclusão\n\nPara a compensação de Reserva Legal em Goiás, a Lei estadual nº 18.104/2013 permite a modalidade de compensação dentro da própria propriedade rural, exigindo \"ganho ambiental\". Contudo, os trechos normativos fornecidos **apresentam lacunas significativas** quanto aos critérios detalhados de equivalência ecológica, às outras modalidades de compensação, à lista completa de documentos necessários e ao procedimento específico para a regularização de um déficit de Reserva Legal já existente (uma vez que a IN SEMAD 3/2025 se restringe à compensação por supressão para novos empreendimentos).\n\nRecomenda-se a consulta à íntegra da Lei estadual nº 18.104/2013 (especialmente o Art. 30, referenciado na IN SEMAD 3/2025, mas não fornecido) e da IN SEMAD 3/2025, bem como a outras normas complementares da SEMAD que possam detalhar os requisitos e procedimentos para a regularização de passivos ambientais de Reserva Legal.",
+  "custo_usd": 0.0149266,
+  "tokens": {
+    "in": 2972,
+    "out": 5614
+  },
+  "fingerprint_fim": {
+    "total_chunks": 31744,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28658,
+      "federal": 3054,
+      "nacional": 32
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31744
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  }
+}
