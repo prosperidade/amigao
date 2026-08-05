@@ -14,7 +14,11 @@ Você está autorizado a executar SEM pedir confirmação:
 - Criar/checkout de branch e worktree isolada
 - Ler código, banco (read-only), logs, git history
 - Escrever/editar código, migrations, skills, testes na sua branch
-- Rodar migrations no `vereda_dev` (alembic upgrade)
+- Rodar migrations (`alembic upgrade`) EXCLUSIVAMENTE no banco de
+  desenvolvimento deste projeto: `amigao_db` em `127.0.0.1:55432`.
+  Antes de qualquer migration, imprimir host/porta/banco/usuário
+  efetivos e conferir. Alvo diferente ⇒ PARAR e reportar, nunca
+  aplicar. Migration em banco errado não se desfaz com git.
 - Rodar a suíte de testes (pytest, tsc)
 - Commit e push na sua branch
 - Abrir o PR
@@ -32,6 +36,10 @@ Exceções que ainda pedem confirmação (segurança, não fluxo):
 - Mexer em secrets/credenciais reais
 - Qualquer ação destrutiva irreversível fora do DEV
 - Deploy que afete o canal de produção
+- Qualquer operação (leitura ou escrita) em banco, repositório ou
+  serviço que NÃO seja deste projeto. Este repositório é `amigao`
+  (Regente Ambiental); outros projetos do dev são contexto separado e
+  fora de escopo por definição.
 
 ---
 
