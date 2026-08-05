@@ -110,7 +110,13 @@ Dispõe sobre a Política Nacional do Meio Ambiente… O Decreto nº 3.179, de 2
 1999… Este foi revogado pelo decreto nº 6.514, de 22 de julho de 2008.
 ```
 
-**Recomendação:** manter o id=25 como está. A versão do corpus vem de espelho
+**DECIDIDO (André, 2026-08-04): manter o id=25 (CETESB).** Deixou de ser
+pendência. Razão dele: trocar uma norma federal já ingerida por captura de
+portal estadual de outro estado (MG) pioraria a proveniência, e a diferença de
+0,94 é aparato de notas do SIAM, não conteúdo normativo. O arquivo
+`RESOLUCAO CONAMA 369-2006.pdf` fica fora do corpus em definitivo.
+
+Fundamentação que sustentou a decisão: manter o id=25 como está. A versão do corpus vem de espelho
 oficial de órgão ambiental e não perde nada de normativo; e as normas citadas no
 aparato do SIAM (Lei 6.938/1981, Decreto 3.179/1999, Decreto 6.514/2008) já estão
 no corpus **com texto próprio**, o que é melhor que tê-las como menção de rodapé.

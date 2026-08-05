@@ -73,8 +73,29 @@ fronteira perdida:
 O que o chunker atual **não** produziu, e o #119 exige: hierarquia
 (Título › Capítulo › Seção › Art.) e número do artigo em campo consultável. Isso
 não existe hoje em `knowledge_catalog`. Por esse motivo — e não pelo tamanho das
-fatias — estas 13 normas teriam de ser re-chunkeadas de qualquer forma. O gate
-está certo mesmo com a métrica melhor do que o esperado.
+fatias — estas 13 normas teriam de ser re-chunkeadas de qualquer forma.
+
+### Calibração do gate (registrada por decisão do André — o plano da remediação usa)
+
+A premissa de que **"os 420 chunks estão quebrados" NÃO se confirmou**: mediana
+152, p95 800, máx 1.345, zero acima de 1.500, nenhuma fatia de 298k tokens.
+
+**O gate segue válido — por #119, não por fronteira perdida.** Sem hierarquia
+(Título › Capítulo › Seção › Art.) e sem número de artigo em campo consultável,
+o re-chunk é obrigatório de qualquer forma. O que muda é a *justificativa*: a
+ordem remediação → ingestão continua certa, mas não porque este pacote seria
+estragado.
+
+**Hipótese sugerida pela medição — a confirmar na remediação, não conclusão:**
+o defeito de fronteira do regex `^\s*Art\.` MULTILINE parece se concentrar em
+PDFs de **compêndio/coletânea estaduais** (documento que empilha várias normas,
+onde uma âncora `Art.` falsa emenda dois diplomas), e **não** em norma federal
+avulsa bem formada, que tem um único preâmbulo e uma sequência de artigos
+limpa. As 11 medidas aqui são todas do segundo tipo, e nenhuma passou de 1.345
+tokens. Isso é indício, não prova: a medição da remediação é que decide, e ela
+deveria olhar de propósito para as coletâneas (`Coletânea Licenciamento GO
+2020+`, `Coletânea Outorga GO 1997+`, `Anexo ATIV-INEX GO 308p`) antes de
+generalizar a partir de norma avulsa.
 
 ### Revert
 
@@ -126,17 +147,33 @@ isso a comparação é por texto extraído. Hashes completos no inventário.
 Defeito encontrado e corrigido no próprio normalizador, antes de commitar:
 identificador **sem** número e ano — que no corpus existe, são rótulos e não
 normas (`Anexo ATIV-INEX GO 308p`, `AC-N03-florestal_car_pra`) — colapsava numa
-chave degenerada e dois rótulos **diferentes** casavam como duplicata. Medido
-contra os 102 identificadores do corpus: 2 colisões falsas. Corrigido fazendo a
-chave cair no texto cru normalizado quando falta número ou ano; passou a 102
-chaves para 102 identificadores, **zero colisão**, sem perder as 2 duplicatas
-verdadeiras. Não teria mordido neste pacote (as 13 têm número e ano), mas
-morderia na próxima entrega com anexo.
+chave degenerada e dois rótulos **diferentes** casavam como duplicata.
+
+Antes/depois medido sobre os 102 identificadores do corpus:
+
+| | chaves geradas | colisões falsas | duplicatas verdadeiras achadas |
+|---|---:|---:|---:|
+| **antes** | 100 | **2** (`Anexo ATIV-INEX GO 308p` × `7p`; `AC-N03-florestal_car_pra` × `AC-N06-florestal_car_pra_2`) | 2 |
+| **depois** | **102** | **0** | 2 |
+
+Correção: sem número **ou** sem ano, a chave cai no texto cru normalizado, que só
+casa consigo mesmo. Não teria mordido neste pacote (as 13 têm número e ano), mas
+morderia na próxima entrega com anexo — e o sintoma seria o pior tipo: o ingestor
+**pulando documento legítimo** achando que é duplicata, em silêncio.
 
 Sobre a CONAMA 369/2006: os ~2,4 mil chars a mais da versão do pacote (SIAM/MG)
 **não são normativos** — são o aparato de notas de rodapé do SIAM citando normas
-correlatas. As duas versões trazem o corpo íntegro (Art. 1 a 18). Recomendação
-mantida: preservar o id=25 (fonte CETESB).
+correlatas. As duas versões trazem o corpo íntegro (Art. 1 a 18).
+
+> **DECIDIDO pelo André (2026-08-04): manter o id=25 (CETESB).** Não é mais
+> pendência. Razão registrada, nas palavras dele: *"A evidência sustenta: 0,94 de
+> similaridade e a diferença sendo aparato de notas do SIAM, não conteúdo
+> normativo. Trocar uma norma FEDERAL já ingerida por captura de portal estadual
+> de outro estado (MG) pioraria a proveniência."*
+>
+> Consequência operacional: `RESOLUCAO CONAMA 369-2006.pdf` **fica fora do
+> corpus em definitivo** — pulada por dedupe, e agora também por decisão. Na
+> retomada, o script continua pulando-a sozinho; não há nada a fazer.
 
 ### 3.3 Limpeza de moldura — Passo 2 ✅ (validada)
 
@@ -342,8 +379,8 @@ do `pypdf`, o arquivo não. O hash do texto não se perde — vai em
 Dívidas a registrar na faixa do corpus (#100–199) no momento da retomada — não
 abertas agora, por determinação de congelar a missão:
 
-- Pendência humana da **CONAMA 369/2006** (id=25 CETESB × versão SIAM), com a
-  recomendação de manter o id=25.
+- ~~Pendência humana da CONAMA 369/2006~~ — **resolvida em 2026-08-04**: manter
+  o id=25 (CETESB). Não gera dívida. Ver seção 3.2.
 - **Anexo Único da IN RFB 2.203/2024** ausente; buscar fonte oficial.
 - `IN MMA 02/2014` (id=1) e `Res. CONAMA 369/2006` (id=25) têm grafia de
   identificador fora do padrão do resto do corpus. O dedupe normalizado
