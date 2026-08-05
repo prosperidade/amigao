@@ -8,8 +8,17 @@ Estrategia:
 3. Se nenhuma marcacao for encontrada (ex: doutrina, oficio, manual),
    cai direto na janela deslizante.
 
-Estimativa de tokens via heuristica de 4 chars/token (boa aproximacao
-para portugues juridico — confirmado contra Gemini tokenizer no Sprint 0).
+Contagem de tokens REAL, via `tiktoken` (cl100k_base) — o mesmo tokenizador do
+`text-embedding-3-small`, que e quem embarca.
+
+A heuristica anterior (4 chars/token) foi REFUTADA em 05/08: medida contra o
+tokenizador da OpenAI sobre todo o corpus, ela subestima em **1,22x na mediana,
+1,50x no p90, 1,79x no p99 e 2,44x no maximo**. Seis chunks estouravam o teto
+duro de 8.192 tokens da API — o maior com 9.947 reais contra 5.915 estimados.
+
+O docstring dizia que a heuristica estava "confirmada contra Gemini tokenizer no
+Sprint 0". Era verdade — para o tokenizador do GEMINI. Trocamos de provider de
+embedding na Sprint W e a premissa nunca foi reconferida (#123).
 """
 
 from __future__ import annotations
@@ -32,7 +41,30 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 TARGET_TOKENS = 800
 MAX_TOKENS = 1500
 OVERLAP_TOKENS = 100
-_CHARS_PER_TOKEN = 4
+
+# Teto DURO da API de embedding. Nao se argumenta: acima dele nao ha embedding,
+# e sem embedding nao ha chunk. E restricao de INFRAESTRUTURA, distinta do teto
+# do artigo (que e do DOMINIO) — as duas valem ao mesmo tempo.
+LIMITE_API_TOKENS = 8192
+
+_ENCODING = "cl100k_base"
+_encoder = None
+
+
+def _enc():
+    global _encoder
+    if _encoder is None:
+        import tiktoken
+
+        _encoder = tiktoken.get_encoding(_ENCODING)
+    return _encoder
+
+
+def contar_tokens(texto: str) -> int:
+    """Tokens REAIS, na regua de quem embarca."""
+    if not texto:
+        return 0
+    return len(_enc().encode(texto))
 
 # --------------------------------------------------------------------------
 # Teto do ARTIGO (#118)
@@ -93,7 +125,8 @@ _RE_ARTIGO = re.compile(r"^\s*Art\.\s*\d+")
 
 
 def _approx_tokens(text: str) -> int:
-    return max(1, len(text) // _CHARS_PER_TOKEN)
+    """Nome mantido pelos consumidores; a contagem agora e real, nao aproximada."""
+    return max(1, contar_tokens(text))
 
 
 # --------------------------------------------------------------------------
@@ -280,14 +313,16 @@ def _sliding_window(
 ) -> list[TextChunk]:
     """Janela deslizante por tokens aproximados, com overlap."""
     chunks: list[TextChunk] = []
-    target_chars = TARGET_TOKENS * _CHARS_PER_TOKEN
-    overlap_chars = OVERLAP_TOKENS * _CHARS_PER_TOKEN
-    step = max(1, target_chars - overlap_chars)
+    # Corte por TOKEN, nao por char: cortar por char com uma razao chutada foi
+    # exatamente o defeito que estourou o teto da API.
+    enc = _enc()
+    ids = enc.encode(text)
+    step = max(1, TARGET_TOKENS - OVERLAP_TOKENS)
 
     pos = 0
     sub_idx = 0
-    while pos < len(text):
-        window = text[pos : pos + target_chars]
+    while pos < len(ids):
+        window = enc.decode(ids[pos : pos + TARGET_TOKENS])
         if not window.strip():
             break
         corpo = window.strip()
@@ -299,7 +334,7 @@ def _sliding_window(
                 text=corpo,
                 section=f"{base_section} (parte {sub_idx + 1})" if base_section else None,
                 index=base_index + sub_idx,
-                tokens=_approx_tokens(window),
+                tokens=_approx_tokens(corpo),
                 hierarquia=dict(hierarquia) if hierarquia else None,
                 dispositivo=dispositivo,
                 dispositivo_origem=(

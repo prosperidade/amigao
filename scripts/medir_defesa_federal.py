@@ -242,15 +242,31 @@ RE_FRAGMENTO = re.compile(r"\(parte\s*\d+\)", re.I)
 # compara com nada depois. Baseline e pós-remediação só se comparam sobre
 # fingerprints IGUAIS; portanto o portão é igualdade exata.
 ESTADO_ESPERADO = {
-    "total_chunks": 30_165,
+    "total_chunks": 31_744,
     "legislation_documents": 102,
 }
 ESTADO_FONTE = (
     "PREVISÃO declarada ANTES da reindexação da Fase 4 (05/08), a partir do "
-    "dry-run: 28.971 chunks de legislação + 1.194 de outras fontes "
-    "(norma_procedural 953, matriz_ipe 175, manual_ipe 48, gabarito_laudo 15, "
-    "other 3) = 30.165. Estado anterior, do baseline 2e78917: 31.298/102."
+    "dry-run com a régua REAL de tokens: 30.550 chunks de legislação + 1.194 de "
+    "outras fontes (norma_procedural 953, matriz_ipe 175, manual_ipe 48, "
+    "gabarito_laudo 15, other 3) = 31.744. Estado anterior, baseline 2e78917: "
+    "31.298/102. A primeira previsão desta fase (30.165) foi feita com a régua "
+    "de 4 chars/token, refutada no mesmo dia — ver a nota abaixo."
 )
+
+# POR QUE A PREVISÃO MUDOU DE 30.165 PARA 31.744
+#
+# A primeira previsão saiu de um dry-run que media tokens por `len//4`. Essa
+# régua subestimava (1,22x na mediana, 2,44x no máximo), então ela "cabia" mais
+# texto em cada chunk do que cabe de verdade — e previa MENOS chunks.
+#
+# Com a régua real (tiktoken, cl100k_base — a mesma do modelo que embarca), o
+# mesmo corpus rende 30.550 chunks de legislação em vez de 28.971. A diferença
+# de +1.579 é consequência ESPERADA da troca de régua, não achado.
+#
+# O corpus antigo tinha 30.104 chunks de legislação. O saldo (+446) é pequeno
+# porque duas forças se cancelam: o teto do artigo (#118) junta pedaços, e a
+# régua honesta separa o que só cabia junto no papel.
 
 # O portão é PREVISÃO, não espelho.
 #

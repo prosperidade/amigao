@@ -22,16 +22,31 @@ from app.services.chunking import (
     MAX_ARTIGO_TOKENS,
     MAX_TOKENS,
     ROTULO_NAO_ARTICULADO,
-    _CHARS_PER_TOKEN,
     chunk_text,
 )
 
 
 def _texto(tokens: int, recheio: str = "palavra ") -> str:
-    """Bloco de texto com aproximadamente `tokens` tokens (4 chars/token)."""
-    return (recheio * (tokens * _CHARS_PER_TOKEN // len(recheio) + 1))[
-        : tokens * _CHARS_PER_TOKEN
-    ]
+    """Bloco com pelo menos `tokens` tokens REAIS (regua do tiktoken).
+
+    A contagem e real desde 05/08: a heuristica de 4 chars/token subestimava ate
+    2,44x e deixava chunk passar do teto de 8.192 da API.
+    """
+    from app.services.chunking import contar_tokens
+
+    texto = recheio
+    while contar_tokens(texto) < tokens:
+        texto = texto * 2
+    # corta na medida, sem estourar
+    palavras = texto.split()
+    baixo, alto = 1, len(palavras)
+    while baixo < alto:
+        meio = (baixo + alto + 1) // 2
+        if contar_tokens(" ".join(palavras[:meio])) <= tokens:
+            baixo = meio
+        else:
+            alto = meio - 1
+    return " ".join(palavras[:baixo])
 
 
 def _rotulos(chunks):
@@ -436,3 +451,50 @@ def test_referencia_SEM_formula_gatilho_nao_e_capturada_e_isso_e_o_escopo():
 
     assert _extrair_referencias("observa-se o prazo do art. 225 da Constituicao") == []
     assert _extrair_referencias("nos termos do art. 225 da Constituicao") != []
+
+
+# --------------------------------------------------------------------------
+# Teto DURO da API de embedding (05/08)
+# --------------------------------------------------------------------------
+
+def test_regua_de_token_e_a_do_modelo_que_embarca():
+    """A heurística de 4 chars/token foi refutada em 05/08.
+
+    Medida contra o tokenizador da OpenAI sobre o corpus, ela subestimava 1,22×
+    na mediana e 2,44× no máximo — e seis chunks estouraram o teto de 8.192.
+    O docstring dizia "confirmado contra Gemini tokenizer no Sprint 0": era
+    verdade para o Gemini, e falso desde que trocamos de provider de embedding
+    sem reconferir a premissa (#123).
+    """
+    from app.services.chunking import contar_tokens
+
+    texto = "Art. 5º Fica instituída a Política Estadual de Recursos Hídricos."
+
+    assert contar_tokens(texto) == len(
+        __import__("tiktoken").get_encoding("cl100k_base").encode(texto)
+    )
+    # A régua antiga: len//4. Em português jurídico ela erra para baixo.
+    assert contar_tokens(texto) > len(texto) // 4
+
+
+def test_nenhum_chunk_vai_para_a_API_acima_do_teto_duro():
+    """Guarda dura: estourou, falha alto e diz QUAL chunk.
+
+    Truncar em silêncio seria pior que falhar — embarcaria meio dispositivo como
+    se fosse inteiro, e o vetor representaria um texto que ninguém escreveu.
+    """
+    import pytest
+
+    from app.services.chunking import LIMITE_API_TOKENS
+    from app.services.embeddings import ChunkAcimaDoLimite, _exigir_dentro_do_limite
+
+    enorme = _texto(LIMITE_API_TOKENS + 500)
+
+    _exigir_dentro_do_limite(["texto curto e normal"])  # não levanta
+
+    with pytest.raises(ChunkAcimaDoLimite) as erro:
+        _exigir_dentro_do_limite(["curto", enorme])
+
+    mensagem = str(erro.value)
+    assert "item[1]" in mensagem, "precisa dizer QUAL item estourou"
+    assert str(LIMITE_API_TOKENS) in mensagem

@@ -323,6 +323,38 @@ def embed_text(text: str, *, task_type: str = "RETRIEVAL_DOCUMENT") -> list[floa
         return _gemini_embed_single(client, text, key=key, task_type=task_type)
 
 
+class ChunkAcimaDoLimite(EmbeddingError):
+    """Chunk maior que o teto duro da API de embedding."""
+
+
+def _exigir_dentro_do_limite(items: list[str]) -> None:
+    """Nenhum chunk vai para a API sem conferencia de tokens REAIS.
+
+    O teto de 8.192 nao se argumenta: acima dele nao ha embedding. Truncar em
+    silencio seria pior que falhar — embarcaria meio dispositivo como se fosse
+    inteiro, e o vetor resultante representaria um texto que ninguem escreveu.
+
+    Existe porque a regua antiga (4 chars/token) subestimava ate 2,44x e seis
+    chunks estouraram o limite em producao de indice (05/08).
+    """
+    from app.services.chunking import LIMITE_API_TOKENS, contar_tokens
+
+    estouros = [
+        (i, n, " ".join(t[:80].split()))
+        for i, t in enumerate(items)
+        if (n := contar_tokens(t)) > LIMITE_API_TOKENS
+    ]
+    if estouros:
+        detalhe = "; ".join(
+            f"item[{i}]={n} tokens, comeca com {inicio!r}" for i, n, inicio in estouros
+        )
+        raise ChunkAcimaDoLimite(
+            f"{len(estouros)} chunk(s) acima do teto de {LIMITE_API_TOKENS} tokens "
+            f"da API de embedding: {detalhe}. Nada foi embarcado — truncar em "
+            "silencio embarcaria meio dispositivo como se fosse inteiro."
+        )
+
+
 def embed_batch(
     texts: Iterable[str],
     *,
@@ -332,6 +364,8 @@ def embed_batch(
     items = [t for t in texts if t and t.strip()]
     if not items:
         return []
+
+    _exigir_dentro_do_limite(items)
 
     provider = _select_provider()
     logger.info("embeddings.batch: %d itens via %s", len(items), provider)

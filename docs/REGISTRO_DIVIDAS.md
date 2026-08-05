@@ -1141,7 +1141,40 @@ chunking, 04/08.
 ## Faixa 300-399 — infraestrutura do repositório
 
 > Faixa própria pelo mesmo motivo das outras: dois agentes lendo "próximo livre"
-> ao mesmo tempo colidem. **Próximo livre nesta faixa: 302.**
+> ao mesmo tempo colidem. **Próximo livre nesta faixa: 303.**
+
+**302. 🔴 ABERTA — dev com grafo de alembic inconsistente (duas frentes
+paralelas).** O `alembic_version` do `amigao_db` está em **`b4e1d70c9a35`**,
+revisão que vive na branch **`feat/audio-conversao-e-diarizacao`** (commit
+`ce4f1a8`) e **não está na main**. Qualquer branch que não a contenha não
+consegue nem resolver o `current`:
+
+```
+ERROR  Can't locate revision identified by 'b4e1d70c9a35'
+FAILED: Can't locate revision identified by 'b4e1d70c9a35'
+```
+
+Consequência concreta: a migration `b7e3f1a90c24` (#119, estrutura da norma como
+dado) **não pôde ser aplicada por alembic**, e a reindexação da Fase 4 falhou com
+`UndefinedColumn: column "dispositivo" does not exist`.
+
+**Contorno aplicado em 05/08 (opção C):** o DDL de `b7e3f1a90c24` foi executado
+**à mão** no dev, numa transação única, com `alembic_version` **intocado**.
+Conferido coluna a coluna contra a migration — tipos, nullability e os dois
+índices batem; as quatro colunas nasceram NULL em 31.298 linhas.
+
+**Descartado: `alembic stamp`.** Apontar o banco para o head que a nossa branch
+conhece **mentiria sobre o estado do banco** — as tabelas da outra frente
+continuariam existindo com o alembic declarando que não foram aplicadas. É a
+família #123 (registrar o pretendido como se fosse o realizado), e o preço se
+paga meses depois, quando alguém confia no `alembic_version`.
+
+**O conserto real é o merge da branch de áudio.** Enquanto ele não acontece, dev
+e prod divergem no registro de migrations — não no schema, que está conferido.
+**Esta dívida NÃO fecha com o contorno; fecha quando a branch entrar na main e o
+`upgrade head` rodar limpo.**
+
+**Origem:** Fase 4 da remediação do chunking, 05/08.
 
 **301. 110 MB de blobs mortos no histórico do git — ~80% do `.git`.** O
 repositório tem **137 MB** em `.git`, dos quais **110 MB são 8 blobs acima de
