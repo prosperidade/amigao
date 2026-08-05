@@ -65,6 +65,8 @@ from typing import Optional
 # Permite rodar `python scripts/ingest_legislation.py` direto da raiz
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.services.normalizacao import normalizar as _normalizar_unicode
+
 logger = logging.getLogger("ingest_legislation")
 
 
@@ -216,6 +218,9 @@ _ESPACOS_UNICODE = dict.fromkeys(
 
 def sanitize_text(text: str) -> str:
     """Remove caracteres de controle e normaliza whitespace."""
+    # Ligadura desfeita na entrada (#122): o glifo do PDF ("ﬁns") vira texto
+    # comparavel ("fins"). Troca CIRURGICA: o NFKC levaria junto `º` e `ª`.
+    text = _normalizar_unicode(text)
     text = _CONTROL_CHARS_RE.sub("", text)
     # Espaço não-quebrável e parentes viram espaço comum. O Planalto separa
     # "Art." do número com U+00A0: o texto PARECE "Art. 18." e não casa com
@@ -271,7 +276,6 @@ def persist_document(
       - mesmo identifier+hash → skip
       - mesmo identifier, hash diferente → versiona (antiga vira superseded)
     """
-    from sqlalchemy import update
 
     from app.db.session import SessionLocal
     from app.models.legislation import LegislationDocument

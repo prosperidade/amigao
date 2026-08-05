@@ -35,6 +35,7 @@ from app.services.embeddings import (
     embed_batch,
     embed_text,
 )
+from app.services.normalizacao import normalizar
 from app.services.vigencia import titulo_com_vigencia, vigencia_do_documento
 
 logger = logging.getLogger(__name__)
@@ -207,6 +208,11 @@ def index_text(
     precisa dizer qual está alimentando — nunca deduzir.
     """
     modelo = embedding_model or current_model()
+    # Ligaduras desfeitas na ENTRADA do pipeline (#122). Normalizar no consumo
+    # obrigaria cada
+    # consumidor a lembrar, e basta um esquecer para a comparacao literal mentir
+    # de novo. So ligaduras — o NFKC destroi `º`/`ª`; ver o modulo.
+    body = normalizar(body)
     chunks = chunk_text(body)
     if not chunks:
         return 0

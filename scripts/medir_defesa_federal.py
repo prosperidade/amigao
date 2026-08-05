@@ -242,12 +242,25 @@ RE_FRAGMENTO = re.compile(r"\(parte\s*\d+\)", re.I)
 # compara com nada depois. Baseline e pós-remediação só se comparam sobre
 # fingerprints IGUAIS; portanto o portão é igualdade exata.
 ESTADO_ESPERADO = {
-    "total_chunks": 31_298,
+    "total_chunks": 30_165,
     "legislation_documents": 102,
 }
 ESTADO_FONTE = (
-    "ADR-040 (medição de 03/08) + estado pós-revert da ingestão de outro agente (04/08)"
+    "PREVISÃO declarada ANTES da reindexação da Fase 4 (05/08), a partir do "
+    "dry-run: 28.971 chunks de legislação + 1.194 de outras fontes "
+    "(norma_procedural 953, matriz_ipe 175, manual_ipe 48, gabarito_laudo 15, "
+    "other 3) = 30.165. Estado anterior, do baseline 2e78917: 31.298/102."
 )
+
+# O portão é PREVISÃO, não espelho.
+#
+# O valor acima foi escrito e commitado ANTES de executar a reindexação, a
+# partir do dry-run. Preenchê-lo com o número observado DEPOIS faria o portão
+# confirmar qualquer resultado, inclusive um errado — ele deixaria de medir e
+# passaria a refletir.
+#
+# Bater = previsão confirmada. Não bater = ACHADO: reportar e parar, nunca
+# ajustar a constante para caber no observado.
 
 
 class CorpusInvalido(RuntimeError):

@@ -190,9 +190,53 @@ Medidos ao construir este baseline, registrados em `docs/REGISTRO_DIVIDAS.md`:
 - **#121** — o mesmo texto normativo sob identidades diferentes: 4.821 grupos,
   9.890 chunks redundantes, 2.013 grupos com ≥200 tokens. **O mais grave do
   dia**: devolve o trecho certo com a fonte errada, e isso passa na conferência.
-- **#122** — ligaduras tipográficas (`ﬁ`/`ﬂ`) em 2.091 chunks de 19 normas.
-  Mascarou a #121 inteira do dedup por `content_hash`. **Entra na mesma passada
-  da reindexação da Fase 4** — reindexar sobre texto não normalizado mediria o
-  pós-remediação com as ligaduras ainda mascarando comparação de string, e o
-  antes/depois nasceria contaminado pelo mesmo mecanismo que escondeu a #121.
+- **#122** — ligaduras tipográficas (`ﬁ`/`ﬂ`) em 2.091 chunks. **Entra na mesma
+  passada da reindexação da Fase 4** — se o texto vai ser reescrito de qualquer
+  forma, é aqui que a troca sai de graça.
+
+  > **Correção de 05/08 — a frase original desta linha foi REFUTADA por
+  > medição.** Estava escrito *"mascarou a #121 inteira do dedup por
+  > `content_hash`"*, e daí se concluía que reindexar sem normalizar produziria um
+  > antes/depois contaminado. Medido: **4.530 grupos de texto idêntico antes da
+  > normalização, 4.529 depois** — as duplicatas já eram byte-idênticas. O que as
+  > esconde é o **desenho do hash** (`_hash_chunk` inclui `source_ref`, então
+  > documentos diferentes nunca colidem), não a ligadura.
+  >
+  > A afirmação era **inferência apresentada como medição** — o defeito que a
+  > #123 descreve, cometido no documento que a registra. O escopo real da #122 é
+  > menor e de outra natureza: atrapalha **comparação literal e busca por termo**
+  > (quem procura `fins` não acha `ﬁns`), não dedupe. Também mudou o **como**:
+  > NFKC foi descartado por converter `º`→`o` em 18.362 chunks; a troca é
+  > cirúrgica, só ligaduras. Detalhe em `docs/REGISTRO_DIVIDAS.md` #122.
+  >
+  > Consequência para esta Fase 4: como o `content_hash` inclui `source_ref`, a
+  > reindexação **não deduplica por acidente** — garantia estrutural, não
+  > disciplina de quem executa. A #121 continua aberta e intocada.
 - **#123** — regra: silêncio não é evidência de ausência.
+
+---
+
+## Anotação de 05/08 — o que a Fase 4 mudou neste documento
+
+Este arquivo **não foi reescrito**: baseline é artefato do que aconteceu,
+incluindo o que foi refutado depois (#123). O que segue é anotação.
+
+**O fingerprint de partida acima (31.298 / 102) vale para o baseline.** Depois da
+reindexação da Fase 4 ele muda, e a previsão foi declarada **antes** de executar,
+a partir do dry-run:
+
+| | baseline (2e78917) | previsto pós-Fase 4 |
+|---|---:|---:|
+| chunks de legislação | 30.104 | **28.971** |
+| outras fontes (SEMAD etc.) | 1.194 | 1.194 |
+| **total `knowledge_catalog`** | **31.298** | **30.165** |
+| `legislation_documents` | 102 | 102 |
+
+O portão do medidor foi atualizado para 30.165 **antes** da execução. Bater
+confirma a previsão; não bater é **achado** — reportar e parar, nunca ajustar a
+constante para caber no observado. Preencher com o resultado faria o portão
+deixar de medir e passar a refletir.
+
+**Custo:** o dry-run estimou **US$ 0,1852** (9.259.633 tokens a US$ 0,020/1M),
+contra os ~US$ 0,58 previstos na abertura da frente. A estimativa antiga fica
+registrada como divergência **sem procedência conhecida** — não foi investigada.

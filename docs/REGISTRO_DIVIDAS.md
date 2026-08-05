@@ -958,24 +958,56 @@ cópias diferem em ligaduras tipográficas (#122), espaçamento e pontuação. H
 exato sobre texto de PDF é dedup que **parece** funcionar. Parente da #107 e da
 #119. **Origem:** levantamento do baseline do chunking, 04/08.
 
-**122. Ligaduras tipográficas não normalizadas na extração de texto.** **2.091
-chunks** em **19 normas** contêm `ﬁ`, `ﬂ` e parentes (U+FB01…U+FB04) — um único
-caractere onde deveriam estar dois. Vem do PDF: a fonte usa o glifo composto e o
-extrator o copia como está.
+**122. Ligaduras tipográficas atrapalham comparação literal e busca por termo.**
+*(Título anterior: "…não normalizadas na extração de texto" — reescrito em 05/08
+junto com a causa, que foi refutada por medição.)*
 
-Parece cosmético e não é. **Já mascarou uma duplicação inteira**: o dedup por
-`content_hash` reportava zero colisões no corpus enquanto 9.890 chunks estavam
-duplicados (#121) — `ﬁns` e `fins` são strings diferentes. Pelo mesmo mecanismo,
-mascara **qualquer** comparação de string: dedupe, match de citação, busca
-literal por dispositivo, o guard de identidade da norma. Um `Art. 5º, §1º,
-inciso II` procurado com `fi` normal não encontra o que está gravado com `ﬁ`.
+> **⛔ CAUSA ORIGINAL REFUTADA em 05/08 — e o defeito é do tipo que esta própria
+> dívida descreve.** Estava escrito aqui que a ligadura **"já mascarou uma
+> duplicação inteira"**: que o `content_hash` reportava zero colisões enquanto
+> 9.890 chunks estavam duplicados porque `ﬁns` ≠ `fins`.
+>
+> **Isso era INFERÊNCIA APRESENTADA COMO MEDIÇÃO.** Nunca foi medido; foi
+> deduzido de dois fatos verdadeiros (há ligaduras; o `content_hash` não
+> colidia) e escrito com a autoridade de um número. Medido agora:
+>
+> | grupos de texto idêntico entre normas diferentes | |
+> |---|---:|
+> | antes da normalização | **4.530** |
+> | depois da normalização | 4.529 |
+>
+> **Não emergiu nada — caiu 1.** As duplicatas já eram byte-idênticas.
+>
+> **Causa real da invisibilidade:** `_hash_chunk` inclui `source_ref`. Dois
+> documentos diferentes **nunca colidem**, com ou sem ligadura. A duplicação é
+> invisível ao `content_hash` **por desenho do hash**, não por Unicode.
+>
+> Cruzar com **#123** ("artefato registra o que ACONTECEU, nunca o que foi
+> solicitado"): o mesmo erro, cometido **dentro do documento que o descreve**. É
+> a lição mais transferível do dia — a regra não protege quem a escreveu.
 
-**O conserto é normalização Unicode (NFKC) na ENTRADA do pipeline, não no
-consumo.** Normalizar no consumo obriga cada consumidor a lembrar — e o que
-mascarou a #121 foi exatamente um consumidor que não lembrou. **NÃO corrigir
-agora:** exige reingestão, e a remediação do chunking (#117/#118/#119) já tem uma
-reindexação única programada — os dois devem entrar na mesma passada.
-**Origem:** levantamento do baseline do chunking, 04/08.
+**ESCOPO REMANESCENTE — defeito real, menor e de outra natureza.** **19 de 102
+documentos**, **8.974 ocorrências**, **2.507 chunks** (8,7%) de `ﬁ`, `ﬂ` e parentes
+(U+FB00…U+FB06). Vem do PDF: a fonte usa o glifo composto e o extrator o copia.
+Atrapalha **comparação literal e busca por termo** — quem procura `fins` não
+acha o que está gravado como `ﬁns`, nem no nosso match de citação nem no Ctrl+F
+de quem lê. **Não** atrapalha dedupe, pelo motivo acima.
+
+**O conserto é normalização na ENTRADA, e é CIRÚRGICA — só ligaduras.** NFKC foi
+a primeira escolha e **medir antes de escrever no corpus a derrubou**: ele trata
+`º` (U+00BA) como equivalente de compatibilidade de `o` e converte —
+`"Lei nº 12.651"` → `"Lei no 12.651"`, `"art. 5º, §1º"` → `"art. 5o, §1o"`.
+Mudaria **18.362 chunks (63%)**, quase todos por causa do `º`, e **quebraria toda
+busca por dispositivo**: a normalização feita para consertar comparação
+destruiria a comparação que sustenta o produto. A troca preserva `º`, `ª` e `§`.
+
+**Garantia estrutural que apareceu na conferência:** como o `content_hash` inclui
+`source_ref`, a reindexação **não deduplica por acidente**. A instrução de não
+deduplicar está garantida pela **estrutura do hash**, não pela disciplina de quem
+executa — e garantia estrutural vale mais que instrução.
+
+**Origem:** levantamento do baseline do chunking, 04/08; causa corrigida na Fase
+4, 05/08.
 
 **123. REGRA: silêncio não é evidência de ausência.** Nenhum instrumento de
 medição ou vigilância pode descartar `stderr` (`2>/dev/null`) nem tratar
@@ -1103,6 +1135,39 @@ Registrado, **não resolvido agora**. **Origem:** Fase 1 da remediação do
 chunking, 04/08.
 
 **PRÓXIMO LIVRE: 127.**
+
+---
+
+## Faixa 300-399 — infraestrutura do repositório
+
+> Faixa própria pelo mesmo motivo das outras: dois agentes lendo "próximo livre"
+> ao mesmo tempo colidem. **Próximo livre nesta faixa: 302.**
+
+**301. 110 MB de blobs mortos no histórico do git — ~80% do `.git`.** O
+repositório tem **137 MB** em `.git`, dos quais **110 MB são 8 blobs acima de
+1 MB** que ninguém usa:
+
+| arquivo | tamanho | entrou | saiu |
+|---|---:|---|---|
+| `frontend.zip` | **43,4 MB** | `1bbac39` *"atualização do sistema"* | `66b6b9b` |
+| 7 PDFs `docs/base_regulatoria/SEMAD/Manuais/` | **66,6 MB** | `ed1801f` | `6d7eab9` |
+
+**Não é hipótese de dano — já cobrou.** O commit `6d7eab9` diz o que aconteceu:
+*"remove corpus SEMAD do git — quebrava clone do Render no Linux"*. O deploy
+falhava no `git clone`, antes do build.
+
+**NOTA OBRIGATÓRIA: remover do working tree NÃO remove do histórico.** Os dois
+arquivos já não existem no working tree e os 110 MB continuam lá — todo clone
+ainda os baixa. A limpeza exige **reescrita de histórico** (`git filter-repo` ou
+equivalente), que é **janela própria, com o repo parado e coordenada com quem
+tiver clone**: reescrever troca os hashes de todos os commits, e quem tiver
+branch local fica órfão. **Decisão do André, não se faz no meio de uma fase.**
+
+**Prevenção já feita** (commit `66bddb7`, não é reescrita): `*.dump`, `*.sql.gz`
+e `*.zip` no `.gitignore`. A lacuna quase pegou de novo — o backup de 109 MB da
+Fase 4 apareceria como untracked porque `*.dump` não estava listado.
+
+**Origem:** levantamento pedido na Fase 4 da remediação do chunking, 05/08.
 
 ---
 
