@@ -65,6 +65,12 @@ def main() -> int:
         action="store_true",
         help="desliga a guarda de sanidade no chunker (mede o comportamento ANTERIOR)",
     )
+    p.add_argument(
+        "--max-artigo",
+        type=int,
+        default=None,
+        help="sobrescreve MAX_ARTIGO_TOKENS (para medir o teto anterior)",
+    )
     args = p.parse_args()
 
     from sqlalchemy import text as _sql
@@ -85,10 +91,14 @@ def main() -> int:
     # zeraria o defeito por construção — mediria o instrumento, não o conserto.
     LIMITE = LIMITE_ARTIGO_TOKENS
 
-    if args.sem_guarda:
-        import app.services.chunking as _ch
+    import app.services.chunking as _ch
 
+    if args.sem_guarda:
         _ch.LIMITE_ARTIGO_TOKENS = 10**9
+    if args.max_artigo is not None:
+        # Permite medir o teto ANTERIOR sem reverter codigo. A classificacao do
+        # defeito continua vindo de LIMITE, capturado acima.
+        _ch.MAX_ARTIGO_TOKENS = args.max_artigo
 
     art = dict(_PATTERNS)["artigo"]
     session = SessionLocal()
@@ -107,6 +117,8 @@ def main() -> int:
         chunks_totais = 0
         chunks_rotulo_artigo = 0
         chunks_rotulo_honesto = 0
+        chunks_artigo_partido = 0
+        tam_chunks: list[int] = []
 
         for d in docs:
             fatias = _split_by_pattern(d.full_text, art)
@@ -134,17 +146,53 @@ def main() -> int:
             # O que sai de fato: quantos chunks carregam rótulo de artigo falso.
             for c in chunk_text(d.full_text):
                 chunks_totais += 1
+                tam_chunks.append(c.tokens)
                 if c.section and art.match(c.section):
                     chunks_rotulo_artigo += 1
+                    if "(parte" in c.section:
+                        chunks_artigo_partido += 1
                 elif c.section and c.section.startswith(ROTULO_NAO_ARTICULADO):
                     chunks_rotulo_honesto += 1
 
+        # BASE DA MEDIÇÃO — declarada ao lado do resultado.
+        #
+        # O baseline de recuperação (2e78917) usa 31.298 = `knowledge_catalog`
+        # INTEIRO. Esta métrica usa 30.104 = só o que vem de
+        # `legislation_documents`. Números de bases diferentes não se comparam,
+        # e o antes/depois inteiro se apoia nisso.
+        por_source = {
+            r.st: int(r.n)
+            for r in session.execute(
+                _sql(
+                    "SELECT coalesce(source_type,'(null)') st, count(*) n "
+                    "FROM knowledge_catalog GROUP BY 1 ORDER BY 2 DESC"
+                )
+            ).all()
+        }
+
         resultado = {
             "rotulo": args.rotulo,
+            "base_da_medicao": {
+                "o_que_e_medido": (
+                    "re-chunking do full_text de legislation_documents — "
+                    "NAO e o knowledge_catalog inteiro"
+                ),
+                "equivalente_no_indice": (
+                    "knowledge_catalog WHERE source_type='legislation'"
+                ),
+                "chunks_no_indice_por_source_type": por_source,
+                "total_knowledge_catalog": sum(por_source.values()),
+                "query_total": "SELECT count(*) FROM knowledge_catalog",
+                "query_recorte": (
+                    "SELECT count(*) FROM knowledge_catalog "
+                    "WHERE source_type='legislation'"
+                ),
+            },
             "documentos": len(docs),
             "limite_artigo_tokens": LIMITE,
             "guarda_ativa": not args.sem_guarda,
             "max_tokens": MAX_TOKENS,
+            "max_artigo_tokens": _ch.MAX_ARTIGO_TOKENS,
             "fatias_de_artigo": len(tamanhos),
             "distribuicao_tokens": _percentis(tamanhos),
             "artigos_grandes_legitimos": {
@@ -164,6 +212,8 @@ def main() -> int:
                 "total": chunks_totais,
                 "com_rotulo_de_artigo": chunks_rotulo_artigo,
                 "com_rotulo_honesto_nao_articulado": chunks_rotulo_honesto,
+                "de_artigo_PARTIDO_por_tamanho": chunks_artigo_partido,
+                "distribuicao_tokens": _percentis(tam_chunks),
             },
         }
 

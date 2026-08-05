@@ -848,6 +848,22 @@ perdida engolindo o documento (defeito). **Separar os dois antes de qualquer
 experimento de chunking**; medir sobre a mistura mediria o defeito, não a
 estratégia. **Origem:** levantamento de 03/08.
 
+> **✅ FASE 2 (04/08, `feat/chunking-estrutural` · ADR-041).** Teto próprio para
+> artigo: `MAX_ARTIGO_TOKENS = 7000`, cobrindo inteiros os três medidos (4.644 /
+> 5.578 / 6.289). Vale **só para artigo** — capítulo, seção e prelúdio seguem em
+> `MAX_TOKENS`, porque para eles 7.000 tokens num chunk é diluição, não
+> dispositivo inteiro. Corte por tamanho continua como último recurso e passou a
+> **logar**. Medido: chunks de artigo partidos por tamanho **4.935 → 67**;
+> mediana **172 → 163**; p90/p95 **inalterados em 800**; máximo 1.498 → 6.963.
+> Base declarada nos artefatos (`legislation_documents`, 30.104 — não os 31.298
+> do catálogo inteiro). Sem reindexação.
+>
+> **Efeito colateral medido:** dos 362 chunks de artigo acima de 1.500 tokens,
+> **81 são absorvedores de vigência abaixo do limiar de 8.000** — viraram blobs
+> únicos. Menos rótulo falso, mais diluição. O sinal que os pega é semântico (o
+> artigo de vigência tem p50=273, p75=519 tokens), não de tamanho; pertence à
+> #126.
+
 **118. `MAX_TOKENS=1500` é escolha nossa, não limite do modelo.** O
 `text-embedding-3-small` aceita **8.191 tokens**; nosso teto é 1.500. Os artigos
 que se partem por tamanho no federal caberiam folgados: `Art. 19` da Lei 6.938

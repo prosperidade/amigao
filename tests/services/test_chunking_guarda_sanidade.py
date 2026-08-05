@@ -19,6 +19,7 @@ import logging
 
 from app.services.chunking import (
     LIMITE_ARTIGO_TOKENS,
+    MAX_ARTIGO_TOKENS,
     MAX_TOKENS,
     ROTULO_NAO_ARTICULADO,
     _CHARS_PER_TOKEN,
@@ -194,3 +195,103 @@ def test_limite_esta_acima_do_maior_artigo_genuino_conhecido():
     MAIOR_ARTIGO_GENUINO_MEDIDO = 6289
     assert LIMITE_ARTIGO_TOKENS > MAIOR_ARTIGO_GENUINO_MEDIDO
     assert LIMITE_ARTIGO_TOKENS > MAX_TOKENS
+
+
+# --------------------------------------------------------------------------
+# Teto do artigo (#118) — o corte por tamanho para de partir dispositivo
+# --------------------------------------------------------------------------
+
+def test_artigos_medidos_cabem_INTEIROS():
+    """Os três que a Fase 2 tem de acomodar, medidos no corpus: 4.644 (Art. 61-A
+    do Código Florestal), 5.578 (art. 100 da CF) e 6.289 (art. 19 da 6.938).
+
+    Chunk grande demais dilui — o vetor vira um ponto que representa tudo
+    vagamente e perde o dispositivo específico, que é o que a peça cita. Chunk
+    pequeno demais parte o dispositivo. O tamanho certo é a unidade semântica do
+    domínio: o artigo.
+    """
+    for medido in (4644, 5578, 6289):
+        texto = (
+            f"Art. 61-A. Dispositivo de {medido} tokens.\n{_texto(medido)}\n"
+            "Art. 62. Artigo seguinte, curto.\n"
+        )
+        chunks = chunk_text(texto)
+        do_artigo = [c for c in chunks if (c.section or "").startswith("Art. 61-A.")]
+
+        assert len(do_artigo) == 1, (
+            f"artigo de {medido} tokens foi partido em {len(do_artigo)} — "
+            "o teto ainda corta dispositivo"
+        )
+        assert "(parte" not in (do_artigo[0].section or "")
+
+
+def test_chunk_pequeno_continua_pequeno():
+    """Subir o teto do artigo não pode inflar o caso comum (p50 = 129 tokens):
+    o teto é limite, não alvo."""
+    texto = "".join(
+        f"Art. {n}. Dispositivo curto e objetivo sobre licenciamento.\n"
+        for n in range(1, 12)
+    )
+
+    chunks = chunk_text(texto)
+
+    assert all(c.tokens < 100 for c in chunks), (
+        "artigo curto tem de continuar curto"
+    )
+
+
+def test_teto_ampliado_vale_SO_para_artigo():
+    """Capítulo e seção seguem em MAX_TOKENS.
+
+    Para eles, 7.000 tokens num chunk só não é "dispositivo inteiro" — é
+    diluição. A unidade semântica do domínio é o artigo, não o capítulo.
+    """
+    grande = MAX_ARTIGO_TOKENS - 1000
+    texto = (
+        f"CAPITULO I\nDAS DISPOSICOES GERAIS\n{_texto(grande)}\n"
+        f"CAPITULO II\nDO LICENCIAMENTO\n{_texto(200)}\n"
+    )
+
+    chunks = chunk_text(texto)
+
+    assert any("(parte" in (c.section or "") for c in chunks), (
+        "capitulo gigante tem de continuar sendo cortado por MAX_TOKENS"
+    )
+    assert all(c.tokens <= MAX_TOKENS for c in chunks)
+
+
+def test_corte_por_tamanho_e_ultimo_recurso_E_deixa_rastro():
+    """O corte não some — só deixa de ser a regra. Quando acontece, loga:
+    dispositivo partido ao meio sem rastro significa busca devolvendo meio
+    artigo sem ninguem ficar sabendo."""
+    acima = MAX_ARTIGO_TOKENS + 500  # ainda abaixo da guarda (8.000)
+    texto = (
+        f"Art. 1º Artigo enorme.\n{_texto(acima)}\n"
+        "Art. 2º Artigo seguinte.\n"
+    )
+
+    class _Escuta(logging.Handler):
+        def __init__(self):
+            super().__init__(level=logging.INFO)
+            self.mensagens: list[str] = []
+
+        def emit(self, record):
+            self.mensagens.append(record.getMessage())
+
+    escuta = _Escuta()
+    log = logging.getLogger("app.services.chunking")
+    nivel = log.level
+    log.setLevel(logging.INFO)
+    log.addHandler(escuta)
+    try:
+        chunks = chunk_text(texto)
+    finally:
+        log.removeHandler(escuta)
+        log.setLevel(nivel)
+
+    assert any("(parte" in (c.section or "") for c in chunks), (
+        "acima do teto do artigo o corte por tamanho ainda vale"
+    )
+    assert any("artigo_cortado_por_tamanho" in m for m in escuta.mensagens), (
+        "corte de artigo tem de deixar rastro"
+    )

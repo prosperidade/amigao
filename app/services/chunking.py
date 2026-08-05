@@ -35,6 +35,26 @@ OVERLAP_TOKENS = 100
 _CHARS_PER_TOKEN = 4
 
 # --------------------------------------------------------------------------
+# Teto do ARTIGO (#118)
+# --------------------------------------------------------------------------
+# `MAX_TOKENS = 1500` e escolha nossa, nao limite de modelo — e ela corta
+# artigo ao meio. O objetivo aqui NAO e "subir o teto": e o teto deixar de
+# cortar a unidade semantica do dominio, que e o artigo. Chunk pequeno continua
+# pequeno (p50 = 129 tokens); corte por tamanho continua existindo, como ULTIMO
+# recurso, e agora e logado quando acontece.
+#
+# Precisam caber INTEIROS, medidos: 4.644 (Art. 61-A do Codigo Florestal),
+# 5.578 (art. 100 da CF) e 6.289 (art. 19 da Lei 6.938). 7.000 cobre os tres
+# com folga e fica abaixo do limiar da guarda (8.000).
+#
+# O teto ampliado vale SO para fatia de artigo. Capitulo, secao e preludio
+# seguem em MAX_TOKENS: para eles, 7.000 tokens num chunk so nao e "dispositivo
+# inteiro", e sim diluicao — o vetor vira um ponto que representa tudo
+# vagamente e perde justamente o dispositivo especifico, que e o que a peca
+# cita.
+MAX_ARTIGO_TOKENS = 7000
+
+# --------------------------------------------------------------------------
 # Guarda de sanidade (#117)
 # --------------------------------------------------------------------------
 # `_split_by_pattern` assume que o documento e articulado do inicio ao fim: tudo
@@ -201,7 +221,12 @@ def chunk_text(text: str) -> list[TextChunk]:
             next_index += len(sub_chunks)
             continue
 
-        if tokens <= MAX_TOKENS:
+        # Artigo tem teto proprio: e a unidade semantica do dominio e deve
+        # entrar inteiro sempre que couber.
+        e_artigo = _label == "artigo" and bool(_RE_ARTIGO.match(slice_text))
+        teto = MAX_ARTIGO_TOKENS if e_artigo else MAX_TOKENS
+
+        if tokens <= teto:
             chunks.append(
                 TextChunk(
                     text=slice_text,
@@ -212,6 +237,16 @@ def chunk_text(text: str) -> list[TextChunk]:
             )
             next_index += 1
         else:
+            # Corte por tamanho e ULTIMO recurso — e deixa rastro. Sem o log,
+            # um dispositivo partido ao meio some do radar: a busca devolve
+            # meio artigo e ninguem fica sabendo que houve corte.
+            if e_artigo:
+                logger.info(
+                    "chunking.artigo_cortado_por_tamanho rotulo=%r tokens=%d teto=%d",
+                    (section or "")[:60],
+                    tokens,
+                    teto,
+                )
             sub_chunks = _sliding_window(slice_text, section, next_index)
             chunks.extend(sub_chunks)
             next_index += len(sub_chunks)

@@ -1,9 +1,25 @@
 {
   "rotulo": "antes_fase1",
+  "base_da_medicao": {
+    "o_que_e_medido": "re-chunking do full_text de legislation_documents — NAO e o knowledge_catalog inteiro",
+    "equivalente_no_indice": "knowledge_catalog WHERE source_type='legislation'",
+    "chunks_no_indice_por_source_type": {
+      "legislation": 30104,
+      "norma_procedural": 953,
+      "matriz_ipe": 175,
+      "manual_ipe": 48,
+      "gabarito_laudo": 15,
+      "other": 3
+    },
+    "total_knowledge_catalog": 31298,
+    "query_total": "SELECT count(*) FROM knowledge_catalog",
+    "query_recorte": "SELECT count(*) FROM knowledge_catalog WHERE source_type='legislation'"
+  },
   "documentos": 102,
   "limite_artigo_tokens": 8000,
   "guarda_ativa": false,
   "max_tokens": 1500,
+  "max_artigo_tokens": 1500,
   "fatias_de_artigo": 24577,
   "distribuicao_tokens": {
     "p50": 129,
@@ -169,6 +185,15 @@
   "chunks": {
     "total": 30104,
     "com_rotulo_de_artigo": 28960,
-    "com_rotulo_honesto_nao_articulado": 0
+    "com_rotulo_honesto_nao_articulado": 0,
+    "de_artigo_PARTIDO_por_tamanho": 4935,
+    "distribuicao_tokens": {
+      "p50": 172,
+      "p90": 800,
+      "p95": 800,
+      "p99": 1032,
+      "p999": 1392,
+      "max": 1498
+    }
   }
 }

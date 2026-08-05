@@ -1,5 +1,5 @@
 {
-  "rotulo": "depois_fase1",
+  "rotulo": "depois_fase2",
   "base_da_medicao": {
     "o_que_e_medido": "re-chunking do full_text de legislation_documents — NAO e o knowledge_catalog inteiro",
     "equivalente_no_indice": "knowledge_catalog WHERE source_type='legislation'",
@@ -19,7 +19,7 @@
   "limite_artigo_tokens": 8000,
   "guarda_ativa": true,
   "max_tokens": 1500,
-  "max_artigo_tokens": 1500,
+  "max_artigo_tokens": 7000,
   "fatias_de_artigo": 24577,
   "distribuicao_tokens": {
     "p50": 129,
@@ -183,17 +183,17 @@
     ]
   },
   "chunks": {
-    "total": 30104,
-    "com_rotulo_de_artigo": 25580,
+    "total": 28971,
+    "com_rotulo_de_artigo": 24454,
     "com_rotulo_honesto_nao_articulado": 3380,
-    "de_artigo_PARTIDO_por_tamanho": 1555,
+    "de_artigo_PARTIDO_por_tamanho": 67,
     "distribuicao_tokens": {
-      "p50": 172,
+      "p50": 163,
       "p90": 800,
       "p95": 800,
-      "p99": 1032,
-      "p999": 1392,
-      "max": 1498
+      "p99": 1712,
+      "p999": 4371,
+      "max": 6963
     }
   }
 }
