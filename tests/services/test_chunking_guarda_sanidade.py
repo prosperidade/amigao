@@ -295,3 +295,144 @@ def test_corte_por_tamanho_e_ultimo_recurso_E_deixa_rastro():
     assert any("artigo_cortado_por_tamanho" in m for m in escuta.mensagens), (
         "corte de artigo tem de deixar rastro"
     )
+
+
+# --------------------------------------------------------------------------
+# Estrutura da norma como dado (#119) — extração sim, navegação não
+# --------------------------------------------------------------------------
+
+_NORMA = """TITULO II
+DAS AREAS DE PRESERVACAO PERMANENTE
+CAPITULO I
+DA DELIMITACAO
+SECAO II
+DO REGIME DE PROTECAO
+Art. 61-A. Nas Areas de Preservacao Permanente, na forma do art. 12 da Lei 12.651/2012, e autorizada a continuidade.
+Art. 62. Nos casos previstos no art. 61-A, observa-se o disposto no art. 225 da Constituicao Federal.
+"""
+
+
+def test_hierarquia_e_preservada():
+    """O chunker corta pelo padrão mais granular e descartava os níveis acima.
+    A hierarquia não precisa ser inferida — está escrita, só não era guardada.
+    Medido antes: 12 chunks de 3.192 federais tinham rótulo hierárquico."""
+    chunks = chunk_text(_NORMA)
+    art61a = next(c for c in chunks if c.dispositivo == "61-A")
+
+    assert art61a.hierarquia == {
+        "titulo": "TITULO II",
+        "capitulo": "CAPITULO I",
+        "secao": "SECAO II",
+    }
+
+
+def test_dispositivo_vai_para_campo_proprio_nao_para_o_texto():
+    """93,1% dos chunks federais mencionam um artigo e o número não estava em
+    campo consultável — vivia dentro de `section`, como texto."""
+    chunks = chunk_text(_NORMA)
+
+    assert [c.dispositivo for c in chunks if c.dispositivo] == ["61-A", "62"]
+
+
+def test_dispositivo_LIDO_e_distinguivel_de_HERDADO():
+    """Campo preenchido por herança tem de ser distinguível de campo lido do
+    texto. Rótulo herdado apresentado como lido é a família #121/#123.
+
+    Num artigo partido por tamanho, só o primeiro pedaço contém o cabeçalho —
+    os demais herdam, e dizem que herdaram.
+    """
+    grande = MAX_ARTIGO_TOKENS + 500  # forca o corte por tamanho
+    texto = f"Art. 5º Dispositivo extenso.\n{_texto(grande)}\nArt. 6º Outro.\n"
+
+    pedacos = [c for c in chunk_text(texto) if c.dispositivo == "5"]
+
+    assert len(pedacos) > 1, "o artigo precisa ter sido partido para o teste valer"
+    assert pedacos[0].dispositivo_origem == "lido"
+    assert all(p.dispositivo_origem == "herdado" for p in pedacos[1:])
+
+
+def test_referencia_com_norma_nomeada_e_extraida_com_o_alvo():
+    chunks = chunk_text(_NORMA)
+    art61a = next(c for c in chunks if c.dispositivo == "61-A")
+
+    assert art61a.referencias == [
+        {
+            "artigo": "12",
+            "norma_alvo": "Lei 12.651/2012",
+            "formula": "na forma do",
+            "trecho": "na forma do art. 12 da Lei 12.651/2012, e autorizada a continuidade.",
+        }
+    ]
+
+
+def test_referencia_sem_norma_nomeada_NAO_e_adivinhada():
+    """Quando o texto não nomeia a norma, o alvo é gravado como não declarado.
+
+    Supor "é a norma atual" seria inferência apresentada como leitura — e
+    referência que não resolve é **dado legítimo**, nunca descartada em silêncio
+    nem consertada por aproximação.
+    """
+    chunks = chunk_text(_NORMA)
+    art62 = next(c for c in chunks if c.dispositivo == "62")
+    alvos = {r["norma_alvo"] for r in (art62.referencias or [])}
+
+    assert "nao_declarado_no_texto" in alvos, (
+        "a referencia ao art. 61-A nao nomeia norma — tem de ficar assim"
+    )
+    assert "Constituicao Federal" in alvos
+    assert art62.referencias, "referencia nao resolvida NAO pode ser descartada"
+
+
+def test_norma_alvo_so_conta_quando_segue_o_artigo_DIRETAMENTE():
+    """Alvo errado é pior que alvo ausente, porque tem cara de dado.
+
+    Em "art. 8 aplica-se conforme resolucao CONAMA 369" a resolução é OUTRA
+    referência, não o alvo do art. 8.
+    """
+    from app.services.chunking import _extrair_referencias
+
+    achadas = _extrair_referencias(
+        "nos termos do art. 8 aplica-se conforme resolucao CONAMA 369"
+    )
+
+    assert achadas[0]["artigo"] == "8"
+    assert achadas[0]["norma_alvo"] == "nao_declarado_no_texto"
+
+
+def test_fatia_absorvedora_perde_o_dispositivo_mas_mantem_a_hierarquia():
+    """A fatia não é aquele artigo — então não carrega o número dele. Mas ela
+    está mesmo dentro daquele título/capítulo, e isso continua verdadeiro."""
+    texto = (
+        "TITULO I\nDAS DISPOSICOES GERAIS\n"
+        "Art. 37. Os casos omissos serao resolvidos pelo orgao ambiental.\n"
+        "Art. 38. Esta lei entra em vigor na data de sua publicacao.\n"
+        + _texto(LIMITE_ARTIGO_TOKENS + 2000, "anexo tabela zoneamento pagina ")
+    )
+
+    absorvidos = [
+        c for c in chunk_text(texto)
+        if (c.section or "").startswith(ROTULO_NAO_ARTICULADO)
+    ]
+
+    assert absorvidos
+    assert all(c.dispositivo is None for c in absorvidos), (
+        "material absorvido nao pode alegar ser o artigo"
+    )
+    assert all(c.hierarquia == {"titulo": "TITULO I"} for c in absorvidos)
+
+
+def test_referencia_SEM_formula_gatilho_nao_e_capturada_e_isso_e_o_escopo():
+    """Limitação declarada, não escondida.
+
+    A #119 mediu **329** referências federais por três fórmulas: "na forma do
+    art." (27), "nos termos do art." (64) e "previsto/disposto no art." (238).
+    Menção solta — *"o prazo do art. 225"* — fica de fora.
+
+    É escolha de escopo: alargar o gatilho aumentaria a captura e também os
+    falsos positivos, e o número que justifica a fase é o das três fórmulas.
+    Quem ler o campo `referencias` precisa saber que ele não é exaustivo.
+    """
+    from app.services.chunking import _extrair_referencias
+
+    assert _extrair_referencias("observa-se o prazo do art. 225 da Constituicao") == []
+    assert _extrair_referencias("nos termos do art. 225 da Constituicao") != []

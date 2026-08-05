@@ -872,6 +872,31 @@ que se partem por tamanho no federal caberiam folgados: `Art. 19` da Lei 6.938
 provedor X" resolveria gargalo que não temos — nem a janela atual está sendo
 usada. **Origem:** levantamento de 03/08.
 
+> **✅ FASE 3 (04/08, `feat/chunking-estrutural` · ADR-041 · migration
+> `b7e3f1a90c24`).** Medido sobre os 102 documentos, 28.971 chunks:
+>
+> | | antes | depois |
+> |---|---:|---:|
+> | com hierarquia | 12 de 3.192 federais | **26.938 (93,0%)** |
+> | com dispositivo em campo próprio | 0 | **24.584 (84,9%)** |
+> | referências como dado | 0 | **2.235** |
+>
+> `dispositivo_origem` distingue **lido** (24.523) de **herdado** (61) — campo
+> preenchido por herança tem de ser distinguível de campo lido do texto, ou
+> repetimos a #121/#123. Das 2.235 referências, **547 têm norma-alvo declarada**
+> e **1.688 não** — e as não declaradas ficam gravadas assim, nunca supondo "é a
+> norma atual" nem descartadas em silêncio. Alvo só é aceito quando a norma
+> **segue o artigo diretamente**: sem essa âncora, *"art. 8 aplica-se conforme
+> resolução CONAMA 369"* ligava o art. 8 a uma resolução que é outra referência.
+>
+> **Escopo declarado:** o gatilho são as três fórmulas que esta dívida mediu.
+> Menção solta (*"o prazo do art. 225"*) não entra — o campo `referencias` **não
+> é exaustivo**, e há teste dizendo isso. Alargar o gatilho traria falso positivo
+> junto.
+>
+> **Extração sim, navegação não:** nada resolve, segue ou expande referência.
+> Colunas nascem NULL; preenchem na reindexação única da Fase 4.
+
 **119. A estrutura determinística da norma é jogada fora.** Três coisas que o
 texto entrega de graça e o corpus não guarda: **(a) hierarquia** — o chunker usa
 o padrão mais granular que corta e, ao cortar por artigo, descarta capítulo e

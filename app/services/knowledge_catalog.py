@@ -124,12 +124,15 @@ def _insert_chunks(
         INSERT INTO knowledge_catalog (
             tenant_id, source_type, source_ref, chunk_index,
             title, section, chunk_text, chunk_tokens,
+            dispositivo, dispositivo_origem, hierarquia, referencias,
             jurisdiction, uf, agency, identifier, effective_date,
             embedding, embedding_model, embedding_dim,
             content_hash, extra_metadata
         ) VALUES (
             :tenant_id, :source_type, :source_ref, :chunk_index,
             :title, :section, :chunk_text, :chunk_tokens,
+            :dispositivo, :dispositivo_origem,
+            CAST(:hierarquia AS jsonb), CAST(:referencias AS jsonb),
             :jurisdiction, :uf, :agency, :identifier, :effective_date,
             CAST(:embedding AS vector), :embedding_model, :embedding_dim,
             :content_hash, CAST(:extra_metadata AS jsonb)
@@ -151,6 +154,13 @@ def _insert_chunks(
             "section": chunk.section,
             "chunk_text": chunk.text,
             "chunk_tokens": chunk.tokens,
+            # Estrutura da norma (#119) — extraida pelo chunker, gravada como
+            # dado. `dispositivo_origem` viaja junto porque campo herdado tem
+            # de ser distinguivel de campo lido do texto.
+            "dispositivo": chunk.dispositivo,
+            "dispositivo_origem": chunk.dispositivo_origem,
+            "hierarquia": _json.dumps(chunk.hierarquia) if chunk.hierarquia else None,
+            "referencias": _json.dumps(chunk.referencias) if chunk.referencias else None,
             "jurisdiction": base_metadata.get("jurisdiction"),
             "uf": base_metadata.get("uf"),
             "agency": base_metadata.get("agency"),

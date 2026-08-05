@@ -98,6 +98,23 @@ class KnowledgeChunk(Base):
     chunk_text = Column(Text, nullable=False)
     chunk_tokens = Column(Integer, nullable=False, default=0)
 
+    # Estrutura da norma como DADO (#119, ADR-041). Nasce NULL: preenche-se na
+    # proxima passada de indice.
+    #
+    # `dispositivo` e o numero do artigo em CAMPO CONSULTAVEL (indexado) — antes
+    # ele existia so dentro de `section`, como texto.
+    #
+    # `dispositivo_origem` distingue "lido" (o cabecalho esta NESTE chunk) de
+    # "herdado" (veio da fatia-mae; este pedaco nao o contem). Campo preenchido
+    # por heranca apresentado como leitura e a familia da #121/#123.
+    #
+    # `referencias` guarda as citacoes cruzadas EXTRAIDAS. Extracao sim,
+    # navegacao nao: resolver ou seguir referencia e decisao futura.
+    dispositivo = Column(String(20), nullable=True, index=True)
+    dispositivo_origem = Column(String(10), nullable=True)
+    hierarquia = Column(JSONB, nullable=True)
+    referencias = Column(JSONB, nullable=True)
+
     # Metadados juridicos para filtragem.
     jurisdiction = Column(String(20), nullable=True)
     uf = Column(String(2), nullable=True)

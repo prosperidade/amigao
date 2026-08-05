@@ -96,6 +96,65 @@ def _approx_tokens(text: str) -> int:
     return max(1, len(text) // _CHARS_PER_TOKEN)
 
 
+# --------------------------------------------------------------------------
+# Estrutura da norma como DADO (#119)
+# --------------------------------------------------------------------------
+# O texto entrega de graca tres coisas que o corpus jogava fora:
+#   (a) hierarquia — o chunker usava o padrao mais granular que quebrava e
+#       descartava titulo/capitulo/secao;
+#   (b) identidade do dispositivo — 93,1% dos chunks federais mencionam um
+#       artigo, e o numero nao estava em campo consultavel;
+#   (c) referencias cruzadas — 329 chunks federais com "na forma do art.",
+#       "nos termos do art.", "previsto/disposto no art.": arestas viradas
+#       texto corrido.
+#
+# EXTRACAO SIM, NAVEGACAO NAO. Referencia e gravada como dado; resolver,
+# seguir ou expandir e decisao futura, nao subproduto desta fase.
+
+# Numero do dispositivo: "Art. 61-A", "Art. 5o", "Art. 22".
+_RE_DISPOSITIVO = re.compile(r"^\s*Art\.\s*(\d+(?:\s*-\s*[A-Za-z])?)")
+
+# Referencia cruzada explicita. Captura a formula, o numero e — quando o texto
+# nomear — a norma alvo. NAO tenta adivinhar a norma quando ela nao esta escrita.
+_RE_REFERENCIA = re.compile(
+    r"(?P<formula>na forma d[oa]s?|nos termos d[oa]s?|previst[oa]s? n[oa]s?|"
+    r"disposto n[oa]s?|conforme|de acordo com)\s+"
+    r"art(?:igo)?s?\.?\s*(?P<artigo>\d+(?:\s*-\s*[A-Za-z])?)(?:\s*[ºo°]\.?)?"
+    # Lookahead: o `resto` e OLHADO, nao consumido. Consumindo, uma segunda
+    # referencia logo depois era engolida pela primeira — e o `trecho` gravado
+    # continha texto de outra citacao.
+    r"(?=(?P<resto>[^;\n]{0,60}))",
+    re.IGNORECASE,
+)
+
+# Norma nomeada LOGO APOS o artigo ("art. 12 da Lei 12.651/2012").
+#
+# ANCORADA no inicio do `resto`, aceitando so o conector. A norma tem de seguir
+# o artigo diretamente: sem a ancora, "art. 8 aplica-se conforme resolucao
+# CONAMA 369" ligava o art. 8 a uma resolucao que e OUTRA referencia. Alvo
+# errado e pior que alvo ausente, porque tem cara de dado.
+#
+# O numero aceita ponto: sem isso, "Lei 12.651/2012" virava "Lei 12".
+_RE_CONSTITUICAO = re.compile(
+    r"^[\s,]*(?:d[aeo]s?\s+)?constitui[çc][ãa]o(\s+federal)?", re.IGNORECASE
+)
+
+_RE_NORMA_ALVO = re.compile(
+    r"^[\s,]*(?:d[aeo]s?\s+)?"
+    r"(?P<tipo>lei complementar|lei|decreto-lei|decreto|resolu[çc][ãa]o|"
+    r"instru[çc][ãa]o normativa|portaria|medida provis[óo]ria)\b"
+    r"[^0-9\n]{0,20}?(?P<numero>\d[\d.]*)(?:\s*/\s*(?P<ano>\d{4}))?",
+    re.IGNORECASE,
+)
+
+# Alvo declarado quando o texto NAO nomeia a norma. Nao e "a norma atual" —
+# assumir isso seria inferencia apresentada como leitura (familia #121/#123).
+ALVO_NAO_DECLARADO = "nao_declarado_no_texto"
+
+ORIGEM_LIDA = "lido"        # o cabecalho do dispositivo esta NESTE chunk
+ORIGEM_HERDADA = "herdado"  # veio da fatia-mae; este pedaco nao o contem
+
+
 @dataclass
 class TextChunk:
     """Pedaco de texto resultante do chunking."""
@@ -104,6 +163,11 @@ class TextChunk:
     section: str | None
     index: int
     tokens: int
+    # Estrutura da norma (#119) — dado extraido, nao inferencia.
+    hierarquia: dict[str, str] | None = None
+    dispositivo: str | None = None
+    dispositivo_origem: str | None = None
+    referencias: list[dict[str, str]] | None = None
 
 
 def _split_by_pattern(text: str, pattern: re.Pattern[str]) -> list[tuple[int, str]]:
@@ -131,10 +195,88 @@ def _label_section(slice_text: str) -> str | None:
     return first_line.strip() or None
 
 
+def _mapa_hierarquico(text: str) -> dict[str, list[tuple[int, str]]]:
+    """Posicoes de titulo/capitulo/secao no texto, para reconstruir o caminho.
+
+    O chunker corta pelo padrao mais granular que quebra e descarta os demais.
+    A hierarquia nao precisa ser inferida: ela esta escrita, so nao estava sendo
+    guardada. Aqui e lida uma vez, por deslocamento.
+    """
+    mapa: dict[str, list[tuple[int, str]]] = {}
+    for nome, padrao in _PATTERNS:
+        if nome == "artigo":
+            continue
+        marcas: list[tuple[int, str]] = []
+        for m in padrao.finditer(text):
+            linha = text[m.start() : m.start() + 120].splitlines()[0].strip()
+            marcas.append((m.start(), linha))
+        if marcas:
+            mapa[nome] = marcas
+    return mapa
+
+
+def _hierarquia_em(mapa: dict[str, list[tuple[int, str]]], offset: int) -> dict[str, str]:
+    """Ultimo titulo/capitulo/secao ANTES do deslocamento — o caminho do trecho."""
+    caminho: dict[str, str] = {}
+    for nome, marcas in mapa.items():
+        anterior = [rotulo for pos, rotulo in marcas if pos <= offset]
+        if anterior:
+            caminho[nome] = anterior[-1]
+    return caminho
+
+
+def _extrair_dispositivo(slice_text: str) -> str | None:
+    """Numero do artigo, lido do cabecalho. `None` quando nao ha cabecalho."""
+    m = _RE_DISPOSITIVO.match(slice_text)
+    if not m:
+        return None
+    return re.sub(r"\s*-\s*", "-", m.group(1)).upper()
+
+
+def _extrair_referencias(texto: str) -> list[dict[str, str]]:
+    """Referencias cruzadas explicitas, como DADO.
+
+    Extracao apenas. Nao resolve, nao seque, nao expande — grafo e decisao
+    futura. E quando o texto nao nomeia a norma alvo, isso e gravado como
+    `nao_declarado_no_texto`: supor "e a norma atual" seria inferencia
+    apresentada como leitura, que e a familia da #121/#123. Referencia que nao
+    casa com norma conhecida tambem e dado legitimo — nunca descartada em
+    silencio nem "consertada" por aproximacao.
+    """
+    achadas: list[dict[str, str]] = []
+    vistas: set[tuple[str, str]] = set()
+    for m in _RE_REFERENCIA.finditer(texto):
+        artigo = re.sub(r"\s*-\s*", "-", m.group("artigo")).upper()
+        resto = m.group("resto") or ""
+        alvo = ALVO_NAO_DECLARADO
+        if _RE_CONSTITUICAO.match(resto):
+            alvo = "Constituicao Federal"
+        norma = _RE_NORMA_ALVO.match(resto)
+        if norma:
+            partes = [norma.group("tipo").strip()]
+            partes.append(norma.group("numero"))
+            if norma.group("ano"):
+                partes[-1] = f"{norma.group('numero')}/{norma.group('ano')}"
+            alvo = " ".join(partes)
+        chave = (artigo, alvo)
+        if chave in vistas:
+            continue
+        vistas.add(chave)
+        achadas.append({
+            "artigo": artigo,
+            "norma_alvo": alvo,
+            "formula": " ".join(m.group("formula").split()).lower(),
+            "trecho": " ".join((m.group(0) + resto).split())[:160],
+        })
+    return achadas
+
+
 def _sliding_window(
     text: str,
     base_section: str | None,
     base_index: int,
+    hierarquia: dict[str, str] | None = None,
+    dispositivo: str | None = None,
 ) -> list[TextChunk]:
     """Janela deslizante por tokens aproximados, com overlap."""
     chunks: list[TextChunk] = []
@@ -148,12 +290,24 @@ def _sliding_window(
         window = text[pos : pos + target_chars]
         if not window.strip():
             break
+        corpo = window.strip()
+        # O dispositivo so e "lido" quando o cabecalho esta NESTE pedaco. Nos
+        # demais ele vem da fatia-mae — e isso e declarado, nao disfarcado.
+        lido_aqui = dispositivo is not None and _RE_DISPOSITIVO.match(corpo) is not None
         chunks.append(
             TextChunk(
-                text=window.strip(),
+                text=corpo,
                 section=f"{base_section} (parte {sub_idx + 1})" if base_section else None,
                 index=base_index + sub_idx,
                 tokens=_approx_tokens(window),
+                hierarquia=dict(hierarquia) if hierarquia else None,
+                dispositivo=dispositivo,
+                dispositivo_origem=(
+                    None
+                    if dispositivo is None
+                    else (ORIGEM_LIDA if lido_aqui else ORIGEM_HERDADA)
+                ),
+                referencias=_extrair_referencias(corpo) or None,
             )
         )
         sub_idx += 1
@@ -167,13 +321,18 @@ def chunk_text(text: str) -> list[TextChunk]:
     if not text:
         return []
 
+    # Hierarquia lida UMA vez, por deslocamento: o corte usa o padrao mais
+    # granular e descarta os outros niveis, mas eles continuam escritos no
+    # texto — so nao estavam sendo guardados (#119).
+    mapa = _mapa_hierarquico(text)
+
     # 1. Tenta marcadores estruturais. Usa o mais granular que retorna >1 split.
-    structural: list[tuple[str, str]] = []  # (section_label, text)
+    structural: list[tuple[str, int, str]] = []  # (label, offset, texto)
     for label, pattern in reversed(_PATTERNS):
         slices = _split_by_pattern(text, pattern)
         if len(slices) > 1:
-            for _, slice_text in slices:
-                structural.append((label, slice_text))
+            for offset, slice_text in slices:
+                structural.append((label, offset, slice_text))
             break
 
     # 2. Se nenhum padrao quebrou — janela deslizante direta.
@@ -183,12 +342,14 @@ def chunk_text(text: str) -> list[TextChunk]:
     # 3. Para cada slice estrutural: aceita inteiro se cabe; senao sub-divide.
     chunks: list[TextChunk] = []
     next_index = 0
-    for _label, slice_text in structural:
+    for _label, _offset, slice_text in structural:
         slice_text = slice_text.strip()
         if not slice_text:
             continue
         section = _label_section(slice_text)
         tokens = _approx_tokens(slice_text)
+        caminho = _hierarquia_em(mapa, _offset) or None
+        dispositivo = _extrair_dispositivo(slice_text)
 
         # Guarda de sanidade: fatia rotulada como artigo acima do plausivel NAO
         # e artigo, e nao pode herdar o rotulo. Cai em estrategia DECLARADA —
@@ -214,8 +375,11 @@ def chunk_text(text: str) -> list[TextChunk]:
                 tokens,
                 LIMITE_ARTIGO_TOKENS,
             )
+            # A fatia perde o rotulo de artigo E o dispositivo: ela nao e
+            # aquele artigo. A hierarquia, essa, continua valendo — o trecho
+            # esta mesmo dentro daquele titulo/capitulo.
             sub_chunks = _sliding_window(
-                slice_text, ROTULO_NAO_ARTICULADO, next_index
+                slice_text, ROTULO_NAO_ARTICULADO, next_index, hierarquia=caminho
             )
             chunks.extend(sub_chunks)
             next_index += len(sub_chunks)
@@ -233,6 +397,10 @@ def chunk_text(text: str) -> list[TextChunk]:
                     section=section,
                     index=next_index,
                     tokens=tokens,
+                    hierarquia=caminho,
+                    dispositivo=dispositivo,
+                    dispositivo_origem=ORIGEM_LIDA if dispositivo else None,
+                    referencias=_extrair_referencias(slice_text) or None,
                 )
             )
             next_index += 1
@@ -247,7 +415,10 @@ def chunk_text(text: str) -> list[TextChunk]:
                     tokens,
                     teto,
                 )
-            sub_chunks = _sliding_window(slice_text, section, next_index)
+            sub_chunks = _sliding_window(
+                slice_text, section, next_index,
+                hierarquia=caminho, dispositivo=dispositivo,
+            )
             chunks.extend(sub_chunks)
             next_index += len(sub_chunks)
 
