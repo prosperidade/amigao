@@ -1,0 +1,220 @@
+{
+  "rotulo": "baseline_chunking_car",
+  "pergunta": "Quais são os requisitos e o procedimento para retificação do Cadastro Ambiental Rural (CAR) de um imóvel rural em Goiás?",
+  "perfil_pergunta": "car",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal', 'nacional') + uf=GO (ADR-034)",
+  "fragmentacao": {
+    "trechos_recuperados": 8,
+    "sao_pedaco_de_dispositivo": 0,
+    "identificadores_distintos": 3
+  },
+  "alvo": {
+    "sem_alvo": true,
+    "motivo": "a norma procedural do CAR (IN MMA 2/2014) não está ingerida; alvo hoje mediria ausência de corpus, não qualidade de chunking",
+    "reavaliar_apos": "ingestao_normativas_federais"
+  },
+  "fingerprint_inicio": {
+    "total_chunks": 31298,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28106,
+      "federal": 3168,
+      "nacional": 24
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31298
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  },
+  "baseline": true,
+  "corpus_estado": "esperado",
+  "estado_esperado": {
+    "exigido": {
+      "total_chunks": 31298,
+      "legislation_documents": 102
+    },
+    "fonte": "ADR-040 (medição de 03/08) + estado pós-revert da ingestão de outro agente (04/08)",
+    "divergencias": []
+  },
+  "estado_corpus": {
+    "estadual": 28106,
+    "federal": 3168,
+    "nacional": 24
+  },
+  "chunks_recuperados": [
+    {
+      "id": 2452,
+      "identifier": "IN MMA 02/2014",
+      "title": "Instrução Normativa MMA 02/2014 — Procedimentos do CAR/SICAR",
+      "section": "Art. 3 5. Quando o imóvel rural tiver seu perímetro localizado em zona urbana com",
+      "jurisdiction": "federal",
+      "similarity": 0.7286,
+      "chars": 532
+    },
+    {
+      "id": 2418,
+      "identifier": "IN MMA 02/2014",
+      "title": "Instrução Normativa MMA 02/2014 — Procedimentos do CAR/SICAR",
+      "section": "Art. 1 o Estabelecer procedimentos a serem adotados para a inscrição, registro, análise e",
+      "jurisdiction": "federal",
+      "similarity": 0.7251,
+      "chars": 292
+    },
+    {
+      "id": 35523,
+      "identifier": "Decreto 8.235/2014",
+      "title": "Programa de Regularização Ambiental — PRA (Decreto 8.235/2014)",
+      "section": "Art. 3º Os proprietários ou possuidores de imóveis rurais deverão inscrever seus imóveis no Cadastro Ambiental Rural - C",
+      "jurisdiction": "federal",
+      "similarity": 0.7243,
+      "chars": 1562
+    },
+    {
+      "id": 2430,
+      "identifier": "IN MMA 02/2014",
+      "title": "Instrução Normativa MMA 02/2014 — Procedimentos do CAR/SICAR",
+      "section": "Art. 1 3. A inscrição e o registro do imóvel rural no CAR é gratuita e deverá conter,",
+      "jurisdiction": "federal",
+      "similarity": 0.7174,
+      "chars": 718
+    },
+    {
+      "id": 2460,
+      "identifier": "IN MMA 02/2014",
+      "title": "Instrução Normativa MMA 02/2014 — Procedimentos do CAR/SICAR",
+      "section": "Art. 4 3. O SICAR poderá dispor de mecanismo de análise automática das informações",
+      "jurisdiction": "federal",
+      "similarity": 0.7129,
+      "chars": 1446
+    },
+    {
+      "id": 2470,
+      "identifier": "IN MMA 02/2014",
+      "title": "Instrução Normativa MMA 02/2014 — Procedimentos do CAR/SICAR",
+      "section": "Art. 53. A inscrição dos assentamentos de Reforma Agrár ia no Cadastro Ambiental Rural",
+      "jurisdiction": "federal",
+      "similarity": 0.7096,
+      "chars": 1224
+    },
+    {
+      "id": 35503,
+      "identifier": "Decreto 7.830/2012",
+      "title": "Regulamento do SICAR (Decreto 7.830/2012)",
+      "section": "Art. 7",
+      "jurisdiction": "federal",
+      "similarity": 0.7077,
+      "chars": 1101
+    },
+    {
+      "id": 2468,
+      "identifier": "IN MMA 02/2014",
+      "title": "Instrução Normativa MMA 02/2014 — Procedimentos do CAR/SICAR",
+      "section": "Art. 51. O demonstrativo poderá apresentar as seguintes situações relativas ao cadastro do",
+      "jurisdiction": "federal",
+      "similarity": 0.6999,
+      "chars": 2006
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 272,
+      "chunks_por_mencao_de_terceiros": 174,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 70,
+      "chunks_por_mencao_de_terceiros": 7,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 65,
+      "chunks_por_mencao_de_terceiros": 91,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 44,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 94,
+      "chunks_por_mencao_de_terceiros": 125,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 134,
+      "chunks_por_mencao_de_terceiros": 1142,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 144,
+      "chunks_por_mencao_de_terceiros": 26,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 13,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 10,
+      "chunks_por_mencao_de_terceiros": 36,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "gateway": {
+    "tentativas_transitorias": 0,
+    "fallbacks_acionados": 0,
+    "avisos": []
+  },
+  "provider_efetivo": "gemini",
+  "duracao_ms": 20968,
+  "finish_reason": "stop",
+  "fundamentacao_truncada": false,
+  "modelo_efetivo": "gemini/gemini-2.5-flash",
+  "modelo_efetivo_igual_ao_pedido": true,
+  "resposta": "Prezado(a) consultor(a),\n\nCom base nos trechos legislativos fornecidos, apresento a fundamentação jurídica para a defesa administrativa referente à retificação do Cadastro Ambiental Rural (CAR) de um imóvel rural em Goiás.\n\n**1. Base Normativa Federal do SICAR e da Retificação**\n\nO Cadastro Ambiental Rural (CAR) é um registro público eletrônico de âmbito nacional, obrigatório para todos os imóveis rurais, com a finalidade de integrar as informações ambientais das propriedades e posses rurais. O Sistema de Cadastro Ambiental Rural (SICAR) é a plataforma para sua realização.\n\n*   A **Instrução Normativa MMA nº 02/2014**, em seu **Art. 1º**, estabelece os procedimentos para a inscrição, registro, análise e demonstração das informações ambientais sobre os imóveis rurais no CAR, bem como para a disponibilização e integração dos dados no SICAR.\n*   O **Decreto nº 8.235/2014**, em seu **Art. 3º, § 1º**, reforça que a inscrição no CAR é realizada por meio do SICAR.\n\nA possibilidade de retificação ou correção das informações declaradas no CAR está expressamente prevista na legislação:\n\n*   O **Decreto nº 7.830/2012**, em seu **Art. 7º, caput**, determina que \"Caso detectadas pendências ou inconsistências nas informações declaradas e nos documentos apresentados no CAR, o órgão responsável deverá notificar o requerente, de uma única vez, para que preste informações complementares ou promova a correção e adequação das informações prestadas.\"\n*   A **Instrução Normativa MMA nº 02/2014**, em seu **Art. 51, inciso II, alínea \"f\"**, classifica o CAR como \"pendente\" quando \"constatada declaração incorreta, conforme o previsto no art. 7º do Decreto nº 7.830, de 2012\", o que corrobora a necessidade e o procedimento de correção.\n*   A mesma IN MMA 02/2014, em seu **Art. 3º, Parágrafo único**, prevê a solicitação de \"alteração do registro no CAR\" em casos específicos de inclusão do imóvel rural em parcelamento ou expansão urbana, demonstrando a possibilidade geral de modificação do cadastro.\n\n**2. Quem Analisa o Pedido de Retificação**\n\nA análise das informações declaradas no CAR e, consequentemente, dos pedidos de retificação, é de responsabilidade do órgão ambiental competente.\n\n*   O **Decreto nº 7.830/2012**, em seu **Art. 7º, caput**, atribui ao \"órgão responsável\" a notificação para correção de pendências. O **§ 3º** do mesmo artigo complementa que \"O órgão ambiental competente poderá realizar vistorias de campo sempre que julgar necessário para verificação das informações declaradas e acompanhamento dos compromissos assumidos.\"\n*   A **Instrução Normativa MMA nº 02/2014**, em seu **Art. 43**, indica que \"O SICAR poderá dispor de mecanismo de análise automática das informações declaradas\", verificando aspectos como:\n    *   Diferença entre a área declarada no documento de propriedade e a área obtida pela delimitação do perímetro no aplicativo de georreferenciamento do sistema CAR (inciso II).\n    *   Área de Reserva Legal em percentual equivalente, inferior ou excedente (inciso III).\n    *   Sobreposição de perímetro de um imóvel rural com outro (inciso VI).\n    *   Outras sobreposições e inconsistências (incisos VII a X).\n\nPortanto, a análise inicia-se de forma automática pelo SICAR e, posteriormente, é complementada e validada pelo órgão ambiental competente (no caso de Goiás, a Secretaria de Estado de Meio Ambiente e Desenvolvimento Sustentável - SEMAD, embora os textos fornecidos não citem especificamente a SEMAD ou normas estaduais).\n\n**3. Requisitos e Documentos para Instruir o Pedido de Retificação**\n\nOs requisitos para a retificação são os mesmos da inscrição original, focando na correção das inconsistências detectadas.\n\n*   A **Instrução Normativa MMA nº 02/2014**, em seu **Art. 13**, estabelece que a inscrição e o registro do imóvel rural no CAR devem conter:\n    *   I - identificação do proprietário ou possuidor do imóvel rural;\n    *   II - comprovação da propriedade ou posse rural; e\n    *   III - planta georreferenciada da área do imóvel, contendo a indicação das coordenadas geográficas com pelo menos um ponto de amarração do perímetro do imóvel e o perímetro das áreas de servidão administrativa, e a informação da localização das áreas de remanescentes de vegetação nativa, das Áreas de Preservação Permanente, das áreas de uso restrito, das áreas consolidadas e, caso existente, a localização da Reserva Legal.\n\nPara a retificação, especificamente, o proprietário ou possuidor deverá apresentar as informações e documentos que corrijam as divergências apontadas, como a nova planta georreferenciada com o perímetro corrigido e o reposicionamento da Reserva Legal, bem como a comprovação da área real do imóvel, se divergente da matrícula.\n\n*   O **Decreto nº 7.830/2012**, em seu **Art. 7º, § 4º**, permite que \"Os documentos comprobatórios das informações declaradas poderão ser solicitados, a qualquer tempo, pelo órgão competente, e poderão ser fornecidos por meio digital.\"\n\n**4. Procedimento para Retificação do CAR**\n\nO procedimento de retificação é desencadeado, geralmente, pela detecção de inconsistências ou pela solicitação do proprietário/possuidor.\n\n1.  **Detecção de Inconsistências:** O SICAR, por meio de seu mecanismo de análise automática (IN MMA 02/2014, Art. 43), ou o órgão ambiental competente, em análise manual ou vistoria, identifica as divergências (área, perímetro, Reserva Legal).\n2.  **Notificação:** O órgão responsável notifica o requerente, de uma única vez, para que preste informações complementares ou promova a correção e adequação das informações prestadas (Decreto nº 7.830/2012, Art. 7º, caput).\n3.  **Prazo para Correção:** O requerente deverá fazer as alterações no prazo estabelecido pelo órgão ambiental competente (Decreto nº 7.830/2012, Art. 7º, § 1º).\n4.  **Realização das Alterações:** O proprietário ou possuidor rural acessa o SICAR e realiza as alterações necessárias, submetendo a nova planta georreferenciada e demais documentos comprobatórios que corrijam as divergências.\n5.  **Análise e Validação:** O órgão ambiental competente analisa as informações corrigidas. Pode realizar vistorias de campo se julgar necessário (Decreto nº 7.830/2012, Art. 7º, § 3º).\n6.  **Situação do CAR:**\n    *   Enquanto não houver manifestação do órgão competente sobre as pendências, a inscrição será considerada efetivada para todos os fins previstos em lei (Decreto nº 7.830/2012, Art. 7º, § 2º).\n    *   O CAR pode ficar com status \"pendente\" enquanto as obrigações de atualização não forem cumpridas ou houver irregularidades (IN MMA 02/2014, Art. 51, II, \"b\" e \"g\").\n    *   O não cumprimento dos prazos estabelecidos nas notificações pode levar ao \"cancelamento\" do CAR (IN MMA 02/2014, Art. 51, III, \"b\").\n\n**5. Relação com o Georreferenciamento e a Certificação do Imóvel**\n\n*   **Georreferenciamento no CAR:** A **Instrução Normativa MMA nº 02/2014**, em seu **Art. 13, inciso III**, exige expressamente a \"planta georreferenciada da área do imóvel, contendo a indicação das coordenadas geográficas com pelo menos um ponto de amarração do perímetro do imóvel e o perímetro das áreas de servidão administrativa, e a informação da localização das áreas de remanescentes de vegetação nativa, das Áreas de Preservação Permanente, das áreas de uso restrito, das áreas consolidadas e, caso existente, a localização da Reserva Legal.\"\n    *   Isso significa que qualquer retificação que envolva o perímetro do imóvel ou a localização de suas áreas internas (como a Reserva Legal) demandará a apresentação de uma nova planta georreferenciada, com as coordenadas corrigidas.\n\n*   **Certificação do Imóvel pelo INCRA:** Os trechos legislativos fornecidos **não estabelecem uma relação direta e explícita** entre o georreferenciamento exigido para o CAR e a certificação do imóvel rural pelo Instituto Nacional de Colonização e Reforma Agrária (INCRA), conforme a Lei nº 10.267/2001 e o Decreto nº 4.449/2002. Embora ambos os processos utilizem dados georreferenciados, as normas aqui apresentadas tratam apenas dos requisitos para o CAR. A certificação do INCRA é um procedimento distinto, com finalidade de identificação e registro de imóveis rurais para fins de registro imobiliário, e não está detalhada no corpus fornecido.\n\n**6. Considerações sobre Goiás**\n\nOs dispositivos legais citados são de âmbito federal. Embora o imóvel esteja localizado em Goiás, os procedimentos e requisitos básicos para o CAR e sua retificação são regidos por essas normas federais. Os trechos fornecidos **não contêm normas específicas do estado de Goiás** que alterem ou complementem esses procedimentos federais para a retificação do CAR. A análise e gestão do CAR em Goiás seriam de responsabilidade da Secretaria de Estado de Meio Ambiente e Desenvolvimento Sustentável (SEMAD), como órgão ambiental competente.\n\nEm resumo, a retificação do CAR é um procedimento previsto na legislação federal, essencial para garantir a fidedignidade das informações ambientais do imóvel rural. Ela é desencadeada pela detecção de inconsistências ou por solicitação do proprietário, exigindo a apresentação de dados georreferenciados corrigidos e sendo analisada pelo órgão ambiental competente.",
+  "custo_usd": 0.0122713,
+  "tokens": {
+    "in": 3121,
+    "out": 4534
+  },
+  "fingerprint_fim": {
+    "total_chunks": 31298,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28106,
+      "federal": 3168,
+      "nacional": 24
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31298
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  }
+}

@@ -816,7 +816,159 @@ dos chunks federais mencionam um artigo, e o número não está em campo
 consultável. **É dado, não inferência** — e pode ser solução mais elegante que
 trocar de provedor. Parente da #107. **Origem:** levantamento de 03/08.
 
-**PRÓXIMO LIVRE: 120.**
+**120. 245 chunks sem `identifier` — trecho que não sabe dizer de que norma
+veio.** Todos estaduais de GO, espalhados por **51 documentos** distintos. Um
+chunk sem identidade pode ser recuperado e usado na fundamentação, mas não pode
+ser **citado nem conferido** — o consultor recebe o conteúdo sem a fonte. Fere o
+Princípio 11 ("nenhuma afirmação sem fonte") no ponto exato em que ele foi
+escrito para valer. Também é invisível para a família de métricas que recorta por
+`identifier` (o guard da identidade da norma, o alvo do medidor, a cobertura
+nominal): elas não erram nesses chunks, elas **não os enxergam**. **Origem:**
+levantamento do baseline do chunking, 04/08.
+
+**121. O mesmo texto normativo gravado sob identidades diferentes.**
+**⚠️ O achado mais grave do levantamento de 04/08 — acima do chunking.**
+
+Chunking ruim devolve trecho ruim, e trecho ruim se **vê**. Atribuição errada
+devolve o trecho **certo** com a fonte **errada**, e isso não se vê: a peça sai
+coerente, bem fundamentada, citando a portaria no lugar da lei. É o Princípio 11
+("nenhuma afirmação sem fonte") ferido na raiz — a afirmação *tem* fonte, e a
+fonte está errada, que é pior que não ter, porque passa na conferência.
+
+**Impacto:** risco de citação com fonte errada em **peça assinada**.
+
+Medido:
+**4.821 grupos** de chunks com texto idêntico (normalizando caixa e pontuação)
+distribuídos entre identificadores **diferentes**, somando **9.890 chunks
+redundantes** — e não é só cabeçalho: **2.013 grupos têm ≥200 tokens**. Exemplo
+conferido: um trecho de 524 tokens sobre termo de compromisso ambiental aparece
+igual em `IN SEMAD-GO 01/2024`, `Lei GO 18.102/2013` e `Portaria SEMAD-GO
+501/2024`.
+
+**Exemplar colado** (trecho de 524 tokens, termo de compromisso ambiental,
+idêntico nos três):
+
+```
+identifier                  | tokens | início
+IN SEMAD-GO 01/2024         |    524 | a Lei nº 20.961, de 13-01-2021. § 5º O termo de
+Lei GO 18.102/2013          |    524 | compromisso ambiental poderá conter cláusulas
+Portaria SEMAD-GO 501/2024  |    524 | relativas às demais sanções aplica...
+```
+
+**HIPÓTESE DE CAUSA — não confirmada.** Coletâneas e portarias que transcrevem
+outras normas seriam ingeridas com o `identifier` **delas**, e o texto
+reproduzido herdaria essa identidade. É a explicação que o formato dos casos
+sugere; **precisa ser confirmada ou refutada com evidência antes de virar
+premissa de conserto**. Investigar depois do baseline.
+
+O dedup atual não pega: `content_hash` tem **zero** colisões no corpus, porque as
+cópias diferem em ligaduras tipográficas (#122), espaçamento e pontuação. Hash
+exato sobre texto de PDF é dedup que **parece** funcionar. Parente da #107 e da
+#119. **Origem:** levantamento do baseline do chunking, 04/08.
+
+**122. Ligaduras tipográficas não normalizadas na extração de texto.** **2.091
+chunks** em **19 normas** contêm `ﬁ`, `ﬂ` e parentes (U+FB01…U+FB04) — um único
+caractere onde deveriam estar dois. Vem do PDF: a fonte usa o glifo composto e o
+extrator o copia como está.
+
+Parece cosmético e não é. **Já mascarou uma duplicação inteira**: o dedup por
+`content_hash` reportava zero colisões no corpus enquanto 9.890 chunks estavam
+duplicados (#121) — `ﬁns` e `fins` são strings diferentes. Pelo mesmo mecanismo,
+mascara **qualquer** comparação de string: dedupe, match de citação, busca
+literal por dispositivo, o guard de identidade da norma. Um `Art. 5º, §1º,
+inciso II` procurado com `fi` normal não encontra o que está gravado com `ﬁ`.
+
+**O conserto é normalização Unicode (NFKC) na ENTRADA do pipeline, não no
+consumo.** Normalizar no consumo obriga cada consumidor a lembrar — e o que
+mascarou a #121 foi exatamente um consumidor que não lembrou. **NÃO corrigir
+agora:** exige reingestão, e a remediação do chunking (#117/#118/#119) já tem uma
+reindexação única programada — os dois devem entrar na mesma passada.
+**Origem:** levantamento do baseline do chunking, 04/08.
+
+**123. REGRA: silêncio não é evidência de ausência.** Nenhum instrumento de
+medição ou vigilância pode descartar `stderr` (`2>/dev/null`) nem tratar
+resultado vazio como "o estado ainda não foi atingido". **Vazio e erro são
+estados distintos de "não bateu"** e precisam ser distinguíveis no log. Todo
+vigia/poller precisa de **prova de vida**: falhar alto na primeira consulta que
+não devolve linha bem-formada, em vez de seguir em loop parecendo paciente.
+
+**Autópsia (exemplar, 04/08).** O vigia que esperava o corpus chegar a
+31.298/102 foi escrito assim:
+
+```bash
+until [ "$(docker exec ... psql -tAc 'select (select count(*) ...) || "/" || ...' 2>/dev/null)" = "31298/102" ]
+```
+
+Três defeitos compostos: em SQL, `"/"` é **identificador**, não literal — o banco
+respondia `ERROR: column "/" does not exist`; o `2>/dev/null` engolia o erro; e a
+comparação passava a testar string **vazia** contra `31298/102`. O vigia **nunca
+poderia disparar, em nenhum estado do banco**. Pior: o silêncio dele era
+indistinguível de "ainda não chegou", e o revert do corpus já tinha entrado havia
+tempo enquanto o loop parecia estar trabalhando.
+
+**REGRA DERIVADA — artefato de medição registra o que ACONTECEU, nunca o que foi
+solicitado.** Sempre que "pedido ≠ realizado" for possível — fallback de
+provider, retry, degradação, cache — o artefato grava **os dois lados e o
+booleano de igualdade**.
+
+**Segundo exemplar (mesmo dia, mesma família).** A primeira rodada completa deste
+baseline gravou `modelo: gemini/gemini-2.5-flash` nos cinco json. Em uma delas
+(`defesa`) houve **2 timeouts** nesse modelo e o gateway acionou o **fallback** —
+outro modelo respondeu. O medidor gravava `settings.GEMINI_LEGAL_MODEL`, colhido
+**antes** da chamada: o modelo *pedido*. O json afirmava um modelo que não rodou.
+
+Isso quebraria em silêncio a condição que sustenta o experimento desde o pacote A
+("mesma pergunta, mesmo modelo"). O que denunciou não foi o campo — foi o perfil
+dos números: 1.602 tokens de saída e US$ 0,0054 contra 4.808–6.466 e
+US$ 0,0129–0,0164 das outras quatro.
+
+**O padrão do dia:** `model_used` existia e ninguém lia; `embedding_model`
+existia desde a Sprint U e ninguém lia. **Nossos defeitos não são de dado
+ausente — são de dado presente e não consultado.**
+
+`AIResponse` **já expunha** `model_used`; faltava alguém lê-lo — igual à
+`embedding_model` da #114. O medidor passou a gravar `modelo_efetivo`,
+`modelo_efetivo_igual_ao_pedido`, `provider_efetivo`, `duracao_ms` e
+`finish_reason`. Como `AIResponse` **não** expõe nº de tentativas nem motivo do
+fallback, esse sinal é capturado de quem o tem — os próprios avisos do gateway —
+e gravado em `gateway.tentativas_transitorias` / `gateway.fallbacks_acionados`:
+timeout recorrente num modelo é sinal operacional e não pode morrer no terminal.
+
+**Família.** Mesmo mecanismo da #117 (fronteira perdida em silêncio), do
+`probes=1` (#113), do fallback de provider por presença de chave (#114) e do
+`content_hash` mascarado por ligadura (#121/#122). **O sistema não falha:
+responde errado, calado.** A defesa é sempre a mesma — conferir por um segundo
+caminho e fazer o instrumento **recusar** em vez de responder quando não pode
+responder direito. **Origem:** autópsia do vigia do baseline, 04/08.
+
+**124. Tentativas e motivo do fallback só existem como texto de log.**
+`AIResponse` expõe `content`, `model_used`, `provider`, `tokens_in/out`,
+`cost_usd`, `duration_ms` e `finish_reason` — **não** expõe quantas tentativas
+houve nem por que o fallback foi acionado. Esse dado existe apenas na frase do
+aviso que o gateway escreve no log.
+
+**Raspar log é frágil pelo motivo da #123:** mudou a frase do aviso, o consumidor
+**cala** — não quebra, não avisa, apenas passa a contar zero. Silêncio outra vez,
+mesma família.
+
+**Telemetria de fallback não é instrumento de laboratório.** Timeout recorrente
+num provider é **sinal operacional** e deveria ser visível em produção, não só
+num baseline. Hoje, um provider degradando sustentadamente aparece como latência
+e custo estranhos, sem nome.
+
+**O que fazer:** promover `tentativas` e `motivo_do_fallback` a campos
+estruturados de `AIResponse` em `app/core/ai_gateway.py`, e expor a contagem como
+métrica. **Fora do escopo do PR do chunking** (é código de produção): registrado,
+não executado. O baseline usa um handler no logger — solução certa para capturar
+sem tocar em produção, e que esta dívida torna desnecessária quando for feita.
+**Evidência operacional já colhida.** Com a captura ligada, o baseline mediu:
+`gemini-2.5-flash` deu **2 timeouts e caiu para `gpt-4.1-mini`** na pergunta
+`defesa` — **nas duas rodadas seguidas**, não por acaso. É justamente a pergunta
+de **maior contexto**. Ou seja: o provider degrada de forma reprodutível na maior
+entrada, e hoje isso só aparece se alguém estiver lendo o terminal na hora.
+**Origem:** re-run do baseline do chunking, 04/08 (#123).
+
+**PRÓXIMO LIVRE: 125.**
 
 ---
 

@@ -2942,3 +2942,61 @@ silêncio. **Nenhum deles falhava — todos respondiam.**
 A defesa que funcionou nos quatro foi a mesma: conferir por um segundo caminho, e
 fazer o sistema **recusar** em vez de responder quando não pode responder direito.
 Indisponibilidade honesta vale mais que disponibilidade mentirosa.
+
+---
+
+## 04/08 — Baseline da remediação do chunking (`feat/chunking-estrutural`)
+
+Antes de mexer no chunker, medir. O baseline é o commit 1 da frente, e nada de
+código do chunker entra antes dele.
+
+### Cinco perguntas, escolhidas pelo estado do alvo
+
+Três devem melhorar, uma **não pode piorar** (`art71`, hoje íntegro — controle
+negativo) e uma é estadual. Experimento só com casos que devem melhorar não
+detecta regressão.
+
+O medidor tinha escopo e alvo **cravados no código**: sempre federal + GO, sempre
+o art. 18 do 6.514. Viraram atributo da pergunta — sem isso a pergunta estadual
+rodaria no corpus federal e devolveria um número com cara de resposta.
+
+### O que o baseline mostrou
+
+O art. 18 do Decreto 6.514/2008 **existe no corpus e não é recuperado**: fica na
+posição **32**, similaridade 0,6686, fora do top-8. Isso é `falha_de_recuperacao`,
+não ausência de corpus — duas causas opostas com o mesmo sintoma (o agente não
+cita a norma), e sem essa separação uma leva a culpa da outra.
+
+O art. 61-A do Código Florestal está **partido em 7 pedaços** e é recuperado em
+cacos: 4 dos 8 trechos do top-8 são fragmento. O art. 71 da Lei 9.605 está
+íntegro e volta inteiro — é o que a remediação não pode estragar.
+
+### Portão de igualdade, não piso
+
+Piso protege contra banco parcial; **não vê corpus poluído**. O corpus chegou a
+31.718/113 por ingestão de outro agente (revertida) — um piso teria deixado a
+medição correr e produzido baseline incomparável, com o defeito aparecendo
+semanas depois, na comparação que deveria provar o ganho. Baseline e
+pós-remediação só se comparam sobre **fingerprints iguais**.
+
+### Três instrumentos meus falharam calados no mesmo dia
+
+O vigia que esperava o corpus limpo tinha `"/"` como identificador SQL e `stderr`
+descartado: **nunca poderia disparar**, e o silêncio dele era indistinguível de
+"ainda não chegou" (#123). O medidor gravava o modelo **pedido** como se fosse o
+realizado — e a `defesa` foi respondida por `gpt-4.1-mini` após dois timeouts do
+Gemini, nas duas rodadas (#124). O dedup por `content_hash` reportava zero
+duplicatas enquanto 9.890 chunks estavam duplicados, porque `ﬁns` e `fins` são
+strings diferentes (#121/#122).
+
+**O padrão do dia:** `model_used` existia e ninguém lia; `embedding_model` existia
+desde a Sprint U e ninguém lia. Nossos defeitos não são de dado ausente — são de
+**dado presente e não consultado**.
+
+### O achado mais grave não é o chunking
+
+**#121:** o mesmo texto normativo gravado sob identidades diferentes — 4.821
+grupos, 9.890 chunks, 2.013 deles com ≥200 tokens. Chunking ruim devolve trecho
+ruim, e trecho ruim se vê. Atribuição errada devolve o trecho **certo** com a
+fonte **errada**: a peça sai coerente citando a portaria no lugar da lei, e
+**passa na conferência**. Princípio 11 ferido na raiz.
