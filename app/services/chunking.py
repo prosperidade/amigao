@@ -17,6 +17,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 # Marcadores estruturais. Ordem importa: do mais externo para o mais interno.
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("titulo", re.compile(r"^\s*T[ÍI]TULO\s+[IVXLCDM]+", re.MULTILINE | re.IGNORECASE)),
@@ -29,6 +33,43 @@ TARGET_TOKENS = 800
 MAX_TOKENS = 1500
 OVERLAP_TOKENS = 100
 _CHARS_PER_TOKEN = 4
+
+# --------------------------------------------------------------------------
+# Guarda de sanidade (#117)
+# --------------------------------------------------------------------------
+# `_split_by_pattern` assume que o documento e articulado do inicio ao fim: tudo
+# entre um cabecalho e o proximo pertence aquele cabecalho. A premissa e falsa.
+# Quando o texto DEIXA de ser articulado — sumario paginado, rodape de captura
+# web, anexo, lista de diretrizes — todo o rabo nao-normativo e atribuido ao
+# ultimo cabecalho visto.
+#
+# Medido em 04/08 sobre 24.577 fatias de artigo em 102 documentos:
+#
+#     p50 = 129 | p90 = 499 | p95 = 737 | p99 = 2.144 | p99,9 = 23.483
+#     max = 261.280 tokens  ("Art. 51." do MT-NUC01)
+#
+# Aquele "Art. 51." tem 1.045.121 chars, 12.768 linhas e **nenhum outro
+# cabecalho de artigo dentro** — 15 ocorrencias de "Art. N", todas citacoes
+# inline ("art. 225, caput, da CF/88"). Nao e fronteira perdida: e ausencia de
+# fronteira. Nenhum regex melhor corrige, porque nao ha o que casar.
+#
+# O LIMIAR nao foi escolhido no olho:
+#   · maior artigo confirmadamente genuino do corpus: ~6.289 tokens;
+#   · toda fatia acima de 8.000 que foi inspecionada era absorvedora — artigo de
+#     vigencia ("Esta Lei entra em vigor...", que e sempre uma frase) engolindo
+#     o anexo, cabecalho falso vindo de referencia inline ("Art. 10 desta
+#     Resolucao (Juntar copia..."), ou prosa doutrinaria numerada;
+#   · 8.000 tokens sao ~32.000 chars sob UM numero de artigo — deixa de ser
+#     descricao plausivel de dispositivo.
+LIMITE_ARTIGO_TOKENS = 8000
+
+# Rotulo honesto para o material que cai na estrategia alternativa. O conteudo
+# NAO some — continua indexado; o que ele perde e a etiqueta mentirosa.
+ROTULO_NAO_ARTICULADO = "[trecho nao articulado]"
+
+# Mesma expressao do padrao "artigo", usada para conferir se a fatia REALMENTE
+# comeca em cabecalho de artigo (e nao e o preludio da passada estrutural).
+_RE_ARTIGO = re.compile(r"^\s*Art\.\s*\d+")
 
 
 def _approx_tokens(text: str) -> int:
@@ -128,6 +169,38 @@ def chunk_text(text: str) -> list[TextChunk]:
             continue
         section = _label_section(slice_text)
         tokens = _approx_tokens(slice_text)
+
+        # Guarda de sanidade: fatia rotulada como artigo acima do plausivel NAO
+        # e artigo, e nao pode herdar o rotulo. Cai em estrategia DECLARADA —
+        # com log, nunca em silencio — e o conteudo continua indexado sob um
+        # rotulo honesto. Rotulo mentiroso e pior que ausencia de rotulo: passa
+        # na conferencia.
+        # Só vale para fatia que REALMENTE comeca com cabecalho de artigo. O
+        # preludio (ementa, cabecalho de Diario Oficial, formulario) tambem cai
+        # nesta passada estrutural e tambem pode ser gigante — mas ele nao alega
+        # ser artigo nenhum, entao nao ha etiqueta mentirosa para corrigir.
+        # Medido: 4 preludios acima do limite, 474 chunks. Trocar o rotulo deles
+        # seria mexer no que nao esta quebrado, e perder o pouco de contexto que
+        # a primeira linha carrega.
+        if (
+            _label == "artigo"
+            and _RE_ARTIGO.match(slice_text)
+            and tokens > LIMITE_ARTIGO_TOKENS
+        ):
+            logger.warning(
+                "chunking.fatia_absorvedora rotulo=%r tokens=%d limite=%d "
+                "estrategia=janela_deslizante_sem_rotulo_de_artigo",
+                (section or "")[:60],
+                tokens,
+                LIMITE_ARTIGO_TOKENS,
+            )
+            sub_chunks = _sliding_window(
+                slice_text, ROTULO_NAO_ARTICULADO, next_index
+            )
+            chunks.extend(sub_chunks)
+            next_index += len(sub_chunks)
+            continue
+
         if tokens <= MAX_TOKENS:
             chunks.append(
                 TextChunk(

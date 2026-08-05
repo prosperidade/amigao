@@ -775,7 +775,58 @@ corpus desde abril por um espelho da CETESB, justamente porque o Sisconama
 falhou. **O que destrava:** a Isis fornecer identificador estável ou espelho de
 órgão. **Origem:** sondagem do bloco 2.
 
-**117. O chunker perde a fronteira do artigo em PDF de compêndio.** O corte
+**117. O chunker atribui material não articulado ao último artigo visto.**
+*(Título anterior: "O chunker perde a fronteira do artigo em PDF de compêndio" —
+trocado em 04/08 porque a causa que ele nomeava foi refutada.)*
+
+> **⛔ CAUSA ORIGINAL REFUTADA em 04/08.** A hipótese registrada era que "o `Art.`
+> seguinte frequentemente não começa em início de linha, e a fatia engole o resto
+> do documento até o próximo match válido" — e a prescrição era consertar o
+> regex. **Medido no caso exato:** a fatia do `Art. 51.` do MT-NUC01 tem
+> **1.045.121 chars** e **12.768 linhas**, e contém **1** cabeçalho de artigo em
+> início de linha (o próprio, na posição 0). Testadas todas as variantes —
+> `Art N` sem ponto, `Artigo N`, `ART. N`, `Art. Nº`: **0 ocorrências**. Em
+> qualquer posição da linha: **15 ocorrências, todas citações inline**
+> (*"art. 225, caput, da CF/88"*, *"Pelo art. 54 da lei nº 9.605/98"*). `CAPÍTULO`:
+> 1. `SEÇÃO`: 0.
+>
+> **Não há fronteira perdida — não há fronteira.** Nenhum regex melhor corrige,
+> porque não existe o que casar. Amostrado, aquele 1 MB é sumário paginado
+> (*"Zona 2.1.14. Áreas que Requerem Manejo Específico....187"*), rodapé de
+> captura web repetido (*"leisestaduais.com.br/… 77/238"*) e listas de diretrizes
+> (*"146. Implementar programas de pesquisa…"*): **anexo de plano territorial**,
+> não texto articulado.
+
+**CAUSA REAL.** `_split_by_pattern` assume que o documento é articulado do início
+ao fim: tudo entre um cabeçalho e o próximo pertence àquele cabeçalho. **A
+premissa é falsa.** Quando o texto deixa de ser articulado, todo o rabo
+não-normativo é atribuído ao último cabeçalho visto. É defeito de **modelo**, não
+de expressão regular.
+
+O padrão dominante confirma: das 54 fatias absorvedoras do corpus, **31 começam
+com o artigo de vigência** (*"Esta Lei entra em vigor na data de sua
+publicação"*) — que é sempre uma frase, e é o **último** artigo da norma. No
+compêndio, o que vem depois dele é o anexo ou a norma seguinte. Há ainda o
+cabeçalho **falso** vindo de referência inline que calhou de abrir linha
+(*"Art. 10 desta Resolução (Juntar cópia do arquivo…"*).
+
+**O QUE PERMANECE VÁLIDO — e é a parte grave.** Os 374 pedaços carregam todos o
+`section` `"Art. 51. (parte N)"`: sumário de zoneamento **etiquetado como artigo
+de lei**. Metadado **ativamente errado**, não apenas ausente. Rótulo mentiroso é
+pior que ausência de rótulo — **passa na conferência**, mesma lógica da #121.
+
+**✅ FASE 1 (04/08, `feat/chunking-estrutural`).** Guarda de sanidade: fatia que
+realmente começa em cabeçalho de artigo e passa de `LIMITE_ARTIGO_TOKENS`
+(8.000) **não é artigo**, não herda o rótulo, cai em janela deslizante sob
+`"[trecho nao articulado]"` e **loga** — estratégia declarada, nunca silêncio.
+Limiar justificado por medição (p50=129, p90=499, p95=737, p99=2.144,
+p99,9=23.483, max=261.280 sobre 24.577 fatias; maior artigo confirmadamente
+genuíno ~6.289 tokens). Medido antes/depois: **30.104 chunks antes e depois**
+(nada se perde), **−3.380 rótulos de artigo falsos**, **+3.380 rótulos honestos**,
+**371 artigos grandes legítimos intocados**. Sem reindexação — vale na próxima
+passada de índice.
+
+*Registro histórico da entrada original:* O corte
 estrutural usa `^\s*Art\.\s*\d+` em MULTILINE. Em PDF de compêndio o "Art."
 seguinte frequentemente **não começa em início de linha**, e a fatia engole o
 resto do documento até o próximo match válido. Medido: `Art. 51.` do MT-NUC01
@@ -968,7 +1019,49 @@ de **maior contexto**. Ou seja: o provider degrada de forma reprodutível na mai
 entrada, e hoje isso só aparece se alguém estiver lendo o terminal na hora.
 **Origem:** re-run do baseline do chunking, 04/08 (#123).
 
-**PRÓXIMO LIVRE: 125.**
+**125. `gemini-2.5-flash` degrada de forma reprodutível na maior entrada.**
+Medido no baseline do chunking: na pergunta `defesa` — a de **maior contexto** —
+o modelo deu **2 timeouts** e o gateway caiu para `gpt-4.1-mini`. **Nas duas
+rodadas**, não uma vez. As outras quatro perguntas, de contexto menor, passaram
+(duas com 1 tentativa transitória, duas limpas).
+
+Não é ruído de laboratório: é **sinal operacional de produção**. O agente de
+legislação usa esse modelo e monta contexto RAG do mesmo tamanho — em produção
+isso aparece como latência alta, custo estranho e resposta de outro modelo, sem
+nome e sem alarme. Ninguém está olhando o terminal lá.
+
+Relação com a #124: enquanto tentativas e motivo do fallback não forem campos
+estruturados, essa degradação não é observável fora de uma medição manual.
+
+**Decisão: não mexer no timeout do gateway agora** (código de produção, fora do
+PR do chunking). Registrado, não executado. **Origem:** baseline do chunking,
+04/08.
+
+**126. O corpus contém documentos NÃO ARTICULADOS tratados como norma
+articulada.** Plano de manejo, plano territorial, anexo, formulário, coletânea,
+manual, parecer doutrinário e captura de página web entram pelo **mesmo caminho**
+de uma lei. O chunker então procura `Art. N` num texto que não tem artigos — e o
+que ele encontra são citações inline e cabeçalhos falsos.
+
+Exemplos medidos em 04/08: `MT-NUC01` (1 MB de sumário paginado + rodapé de
+captura + listas de diretrizes), `Plano de Manejo EE Pouso Alto` (228.152 tokens
+de prelúdio começando em *"GOIÂNIA, QUINTA-FEIRA, 23 DE JUNHO DE 2016 — DIÁRIO
+OFICIAL"*), `Manual SFB SICAR 2023`, `OJN 06/2009 PFE-IBAMA` (prosa numerada por
+parágrafo: *"102. José dos Santos Carvalho Filho apresenta…"*).
+
+**É questão de CLASSIFICAÇÃO na entrada, anterior ao chunking.** Um documento
+não articulado não deveria sequer tentar o corte por artigo; deveria declarar o
+que é e receber a estratégia adequada. A guarda da #117 trata o **sintoma** com
+honestidade — impede a etiqueta falsa — mas não decide o que o documento é.
+
+**Provável parentesco com a #121:** a coletânea que empresta a própria identidade
+ao texto que transcreve é a mesma família — documento cuja natureza (compilação,
+plano, manual) não é declarada e por isso é tratada como se fosse a norma.
+
+Registrado, **não resolvido agora**. **Origem:** Fase 1 da remediação do
+chunking, 04/08.
+
+**PRÓXIMO LIVRE: 127.**
 
 ---
 

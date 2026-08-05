@@ -160,6 +160,27 @@ vetorial não passa pelo LLM.
 O timeout reprodutível no maior contexto é sinal operacional, não ruído de
 laboratório: ver #124.
 
+## Previsões registradas ANTES de remediar
+
+Previsão feita depois do resultado não é previsão. Estas ficam gravadas no
+commit do baseline para poderem ser conferidas — e para poderem estar erradas.
+
+**1. A Fase 1 NÃO deve mover `compensacao_rl_go`.** Aquela pergunta tem **zero
+fragmentos** no top-8: o problema dela não é corte de dispositivo (#117), é
+**dispersão entre coletâneas** (#121). Se a Fase 1 mover essa pergunta, **não é
+para comemorar** — é sinal de que entendemos errado uma das duas dívidas, e a
+investigação vem antes de qualquer festejo.
+
+**2. `art71` é controle negativo, e reprova a fase sozinho.** Hoje: íntegro
+(1 chunk, 0 pedaços), recuperado inteiro, 0 fragmentos no top-8. O aceite da
+Fase 1 **inclui obrigatoriamente** que ele continue íntegro e continue
+recuperado. **Regressão nele reprova a fase, mesmo com ganho em todas as
+outras.**
+
+**3. Os dois alvos a bater.** O art. 18 do Decreto 6.514/2008 sai da **posição
+32 (0,6686)** e entra no top-8. O art. 61-A do Código Florestal deixa de vir em
+cacos — hoje **partido em 7**.
+
 ## Achados do levantamento (não entram na remediação em curso)
 
 Medidos ao construir este baseline, registrados em `docs/REGISTRO_DIVIDAS.md`:
