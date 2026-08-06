@@ -50,6 +50,23 @@ PERGUNTAS = {
         "Quais são os requisitos e o procedimento para retificação do "
         "Cadastro Ambiental Rural (CAR) de um imóvel rural em Goiás?"
     ),
+    # --- baseline do chunking (04/08) ------------------------------------
+    # Três perguntas novas, escolhidas pelo ESTADO ATUAL do alvo no índice:
+    # duas devem melhorar e uma NÃO PODE piorar. Experimento só com casos que
+    # devem melhorar não detecta regressão.
+    "art61a": (
+        "Quais são as condições, os prazos e as faixas de recomposição para "
+        "regularização de Área de Preservação Permanente consolidada em imóvel "
+        "rural, conforme o art. 61-A do Código Florestal?"
+    ),
+    "art71": (
+        "Qual é o rito e quais são os prazos do processo administrativo "
+        "federal para apuração de infração ambiental?"
+    ),
+    "compensacao_rl_go": (
+        "Quais são os requisitos e o procedimento para compensação de Reserva "
+        "Legal em Goiás?"
+    ),
 }
 PERGUNTA = PERGUNTAS["defesa"]  # compat com as medições já gravadas
 
@@ -72,7 +89,288 @@ Reserva Legal a reposicionar. Interessa o rito: quem analisa, que documentos
 instruem o pedido, qual a base normativa federal do SICAR e da retificação, e
 como isso se relaciona com o georreferenciamento e a certificação do imóvel."""
 
-CONTEXTOS = {"defesa": CONTEXTO_CASO, "car": CONTEXTO_CAR}
+CONTEXTO_ART61A = """Imóvel rural com ocupação anterior a 22/07/2008 em Área de Preservação
+Permanente ao longo de curso d'água. Interessa a regra de transição: largura da
+faixa a recompor conforme o tamanho do imóvel em módulos fiscais, prazos e
+condições para a continuidade da atividade."""
+
+CONTEXTO_ART71 = """Auto de infração ambiental lavrado por órgão federal. Interessa o rito do
+processo administrativo: prazos para defesa, para julgamento e para recurso,
+contados a partir de que marco."""
+
+CONTEXTO_COMPENSACAO_GO = """Imóvel rural em Goiás com déficit de Reserva Legal e intenção de compensar em
+vez de recompor. Interessa o rito estadual: modalidades admitidas, requisitos de
+equivalência ecológica e localização, documentos e quem analisa."""
+
+CONTEXTOS = {
+    "defesa": CONTEXTO_CASO,
+    "car": CONTEXTO_CAR,
+    "art61a": CONTEXTO_ART61A,
+    "art71": CONTEXTO_ART71,
+    "compensacao_rl_go": CONTEXTO_COMPENSACAO_GO,
+}
+
+# O escopo era CRAVADO no script: federal + uf=GO, sempre. A quinta pergunta é
+# ESTADUAL de Goiás — rodada no escopo federal ela mediria o corpus errado e
+# devolveria um número com cara de resposta. Escopo é atributo da pergunta.
+ESCOPO_FEDERAL = {"jurisdiction": ("federal", "nacional"), "uf": "GO"}
+ESCOPO_GO = {"jurisdiction": ("estadual",), "uf": "GO"}
+
+ESCOPOS = {
+    "defesa": ESCOPO_FEDERAL,
+    "car": ESCOPO_FEDERAL,
+    "art61a": ESCOPO_FEDERAL,
+    "art71": ESCOPO_FEDERAL,
+    "compensacao_rl_go": ESCOPO_GO,
+}
+
+# Alvo-CONJUNTO da pergunta estadual (adendo de 04/08).
+#
+# A compensação de Reserva Legal em GO não tem "a norma": está espalhada. O alvo
+# é o CONJUNTO, e cada item vem do identificador REAL gravado no catálogo —
+# nenhum inventado.
+#
+# O levantamento devolveu 8 linhas; entram 7. A oitava foi EXCLUÍDA e a razão
+# fica registrada: é `identifier IS NULL` (chunk 25771, "TERMO DE REFERÊNCIA —
+# COMPENSAÇÃO AMBIENTAL POR DOAÇÃO DE IMÓVEL EM UNIDADE DE CONSERVAÇÃO"), e
+# trata de **compensação ambiental do SNUC** — outro instituto, que só casou por
+# compartilhar a palavra "compensação". Mantê-la afrouxaria o aceite: a busca
+# poderia "passar" devolvendo documento de tema diferente.
+CONJUNTO_GO_COMPENSACAO_RL = [
+    "Coletânea Regularização Ambiental GO 2024",
+    "IN SEMAD 3/2025",
+    "Coletânea Licenciamento GO 2020+",
+    "Lei GO 21.231/2022",
+    "IN SEMAD-GO 01/2024",
+    "Portaria SEMAD-GO 501/2024",
+    "7841 - Y1.2",
+]
+
+
+def _pg_para_python(regex: str) -> str:
+    """`\\m`/`\\M` (fronteira de palavra do Postgres) → `\\b` do Python.
+
+    Converter só um dos lados deixa o outro estourar `bad escape \\M` na
+    compilação — foi o que aconteceu no primeiro dry-run.
+    """
+    return regex.replace(r"\m", r"\b").replace(r"\M", r"\b")
+
+
+def _regex_uniao(identificadores: list[str]) -> str:
+    """União ancorada dos identificadores literais.
+
+    Escapa cada um: "Coletânea Licenciamento GO 2020+" tem `+`, que sem escape
+    vira quantificador e muda o que casa. O dry-run confere que a união casa em
+    ≥1 chunk — é a guarda contra escape errado passar despercebido.
+    """
+    return "^(?:" + "|".join(re.escape(i) for i in identificadores) + ")$"
+
+
+# Alvo = o dispositivo (ou o conjunto de normas) que a resposta PRECISA conter.
+ALVOS: dict[str, dict[str, object] | None] = {
+    "defesa": {
+        "nome": "Decreto 6.514/2008, art. 18",
+        "identifier": r"\m6\.?514\M",
+        "dispositivo": r"art\.?\s*18\M",
+    },
+    # Sem alvo, COM a razão registrada: a norma procedural do CAR (IN MMA
+    # 2/2014) está no pacote federal ainda NÃO ingerido. Um alvo aqui mediria
+    # ausência de corpus e a debitaria do chunking — atribuiria a causa errada.
+    "car": {
+        "sem_alvo": True,
+        "motivo": (
+            "a norma procedural do CAR (IN MMA 2/2014) não está ingerida; alvo "
+            "hoje mediria ausência de corpus, não qualidade de chunking"
+        ),
+        "reavaliar_apos": "ingestao_normativas_federais",
+    },
+    # Hoje partido em 3+ pedaços (`Art. 61-A. (parte N)`): deve virar íntegro.
+    "art61a": {
+        "nome": "Lei 12.651/2012, art. 61-A",
+        "identifier": r"\m12\.?651\M",
+        "dispositivo": r"art\.?\s*61-A\M",
+    },
+    # CONTROLE NEGATIVO: hoje já está íntegro (180 tokens). Não pode piorar.
+    "art71": {
+        "nome": "Lei 9.605/1998, art. 71",
+        "identifier": r"\m9\.?605\M",
+        "dispositivo": r"art\.?\s*71\M",
+    },
+    # Alvo-conjunto: aceite = ≥1 chunk de QUALQUER norma do conjunto no top-k.
+    "compensacao_rl_go": {
+        "nome": "compensação de Reserva Legal em GO (conjunto de 7 normas)",
+        "conjunto": CONJUNTO_GO_COMPENSACAO_RL,
+        "identifier": _regex_uniao(CONJUNTO_GO_COMPENSACAO_RL),
+        "dispositivo": None,
+        "excluidos": [
+            {
+                "chunk_id": 25771,
+                "identifier": None,
+                "titulo": (
+                    "TERMO DE REFERÊNCIA — COMPENSAÇÃO AMBIENTAL POR DOAÇÃO DE "
+                    "IMÓVEL EM UNIDADE DE CONSERVAÇÃO"
+                ),
+                "razao": (
+                    "trata de compensação ambiental do SNUC — instituto diferente "
+                    "de compensação de Reserva Legal; casou apenas por compartilhar "
+                    "a palavra 'compensação'. Mantê-lo afrouxaria o aceite, que "
+                    "poderia passar devolvendo documento de outro tema"
+                ),
+            }
+        ],
+    },
+}
+
+# Marca que o chunker deixa quando parte um dispositivo ao meio.
+RE_FRAGMENTO = re.compile(r"\(parte\s*\d+\)", re.I)
+
+
+# --------------------------------------------------------------------------
+# Fingerprint do corpus — asserido, não só gravado
+# --------------------------------------------------------------------------
+# Hoje (04/08) o Docker caiu no meio da rodada. Medição sobre banco parcial não
+# falha: produz json plausível e mentiroso, com números menores que passariam
+# por "resultado". Daí duas travas: um PISO absoluto, e a igualdade do
+# fingerprint entre o início e o fim da rodada.
+#
+# O critério é IGUALDADE, não piso.
+#
+# Piso protege contra banco parcial (menos do que devia). Não protege contra
+# corpus POLUÍDO — mais do que devia. Foi o caso em 04/08: outro agente ingeriu
+# 11 documentos federais (+420 chunks) e o estado foi revertido. Um piso teria
+# deixado a medição correr sobre 31.718 e produzido um baseline que não se
+# compara com nada depois. Baseline e pós-remediação só se comparam sobre
+# fingerprints IGUAIS; portanto o portão é igualdade exata.
+ESTADO_ESPERADO = {
+    "total_chunks": 31_744,
+    "legislation_documents": 102,
+}
+ESTADO_FONTE = (
+    "PREVISÃO declarada ANTES da reindexação da Fase 4 (05/08), a partir do "
+    "dry-run com a régua REAL de tokens: 30.550 chunks de legislação + 1.194 de "
+    "outras fontes (norma_procedural 953, matriz_ipe 175, manual_ipe 48, "
+    "gabarito_laudo 15, other 3) = 31.744. Estado anterior, baseline 2e78917: "
+    "31.298/102. A primeira previsão desta fase (30.165) foi feita com a régua "
+    "de 4 chars/token, refutada no mesmo dia — ver a nota abaixo."
+)
+
+# POR QUE A PREVISÃO MUDOU DE 30.165 PARA 31.744
+#
+# A primeira previsão saiu de um dry-run que media tokens por `len//4`. Essa
+# régua subestimava (1,22x na mediana, 2,44x no máximo), então ela "cabia" mais
+# texto em cada chunk do que cabe de verdade — e previa MENOS chunks.
+#
+# Com a régua real (tiktoken, cl100k_base — a mesma do modelo que embarca), o
+# mesmo corpus rende 30.550 chunks de legislação em vez de 28.971. A diferença
+# de +1.579 é consequência ESPERADA da troca de régua, não achado.
+#
+# O corpus antigo tinha 30.104 chunks de legislação. O saldo (+446) é pequeno
+# porque duas forças se cancelam: o teto do artigo (#118) junta pedaços, e a
+# régua honesta separa o que só cabia junto no papel.
+
+# O portão é PREVISÃO, não espelho.
+#
+# O valor acima foi escrito e commitado ANTES de executar a reindexação, a
+# partir do dry-run. Preenchê-lo com o número observado DEPOIS faria o portão
+# confirmar qualquer resultado, inclusive um errado — ele deixaria de medir e
+# passaria a refletir.
+#
+# Bater = previsão confirmada. Não bater = ACHADO: reportar e parar, nunca
+# ajustar a constante para caber no observado.
+
+
+class CorpusInvalido(RuntimeError):
+    """Banco não está no estado que a medição exige. Nenhum json é produzido."""
+
+
+def _fingerprint(session) -> dict:
+    from sqlalchemy import text as _sql
+
+    from app.core.config import settings as _s
+    from app.services import embeddings as _emb
+
+    total = int(session.execute(_sql("SELECT count(*) FROM knowledge_catalog")).scalar() or 0)
+    docs = int(
+        session.execute(_sql("SELECT count(*) FROM legislation_documents")).scalar() or 0
+    )
+    por_jur = {
+        r.j: int(r.n)
+        for r in session.execute(
+            _sql(
+                "SELECT coalesce(jurisdiction,'?') j, count(*) n "
+                "FROM knowledge_catalog GROUP BY 1 ORDER BY 1"
+            )
+        ).all()
+    }
+    espacos = [
+        {"modelo": r.m, "dim": r.d, "chunks": int(r.n)}
+        for r in session.execute(
+            _sql(
+                "SELECT coalesce(embedding_model,'?') m, embedding_dim d, count(*) n "
+                "FROM knowledge_catalog GROUP BY 1,2 ORDER BY 1,2"
+            )
+        ).all()
+    ]
+    return {
+        "total_chunks": total,
+        "legislation_documents": docs,
+        "por_jurisdicao": por_jur,
+        # provider/modelo efetivos vêm da trava do ADR-040 (#135) — não de
+        # suposição sobre qual chave está no ambiente.
+        "embedding_provider": _emb._select_provider(),
+        "embedding_model": _emb.current_model(),
+        "espacos_no_indice": espacos,
+        "banco": f"{_s.POSTGRES_SERVER}:{_s.POSTGRES_PORT}/{_s.POSTGRES_DB}",
+        "ivfflat_probes": getattr(_s, "RAG_IVFFLAT_PROBES", None),
+    }
+
+
+def _conferir_estado(fp: dict) -> list[str]:
+    """Divergências entre o corpus medido e o estado esperado (lista vazia = ok)."""
+    return [
+        f"{campo}: encontrado {fp.get(campo)}, esperado {esperado}"
+        for campo, esperado in ESTADO_ESPERADO.items()
+        if fp.get(campo) != esperado
+    ]
+
+
+def _exigir_estado(fp: dict, *, somente_leitura: bool) -> None:
+    """Portão de igualdade.
+
+    Dry-run (`--sem-llm`) é só leitura e não produz baseline: avisa e segue,
+    porque é justamente a rodada usada para inspecionar um corpus fora do
+    estado. Medição completa RECUSA — um baseline medido sobre corpus poluído
+    não é comparável com nada, e o defeito só apareceria meses depois, na
+    comparação que deveria provar o ganho.
+    """
+    divergencias = _conferir_estado(fp)
+    if not divergencias:
+        return
+    detalhe = "; ".join(divergencias)
+    if somente_leitura:
+        logger.warning(
+            "corpus FORA do estado esperado (%s) — %s. Rodada é só leitura; "
+            "nenhum baseline será produzido.",
+            ESTADO_FONTE,
+            detalhe,
+        )
+        return
+    raise CorpusInvalido(
+        f"corpus fora do estado esperado ({ESTADO_FONTE}): {detalhe}. "
+        "Medição completa recusada — nenhum json foi gravado."
+    )
+
+
+def _exigir_estabilidade(inicio: dict, fim: dict) -> None:
+    if inicio != fim:
+        divergentes = sorted(
+            k for k in set(inicio) | set(fim) if inicio.get(k) != fim.get(k)
+        )
+        raise CorpusInvalido(
+            "o corpus MUDOU durante a rodada — medição inválida, json descartado. "
+            f"Campos divergentes: {divergentes}. "
+            f"início={inicio} fim={fim}"
+        )
 
 SYSTEM = """\
 Você é um consultor ambiental sênior. Fundamente juridicamente a defesa
@@ -145,6 +443,81 @@ def _mencoes_de_terceiros(session, regex: str) -> int:
     return int(row or 0)
 
 
+def _rastrear_alvo(session, consulta, escopo, ident_py, disp_py, top_k, limite=200):
+    """Onde o alvo ficou no ranking, quando não entrou no top-k.
+
+    Alvo que EXISTE no corpus e não é recuperado é falha de RECUPERAÇÃO — não
+    ausência de corpus. As duas se parecem no resultado final (o agente não cita
+    a norma) e têm causas opostas: uma se resolve ingerindo, a outra mexendo em
+    chunking/índice. Sem esta medição, a primeira leva a culpa da segunda.
+
+    Reusa `search()` com limite maior em vez de refazer a consulta em SQL: mesmo
+    caminho de código, mesmos filtros, números comparáveis com o top-k por
+    construção.
+    """
+    from app.services.knowledge_catalog import search as _search
+
+    amplo = _search(
+        session,
+        consulta,
+        limit=limite,
+        source_type="legislation",
+        jurisdiction=escopo["jurisdiction"],
+        uf=escopo["uf"],
+        tenant_id=None,
+        min_similarity=0.0,
+    )
+    achados = [
+        {
+            "id": c.id,
+            "identifier": c.identifier,
+            "section": c.section,
+            "posicao_no_ranking": i,
+            "similarity": round(c.similarity, 4),
+            "entrou_no_top_k": i <= top_k,
+        }
+        for i, c in enumerate(amplo, 1)
+        if ident_py.search(c.identifier or "") and disp_py.search(c.chunk_text or "")
+    ]
+    return {
+        "limite_rastreado": limite,
+        "posicoes": achados,
+        "fora_do_ranking_rastreado": not achados,
+    }
+
+
+class _EscutaGateway(logging.Handler):
+    """Captura os avisos do `ai_gateway` durante a chamada.
+
+    `AIResponse` expõe `model_used`, `provider`, `duration_ms` e `finish_reason`
+    — **não** expõe número de tentativas nem motivo do fallback. Em vez de
+    inventar campo que não existe (ou pior, deduzir), escuto quem tem o dado: o
+    próprio gateway, que já loga cada tentativa transitória e cada fallback.
+
+    Timeout recorrente num modelo é sinal OPERACIONAL. Sem isto ele morre no
+    terminal e o baseline registra só o resultado, como se tivesse saído liso.
+    """
+
+    def __init__(self):
+        super().__init__(level=logging.WARNING)
+        self.transientes: list[str] = []
+        self.fallbacks: list[str] = []
+
+    def emit(self, record):
+        msg = record.getMessage()
+        if "transient error" in msg:
+            self.transientes.append(msg)
+        elif "fallback" in msg:
+            self.fallbacks.append(msg)
+
+    def resumo(self) -> dict:
+        return {
+            "tentativas_transitorias": len(self.transientes),
+            "fallbacks_acionados": len(self.fallbacks),
+            "avisos": self.transientes + self.fallbacks,
+        }
+
+
 def _formatar_trechos(chunks: list) -> str:
     """Mesma formatação do `LegislacaoAgent._format_rag_context`."""
     if not chunks:
@@ -188,6 +561,10 @@ def main() -> int:
 
     session = SessionLocal()
     try:
+        # --- fingerprint de ABERTURA (piso obrigatório) ----------------------
+        fp_inicio = _fingerprint(session)
+        _exigir_estado(fp_inicio, somente_leitura=args.sem_llm)
+
         # --- estado do corpus (o que muda entre as rodadas) -------------------
         from sqlalchemy import text as _sql
 
@@ -203,13 +580,14 @@ def main() -> int:
 
         # --- recuperação: esfera FEDERAL, exatamente como o ADR-034 escopa ----
         consulta = f"{pergunta}\n\n{contexto}"
+        escopo = ESCOPOS[args.pergunta]
         chunks = search(
             session,
             consulta,
             limit=top_k,
             source_type="legislation",
-            jurisdiction=("federal", "nacional"),
-            uf="GO",
+            jurisdiction=escopo["jurisdiction"],
+            uf=escopo["uf"],
             tenant_id=None,
             min_similarity=0.0,
         )
@@ -241,6 +619,108 @@ def main() -> int:
                 ),
             }
 
+        # --- fragmentação: a métrica ESTRUTURAL do chunking -------------------
+        # Universal (vale para as 5 perguntas): dos trechos que voltaram, quantos
+        # são pedaço de um dispositivo partido ao meio? É o número que a
+        # remediação do chunking (#117/#118/#119) precisa derrubar.
+        fragmentos_no_topo = sum(1 for c in chunks if RE_FRAGMENTO.search(c.section or ""))
+        fragmentacao = {
+            "trechos_recuperados": len(chunks),
+            "sao_pedaco_de_dispositivo": fragmentos_no_topo,
+            "identificadores_distintos": len({c.identifier for c in chunks if c.identifier}),
+        }
+
+        # Alvo: o dispositivo que a resposta precisa conter, quando há um.
+        alvo_spec = ALVOS.get(args.pergunta)
+        alvo = None
+        if alvo_spec and alvo_spec.get("sem_alvo"):
+            alvo = dict(alvo_spec)
+        elif alvo_spec and alvo_spec.get("conjunto"):
+            # Alvo-CONJUNTO: aceite = ≥1 chunk de qualquer norma do conjunto.
+            uniao = alvo_spec["identifier"]
+            no_corpus = session.execute(
+                _sql(
+                    "SELECT count(*) FROM knowledge_catalog "
+                    "WHERE coalesce(identifier,'') ~ :re"
+                ),
+                {"re": uniao},
+            ).scalar()
+            membros = set(alvo_spec["conjunto"])
+            presentes = [
+                {
+                    "identifier": c.identifier,
+                    "posicao": i,
+                    "similarity": round(c.similarity, 4),
+                    "section": c.section,
+                    "fragmento": bool(RE_FRAGMENTO.search(c.section or "")),
+                }
+                for i, c in enumerate(chunks, 1)
+                if (c.identifier or "") in membros
+            ]
+            alvo = {
+                "nome": alvo_spec["nome"],
+                "conjunto": alvo_spec["conjunto"],
+                "regex_uniao": uniao,
+                "excluidos": alvo_spec.get("excluidos", []),
+                "chunks_no_corpus": int(no_corpus or 0),
+                "membros_recuperados": presentes,
+                "aceite_atendido": bool(presentes),
+            }
+        elif alvo_spec:
+            no_corpus = session.execute(
+                _sql(
+                    """
+                    SELECT count(*) FROM knowledge_catalog
+                    WHERE coalesce(identifier,'') ~* :ident AND chunk_text ~* :disp
+                    """
+                ),
+                {"ident": alvo_spec["identifier"], "disp": alvo_spec["dispositivo"]},
+            ).scalar()
+            # Em quantos pedaços o alvo está partido HOJE (section com "(parte N)").
+            partido_em = session.execute(
+                _sql(
+                    """
+                    SELECT count(*) FROM knowledge_catalog
+                    WHERE coalesce(identifier,'') ~* :ident
+                      AND coalesce(section,'') ~* :disp
+                      AND coalesce(section,'') ~* '\\(parte'
+                    """
+                ),
+                {"ident": alvo_spec["identifier"], "disp": alvo_spec["dispositivo"]},
+            ).scalar()
+            _ident_py = re.compile(_pg_para_python(alvo_spec["identifier"]), re.I)
+            _disp_py = re.compile(_pg_para_python(alvo_spec["dispositivo"]), re.I)
+            recuperados_do_alvo = [
+                c for c in chunks
+                if _ident_py.search(c.identifier or "") and _disp_py.search(c.chunk_text or "")
+            ]
+            existe = int(no_corpus or 0) > 0
+            recuperado = bool(recuperados_do_alvo)
+            # A classificação separa duas causas opostas que produzem o mesmo
+            # sintoma (o agente não cita a norma).
+            if recuperado:
+                classificacao = "recuperado"
+            elif existe:
+                classificacao = "falha_de_recuperacao"
+            else:
+                classificacao = "ausencia_de_corpus"
+            alvo = {
+                "nome": alvo_spec["nome"],
+                "chunks_no_corpus": int(no_corpus or 0),
+                "partido_em_pedacos": int(partido_em or 0),
+                "recuperado_nesta_busca": recuperado,
+                "recuperado_como_fragmento": any(
+                    RE_FRAGMENTO.search(c.section or "") for c in recuperados_do_alvo
+                ),
+                "classificacao": classificacao,
+            }
+            if classificacao == "falha_de_recuperacao":
+                # Existe no corpus e ficou de fora: onde ficou, e com que
+                # similaridade. É a evidência que a remediação precisa reverter.
+                alvo["rastreamento"] = _rastrear_alvo(
+                    session, consulta, escopo, _ident_py, _disp_py, top_k
+                )
+
         # --- o teste específico do art. 18, §1º do 6.514 ----------------------
         # Identidade 6.514 + o dispositivo (art. 18) — não "art" solto perto de "18".
         _RE_6514 = r"\m6\.?514\M"
@@ -266,7 +746,21 @@ def main() -> int:
             "perfil_pergunta": args.pergunta,
             "modelo": modelo,
             "top_k": top_k,
-            "escopo": "jurisdiction IN ('federal','nacional') + uf=GO (ADR-034)",
+            "escopo": (
+                f"jurisdiction IN {escopo['jurisdiction']} + uf={escopo['uf']} (ADR-034)"
+            ),
+            "fragmentacao": fragmentacao,
+            "alvo": alvo,
+            "fingerprint_inicio": fp_inicio,
+            # Marcação explícita: rodada de validação do instrumento NÃO é
+            # baseline e nenhum número dela entra na comparação antes/depois.
+            "baseline": not args.sem_llm and not _conferir_estado(fp_inicio),
+            "corpus_estado": "esperado" if not _conferir_estado(fp_inicio) else "poluido",
+            "estado_esperado": {
+                "exigido": ESTADO_ESPERADO,
+                "fonte": ESTADO_FONTE,
+                "divergencias": _conferir_estado(fp_inicio),
+            },
             "estado_corpus": estado_corpus,
             "chunks_recuperados": recuperados,
             "cobertura_nominal": cobertura,
@@ -286,14 +780,47 @@ def main() -> int:
                 f"PERGUNTA: {pergunta}\n\n"
                 f"TRECHOS LEGISLATIVOS RECUPERADOS DO CORPUS:\n{trechos}"
             )
-            resp = complete(
-                user,
-                system=SYSTEM,
-                model=modelo,
-                temperature=0.0,
-                max_tokens=settings.CLAUDE_LEGAL_MAX_TOKENS,
-                max_cost_override_usd=settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO,
-                agent_name="legislacao",
+            escuta = _EscutaGateway()
+            log_gateway = logging.getLogger("app.core.ai_gateway")
+            log_gateway.addHandler(escuta)
+            try:
+                resp = complete(
+                    user,
+                    system=SYSTEM,
+                    model=modelo,
+                    temperature=0.0,
+                    max_tokens=settings.CLAUDE_LEGAL_MAX_TOKENS,
+                    max_cost_override_usd=settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO,
+                    agent_name="legislacao",
+                )
+            finally:
+                log_gateway.removeHandler(escuta)
+            resultado["gateway"] = escuta.resumo()
+            resultado["provider_efetivo"] = getattr(resp, "provider", None)
+            resultado["duracao_ms"] = getattr(resp, "duration_ms", None)
+            # "length" = resposta TRUNCADA por teto de saída. Sem este campo, uma
+            # fundamentação cortada no meio passa por resposta completa.
+            resultado["finish_reason"] = getattr(resp, "finish_reason", None)
+            # Resposta cortada não entra no baseline como resposta completa —
+            # já custou uma investigação inteira de truncamento (tokens_out
+            # travado abaixo do teto). O rótulo fica no dado, não no report.
+            resultado["fundamentacao_truncada"] = (
+                getattr(resp, "finish_reason", "") == "length"
+            )
+            if resultado["fundamentacao_truncada"]:
+                logger.error(
+                    "fundamentação TRUNCADA em %s (finish_reason=length) — "
+                    "resposta incompleta, não usar como baseline",
+                    args.pergunta,
+                )
+            # O modelo PEDIDO não é necessariamente o que respondeu: o gateway
+            # tem cadeia de fallback e, num timeout, outro modelo assume. Gravar
+            # só o pedido produz artefato que AFIRMA um modelo que não rodou —
+            # e o A/B "com o mesmo modelo" passa a ser falso sem avisar.
+            # Aconteceu na 1ª rodada deste baseline (a `defesa` caiu em fallback).
+            resultado["modelo_efetivo"] = getattr(resp, "model_used", None)
+            resultado["modelo_efetivo_igual_ao_pedido"] = (
+                getattr(resp, "model_used", None) == modelo
             )
             resultado["resposta"] = resp.content
             resultado["custo_usd"] = getattr(resp, "cost_usd", None)
@@ -301,6 +828,13 @@ def main() -> int:
                 "in": getattr(resp, "tokens_in", None),
                 "out": getattr(resp, "tokens_out", None),
             }
+
+        # --- fingerprint de FECHAMENTO ---------------------------------------
+        # Só agora o json pode ser escrito: se o banco mudou no meio (caiu,
+        # subiu parcial, alguém ingeriu), a rodada é inválida e não vira arquivo.
+        fp_fim = _fingerprint(session)
+        _exigir_estabilidade(fp_inicio, fp_fim)
+        resultado["fingerprint_fim"] = fp_fim
 
         args.out_dir.mkdir(parents=True, exist_ok=True)
         # Rodada sem LLM grava em arquivo PRÓPRIO: ela não tem `resposta` e

@@ -1,0 +1,223 @@
+{
+  "rotulo": "baseline_chunking_art71",
+  "pergunta": "Qual é o rito e quais são os prazos do processo administrativo federal para apuração de infração ambiental?",
+  "perfil_pergunta": "art71",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal', 'nacional') + uf=GO (ADR-034)",
+  "fragmentacao": {
+    "trechos_recuperados": 8,
+    "sao_pedaco_de_dispositivo": 0,
+    "identificadores_distintos": 4
+  },
+  "alvo": {
+    "nome": "Lei 9.605/1998, art. 71",
+    "chunks_no_corpus": 1,
+    "partido_em_pedacos": 0,
+    "recuperado_nesta_busca": true,
+    "recuperado_como_fragmento": false,
+    "classificacao": "recuperado"
+  },
+  "fingerprint_inicio": {
+    "total_chunks": 31298,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28106,
+      "federal": 3168,
+      "nacional": 24
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31298
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  },
+  "baseline": true,
+  "corpus_estado": "esperado",
+  "estado_esperado": {
+    "exigido": {
+      "total_chunks": 31298,
+      "legislation_documents": 102
+    },
+    "fonte": "ADR-040 (medição de 03/08) + estado pós-revert da ingestão de outro agente (04/08)",
+    "divergencias": []
+  },
+  "estado_corpus": {
+    "estadual": 28106,
+    "federal": 3168,
+    "nacional": 24
+  },
+  "chunks_recuperados": [
+    {
+      "id": 35323,
+      "identifier": "Lei 9.605/1998",
+      "title": "Lei de Crimes Ambientais (Lei 9.605/1998)",
+      "section": "Art. 71. O processo administrativo para apuração de infração ambiental deve observar",
+      "jurisdiction": "federal",
+      "similarity": 0.7974,
+      "chars": 723
+    },
+    {
+      "id": 34489,
+      "identifier": "Decreto 6.514/2008",
+      "title": "Infrações e sanções administrativas ao meio ambiente (Decreto 6.514/2008)",
+      "section": "Art. 124. Oferecida ou não a defesa, a autoridade julgadora, no prazo de trinta",
+      "jurisdiction": "federal",
+      "similarity": 0.7441,
+      "chars": 659
+    },
+    {
+      "id": 35075,
+      "identifier": "IN IBAMA 19/2023",
+      "title": "Processo administrativo de apuração de infrações ambientais no IBAMA (IN IBAMA 19/2023)",
+      "section": "Art. 108. A autoridade competente julgará o auto de infração ambiental e as medidas cautelares.",
+      "jurisdiction": "federal",
+      "similarity": 0.7423,
+      "chars": 515
+    },
+    {
+      "id": 35322,
+      "identifier": "Lei 9.605/1998",
+      "title": "Lei de Crimes Ambientais (Lei 9.605/1998)",
+      "section": "Art. 70. Considera-se infração administrativa ambiental toda ação ou omissão que",
+      "jurisdiction": "federal",
+      "similarity": 0.7331,
+      "chars": 1061
+    },
+    {
+      "id": 35050,
+      "identifier": "IN IBAMA 19/2023",
+      "title": "Processo administrativo de apuração de infrações ambientais no IBAMA (IN IBAMA 19/2023)",
+      "section": "Art. 83. Constatada a ocorrência de infração ambiental, o agente ambiental federal designado para a ação fiscalizatória",
+      "jurisdiction": "federal",
+      "similarity": 0.727,
+      "chars": 289
+    },
+    {
+      "id": 36085,
+      "identifier": "IN ICMBio 9/2023",
+      "title": "Apuração de infrações administrativas ambientais no ICMBio (compilada com a IN 13/2026)",
+      "section": "Art. 17. Constatando a ocorrência de infração administrativa ambiental, o agente ambiental federal designado para ativid",
+      "jurisdiction": "federal",
+      "similarity": 0.7234,
+      "chars": 1074
+    },
+    {
+      "id": 34436,
+      "identifier": "Decreto 6.514/2008",
+      "title": "Infrações e sanções administrativas ao meio ambiente (Decreto 6.514/2008)",
+      "section": "Art. 97-A.",
+      "jurisdiction": "federal",
+      "similarity": 0.715,
+      "chars": 737
+    },
+    {
+      "id": 34434,
+      "identifier": "Decreto 6.514/2008",
+      "title": "Infrações e sanções administrativas ao meio ambiente (Decreto 6.514/2008)",
+      "section": "Art. 96. Constatada a ocorrência de infração administrativa ambiental, será",
+      "jurisdiction": "federal",
+      "similarity": 0.7039,
+      "chars": 4324
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 272,
+      "chunks_por_mencao_de_terceiros": 174,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 70,
+      "chunks_por_mencao_de_terceiros": 7,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 65,
+      "chunks_por_mencao_de_terceiros": 91,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 44,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 94,
+      "chunks_por_mencao_de_terceiros": 125,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 134,
+      "chunks_por_mencao_de_terceiros": 1142,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 144,
+      "chunks_por_mencao_de_terceiros": 26,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 13,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 10,
+      "chunks_por_mencao_de_terceiros": 36,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "gateway": {
+    "tentativas_transitorias": 0,
+    "fallbacks_acionados": 0,
+    "avisos": []
+  },
+  "provider_efetivo": "gemini",
+  "duracao_ms": 26139,
+  "finish_reason": "stop",
+  "fundamentacao_truncada": false,
+  "modelo_efetivo": "gemini/gemini-2.5-flash",
+  "modelo_efetivo_igual_ao_pedido": true,
+  "resposta": "Prezado(a) consulente,\n\nA defesa administrativa de um auto de infração ambiental lavrado por órgão federal deve observar o rito e os prazos estabelecidos principalmente pela Lei nº 9.605/1998 (Lei de Crimes Ambientais) e pelo Decreto nº 6.514/2008 (que regulamenta a Lei nº 9.605/1998 no que tange às infrações e sanções administrativas), complementados por normas específicas de cada órgão, como a Instrução Normativa IBAMA nº 19/2023.\n\nA seguir, detalho o rito e os prazos aplicáveis, com a fundamentação jurídica extraída dos trechos fornecidos:\n\n---\n\n### Rito e Prazos do Processo Administrativo Federal para Apuração de Infração Ambiental\n\n**1. Lavratura do Auto de Infração e Instauração do Processo**\n\n*   **Competência e Obrigação:** A Lei nº 9.605/1998 estabelece que são autoridades competentes para lavrar auto de infração ambiental e instaurar processo administrativo os funcionários de órgãos ambientais integrantes do Sistema Nacional de Meio Ambiente (SISNAMA), designados para fiscalização, bem como agentes das Capitanias dos Portos (Art. 70, § 1º). A autoridade ambiental que tiver conhecimento de infração é obrigada a promover sua apuração imediata, sob pena de corresponsabilidade (Art. 70, § 3º).\n*   **Formalização:** Constatada a infração, o agente ambiental federal lavrará o auto de infração ambiental e termos próprios, indicando as sanções e formalizando medidas administrativas cautelares (Art. 83 da IN IBAMA nº 19/2023; Art. 17 da IN ICMBio nº 9/2023). O processo administrativo deve assegurar o direito de ampla defesa e o contraditório (Art. 70, § 4º da Lei nº 9.605/1998; Art. 96 do Decreto nº 6.514/2008).\n*   **Notificação do Autuado:** O autuado será notificado da lavratura do auto de infração, podendo a intimação ocorrer pessoalmente, por representante legal, por carta registrada com aviso de recebimento, por edital (se em lugar incerto ou não sabido), ou por intimação eletrônica (Art. 96, § 1º, § 2º e § 4º do Decreto nº 6.514/2008, com a redação dada pelo Decreto nº 12.189, de 2024).\n\n**2. Prazo para Defesa ou Impugnação**\n\n*   **Prazo Geral:** O infrator terá o prazo máximo de **vinte dias** para oferecer defesa ou impugnação contra o auto de infração, contados da data da ciência da autuação (Art. 71, I da Lei nº 9.605/1998). O Decreto nº 6.514/2008, em seu Art. 96, § 5º, I (com a redação dada pelo Decreto nº 11.373, de 2023), reitera que o autuado poderá apresentar defesa ou impugnação nesse prazo, contado da data da cientificação.\n*   **Audiência de Conciliação Ambiental:** Por ocasião da lavratura do auto de infração, o autuado será notificado para, querendo, comparecer a uma audiência de conciliação ambiental (Art. 97-A do Decreto nº 6.514/2008, incluído pelo Decreto nº 9.760, de 2019).\n    *   **Sobrestamento do Prazo:** O agendamento da audiência de conciliação ambiental sobresta a fluência do prazo para defesa, e o curso desse prazo se iniciará a contar da data de sua realização (Art. 97-A, § 1º do Decreto nº 6.514/2008).\n    *   **Alternativas à Defesa:** No prazo de vinte dias, contado da cientificação, o autuado também poderá aderir a uma das soluções legais para o encerramento do processo, como pagamento da multa com desconto, parcelamento da multa ou conversão da multa em serviços de preservação, melhoria e recuperação da qualidade do meio ambiente (Art. 96, § 5º, II do Decreto nº 6.514/2008, com a redação dada pelo Decreto nº 11.373, de 2023). O inciso III do § 5º do Art. 96 do Decreto nº 6.514/2008, que previa a adesão imediata a soluções legais, foi **REVOGADO pelo Decreto nº 11.373, de 2023**.\n\n**3. Prazo para Julgamento**\n\n*   **Prazo e Marco Inicial (Lei):** A Lei nº 9.605/1998 estabelece o prazo máximo de **trinta dias** para a autoridade competente julgar o auto de infração, contados da data da sua lavratura, apresentada ou não a defesa ou impugnação (Art. 71, II).\n*   **Prazo e Marco Inicial (Decreto):** O Decreto nº 6.514/2008, em seu Art. 124, também prevê o prazo de **trinta dias** para a autoridade julgadora julgar o auto de infração, decidindo sobre a aplicação das penalidades, oferecida ou não a defesa. Embora não especifique o marco inicial de forma idêntica à Lei, a expressão \"Oferecida ou não a defesa\" sugere que o prazo se inicia após a fase de defesa.\n*   **Prazo e Marco Inicial (IN IBAMA):** A IN IBAMA nº 19/2023, em seu Art. 108, § 1º, dispõe que a autoridade julgadora emitirá sua decisão no prazo de **trinta dias**, contados do recebimento do processo. Esta interpretação é mais alinhada com a prática administrativa, considerando o processo \"concluso para julgamento\".\n*   **Efeito da Inobservância do Prazo:** A inobservância do prazo para julgamento **não torna nula** a decisão da autoridade julgadora e o processo (Art. 124, § 2º do Decreto nº 6.514/2008; Art. 108, § 3º da IN IBAMA nº 19/2023).\n\n**4. Prazo para Recurso**\n\n*   **Prazo:** O infrator terá o prazo máximo de **vinte dias** para recorrer da decisão condenatória à instância superior do Sistema Nacional do Meio Ambiente (SISNAMA), ou à Diretoria de Portos e Costas, do Ministério da Marinha, de acordo com o tipo de autuação (Art. 71, III da Lei nº 9.605/1998).\n*   **Marco Inicial:** O prazo é contado da decisão condenatória.\n*   **Falta de Base Normativa Complementar:** Os trechos legislativos fornecidos não contêm dispositivos específicos do Decreto nº 6.514/2008 ou da IN IBAMA nº 19/2023 que detalhem ou alterem o prazo e o marco inicial para recurso, mantendo-se, portanto, o disposto na Lei nº 9.605/1998.\n\n**5. Prazo para Pagamento de Multa**\n\n*   **Prazo:** O prazo para o pagamento de multa é de **cinco dias**, contados da data do recebimento da notificação (Art. 71, IV da Lei nº 9.605/1998).\n*   **Falta de Base Normativa Complementar:** Os trechos legislativos fornecidos não contêm dispositivos específicos do Decreto nº 6.514/2008 ou da IN IBAMA nº 19/2023 que detalhem ou alterem o prazo e o marco inicial para pagamento da multa, mantendo-se, portanto, o disposto na Lei nº 9.605/1998.\n\n---\n\nEm resumo, o processo administrativo federal para apuração de infração ambiental é regido por prazos bem definidos, com a possibilidade de conciliação e alternativas à defesa, e com a garantia de ampla defesa e contraditório em todas as fases.",
+  "custo_usd": 0.015177900000000001,
+  "tokens": {
+    "in": 3593,
+    "out": 5640
+  },
+  "fingerprint_fim": {
+    "total_chunks": 31298,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28106,
+      "federal": 3168,
+      "nacional": 24
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31298
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  }
+}

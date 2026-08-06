@@ -1,0 +1,241 @@
+{
+  "rotulo": "posfase4_defesa",
+  "pergunta": "Fundamente a defesa administrativa do auto de infração 484341/D (IBAMA, 2007, Fazenda São Jorge)",
+  "perfil_pergunta": "defesa",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal', 'nacional') + uf=GO (ADR-034)",
+  "fragmentacao": {
+    "trechos_recuperados": 8,
+    "sao_pedaco_de_dispositivo": 6,
+    "identificadores_distintos": 3
+  },
+  "alvo": {
+    "nome": "Decreto 6.514/2008, art. 18",
+    "chunks_no_corpus": 2,
+    "partido_em_pedacos": 0,
+    "recuperado_nesta_busca": false,
+    "recuperado_como_fragmento": false,
+    "classificacao": "falha_de_recuperacao",
+    "rastreamento": {
+      "limite_rastreado": 200,
+      "posicoes": [
+        {
+          "id": 91944,
+          "identifier": "Decreto 6.514/2008",
+          "section": "Art. 18. O descumprimento total ou parcial de",
+          "posicao_no_ranking": 37,
+          "similarity": 0.6687,
+          "entrou_no_top_k": false
+        }
+      ],
+      "fora_do_ranking_rastreado": false
+    }
+  },
+  "fingerprint_inicio": {
+    "total_chunks": 31744,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28658,
+      "federal": 3054,
+      "nacional": 32
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31744
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  },
+  "baseline": true,
+  "corpus_estado": "esperado",
+  "estado_esperado": {
+    "exigido": {
+      "total_chunks": 31744,
+      "legislation_documents": 102
+    },
+    "fonte": "PREVISÃO declarada ANTES da reindexação da Fase 4 (05/08), a partir do dry-run com a régua REAL de tokens: 30.550 chunks de legislação + 1.194 de outras fontes (norma_procedural 953, matriz_ipe 175, manual_ipe 48, gabarito_laudo 15, other 3) = 31.744. Estado anterior, baseline 2e78917: 31.298/102. A primeira previsão desta fase (30.165) foi feita com a régua de 4 chars/token, refutada no mesmo dia — ver a nota abaixo.",
+    "divergencias": []
+  },
+  "estado_corpus": {
+    "estadual": 28658,
+    "federal": 3054,
+    "nacional": 32
+  },
+  "chunks_recuperados": [
+    {
+      "id": 93291,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "ADVOCACIA-GERAL DA UNIÃO (parte 13)",
+      "jurisdiction": "federal",
+      "similarity": 0.7495,
+      "chars": 2542
+    },
+    {
+      "id": 93310,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "[trecho nao articulado] (parte 1)",
+      "jurisdiction": "federal",
+      "similarity": 0.737,
+      "chars": 2451
+    },
+    {
+      "id": 93314,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "[trecho nao articulado] (parte 5)",
+      "jurisdiction": "federal",
+      "similarity": 0.7351,
+      "chars": 2565
+    },
+    {
+      "id": 93279,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "ADVOCACIA-GERAL DA UNIÃO (parte 1)",
+      "jurisdiction": "federal",
+      "similarity": 0.7255,
+      "chars": 1937
+    },
+    {
+      "id": 92393,
+      "identifier": "IN IBAMA 10/2012",
+      "title": "Apuração de infrações ambientais no IBAMA (IN IBAMA 10/2012) [NORMA HISTÓRICA — revogada em 29/01/2020, sucedida por IN Conjunta MMA/IBAMA/ICMBio 02/2020 (rito atual: IN IBAMA 19/2023). Aplicável a fatos anteriores a 29/01/2020 (tempus regit actum); NÃO citar como norma vigente]",
+      "section": "Instrução Normativa IBAMA Nº 10 DE 07/12/2012",
+      "jurisdiction": "federal",
+      "similarity": 0.7124,
+      "chars": 1637
+    },
+    {
+      "id": 93312,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "[trecho nao articulado] (parte 3)",
+      "jurisdiction": "federal",
+      "similarity": 0.7055,
+      "chars": 2507
+    },
+    {
+      "id": 91989,
+      "identifier": "Decreto 6.514/2008",
+      "title": "Infrações e sanções administrativas ao meio ambiente (Decreto 6.514/2008)",
+      "section": "Art. 55.",
+      "jurisdiction": "federal",
+      "similarity": 0.7037,
+      "chars": 2905
+    },
+    {
+      "id": 93306,
+      "identifier": "OJN 06/2009 PFE-IBAMA",
+      "title": "Orientação Jurídica Normativa 06/2009 da PFE-IBAMA — revista e ampliada em 2025",
+      "section": "ADVOCACIA-GERAL DA UNIÃO (parte 28)",
+      "jurisdiction": "federal",
+      "similarity": 0.7025,
+      "chars": 2754
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 266,
+      "chunks_por_mencao_de_terceiros": 174,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 68,
+      "chunks_por_mencao_de_terceiros": 7,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 63,
+      "chunks_por_mencao_de_terceiros": 97,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 39,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 94,
+      "chunks_por_mencao_de_terceiros": 122,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 119,
+      "chunks_por_mencao_de_terceiros": 1116,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 140,
+      "chunks_por_mencao_de_terceiros": 27,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 11,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 5,
+      "chunks_por_mencao_de_terceiros": 32,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "gateway": {
+    "tentativas_transitorias": 2,
+    "fallbacks_acionados": 1,
+    "avisos": [
+      "ai_gateway.complete transient error model=gemini/gemini-2.5-flash attempt=1/3 err=litellm.Timeout: Connection timed out after None seconds.; retry em 1.0s",
+      "ai_gateway.complete transient error model=gemini/gemini-2.5-flash attempt=2/3 err=litellm.Timeout: Connection timed out after None seconds.; retry em 2.0s",
+      "ai_gateway.complete fallback model=gemini/gemini-2.5-flash error=litellm.Timeout: Connection timed out after None seconds."
+    ]
+  },
+  "provider_efetivo": "gpt",
+  "duracao_ms": 64625,
+  "finish_reason": "stop",
+  "fundamentacao_truncada": false,
+  "modelo_efetivo": "gpt-4.1-mini",
+  "modelo_efetivo_igual_ao_pedido": false,
+  "resposta": "Segue fundamentação jurídica para a defesa administrativa do Auto de Infração IBAMA nº 484341/D, lavrado em 2007 na Fazenda São Jorge, São João d'Aliança/GO, com base nas normas e orientações jurídicas disponíveis no corpus:\n\n1. **Prescrição da pretensão punitiva da Administração Pública**\n\n- Conforme o artigo 1º, caput, da Lei nº 9.873/1999, o prazo prescricional para a Administração Pública exercer a pretensão punitiva é de 5 (cinco) anos.\n- A Orientação Jurídica Normativa 06/2009 da PFE-IBAMA (OJN 06/2009 PFE-IBAMA, parte 13 e parte 1) esclarece que a contagem do prazo prescricional para infrações ambientais federais segue a Lei nº 9.873/1999, e que a prescrição pode ser interrompida por qualquer ato inequívoco que importe apuração do fato, conforme artigo 22, II, do Decreto nº 6.514/2008.\n- No caso, o despacho de homologação do auto de infração em 04.11.2004 constitui causa interruptiva da prescrição, reiniciando o prazo prescricional de 5 anos, conforme entendimento consolidado no TRF e no STJ (OJN 06/2009 PFE-IBAMA, parte 13).\n- Assim, considerando que o auto de infração foi lavrado em 2007 e houve movimentação processual e prorrogações de prazo para apresentação do PRAD até 2017, não ocorreu prescrição da pretensão punitiva.\n\n2. **Natureza das medidas cautelares e imprescritibilidade**\n\n- O embargo lavrado com base no artigo 18, §1º, do Decreto nº 6.514/2008 é medida cautelar destinada a prevenir novas infrações e resguardar a recuperação ambiental, não se tratando de sanção punitiva.\n- A OJN 06/2009 PFE-IBAMA (partes 1, 3 e 6) destaca que medidas cautelares como embargo e apreensão são imprescritíveis, pois visam a proteção do meio ambiente e a reparação do dano ambiental, conforme entendimento do STF no RE 654833 (Tema 999).\n- Portanto, a manutenção do embargo não está sujeita à prescrição, reforçando a legitimidade da medida administrativa adotada.\n\n3. **Enquadramento legal do auto de infração**\n\n- O auto de infração foi fundamentado no artigo 70 c/c 72 da Lei nº 9.605/1998 (Lei de Crimes Ambientais), artigo 25 c/c artigo 2º, incisos II, VII e XI do Decreto nº 3.179/1999, e artigo 2º, inciso c, da Lei nº 4.771/1965 (Código Florestal).\n- O Decreto nº 6.514/2008, que regula as infrações ambientais, também é aplicável, especialmente no que tange às medidas administrativas e sanções (artigo 18, §1º para embargo).\n- A Instrução Normativa IBAMA nº 10/2012, embora revogada em 2020, é norma histórica aplicável ao período da infração e disciplina o procedimento administrativo para apuração de infrações ambientais no IBAMA.\n\n4. **Regularização ambiental e prorrogação do prazo para PRAD**\n\n- A apresentação do Plano de Recuperação de Área Degradada (PRAD) e as sucessivas prorrogações de prazo entre 2008 e 2017 demonstram a boa-fé e o esforço do autuado para a regularização ambiental.\n- O Decreto nº 6.514/2008 prevê a possibilidade de suspensão da multa diária durante o período de regularização, conforme artigo 55, §§ 1º a 6º, da Lei nº 4.771/1965 (Código Florestal), que trata da averbação e recuperação da reserva legal.\n- A defesa pode requerer a aplicação do princípio da razoabilidade e da proporcionalidade, considerando o cumprimento das obrigações ambientais e a adoção do PRAD.\n\n5. **Requerimento de adesão ao REFIZ**\n\n- O pedido de adesão ao REFIZ com base no artigo 2º da MPV 780/2017 demonstra a intenção do autuado em regularizar o débito ambiental.\n- Embora a MPV 780/2017 não esteja detalhada no corpus, a defesa pode mencionar que a adesão a programas de parcelamento e regularização fiscal ambiental é medida que demonstra a boa-fé e o interesse em sanar a infração.\n\n6. **Revisão do processo administrativo**\n\n- Conforme artigo 65 da Lei nº 9.784/1999 (citado na OJN 06/2009 PFE-IBAMA, parte 1), os processos administrativos que resultem em sanções podem ser revistos a qualquer tempo, a pedido ou de ofício, quando surgirem fatos novos ou circunstâncias relevantes que justifiquem a inadequação da sanção aplicada, sem agravar a penalidade.\n- A defesa pode requerer a revisão do auto de infração com base na apresentação do PRAD e nas prorrogações concedidas, buscando a adequação da sanção.\n\n**Conclusão:**\n\nA defesa administrativa do Auto de Infração IBAMA nº 484341/D deve ser fundamentada nos seguintes pontos jurídicos:\n\n- Ausência de prescrição da pretensão punitiva, com base no artigo 1º da Lei nº 9.873/1999 e artigo 22, II, do Decreto nº 6.514/2008, considerando a interrupção da prescrição pelo despacho de homologação do auto de infração e a movimentação processual até 2017 (OJN 06/2009 PFE-IBAMA, partes 1, 3, 6 e 13).\n- Reconhecimento da imprescritibilidade das medidas cautelares, como o embargo, conforme artigo 18, §1º, do Decreto nº 6.514/2008 e entendimento do STF no RE 654833 (Tema 999) (OJN 06/2009 PFE-IBAMA, partes 1, 3 e 6).\n- Aplicação das normas legais que fundamentam o auto de infração: artigos 70 e 72 da Lei nº 9.605/1998; artigo 25 c/c artigo 2º, II, VII e XI do Decreto nº 3.179/1999; artigo 2º, c, da Lei nº 4.771/1965; e Decreto nº 6.514/2008.\n- Consideração da boa-fé do autuado na apresentação do PRAD e nas prorrogações concedidas, com base no artigo 55 do Decreto nº 6.514/2008 e artigos correlatos do Código Florestal (Lei nº 4.771/1965).\n- Possibilidade de revisão do processo administrativo conforme artigo 65 da Lei nº 9.784/1999.\n- Reconhecimento do pedido de adesão ao REFIZ (MPV 780/2017) como demonstração de interesse na regularização.\n\n**Observação:** Não há no corpus norma específica detalhando o procedimento do REFIZ ambiental da MPV 780/2017, portanto, falta base normativa para fundamentar especificamente esse ponto.\n\nEssa fundamentação jurídica robusta deve ser apresentada para demonstrar a legalidade da atuação do autuado, a regularidade do processo administrativo e a improcedência de eventual alegação de prescrição ou ilegalidade das medidas cautelares aplicadas.",
+  "custo_usd": 0.0032727999999999998,
+  "tokens": {
+    "in": 6426,
+    "out": 1615
+  },
+  "fingerprint_fim": {
+    "total_chunks": 31744,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28658,
+      "federal": 3054,
+      "nacional": 32
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31744
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  }
+}

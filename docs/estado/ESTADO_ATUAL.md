@@ -1,5 +1,23 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-08-05 (Remediação do chunking — `feat/chunking-estrutural`, PR aberto,
+NÃO MERGEAR):** quatro fases (#117 guarda de sanidade, #118 teto do artigo, #119 estrutura
+da norma como dado, #122 normalização de ligaduras) + reindexação única do corpus de
+legislação. Corpus: 31.298 → **31.744 chunks** (30.550 de legislação), 102 documentos,
+espaço `text-embedding-3-small` 768d, custo US$ 0,2360. **A frente encerra como: estrutura
+corrigida, recuperação NÃO melhorada, uma regressão medida e declarada.** A aposta central
+("artigo inteiro = melhor recuperação") foi **refutada por medição**: o art. 61-A passou de
+partido em 7 para inteiro e **caiu da posição 2 para a 29** (0,7764 → 0,6601). A #118 segue
+justificada por outro motivo — o consultor recebia o dispositivo em cacos —, como ganho de
+ENTREGA com custo medido de RECUPERAÇÃO; nada foi revertido. Ganhos reais: artigos partidos
+por tamanho **4.935 → 67**, **3.380 rótulos falsos** de artigo eliminados, hierarquia em
+**93,0%**, dispositivo em **84,9%**, **2.235 referências** como dado. Dívidas novas:
+**#120–#127** (corpus) e **#301–#303** (infra), com destaque para a **#303 — troca de
+provider não dispara auditoria de premissas** e a **#301 — 110 MB em 8 blobs mortos no
+histórico do git**. Migration `b7e3f1a90c24` aplicada à mão no dev (**#302**: `alembic_version`
+preso em revisão de branch não mergeada). Detalhes: `ops/medicao_corpus_federal/BASELINE_CHUNKING.md`
+e ADR-041.
+
 **Data do instantâneo:** 2026-05-30 (pós-PR #23 fechamento do PR 2.2 — testes integrados 42/42 + cobertura real; pós-PR #24 corpus SEMAD operacional em main; + faxina de repositório: de ~23 branches remotas / 6 worktrees para só `main`)
 **Próxima atualização:** eixo 3 — unificação `Process.status` × `Process.macroetapa` (PR3-agressivo; dívida nova #26) ou follow-on do badge crítico-pendente
 **Responsável de atualização:** quem fechar a próxima sprint

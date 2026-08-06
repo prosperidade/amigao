@@ -1,0 +1,199 @@
+{
+  "rotulo": "depois_fase1",
+  "base_da_medicao": {
+    "o_que_e_medido": "re-chunking do full_text de legislation_documents — NAO e o knowledge_catalog inteiro",
+    "equivalente_no_indice": "knowledge_catalog WHERE source_type='legislation'",
+    "chunks_no_indice_por_source_type": {
+      "legislation": 30104,
+      "norma_procedural": 953,
+      "matriz_ipe": 175,
+      "manual_ipe": 48,
+      "gabarito_laudo": 15,
+      "other": 3
+    },
+    "total_knowledge_catalog": 31298,
+    "query_total": "SELECT count(*) FROM knowledge_catalog",
+    "query_recorte": "SELECT count(*) FROM knowledge_catalog WHERE source_type='legislation'"
+  },
+  "documentos": 102,
+  "limite_artigo_tokens": 8000,
+  "guarda_ativa": true,
+  "max_tokens": 1500,
+  "max_artigo_tokens": 1500,
+  "fatias_de_artigo": 24577,
+  "distribuicao_tokens": {
+    "p50": 129,
+    "p90": 499,
+    "p95": 737,
+    "p99": 2144,
+    "p999": 23483,
+    "max": 261280
+  },
+  "artigos_grandes_legitimos": {
+    "definicao": "1500 < tokens <= 8000 — corte por tamanho é a estratégia",
+    "quantidade": 371,
+    "exemplos": [
+      {
+        "documento": "MS-NUC04-licenciamento",
+        "rotulo": "Art. 23. Ficam revogadas a Lei n ° 334, de 2 de abril de 198",
+        "tokens": 7811
+      },
+      {
+        "documento": "AC-N10-politica_ambiental_sisa",
+        "rotulo": "Art. 148. Esta Lei entra em vigor trinta dias após a data de",
+        "tokens": 7333
+      },
+      {
+        "documento": "AC-N09-infracoes_sanidade",
+        "rotulo": "Art. 158. É vedado nos termos desta Lei, o indeferimento do",
+        "tokens": 7324
+      },
+      {
+        "documento": "AC-N05-hidrico",
+        "rotulo": "Art. 158. É vedado nos termos desta Lei, o indeferimento do",
+        "tokens": 7310
+      },
+      {
+        "documento": "AC-N01-constitucional",
+        "rotulo": "Art. 148. Esta Lei entra em vigor trinta dias após a data de",
+        "tokens": 7306
+      },
+      {
+        "documento": "AC-N04-licenciamento",
+        "rotulo": "Art. 6º Esta Portaria entra em vigor na data de sua publicaç",
+        "tokens": 7115
+      },
+      {
+        "documento": "AC-N05-hidrico",
+        "rotulo": "Art. 3º Esta Lei entra em vigor cento e vinte dias após a da",
+        "tokens": 6963
+      },
+      {
+        "documento": "AC-N05-hidrico",
+        "rotulo": "Art. 22. Esta Resolução entra em vigor na data de sua public",
+        "tokens": 6527
+      },
+      {
+        "documento": "MS-NUC11-fauna_biodiversidade",
+        "rotulo": "Art. 1º O Decreto n º 16.180, de 9 de maio de 2023 , passa a",
+        "tokens": 6424
+      },
+      {
+        "documento": "MS-NUC04-licenciamento",
+        "rotulo": "Art. 19. Ressalvado o disposto nas Leis nºs 5.357, de 17 de",
+        "tokens": 6018
+      }
+    ]
+  },
+  "fatias_absorvedoras": {
+    "definicao": "tokens > 8000 — DEFEITO, deve ir a zero",
+    "quantidade": 54,
+    "das_quais_artigo_de_vigencia": 31,
+    "exemplos": [
+      {
+        "documento": "MT-NUC01-constitucional_institucional_e_competencial",
+        "rotulo": "Art. 51. 07/05/2026, 09:56 Lei Ordinária 9523 2011 de Mato G",
+        "tokens": 261280,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "MT-NUC02-territorial",
+        "rotulo": "Art. 51. 07/05/2026, 10:20 Lei Ordinária 9523 2011 de Mato G",
+        "tokens": 261280,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "Portaria SEMAD-GO 501/2024",
+        "rotulo": "Art. 25. Para obter a compensação a que se refere o art. 18,",
+        "tokens": 137238,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "Coletânea Licenciamento GO 2020+",
+        "rotulo": "Art. 25. Para obter a compensação a que se refere o art. 18,",
+        "tokens": 137235,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "AC-N05-hidrico",
+        "rotulo": "Art. 8° São instrumentos da Política Estadual de Recursos Hí",
+        "tokens": 127961,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "MT-NUC07-credito_pd",
+        "rotulo": "Art. 3º Esta Resolução entra em vigor: I - na data de sua pu",
+        "tokens": 101264,
+        "e_artigo_de_vigencia": true
+      },
+      {
+        "documento": "MT-NUC08-biomas",
+        "rotulo": "Art. 3º Este Decreto entra em vigor na data de sua publicaçã",
+        "tokens": 98202,
+        "e_artigo_de_vigencia": true
+      },
+      {
+        "documento": "MS-NUC05-hidrico_saneamento",
+        "rotulo": "Art. 8º Esta resolução entra em vigor na data da publicação.",
+        "tokens": 81876,
+        "e_artigo_de_vigencia": true
+      },
+      {
+        "documento": "MS-NUC04-licenciamento",
+        "rotulo": "Art. 8º Esta resolução entra em vigor na data da publicação.",
+        "tokens": 81746,
+        "e_artigo_de_vigencia": true
+      },
+      {
+        "documento": "MS-NUC03-florestal_car_pra",
+        "rotulo": "Art. 10 desta Resolução (Juntar cópia do arquivo digital “Sh",
+        "tokens": 61703,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "MS-NUC04-licenciamento",
+        "rotulo": "Art. 10 desta Resolução (Juntar cópia do arquivo digital “ S",
+        "tokens": 59891,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "MS-NUC04-licenciamento",
+        "rotulo": "Art. 10 desta Resolução (Juntar cópia do arquivo digital “ S",
+        "tokens": 59891,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "MS-NUC04-licenciamento",
+        "rotulo": "Art. 10 desta Resolução (Juntar cópia do arquivo digital “ S",
+        "tokens": 59805,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "MS-NUC04-licenciamento",
+        "rotulo": "Art. 10 desta Resolução (Juntar cópia do arquivo digital “ S",
+        "tokens": 59716,
+        "e_artigo_de_vigencia": false
+      },
+      {
+        "documento": "MS-NUC05-hidrico_saneamento",
+        "rotulo": "Art. 10 desta Resolução (Juntar cópia do arquivo digital “ S",
+        "tokens": 59512,
+        "e_artigo_de_vigencia": false
+      }
+    ]
+  },
+  "chunks": {
+    "total": 30104,
+    "com_rotulo_de_artigo": 25580,
+    "com_rotulo_honesto_nao_articulado": 3380,
+    "de_artigo_PARTIDO_por_tamanho": 1555,
+    "distribuicao_tokens": {
+      "p50": 172,
+      "p90": 800,
+      "p95": 800,
+      "p99": 1032,
+      "p999": 1392,
+      "max": 1498
+    }
+  }
+}

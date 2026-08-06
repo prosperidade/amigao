@@ -1,0 +1,225 @@
+{
+  "rotulo": "baseline_chunking_art61a",
+  "pergunta": "Quais são as condições, os prazos e as faixas de recomposição para regularização de Área de Preservação Permanente consolidada em imóvel rural, conforme o art. 61-A do Código Florestal?",
+  "perfil_pergunta": "art61a",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal', 'nacional') + uf=GO (ADR-034)",
+  "fragmentacao": {
+    "trechos_recuperados": 8,
+    "sao_pedaco_de_dispositivo": 4,
+    "identificadores_distintos": 3
+  },
+  "alvo": {
+    "nome": "Lei 12.651/2012, art. 61-A",
+    "chunks_no_corpus": 4,
+    "partido_em_pedacos": 7,
+    "recuperado_nesta_busca": true,
+    "recuperado_como_fragmento": true,
+    "classificacao": "recuperado"
+  },
+  "fingerprint_inicio": {
+    "total_chunks": 31298,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28106,
+      "federal": 3168,
+      "nacional": 24
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31298
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  },
+  "baseline": true,
+  "corpus_estado": "esperado",
+  "estado_esperado": {
+    "exigido": {
+      "total_chunks": 31298,
+      "legislation_documents": 102
+    },
+    "fonte": "ADR-040 (medição de 03/08) + estado pós-revert da ingestão de outro agente (04/08)",
+    "divergencias": []
+  },
+  "estado_corpus": {
+    "estadual": 28106,
+    "federal": 3168,
+    "nacional": 24
+  },
+  "chunks_recuperados": [
+    {
+      "id": 35515,
+      "identifier": "Decreto 7.830/2012",
+      "title": "Regulamento do SICAR (Decreto 7.830/2012)",
+      "section": "Art. 19. A recomposição das Áreas de Preservação Permanente poderá ser feita, isolada ou conjuntamente, pelos seguintes",
+      "jurisdiction": "federal",
+      "similarity": 0.7863,
+      "chars": 3723
+    },
+    {
+      "id": 38710,
+      "identifier": "Lei 12.727/2012",
+      "title": "Lei nº 12.727/2012 — alterações da Lei nº 12.651/2012",
+      "section": "Art. 61-A. (parte 1)",
+      "jurisdiction": "federal",
+      "similarity": 0.7764,
+      "chars": 3200
+    },
+    {
+      "id": 35210,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 61-B.",
+      "jurisdiction": "federal",
+      "similarity": 0.7668,
+      "chars": 860
+    },
+    {
+      "id": 38711,
+      "identifier": "Lei 12.727/2012",
+      "title": "Lei nº 12.727/2012 — alterações da Lei nº 12.651/2012",
+      "section": "Art. 61-A. (parte 2)",
+      "jurisdiction": "federal",
+      "similarity": 0.7637,
+      "chars": 3199
+    },
+    {
+      "id": 35209,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 61-B. Aos proprietários e possuidores dos imóveis rurais que, em 22 de julho de 2008, detinham até 4 (quatro) módul",
+      "jurisdiction": "federal",
+      "similarity": 0.7596,
+      "chars": 783
+    },
+    {
+      "id": 38713,
+      "identifier": "Lei 12.727/2012",
+      "title": "Lei nº 12.727/2012 — alterações da Lei nº 12.651/2012",
+      "section": "Art. 61-B.",
+      "jurisdiction": "federal",
+      "similarity": 0.7574,
+      "chars": 644
+    },
+    {
+      "id": 35202,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 61-A. (parte 1)",
+      "jurisdiction": "federal",
+      "similarity": 0.7568,
+      "chars": 3200
+    },
+    {
+      "id": 35206,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 61-A. (parte 1)",
+      "jurisdiction": "federal",
+      "similarity": 0.75,
+      "chars": 3200
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 272,
+      "chunks_por_mencao_de_terceiros": 174,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 70,
+      "chunks_por_mencao_de_terceiros": 7,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 65,
+      "chunks_por_mencao_de_terceiros": 91,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 44,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 94,
+      "chunks_por_mencao_de_terceiros": 125,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 134,
+      "chunks_por_mencao_de_terceiros": 1142,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 144,
+      "chunks_por_mencao_de_terceiros": 26,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 13,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 10,
+      "chunks_por_mencao_de_terceiros": 36,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "gateway": {
+    "tentativas_transitorias": 1,
+    "fallbacks_acionados": 0,
+    "avisos": [
+      "ai_gateway.complete transient error model=gemini/gemini-2.5-flash attempt=1/3 err=litellm.Timeout: Connection timed out after None seconds.; retry em 1.0s"
+    ]
+  },
+  "provider_efetivo": "gemini",
+  "duracao_ms": 58593,
+  "finish_reason": "stop",
+  "fundamentacao_truncada": false,
+  "modelo_efetivo": "gemini/gemini-2.5-flash",
+  "modelo_efetivo_igual_ao_pedido": true,
+  "resposta": "Prezado(a) proprietário(a) rural,\n\nA defesa administrativa para a regularização de Área de Preservação Permanente (APP) consolidada em imóvel rural, com ocupação anterior a 22 de julho de 2008, ao longo de curso d'água, fundamenta-se nas regras de transição estabelecidas pelo Código Florestal (Lei nº 12.651/2012), especialmente em seu Art. 61-A, conforme alterado pela Lei nº 12.727/2012, e detalhadas pelo Decreto nº 7.830/2012 (Regulamento do SICAR).\n\nA seguir, apresentamos as condições, os prazos e as faixas de recomposição aplicáveis:\n\n---\n\n### **1. Condições para a Regularização e Continuidade das Atividades**\n\nA continuidade das atividades e a regularização da APP consolidada estão condicionadas a diversos requisitos:\n\n*   **Data de Consolidação:** A ocupação da área deve ter ocorrido **até 22 de julho de 2008**.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, *caput* [2], [8]; Decreto nº 7.830/2012, Art. 19, § 8º [1].\n*   **Atividades Permitidas:** É autorizada, exclusivamente, a continuidade das atividades **agrossilvipastoris, de ecoturismo e de turismo rural**.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, *caput* [2], [8].\n*   **Inscrição no CAR:** A existência das áreas consolidadas deve ser **informada no Cadastro Ambiental Rural (CAR)** para fins de monitoramento.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 9º [4].\n*   **Adoção de Técnicas de Conservação:** É exigida a adoção de **técnicas de conservação do solo e da água** que visem à mitigação dos eventuais impactos.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 9º [4].\n    *   Mesmo antes da disponibilização do CAR, o proprietário ou possuidor rural é responsável pela conservação do solo e da água, por meio de adoção de boas práticas agronômicas.\n        *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 10 [4].\n    *   A realização das atividades observará critérios técnicos de conservação do solo e da água indicados no Programa de Regularização Ambiental (PRA).\n        *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 11 [4].\n*   **Vedação de Novas Conversões:** É **vedada a conversão de novas áreas** para uso alternativo do solo nesses locais.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 11 [4].\n*   **Manutenção de Residências e Infraestrutura:** Será admitida a manutenção de residências e da infraestrutura associada às atividades agrossilvipastoris, de ecoturismo e de turismo rural, inclusive o acesso a essas atividades, desde que **não estejam em área que ofereça risco à vida ou à integridade física das pessoas**.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 12 [4].\n*   **Medidas Mitigadoras:** O poder público, verificada a existência de risco de agravamento de processos erosivos ou de inundações, determinará a adoção de medidas mitigadoras que garantam a estabilidade das margens e a qualidade da água, após deliberação do Conselho Estadual de Meio Ambiente ou de órgão colegiado estadual equivalente.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 14 [4].\n*   **Exceção para Unidades de Conservação de Proteção Integral:** As APPs localizadas em imóveis inseridos nos limites de Unidades de Conservação de Proteção Integral criadas por ato do poder público até a data de publicação da Lei **não são passíveis de ter quaisquer atividades consideradas como consolidadas**, ressalvado o que dispuser o Plano de Manejo elaborado e aprovado.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 16 [4].\n\n---\n\n### **2. Prazos para a Regularização**\n\n*   **Continuidade das Atividades:** A continuidade das atividades desenvolvidas nas áreas consolidadas é autorizada a partir da data da publicação da Lei e **até o término do prazo de adesão ao Programa de Regularização Ambiental (PRA)**, de que trata o § 2º do art. 59 da Lei nº 12.651/2012.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 15 [4].\n*   **Prazo de Adesão ao PRA:** O prazo específico para adesão ao PRA (mencionado no § 2º do art. 59 da Lei nº 12.651/2012) **não está disponível nos trechos legislativos fornecidos**.\n\n---\n\n### **3. Faixas de Recomposição para APPs ao Longo de Cursos D'água Naturais**\n\nA largura da faixa a ser recomposta varia conforme o tamanho do imóvel rural em módulos fiscais, contados da borda da calha do leito regular do curso d'água:\n\n*   **Imóveis rurais com área de até 1 (um) módulo fiscal:**\n    *   Recomposição obrigatória de **5 (cinco) metros**, independentemente da largura do curso d'água.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 1º [2], [8]; Decreto nº 7.830/2012, Art. 19, § 1º [1].\n*   **Imóveis rurais com área superior a 1 (um) módulo fiscal e de até 2 (dois) módulos fiscais:**\n    *   Recomposição obrigatória de **8 (oito) metros**, independentemente da largura do curso d'água.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 2º [2], [8]; Decreto nº 7.830/2012, Art. 19, § 2º [1].\n*   **Imóveis rurais com área superior a 2 (dois) módulos fiscais e de até 4 (quatro) módulos fiscais:**\n    *   Recomposição obrigatória de **15 (quinze) metros**, independentemente da largura do curso d'água.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 3º [2], [8]; Decreto nº 7.830/2012, Art. 19, § 3º [1].\n*   **Imóveis rurais com área superior a 4 (quatro) módulos fiscais:**\n    *   A recomposição será obrigatória nas seguintes faixas marginais:\n        *   **20 (vinte) metros**, para imóveis com área superior a 4 (quatro) e de até 10 (dez) módulos fiscais, nos cursos d’água com até 10 (dez) metros de largura.\n            *   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, § 4º, inciso I [1].\n        *   **Nos demais casos**, extensão correspondente à **metade da largura do curso d’água**, observado o mínimo de **30 (trinta) e o máximo de 100 (cem) metros**.\n            *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 4º, inciso II [2], [8]; Decreto nº 7.830/2012, Art. 19, § 4º, inciso II [1].\n\n---\n\n### **4. Métodos de Recomposição**\n\nA recomposição das Áreas de Preservação Permanente poderá ser feita, isolada ou conjuntamente, pelos seguintes métodos:\n\n*   Condução de regeneração natural de espécies nativas.\n*   Plantio de espécies nativas.\n*   Plantio de espécies nativas conjugado com a condução da regeneração natural de espécies nativas.\n*   Plantio intercalado de espécies lenhosas, perenes ou de ciclo longo, exóticas com nativas de ocorrência regional, em até 50% (cinquenta por cento) da área total a ser recomposta, no caso dos imóveis a que se refere o inciso V do *caput* do art. 3º da Lei nº 12.651/2012 (pequenos produtores rurais ou empreendedores familiares rurais, assentados da reforma agrária, e povos e comunidades tradicionais).\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-A, § 13, incisos I a IV [4]; Decreto nº 7.830/2012, Art. 19, incisos I a IV [1].\n\n---\n\n### **5. Limitação da Exigência de Recomposição para Pequenos Imóveis**\n\nPara proprietários e possuidores de imóveis rurais que, em 22 de julho de 2008, detinham **até 10 (dez) módulos fiscais** e desenvolviam atividades agrossilvipastoris nas áreas consolidadas em APPs, a exigência de recomposição, somadas todas as APPs do imóvel, não ultrapassará:\n\n*   **10% (dez por cento)** da área total do imóvel, para imóveis rurais com área de **até 2 (dois) módulos fiscais**.\n*   **20% (vinte por cento)** da área total do imóvel, para imóveis rurais com área **superior a 2 (dois) e de até 4 (quatro) módulos fiscais**.\n    *   **Fundamentação:** Lei nº 12.727/2012, Art. 61-B, *caput*, incisos I e II [3], [6].\n    *   *Observação:* O trecho [5] refere-se à versão da Medida Provisória nº 571/2012, que foi posteriormente alterada pela Lei nº 12.727/2012, que estendeu o limite do *caput* de 4 para 10 módulos fiscais. A versão da Lei nº 12.727/2012 é a aplicável.\n\n---\n\nEsta fundamentação jurídica visa subsidiar a defesa administrativa, demonstrando o enquadramento do imóvel rural nas regras de transição do Código Florestal para APPs consolidadas. É crucial que todas as condições e requisitos sejam devidamente comprovados e informados aos órgãos ambientais competentes.",
+  "custo_usd": 0.018082,
+  "tokens": {
+    "in": 6390,
+    "out": 6466
+  },
+  "fingerprint_fim": {
+    "total_chunks": 31298,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28106,
+      "federal": 3168,
+      "nacional": 24
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31298
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  }
+}

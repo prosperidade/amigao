@@ -1,0 +1,223 @@
+{
+  "rotulo": "posfase4_art61a",
+  "pergunta": "Quais são as condições, os prazos e as faixas de recomposição para regularização de Área de Preservação Permanente consolidada em imóvel rural, conforme o art. 61-A do Código Florestal?",
+  "perfil_pergunta": "art61a",
+  "modelo": "gemini/gemini-2.5-flash",
+  "top_k": 8,
+  "escopo": "jurisdiction IN ('federal', 'nacional') + uf=GO (ADR-034)",
+  "fragmentacao": {
+    "trechos_recuperados": 8,
+    "sao_pedaco_de_dispositivo": 0,
+    "identificadores_distintos": 3
+  },
+  "alvo": {
+    "nome": "Lei 12.651/2012, art. 61-A",
+    "chunks_no_corpus": 4,
+    "partido_em_pedacos": 0,
+    "recuperado_nesta_busca": true,
+    "recuperado_como_fragmento": false,
+    "classificacao": "recuperado"
+  },
+  "fingerprint_inicio": {
+    "total_chunks": 31744,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28658,
+      "federal": 3054,
+      "nacional": 32
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31744
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  },
+  "baseline": true,
+  "corpus_estado": "esperado",
+  "estado_esperado": {
+    "exigido": {
+      "total_chunks": 31744,
+      "legislation_documents": 102
+    },
+    "fonte": "PREVISÃO declarada ANTES da reindexação da Fase 4 (05/08), a partir do dry-run com a régua REAL de tokens: 30.550 chunks de legislação + 1.194 de outras fontes (norma_procedural 953, matriz_ipe 175, manual_ipe 48, gabarito_laudo 15, other 3) = 31.744. Estado anterior, baseline 2e78917: 31.298/102. A primeira previsão desta fase (30.165) foi feita com a régua de 4 chars/token, refutada no mesmo dia — ver a nota abaixo.",
+    "divergencias": []
+  },
+  "estado_corpus": {
+    "estadual": 28658,
+    "federal": 3054,
+    "nacional": 32
+  },
+  "chunks_recuperados": [
+    {
+      "id": 68610,
+      "identifier": "Decreto 7.830/2012",
+      "title": "Regulamento do SICAR (Decreto 7.830/2012)",
+      "section": "Art. 19. A recomposição das Áreas de Preservação Permanente poderá ser feita, isolada ou conjuntamente, pelos seguintes",
+      "jurisdiction": "federal",
+      "similarity": 0.7863,
+      "chars": 3723
+    },
+    {
+      "id": 68374,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 61-B.",
+      "jurisdiction": "federal",
+      "similarity": 0.7667,
+      "chars": 860
+    },
+    {
+      "id": 68373,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 61-B. Aos proprietários e possuidores dos imóveis rurais que, em 22 de julho de 2008, detinham até 4 (quatro) módul",
+      "jurisdiction": "federal",
+      "similarity": 0.7596,
+      "chars": 783
+    },
+    {
+      "id": 93869,
+      "identifier": "Lei 12.727/2012",
+      "title": "Lei nº 12.727/2012 — alterações da Lei nº 12.651/2012",
+      "section": "Art. 61-B.",
+      "jurisdiction": "federal",
+      "similarity": 0.7574,
+      "chars": 644
+    },
+    {
+      "id": 93870,
+      "identifier": "Lei 12.727/2012",
+      "title": "Lei nº 12.727/2012 — alterações da Lei nº 12.651/2012",
+      "section": "Art. 61-C.",
+      "jurisdiction": "federal",
+      "similarity": 0.7408,
+      "chars": 927
+    },
+    {
+      "id": 68376,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 61-C.",
+      "jurisdiction": "federal",
+      "similarity": 0.7299,
+      "chars": 544
+    },
+    {
+      "id": 68385,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 66. O proprietário ou possuidor de imóvel rural que detinha, em 22 de julho de 2008, área de Reserva Legal em exten",
+      "jurisdiction": "federal",
+      "similarity": 0.7296,
+      "chars": 3770
+    },
+    {
+      "id": 68386,
+      "identifier": "Lei 12.651/2012",
+      "title": "Código Florestal (Lei 12.651/2012)",
+      "section": "Art. 67. Nos imóveis rurais que detinham, em 22 de julho de 2008, área de até 4 (quatro) módulos fiscais e que possuam r",
+      "jurisdiction": "federal",
+      "similarity": 0.724,
+      "chars": 424
+    }
+  ],
+  "cobertura_nominal": {
+    "Decreto 6.514/2008": {
+      "chunks_com_texto_proprio": 266,
+      "chunks_por_mencao_de_terceiros": 174,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 3.179/1999": {
+      "chunks_com_texto_proprio": 68,
+      "chunks_por_mencao_de_terceiros": 7,
+      "situacao": "texto_proprio"
+    },
+    "Lei 4.771/1965": {
+      "chunks_com_texto_proprio": 63,
+      "chunks_por_mencao_de_terceiros": 97,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.784/1999": {
+      "chunks_com_texto_proprio": 81,
+      "chunks_por_mencao_de_terceiros": 39,
+      "situacao": "texto_proprio"
+    },
+    "Lei 9.605/1998": {
+      "chunks_com_texto_proprio": 94,
+      "chunks_por_mencao_de_terceiros": 122,
+      "situacao": "texto_proprio"
+    },
+    "Lei 12.651/2012": {
+      "chunks_com_texto_proprio": 119,
+      "chunks_por_mencao_de_terceiros": 1116,
+      "situacao": "texto_proprio"
+    },
+    "IN IBAMA 10/2012": {
+      "chunks_com_texto_proprio": 140,
+      "chunks_por_mencao_de_terceiros": 27,
+      "situacao": "texto_proprio"
+    },
+    "Lei 13.494/2017": {
+      "chunks_com_texto_proprio": 11,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "MPV 780/2017": {
+      "chunks_com_texto_proprio": 14,
+      "chunks_por_mencao_de_terceiros": 1,
+      "situacao": "texto_proprio"
+    },
+    "Decreto 11.373/2023": {
+      "chunks_com_texto_proprio": 5,
+      "chunks_por_mencao_de_terceiros": 32,
+      "situacao": "texto_proprio"
+    }
+  },
+  "art18_par1_6514": {
+    "chunks_no_corpus": 2,
+    "recuperado_nesta_busca": false
+  },
+  "gateway": {
+    "tentativas_transitorias": 0,
+    "fallbacks_acionados": 0,
+    "avisos": []
+  },
+  "provider_efetivo": "gemini",
+  "duracao_ms": 25125,
+  "finish_reason": "stop",
+  "fundamentacao_truncada": false,
+  "modelo_efetivo": "gemini/gemini-2.5-flash",
+  "modelo_efetivo_igual_ao_pedido": true,
+  "resposta": "Prezado(a) proprietário(a) rural,\n\nA presente defesa administrativa visa fundamentar juridicamente as condições, os prazos e as faixas de recomposição para a regularização de Área de Preservação Permanente (APP) consolidada em imóvel rural, com ocupação anterior a 22 de julho de 2008, ao longo de curso d'água, conforme o regime de transição estabelecido pelo Código Florestal (Lei nº 12.651/2012) e seu regulamento.\n\n**I. Premissa Fundamental: Ocupação Anterior a 22 de Julho de 2008**\n\nPara que as regras de transição sejam aplicáveis, é imprescindível que a área de APP consolidada estivesse ocupada com atividades agrossilvipastoris até a data de 22 de julho de 2008. Esta data é o marco temporal para a aplicação das regras de regularização ambiental.\n*   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, § 8º, que estabelece: \"Será considerada, para os fins do disposto neste artigo, a área detida pelo imóvel rural em 22 de julho de 2008.\"\n\n**II. Faixas de Recomposição para APP Consolidada ao Longo de Cursos D'água Naturais (Regulamentação do Art. 61-A do Código Florestal)**\n\nÉ importante ressaltar que o texto integral do Art. 61-A da Lei nº 12.651/2012 não foi fornecido nos trechos legislativos recuperados. No entanto, o Decreto nº 7.830/2012, que regulamenta o Código Florestal, detalha as faixas de recomposição para APPs consolidadas ao longo de cursos d'água, fazendo referência expressa ao Art. 61-A da Lei nº 12.651/2012.\n\n**A. Métodos de Recomposição:**\nA recomposição das Áreas de Preservação Permanente poderá ser feita, isolada ou conjuntamente, pelos seguintes métodos:\n*   Condução de regeneração natural de espécies nativas;\n*   Plantio de espécies nativas;\n*   Plantio de espécies nativas conjugado com a condução da regeneração natural de espécies nativas;\n*   Plantio intercalado de espécies lenhosas, perenes ou de ciclo longo, exóticas com nativas de ocorrência regional, em até cinquenta por cento da área total a ser recomposta, no caso dos imóveis a que se refere o inciso V do caput do art. 3º da Lei nº 12.651, de 2012 (não detalhado nos trechos).\n*   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, incisos I, II, III e IV.\n\n**B. Faixas Mínimas de Recomposição Conforme o Tamanho do Imóvel em Módulos Fiscais:**\nAs faixas marginais a serem recompostas, contadas da borda da calha do leito regular do curso d'água, variam de acordo com o tamanho do imóvel rural em módulos fiscais:\n\n1.  **Imóveis rurais com área de até um módulo fiscal:**\n    *   Recomposição obrigatória de **cinco metros**, independentemente da largura do curso d'água.\n    *   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, § 1º.\n\n2.  **Imóveis rurais com área superior a um módulo fiscal e de até dois módulos fiscais:**\n    *   Recomposição obrigatória de **oito metros**, independentemente da largura do curso d'água.\n    *   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, § 2º.\n\n3.  **Imóveis rurais com área superior a dois módulos fiscais e de até quatro módulos fiscais:**\n    *   Recomposição obrigatória de **quinze metros**, independentemente da largura do curso d'água.\n    *   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, § 3º.\n\n4.  **Imóveis rurais com área superior a quatro e de até dez módulos fiscais (e cursos d'água com até dez metros de largura):**\n    *   Recomposição de, no mínimo, **vinte metros**.\n    *   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, § 4º, inciso I (para fins do que dispõe o inciso II do § 4º do art. 61-A da Lei nº 12.651, de 2012).\n\n5.  **Demais casos (para imóveis superiores a quatro módulos fiscais, e cursos d'água com mais de dez metros de largura):**\n    *   Recomposição de extensão correspondente à **metade da largura do curso d'água**, observado o mínimo de **trinta metros** e o máximo de **cem metros**.\n    *   **Fundamentação:** Decreto nº 7.830/2012, Art. 19, § 4º, inciso II (para fins do que dispõe o inciso II do § 4º do art. 61-A da Lei nº 12.651, de 2012).\n\n**III. Limites Máximos de Exigência de Recomposição (Art. 61-B do Código Florestal)**\n\nPara proprietários e possuidores de imóveis rurais que, em 22 de julho de 2008, detinham até 10 (dez) módulos fiscais e desenvolviam atividades agrossilvipastoris nas áreas consolidadas em APPs, a exigência de recomposição, somadas todas as APPs do imóvel, não ultrapassará os seguintes percentuais da área total do imóvel:\n\n*   **Aviso sobre Norma Histórica/Revogada:** O trecho [3] (Lei 12.651/2012, Art. 61-B, incluído pela Medida Provisória nº 571, de 2012) apresenta uma redação anterior do *caput* do artigo, que limitava a aplicação a imóveis de até 4 módulos fiscais. A redação atual e aplicável, incluída pela Lei nº 12.727/2012, amplia o escopo para imóveis de até 10 módulos fiscais, conforme os trechos [2] e [4].\n\n1.  **Para imóveis rurais com área de até 2 (dois) módulos fiscais:**\n    *   A exigência de recomposição não ultrapassará **10% (dez por cento)** da área total do imóvel.\n    *   **Fundamentação:** Lei nº 12.651/2012, Art. 61-B, inciso I (incluído pela Lei nº 12.727/2012).\n\n2.  **Para imóveis rurais com área superior a 2 (dois) e de até 4 (quatro) módulos fiscais:**\n    *   A exigência de recomposição não ultrapassará **20% (vinte por cento)** da área total do imóvel.\n    *   **Fundamentação:** Lei nº 12.651/2012, Art. 61-B, inciso II (incluído pela Lei nº 12.727/2012).\n\n3.  **Para imóveis rurais com área superior a 4 (quatro) e de até 10 (dez) módulos fiscais:**\n    *   O inciso III do Art. 61-B, que estabeleceria um limite percentual para esta faixa de tamanho de imóvel, foi **VETADO** (conforme trechos [2] e [4]). Portanto, não há um limite percentual máximo de recomposição estabelecido neste artigo para imóveis desta categoria.\n\n**IV. Prazos para Recomposição**\n\n**FALTA DE BASE NORMATIVA:** Os trechos legislativos fornecidos não contêm informações específicas sobre os prazos para a conclusão da recomposição das Áreas de Preservação Permanente consolidadas ao longo de cursos d'água, conforme o Art. 61-A do Código Florestal. O Art. 66, § 2º da Lei nº 12.651/2012, que menciona um prazo de 20 anos, refere-se à recomposição de Reserva Legal, não de APP.\n\n**V. Condições para a Continuidade da Atividade**\n\n**FALTA DE BASE NORMATIVA ESPECÍFICA PARA CURSOS D'ÁGUA:** Os trechos legislativos fornecidos não detalham as condições para a continuidade da atividade agrossilvipastoril em APPs consolidadas *ao longo de cursos d'água* após a recomposição das faixas marginais, no contexto do Art. 61-A.\n\nO Decreto nº 7.830/2012, Art. 19, menciona a admissão de manutenção de atividades agrossilvipastoris, de ecoturismo ou de turismo rural para outras tipologias de APPs consolidadas, como:\n*   No entorno de nascentes e olhos d'água perenes, sendo obrigatória a recomposição do raio mínimo de quinze metros (§ 5º).\n*   No entorno de lagos e lagoas naturais, sendo obrigatória a recomposição de faixa marginal com largura mínima variável conforme o módulo fiscal (§ 6º).\nNo entanto, essa permissão não é explicitamente estendida para as áreas de cursos d'água após a recomposição das faixas mínimas nos trechos analisados.\n\n**VI. Considerações Adicionais para Assentamentos de Reforma Agrária**\n\nPara os assentamentos do Programa de Reforma Agrária, a recomposição de áreas consolidadas em APPs ao longo ou no entorno de cursos d'água, lagos e lagoas naturais observará as exigências estabelecidas no Art. 61-A, observados os limites de cada área demarcada individualmente, objeto de contrato de concessão de uso, até a titulação por parte do Instituto Nacional de Colonização e Reforma Agrária - Incra.\n*   **Fundamentação:** Lei nº 12.651/2012, Art. 61-C (incluído pela Lei nº 12.727/2012).\n\nEsta defesa administrativa, baseada exclusivamente nos trechos legislativos fornecidos, elucida as faixas de recomposição e os limites de exigência para a regularização de APPs consolidadas em imóveis rurais, destacando as lacunas normativas quanto aos prazos e às condições específicas para a continuidade das atividades em APPs de cursos d'água.",
+  "custo_usd": 0.015366800000000002,
+  "tokens": {
+    "in": 4106,
+    "out": 5654
+  },
+  "fingerprint_fim": {
+    "total_chunks": 31744,
+    "legislation_documents": 102,
+    "por_jurisdicao": {
+      "estadual": 28658,
+      "federal": 3054,
+      "nacional": 32
+    },
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "espacos_no_indice": [
+      {
+        "modelo": "text-embedding-3-small",
+        "dim": 768,
+        "chunks": 31744
+      }
+    ],
+    "banco": "127.0.0.1:55432/amigao_db",
+    "ivfflat_probes": 10
+  }
+}

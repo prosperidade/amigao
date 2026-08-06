@@ -89,3 +89,15 @@ docs/base_regulatoria/
 # (incluindo um .md de 16 MB). O que entra versionado e o MANIFESTO extraido
 # delas por `scripts/extrair_manifesto.py` (ADR-038).
 curadoria_isis/
+
+# Dumps e arquivos empacotados — prevencao, nao reescrita (#301).
+#
+# O historico ja carrega 110 MB em 8 blobs mortos: frontend.zip (43,4 MB) e 7
+# PDFs SEMAD (66,6 MB). O episodio dos PDFs quebrou o clone do Render no Linux
+# (commit 6d7eab9). Remover do working tree NAO remove do historico.
+#
+# A lacuna quase pegou de novo: o backup de 109 MB da Fase 4 apareceria como
+# untracked, porque *.dump nao estava listado aqui.
+*.dump
+*.sql.gz
+*.zip

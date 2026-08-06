@@ -775,7 +775,58 @@ corpus desde abril por um espelho da CETESB, justamente porque o Sisconama
 falhou. **O que destrava:** a Isis fornecer identificador estável ou espelho de
 órgão. **Origem:** sondagem do bloco 2.
 
-**117. O chunker perde a fronteira do artigo em PDF de compêndio.** O corte
+**117. O chunker atribui material não articulado ao último artigo visto.**
+*(Título anterior: "O chunker perde a fronteira do artigo em PDF de compêndio" —
+trocado em 04/08 porque a causa que ele nomeava foi refutada.)*
+
+> **⛔ CAUSA ORIGINAL REFUTADA em 04/08.** A hipótese registrada era que "o `Art.`
+> seguinte frequentemente não começa em início de linha, e a fatia engole o resto
+> do documento até o próximo match válido" — e a prescrição era consertar o
+> regex. **Medido no caso exato:** a fatia do `Art. 51.` do MT-NUC01 tem
+> **1.045.121 chars** e **12.768 linhas**, e contém **1** cabeçalho de artigo em
+> início de linha (o próprio, na posição 0). Testadas todas as variantes —
+> `Art N` sem ponto, `Artigo N`, `ART. N`, `Art. Nº`: **0 ocorrências**. Em
+> qualquer posição da linha: **15 ocorrências, todas citações inline**
+> (*"art. 225, caput, da CF/88"*, *"Pelo art. 54 da lei nº 9.605/98"*). `CAPÍTULO`:
+> 1. `SEÇÃO`: 0.
+>
+> **Não há fronteira perdida — não há fronteira.** Nenhum regex melhor corrige,
+> porque não existe o que casar. Amostrado, aquele 1 MB é sumário paginado
+> (*"Zona 2.1.14. Áreas que Requerem Manejo Específico....187"*), rodapé de
+> captura web repetido (*"leisestaduais.com.br/… 77/238"*) e listas de diretrizes
+> (*"146. Implementar programas de pesquisa…"*): **anexo de plano territorial**,
+> não texto articulado.
+
+**CAUSA REAL.** `_split_by_pattern` assume que o documento é articulado do início
+ao fim: tudo entre um cabeçalho e o próximo pertence àquele cabeçalho. **A
+premissa é falsa.** Quando o texto deixa de ser articulado, todo o rabo
+não-normativo é atribuído ao último cabeçalho visto. É defeito de **modelo**, não
+de expressão regular.
+
+O padrão dominante confirma: das 54 fatias absorvedoras do corpus, **31 começam
+com o artigo de vigência** (*"Esta Lei entra em vigor na data de sua
+publicação"*) — que é sempre uma frase, e é o **último** artigo da norma. No
+compêndio, o que vem depois dele é o anexo ou a norma seguinte. Há ainda o
+cabeçalho **falso** vindo de referência inline que calhou de abrir linha
+(*"Art. 10 desta Resolução (Juntar cópia do arquivo…"*).
+
+**O QUE PERMANECE VÁLIDO — e é a parte grave.** Os 374 pedaços carregam todos o
+`section` `"Art. 51. (parte N)"`: sumário de zoneamento **etiquetado como artigo
+de lei**. Metadado **ativamente errado**, não apenas ausente. Rótulo mentiroso é
+pior que ausência de rótulo — **passa na conferência**, mesma lógica da #121.
+
+**✅ FASE 1 (04/08, `feat/chunking-estrutural`).** Guarda de sanidade: fatia que
+realmente começa em cabeçalho de artigo e passa de `LIMITE_ARTIGO_TOKENS`
+(8.000) **não é artigo**, não herda o rótulo, cai em janela deslizante sob
+`"[trecho nao articulado]"` e **loga** — estratégia declarada, nunca silêncio.
+Limiar justificado por medição (p50=129, p90=499, p95=737, p99=2.144,
+p99,9=23.483, max=261.280 sobre 24.577 fatias; maior artigo confirmadamente
+genuíno ~6.289 tokens). Medido antes/depois: **30.104 chunks antes e depois**
+(nada se perde), **−3.380 rótulos de artigo falsos**, **+3.380 rótulos honestos**,
+**371 artigos grandes legítimos intocados**. Sem reindexação — vale na próxima
+passada de índice.
+
+*Registro histórico da entrada original:* O corte
 estrutural usa `^\s*Art\.\s*\d+` em MULTILINE. Em PDF de compêndio o "Art."
 seguinte frequentemente **não começa em início de linha**, e a fatia engole o
 resto do documento até o próximo match válido. Medido: `Art. 51.` do MT-NUC01
@@ -797,6 +848,40 @@ perdida engolindo o documento (defeito). **Separar os dois antes de qualquer
 experimento de chunking**; medir sobre a mistura mediria o defeito, não a
 estratégia. **Origem:** levantamento de 03/08.
 
+> **✅ FASE 2 (04/08, `feat/chunking-estrutural` · ADR-041).** Teto próprio para
+> artigo: `MAX_ARTIGO_TOKENS = 7000`, cobrindo inteiros os três medidos (4.644 /
+> 5.578 / 6.289). Vale **só para artigo** — capítulo, seção e prelúdio seguem em
+> `MAX_TOKENS`, porque para eles 7.000 tokens num chunk é diluição, não
+> dispositivo inteiro. Corte por tamanho continua como último recurso e passou a
+> **logar**. Medido: chunks de artigo partidos por tamanho **4.935 → 67**;
+> mediana **172 → 163**; p90/p95 **inalterados em 800**; máximo 1.498 → 6.963.
+> Base declarada nos artefatos (`legislation_documents`, 30.104 — não os 31.298
+> do catálogo inteiro). Sem reindexação.
+>
+> **⚠️ RESULTADO DA FASE 4 (05/08): o ganho de recuperação NÃO existe — houve
+> PERDA.** Medido depois da reindexação única, no caso escolhido para provar a
+> tese: o **art. 61-A** passou de `partido_em 7` para `0` (entrou inteiro, como a
+> dívida pedia) e **caiu da posição 2 para a 29**, similaridade **0,7764 →
+> 0,6601**. O fragmento focado casava melhor com a pergunta que o artigo
+> completo — o mecanismo de diluição que a ADR-041 descreve, agora medido contra
+> nós.
+>
+> Escala: **490 chunks** são artigos inteiros acima de 1.500 tokens, **1,60% do
+> corpus** (p50 2.304, p90 4.302). É cauda; mas o 61-A (2.837 e 2.641 tokens)
+> está no miolo dela — a regressão é típica da faixa, não um extremo.
+>
+> **A dívida permanece justificada por OUTRO motivo, declarado:** o consultor
+> recebia o dispositivo em cacos — o 61-A chegava em quatro pedaços no top-8 — e
+> peça se escreve sobre artigo inteiro. **Benefício de ENTREGA, com custo medido
+> de RECUPERAÇÃO.** Nada foi revertido; a requalificação do teto é decisão
+> separada, fora da fase que produziu o número.
+>
+> **Efeito colateral medido:** dos 362 chunks de artigo acima de 1.500 tokens,
+> **81 são absorvedores de vigência abaixo do limiar de 8.000** — viraram blobs
+> únicos. Menos rótulo falso, mais diluição. O sinal que os pega é semântico (o
+> artigo de vigência tem p50=273, p75=519 tokens), não de tamanho; pertence à
+> #126.
+
 **118. `MAX_TOKENS=1500` é escolha nossa, não limite do modelo.** O
 `text-embedding-3-small` aceita **8.191 tokens**; nosso teto é 1.500. Os artigos
 que se partem por tamanho no federal caberiam folgados: `Art. 19` da Lei 6.938
@@ -804,6 +889,31 @@ que se partem por tamanho no federal caberiam folgados: `Art. 19` da Lei 6.938
 (4.644). **Consequência para o experimento de embedding:** "janela maior do
 provedor X" resolveria gargalo que não temos — nem a janela atual está sendo
 usada. **Origem:** levantamento de 03/08.
+
+> **✅ FASE 3 (04/08, `feat/chunking-estrutural` · ADR-041 · migration
+> `b7e3f1a90c24`).** Medido sobre os 102 documentos, 28.971 chunks:
+>
+> | | antes | depois |
+> |---|---:|---:|
+> | com hierarquia | 12 de 3.192 federais | **26.938 (93,0%)** |
+> | com dispositivo em campo próprio | 0 | **24.584 (84,9%)** |
+> | referências como dado | 0 | **2.235** |
+>
+> `dispositivo_origem` distingue **lido** (24.523) de **herdado** (61) — campo
+> preenchido por herança tem de ser distinguível de campo lido do texto, ou
+> repetimos a #121/#123. Das 2.235 referências, **547 têm norma-alvo declarada**
+> e **1.688 não** — e as não declaradas ficam gravadas assim, nunca supondo "é a
+> norma atual" nem descartadas em silêncio. Alvo só é aceito quando a norma
+> **segue o artigo diretamente**: sem essa âncora, *"art. 8 aplica-se conforme
+> resolução CONAMA 369"* ligava o art. 8 a uma resolução que é outra referência.
+>
+> **Escopo declarado:** o gatilho são as três fórmulas que esta dívida mediu.
+> Menção solta (*"o prazo do art. 225"*) não entra — o campo `referencias` **não
+> é exaustivo**, e há teste dizendo isso. Alargar o gatilho traria falso positivo
+> junto.
+>
+> **Extração sim, navegação não:** nada resolve, segue ou expande referência.
+> Colunas nascem NULL; preenchem na reindexação única da Fase 4.
 
 **119. A estrutura determinística da norma é jogada fora.** Três coisas que o
 texto entrega de graça e o corpus não guarda: **(a) hierarquia** — o chunker usa
@@ -816,7 +926,380 @@ dos chunks federais mencionam um artigo, e o número não está em campo
 consultável. **É dado, não inferência** — e pode ser solução mais elegante que
 trocar de provedor. Parente da #107. **Origem:** levantamento de 03/08.
 
-**PRÓXIMO LIVRE: 120.**
+**120. 245 chunks sem `identifier` — trecho que não sabe dizer de que norma
+veio.** Todos estaduais de GO, espalhados por **51 documentos** distintos. Um
+chunk sem identidade pode ser recuperado e usado na fundamentação, mas não pode
+ser **citado nem conferido** — o consultor recebe o conteúdo sem a fonte. Fere o
+Princípio 11 ("nenhuma afirmação sem fonte") no ponto exato em que ele foi
+escrito para valer. Também é invisível para a família de métricas que recorta por
+`identifier` (o guard da identidade da norma, o alvo do medidor, a cobertura
+nominal): elas não erram nesses chunks, elas **não os enxergam**. **Origem:**
+levantamento do baseline do chunking, 04/08.
+
+**121. O mesmo texto normativo gravado sob identidades diferentes.**
+**⚠️ O achado mais grave do levantamento de 04/08 — acima do chunking.**
+
+Chunking ruim devolve trecho ruim, e trecho ruim se **vê**. Atribuição errada
+devolve o trecho **certo** com a fonte **errada**, e isso não se vê: a peça sai
+coerente, bem fundamentada, citando a portaria no lugar da lei. É o Princípio 11
+("nenhuma afirmação sem fonte") ferido na raiz — a afirmação *tem* fonte, e a
+fonte está errada, que é pior que não ter, porque passa na conferência.
+
+**Impacto:** risco de citação com fonte errada em **peça assinada**.
+
+Medido:
+**4.821 grupos** de chunks com texto idêntico (normalizando caixa e pontuação)
+distribuídos entre identificadores **diferentes**, somando **9.890 chunks
+redundantes** — e não é só cabeçalho: **2.013 grupos têm ≥200 tokens**. Exemplo
+conferido: um trecho de 524 tokens sobre termo de compromisso ambiental aparece
+igual em `IN SEMAD-GO 01/2024`, `Lei GO 18.102/2013` e `Portaria SEMAD-GO
+501/2024`.
+
+**Exemplar colado** (trecho de 524 tokens, termo de compromisso ambiental,
+idêntico nos três):
+
+```
+identifier                  | tokens | início
+IN SEMAD-GO 01/2024         |    524 | a Lei nº 20.961, de 13-01-2021. § 5º O termo de
+Lei GO 18.102/2013          |    524 | compromisso ambiental poderá conter cláusulas
+Portaria SEMAD-GO 501/2024  |    524 | relativas às demais sanções aplica...
+```
+
+**HIPÓTESE DE CAUSA — não confirmada.** Coletâneas e portarias que transcrevem
+outras normas seriam ingeridas com o `identifier` **delas**, e o texto
+reproduzido herdaria essa identidade. É a explicação que o formato dos casos
+sugere; **precisa ser confirmada ou refutada com evidência antes de virar
+premissa de conserto**. Investigar depois do baseline.
+
+O dedup atual não pega: `content_hash` tem **zero** colisões no corpus, porque as
+cópias diferem em ligaduras tipográficas (#122), espaçamento e pontuação. Hash
+exato sobre texto de PDF é dedup que **parece** funcionar. Parente da #107 e da
+#119. **Origem:** levantamento do baseline do chunking, 04/08.
+
+**122. Ligaduras tipográficas atrapalham comparação literal e busca por termo.**
+*(Título anterior: "…não normalizadas na extração de texto" — reescrito em 05/08
+junto com a causa, que foi refutada por medição.)*
+
+> **⛔ CAUSA ORIGINAL REFUTADA em 05/08 — e o defeito é do tipo que esta própria
+> dívida descreve.** Estava escrito aqui que a ligadura **"já mascarou uma
+> duplicação inteira"**: que o `content_hash` reportava zero colisões enquanto
+> 9.890 chunks estavam duplicados porque `ﬁns` ≠ `fins`.
+>
+> **Isso era INFERÊNCIA APRESENTADA COMO MEDIÇÃO.** Nunca foi medido; foi
+> deduzido de dois fatos verdadeiros (há ligaduras; o `content_hash` não
+> colidia) e escrito com a autoridade de um número. Medido agora:
+>
+> | grupos de texto idêntico entre normas diferentes | |
+> |---|---:|
+> | antes da normalização | **4.530** |
+> | depois da normalização | 4.529 |
+>
+> **Não emergiu nada — caiu 1.** As duplicatas já eram byte-idênticas.
+>
+> **Causa real da invisibilidade:** `_hash_chunk` inclui `source_ref`. Dois
+> documentos diferentes **nunca colidem**, com ou sem ligadura. A duplicação é
+> invisível ao `content_hash` **por desenho do hash**, não por Unicode.
+>
+> Cruzar com **#123** ("artefato registra o que ACONTECEU, nunca o que foi
+> solicitado"): o mesmo erro, cometido **dentro do documento que o descreve**. É
+> a lição mais transferível do dia — a regra não protege quem a escreveu.
+
+**ESCOPO REMANESCENTE — defeito real, menor e de outra natureza.** **19 de 102
+documentos**, **8.974 ocorrências**, **2.507 chunks** (8,7%) de `ﬁ`, `ﬂ` e parentes
+(U+FB00…U+FB06). Vem do PDF: a fonte usa o glifo composto e o extrator o copia.
+Atrapalha **comparação literal e busca por termo** — quem procura `fins` não
+acha o que está gravado como `ﬁns`, nem no nosso match de citação nem no Ctrl+F
+de quem lê. **Não** atrapalha dedupe, pelo motivo acima.
+
+**O conserto é normalização na ENTRADA, e é CIRÚRGICA — só ligaduras.** NFKC foi
+a primeira escolha e **medir antes de escrever no corpus a derrubou**: ele trata
+`º` (U+00BA) como equivalente de compatibilidade de `o` e converte —
+`"Lei nº 12.651"` → `"Lei no 12.651"`, `"art. 5º, §1º"` → `"art. 5o, §1o"`.
+Mudaria **18.362 chunks (63%)**, quase todos por causa do `º`, e **quebraria toda
+busca por dispositivo**: a normalização feita para consertar comparação
+destruiria a comparação que sustenta o produto. A troca preserva `º`, `ª` e `§`.
+
+**Garantia estrutural que apareceu na conferência:** como o `content_hash` inclui
+`source_ref`, a reindexação **não deduplica por acidente**. A instrução de não
+deduplicar está garantida pela **estrutura do hash**, não pela disciplina de quem
+executa — e garantia estrutural vale mais que instrução.
+
+**Origem:** levantamento do baseline do chunking, 04/08; causa corrigida na Fase
+4, 05/08.
+
+**123. REGRA: silêncio não é evidência de ausência.** Nenhum instrumento de
+medição ou vigilância pode descartar `stderr` (`2>/dev/null`) nem tratar
+resultado vazio como "o estado ainda não foi atingido". **Vazio e erro são
+estados distintos de "não bateu"** e precisam ser distinguíveis no log. Todo
+vigia/poller precisa de **prova de vida**: falhar alto na primeira consulta que
+não devolve linha bem-formada, em vez de seguir em loop parecendo paciente.
+
+**Autópsia (exemplar, 04/08).** O vigia que esperava o corpus chegar a
+31.298/102 foi escrito assim:
+
+```bash
+until [ "$(docker exec ... psql -tAc 'select (select count(*) ...) || "/" || ...' 2>/dev/null)" = "31298/102" ]
+```
+
+Três defeitos compostos: em SQL, `"/"` é **identificador**, não literal — o banco
+respondia `ERROR: column "/" does not exist`; o `2>/dev/null` engolia o erro; e a
+comparação passava a testar string **vazia** contra `31298/102`. O vigia **nunca
+poderia disparar, em nenhum estado do banco**. Pior: o silêncio dele era
+indistinguível de "ainda não chegou", e o revert do corpus já tinha entrado havia
+tempo enquanto o loop parecia estar trabalhando.
+
+**REGRA DERIVADA — artefato de medição registra o que ACONTECEU, nunca o que foi
+solicitado.** Sempre que "pedido ≠ realizado" for possível — fallback de
+provider, retry, degradação, cache — o artefato grava **os dois lados e o
+booleano de igualdade**.
+
+**Segundo exemplar (mesmo dia, mesma família).** A primeira rodada completa deste
+baseline gravou `modelo: gemini/gemini-2.5-flash` nos cinco json. Em uma delas
+(`defesa`) houve **2 timeouts** nesse modelo e o gateway acionou o **fallback** —
+outro modelo respondeu. O medidor gravava `settings.GEMINI_LEGAL_MODEL`, colhido
+**antes** da chamada: o modelo *pedido*. O json afirmava um modelo que não rodou.
+
+Isso quebraria em silêncio a condição que sustenta o experimento desde o pacote A
+("mesma pergunta, mesmo modelo"). O que denunciou não foi o campo — foi o perfil
+dos números: 1.602 tokens de saída e US$ 0,0054 contra 4.808–6.466 e
+US$ 0,0129–0,0164 das outras quatro.
+
+**O padrão do dia:** `model_used` existia e ninguém lia; `embedding_model`
+existia desde a Sprint U e ninguém lia. **Nossos defeitos não são de dado
+ausente — são de dado presente e não consultado.**
+
+`AIResponse` **já expunha** `model_used`; faltava alguém lê-lo — igual à
+`embedding_model` da #114. O medidor passou a gravar `modelo_efetivo`,
+`modelo_efetivo_igual_ao_pedido`, `provider_efetivo`, `duracao_ms` e
+`finish_reason`. Como `AIResponse` **não** expõe nº de tentativas nem motivo do
+fallback, esse sinal é capturado de quem o tem — os próprios avisos do gateway —
+e gravado em `gateway.tentativas_transitorias` / `gateway.fallbacks_acionados`:
+timeout recorrente num modelo é sinal operacional e não pode morrer no terminal.
+
+**TERCEIRO EXEMPLAR — o instrumento de aceite tinha o defeito que a fase
+combatia (05/08).** A métrica que julgaria o sucesso da remediação dizia que o
+art. 61-A continuava `recuperado` depois da reindexação. **Estava errada.**
+
+Ela procurava o texto `"art. 61-A"` **no corpo do chunk** — e os chunks do art.
+61-**B** *mencionam* o 61-A. A métrica capturava **menção**, não **identidade**,
+e por isso deu positivo para um artigo que havia **saído do top-8**.
+
+É literalmente a #121 (o mesmo texto sob identidade errada) cometida pelo
+medidor. Toda a Fase 3 existiu para separar identidade de menção — e o
+instrumento de aceite continuava misturando as duas.
+
+Corrigido usando o campo `dispositivo`, que a Fase 3 criou exatamente para isso.
+Com a identidade correta, o número real apareceu: **posição 2 → 29, similaridade
+0,7764 → 0,6601**. Sem a correção, a fase teria sido reportada como sucesso.
+
+**Família.** Mesmo mecanismo da #117 (fronteira perdida em silêncio), do
+`probes=1` (#113), do fallback de provider por presença de chave (#114) e do
+`content_hash` mascarado por ligadura (#121/#122). **O sistema não falha:
+responde errado, calado.** A defesa é sempre a mesma — conferir por um segundo
+caminho e fazer o instrumento **recusar** em vez de responder quando não pode
+responder direito. **Origem:** autópsia do vigia do baseline, 04/08.
+
+**124. Tentativas e motivo do fallback só existem como texto de log.**
+`AIResponse` expõe `content`, `model_used`, `provider`, `tokens_in/out`,
+`cost_usd`, `duration_ms` e `finish_reason` — **não** expõe quantas tentativas
+houve nem por que o fallback foi acionado. Esse dado existe apenas na frase do
+aviso que o gateway escreve no log.
+
+**Raspar log é frágil pelo motivo da #123:** mudou a frase do aviso, o consumidor
+**cala** — não quebra, não avisa, apenas passa a contar zero. Silêncio outra vez,
+mesma família.
+
+**Telemetria de fallback não é instrumento de laboratório.** Timeout recorrente
+num provider é **sinal operacional** e deveria ser visível em produção, não só
+num baseline. Hoje, um provider degradando sustentadamente aparece como latência
+e custo estranhos, sem nome.
+
+**O que fazer:** promover `tentativas` e `motivo_do_fallback` a campos
+estruturados de `AIResponse` em `app/core/ai_gateway.py`, e expor a contagem como
+métrica. **Fora do escopo do PR do chunking** (é código de produção): registrado,
+não executado. O baseline usa um handler no logger — solução certa para capturar
+sem tocar em produção, e que esta dívida torna desnecessária quando for feita.
+**Evidência operacional já colhida.** Com a captura ligada, o baseline mediu:
+`gemini-2.5-flash` deu **2 timeouts e caiu para `gpt-4.1-mini`** na pergunta
+`defesa` — **nas duas rodadas seguidas**, não por acaso. É justamente a pergunta
+de **maior contexto**. Ou seja: o provider degrada de forma reprodutível na maior
+entrada, e hoje isso só aparece se alguém estiver lendo o terminal na hora.
+**Origem:** re-run do baseline do chunking, 04/08 (#123).
+
+**125. `gemini-2.5-flash` degrada de forma reprodutível na maior entrada.**
+Medido no baseline do chunking: na pergunta `defesa` — a de **maior contexto** —
+o modelo deu **2 timeouts** e o gateway caiu para `gpt-4.1-mini`. **Nas duas
+rodadas**, não uma vez. As outras quatro perguntas, de contexto menor, passaram
+(duas com 1 tentativa transitória, duas limpas).
+
+Não é ruído de laboratório: é **sinal operacional de produção**. O agente de
+legislação usa esse modelo e monta contexto RAG do mesmo tamanho — em produção
+isso aparece como latência alta, custo estranho e resposta de outro modelo, sem
+nome e sem alarme. Ninguém está olhando o terminal lá.
+
+Relação com a #124: enquanto tentativas e motivo do fallback não forem campos
+estruturados, essa degradação não é observável fora de uma medição manual.
+
+**Decisão: não mexer no timeout do gateway agora** (código de produção, fora do
+PR do chunking). Registrado, não executado. **Origem:** baseline do chunking,
+04/08.
+
+**126. O corpus contém documentos NÃO ARTICULADOS tratados como norma
+articulada.** Plano de manejo, plano territorial, anexo, formulário, coletânea,
+manual, parecer doutrinário e captura de página web entram pelo **mesmo caminho**
+de uma lei. O chunker então procura `Art. N` num texto que não tem artigos — e o
+que ele encontra são citações inline e cabeçalhos falsos.
+
+Exemplos medidos em 04/08: `MT-NUC01` (1 MB de sumário paginado + rodapé de
+captura + listas de diretrizes), `Plano de Manejo EE Pouso Alto` (228.152 tokens
+de prelúdio começando em *"GOIÂNIA, QUINTA-FEIRA, 23 DE JUNHO DE 2016 — DIÁRIO
+OFICIAL"*), `Manual SFB SICAR 2023`, `OJN 06/2009 PFE-IBAMA` (prosa numerada por
+parágrafo: *"102. José dos Santos Carvalho Filho apresenta…"*).
+
+**É questão de CLASSIFICAÇÃO na entrada, anterior ao chunking.** Um documento
+não articulado não deveria sequer tentar o corte por artigo; deveria declarar o
+que é e receber a estratégia adequada. A guarda da #117 trata o **sintoma** com
+honestidade — impede a etiqueta falsa — mas não decide o que o documento é.
+
+**Provável parentesco com a #121:** a coletânea que empresta a própria identidade
+ao texto que transcreve é a mesma família — documento cuja natureza (compilação,
+plano, manual) não é declarada e por isso é tratada como se fosse a norma.
+
+**HIPÓTESE REFORÇADA pela Fase 4 (05/08) — registrada, sem abrir frente.** Na
+pergunta da `defesa`, o art. 18 do Decreto 6.514 continuou fora do top-8 mesmo
+depois de toda a remediação. A causa ficou **visível**: a **OJN 06/2009
+PFE-IBAMA** — um parecer doutrinário — ocupa **6 das 8 vagas**. O problema ali
+nunca foi chunking.
+
+Isso sugere que o corpus precisa distinguir **NORMA de INTERPRETAÇÃO na
+RECUPERAÇÃO**, não só no rótulo: material interpretativo é semanticamente mais
+próximo de uma pergunta em linguagem natural do que o texto seco do dispositivo,
+e por isso ganha a disputa por similaridade — justamente quando o consultor
+precisa da norma. **Hipótese, não conclusão.**
+
+Registrado, **não resolvido agora**. **Origem:** Fase 1 da remediação do
+chunking, 04/08.
+
+**127. Metadado do chunk de legislação é preenchido em dois lugares.**
+`index_legislation_document()` e `scripts/reindexar_chunking.py:_inserir_preparado()`
+montam **o mesmo** conjunto de metadados — `source_ref`, título, `tenant_id`,
+`scope`, `uf`, `agency`, `identifier`, `effective_date` e o `extra_metadata` com
+`demand_types`, `keywords`, `vigencia_inicio/fim`, `sucessora_ref` e `historica`.
+
+A duplicação foi **necessária** em 05/08: a rota original embarca e insere na
+mesma chamada, e a reindexação da Fase 4 precisou separar as duas coisas
+(embedding fora de transação, escrita dentro). Não havia como reusar sem
+reescrever a original no meio de uma passada de escrita.
+
+**Mas duplicação diverge com o tempo, e o candidato óbvio já está apontado:** o
+rótulo de vigência do ADR-037 (`titulo_com_vigencia`) é exatamente o detalhe que
+alguém atualiza num lugar só. Ele viaja **no dado** justamente para não depender
+de ninguém lembrar — e passaria a depender de alguém lembrar de dois lugares.
+
+**Conserto:** extrair o preenchimento de metadado para uma função única,
+consumida pelas duas rotas. **Não fazer agora.** **Origem:** Fase 4 da
+remediação do chunking, 05/08.
+
+**PRÓXIMO LIVRE: 128.**
+
+---
+
+## Faixa 300-399 — infraestrutura do repositório
+
+> Faixa própria pelo mesmo motivo das outras: dois agentes lendo "próximo livre"
+> ao mesmo tempo colidem. **Próximo livre nesta faixa: 304.**
+
+**303. Troca de provider não dispara auditoria de premissas.** Trocar o provider
+de embedding altera **tokenização, limites duros, dimensionalidade e custo** — e
+**nada no processo obriga a reconferir o que dependia do provider anterior**.
+
+Não é descuido individual. É **ausência de gatilho**: cada uma das premissas
+abaixo foi escrita corretamente, com evidência, na época em que valia. Todas
+sobreviveram intactas à migração Gemini → OpenAI da Sprint W, e nenhuma foi
+reconferida — até serem descobertas por acidente, **três no mesmo dia**.
+
+| premissa | escrita quando | como foi descoberta |
+|---|---|---|
+| régua de token `len//4`, *"confirmado contra Gemini tokenizer"* | Sprint 0 | reindexação abortou: `maximum input length is 8192 tokens`. Erro real de 1,22× na mediana, **2,44× no máximo** |
+| `embedding_model` gravado em toda linha | Sprint U | levantamento da #114 — a coluna existia, **ninguém lia**; a busca não filtrava por espaço vetorial |
+| `model_used` exposto no `AIResponse` | — | baseline gravava o modelo **pedido** como se fosse o realizado (#123); o campo com o modelo real já estava ali |
+
+**O padrão comum:** o dado existia e ninguém foi olhar. As três só apareceram
+porque algo quebrou alto — a régua porque a API recusou, as outras duas porque
+alguém foi medir por outro motivo. Nenhuma teria aparecido sozinha.
+
+**Proposta — registrada, NÃO implementada:**
+
+1. **Checklist obrigatório de troca de provider**, cobrindo no mínimo:
+   tokenização e contagem, limites duros de entrada, dimensionalidade do vetor,
+   tabela de preço, nomes de modelo persistidos, e **reindexação necessária ou
+   não**.
+2. **Comentário de calibração no código**: toda constante calibrada contra um
+   provider específico declara **qual provider e quando** — como
+   `# calibrado contra cl100k_base (OpenAI), 05/08`. Sem isso, a constante
+   parece universal e sobrevive à troca sem que ninguém desconfie.
+
+**Origem:** três achados independentes na Fase 4 da remediação do chunking,
+05/08. Correlatas: #114, #123, #124, ADR-040, ADR-041 (adendo).
+
+**302. 🔴 ABERTA — dev com grafo de alembic inconsistente (duas frentes
+paralelas).** O `alembic_version` do `amigao_db` está em **`b4e1d70c9a35`**,
+revisão que vive na branch **`feat/audio-conversao-e-diarizacao`** (commit
+`ce4f1a8`) e **não está na main**. Qualquer branch que não a contenha não
+consegue nem resolver o `current`:
+
+```
+ERROR  Can't locate revision identified by 'b4e1d70c9a35'
+FAILED: Can't locate revision identified by 'b4e1d70c9a35'
+```
+
+Consequência concreta: a migration `b7e3f1a90c24` (#119, estrutura da norma como
+dado) **não pôde ser aplicada por alembic**, e a reindexação da Fase 4 falhou com
+`UndefinedColumn: column "dispositivo" does not exist`.
+
+**Contorno aplicado em 05/08 (opção C):** o DDL de `b7e3f1a90c24` foi executado
+**à mão** no dev, numa transação única, com `alembic_version` **intocado**.
+Conferido coluna a coluna contra a migration — tipos, nullability e os dois
+índices batem; as quatro colunas nasceram NULL em 31.298 linhas.
+
+**Descartado: `alembic stamp`.** Apontar o banco para o head que a nossa branch
+conhece **mentiria sobre o estado do banco** — as tabelas da outra frente
+continuariam existindo com o alembic declarando que não foram aplicadas. É a
+família #123 (registrar o pretendido como se fosse o realizado), e o preço se
+paga meses depois, quando alguém confia no `alembic_version`.
+
+**O conserto real é o merge da branch de áudio.** Enquanto ele não acontece, dev
+e prod divergem no registro de migrations — não no schema, que está conferido.
+**Esta dívida NÃO fecha com o contorno; fecha quando a branch entrar na main e o
+`upgrade head` rodar limpo.**
+
+**Origem:** Fase 4 da remediação do chunking, 05/08.
+
+**301. 110 MB de blobs mortos no histórico do git — ~80% do `.git`.** O
+repositório tem **137 MB** em `.git`, dos quais **110 MB são 8 blobs acima de
+1 MB** que ninguém usa:
+
+| arquivo | tamanho | entrou | saiu |
+|---|---:|---|---|
+| `frontend.zip` | **43,4 MB** | `1bbac39` *"atualização do sistema"* | `66b6b9b` |
+| 7 PDFs `docs/base_regulatoria/SEMAD/Manuais/` | **66,6 MB** | `ed1801f` | `6d7eab9` |
+
+**Não é hipótese de dano — já cobrou.** O commit `6d7eab9` diz o que aconteceu:
+*"remove corpus SEMAD do git — quebrava clone do Render no Linux"*. O deploy
+falhava no `git clone`, antes do build.
+
+**NOTA OBRIGATÓRIA: remover do working tree NÃO remove do histórico.** Os dois
+arquivos já não existem no working tree e os 110 MB continuam lá — todo clone
+ainda os baixa. A limpeza exige **reescrita de histórico** (`git filter-repo` ou
+equivalente), que é **janela própria, com o repo parado e coordenada com quem
+tiver clone**: reescrever troca os hashes de todos os commits, e quem tiver
+branch local fica órfão. **Decisão do André, não se faz no meio de uma fase.**
+
+**Prevenção já feita** (commit `66bddb7`, não é reescrita): `*.dump`, `*.sql.gz`
+e `*.zip` no `.gitignore`. A lacuna quase pegou de novo — o backup de 109 MB da
+Fase 4 apareceria como untracked porque `*.dump` não estava listado.
+
+**Origem:** levantamento pedido na Fase 4 da remediação do chunking, 05/08.
 
 ---
 

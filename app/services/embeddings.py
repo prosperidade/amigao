@@ -157,14 +157,52 @@ def _openai_post(
     for attempt in range(_MAX_RETRIES + 1):
         try:
             response = client.post(OPENAI_EMBED_URL, headers=headers, json=payload)
+        except httpx.TransportError as exc:
+            # TRANSITORIO: conexao fechada pelo peer, timeout, DNS, reset. A
+            # requisicao nao chegou a ser respondida — repetir tem chance real.
+            # Foi aqui que a reindexacao de 05/08 morreu: "peer closed
+            # connection without sending complete message body".
+            if attempt < _MAX_RETRIES:
+                delay = _RETRY_BASE_SECONDS * (2**attempt)
+                logger.warning(
+                    "embeddings.falha classificacao=TRANSITORIA tipo=%s "
+                    "tentativa=%d/%d retry_em=%.1fs err=%s",
+                    type(exc).__name__, attempt + 1, _MAX_RETRIES, delay, exc,
+                )
+                time.sleep(delay)
+                continue
+            logger.error(
+                "embeddings.falha classificacao=TRANSITORIA esgotou %d tentativas: %s",
+                _MAX_RETRIES, exc,
+            )
+            raise EmbeddingError(
+                f"Falha de rede ao embedar (openai) apos {_MAX_RETRIES} "
+                f"tentativas: {exc}"
+            ) from exc
         except httpx.HTTPError as exc:
+            # DETERMINISTICO: repetir nao muda o resultado — so queima tempo e
+            # dinheiro. Retry cego aqui seria repetir sem olhar a causa.
+            logger.error(
+                "embeddings.falha classificacao=DETERMINISTICA tipo=%s err=%s",
+                type(exc).__name__, exc,
+            )
             raise EmbeddingError(f"Falha HTTP ao embedar (openai): {exc}") from exc
+
+        if response.status_code == 400:
+            logger.error(
+                "embeddings.falha classificacao=DETERMINISTICA http=400 body=%s",
+                response.text[:400],
+            )
+            raise EmbeddingError(
+                f"Requisicao invalida ao embedar (openai): {response.text[:400]}"
+            )
 
         if response.status_code == 429 or response.status_code >= 500:
             if attempt < _MAX_RETRIES:
                 delay = _RETRY_BASE_SECONDS * (2 ** attempt)
                 logger.warning(
-                    "openai %d (rate limit/instavel), retry %d/%d em %.1fs",
+                    "embeddings.falha classificacao=TRANSITORIA http=%d "
+                    "tentativa=%d/%d retry_em=%.1fs",
                     response.status_code, attempt + 1, _MAX_RETRIES, delay,
                 )
                 time.sleep(delay)
@@ -258,6 +296,15 @@ def _gemini_embed_single(
         except httpx.HTTPError as exc:
             raise EmbeddingError(f"Falha HTTP ao embedar (gemini): {exc}") from exc
 
+        if response.status_code == 400:
+            logger.error(
+                "embeddings.falha classificacao=DETERMINISTICA http=400 body=%s",
+                response.text[:400],
+            )
+            raise EmbeddingError(
+                f"Requisicao invalida ao embedar (openai): {response.text[:400]}"
+            )
+
         if response.status_code == 429 or response.status_code >= 500:
             if attempt < _MAX_RETRIES:
                 delay = _RETRY_BASE_SECONDS * (2 ** attempt)
@@ -323,6 +370,38 @@ def embed_text(text: str, *, task_type: str = "RETRIEVAL_DOCUMENT") -> list[floa
         return _gemini_embed_single(client, text, key=key, task_type=task_type)
 
 
+class ChunkAcimaDoLimite(EmbeddingError):
+    """Chunk maior que o teto duro da API de embedding."""
+
+
+def _exigir_dentro_do_limite(items: list[str]) -> None:
+    """Nenhum chunk vai para a API sem conferencia de tokens REAIS.
+
+    O teto de 8.192 nao se argumenta: acima dele nao ha embedding. Truncar em
+    silencio seria pior que falhar — embarcaria meio dispositivo como se fosse
+    inteiro, e o vetor resultante representaria um texto que ninguem escreveu.
+
+    Existe porque a regua antiga (4 chars/token) subestimava ate 2,44x e seis
+    chunks estouraram o limite em producao de indice (05/08).
+    """
+    from app.services.chunking import LIMITE_API_TOKENS, contar_tokens
+
+    estouros = [
+        (i, n, " ".join(t[:80].split()))
+        for i, t in enumerate(items)
+        if (n := contar_tokens(t)) > LIMITE_API_TOKENS
+    ]
+    if estouros:
+        detalhe = "; ".join(
+            f"item[{i}]={n} tokens, comeca com {inicio!r}" for i, n, inicio in estouros
+        )
+        raise ChunkAcimaDoLimite(
+            f"{len(estouros)} chunk(s) acima do teto de {LIMITE_API_TOKENS} tokens "
+            f"da API de embedding: {detalhe}. Nada foi embarcado — truncar em "
+            "silencio embarcaria meio dispositivo como se fosse inteiro."
+        )
+
+
 def embed_batch(
     texts: Iterable[str],
     *,
@@ -332,6 +411,8 @@ def embed_batch(
     items = [t for t in texts if t and t.strip()]
     if not items:
         return []
+
+    _exigir_dentro_do_limite(items)
 
     provider = _select_provider()
     logger.info("embeddings.batch: %d itens via %s", len(items), provider)

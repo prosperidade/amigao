@@ -2942,3 +2942,149 @@ silêncio. **Nenhum deles falhava — todos respondiam.**
 A defesa que funcionou nos quatro foi a mesma: conferir por um segundo caminho, e
 fazer o sistema **recusar** em vez de responder quando não pode responder direito.
 Indisponibilidade honesta vale mais que disponibilidade mentirosa.
+
+---
+
+## 04/08 — Baseline da remediação do chunking (`feat/chunking-estrutural`)
+
+Antes de mexer no chunker, medir. O baseline é o commit 1 da frente, e nada de
+código do chunker entra antes dele.
+
+### Cinco perguntas, escolhidas pelo estado do alvo
+
+Três devem melhorar, uma **não pode piorar** (`art71`, hoje íntegro — controle
+negativo) e uma é estadual. Experimento só com casos que devem melhorar não
+detecta regressão.
+
+O medidor tinha escopo e alvo **cravados no código**: sempre federal + GO, sempre
+o art. 18 do 6.514. Viraram atributo da pergunta — sem isso a pergunta estadual
+rodaria no corpus federal e devolveria um número com cara de resposta.
+
+### O que o baseline mostrou
+
+O art. 18 do Decreto 6.514/2008 **existe no corpus e não é recuperado**: fica na
+posição **32**, similaridade 0,6686, fora do top-8. Isso é `falha_de_recuperacao`,
+não ausência de corpus — duas causas opostas com o mesmo sintoma (o agente não
+cita a norma), e sem essa separação uma leva a culpa da outra.
+
+O art. 61-A do Código Florestal está **partido em 7 pedaços** e é recuperado em
+cacos: 4 dos 8 trechos do top-8 são fragmento. O art. 71 da Lei 9.605 está
+íntegro e volta inteiro — é o que a remediação não pode estragar.
+
+### Portão de igualdade, não piso
+
+Piso protege contra banco parcial; **não vê corpus poluído**. O corpus chegou a
+31.718/113 por ingestão de outro agente (revertida) — um piso teria deixado a
+medição correr e produzido baseline incomparável, com o defeito aparecendo
+semanas depois, na comparação que deveria provar o ganho. Baseline e
+pós-remediação só se comparam sobre **fingerprints iguais**.
+
+### Três instrumentos meus falharam calados no mesmo dia
+
+O vigia que esperava o corpus limpo tinha `"/"` como identificador SQL e `stderr`
+descartado: **nunca poderia disparar**, e o silêncio dele era indistinguível de
+"ainda não chegou" (#123). O medidor gravava o modelo **pedido** como se fosse o
+realizado — e a `defesa` foi respondida por `gpt-4.1-mini` após dois timeouts do
+Gemini, nas duas rodadas (#124). O dedup por `content_hash` reportava zero
+duplicatas enquanto 9.890 chunks estavam duplicados, porque `ﬁns` e `fins` são
+strings diferentes (#121/#122).
+
+**O padrão do dia:** `model_used` existia e ninguém lia; `embedding_model` existia
+desde a Sprint U e ninguém lia. Nossos defeitos não são de dado ausente — são de
+**dado presente e não consultado**.
+
+### O achado mais grave não é o chunking
+
+**#121:** o mesmo texto normativo gravado sob identidades diferentes — 4.821
+grupos, 9.890 chunks, 2.013 deles com ≥200 tokens. Chunking ruim devolve trecho
+ruim, e trecho ruim se vê. Atribuição errada devolve o trecho **certo** com a
+fonte **errada**: a peça sai coerente citando a portaria no lugar da lei, e
+**passa na conferência**. Princípio 11 ferido na raiz.
+
+---
+
+## 05/08 — Remediação do chunking, Fases 1 a 4 (`feat/chunking-estrutural`)
+
+**A frente encerra assim: estrutura corrigida, recuperação NÃO melhorada, uma
+regressão medida e declarada.** O entregável é o registro, não o ganho.
+
+### A aposta central foi refutada pela própria medição
+
+A Fase 2 apostou que juntar o dispositivo melhoraria a recuperação. O art. 61-A —
+o caso escolhido para provar a tese — passou de partido em 7 pedaços para
+**inteiro**, e **caiu da posição 2 para a 29** (similaridade 0,7764 → 0,6601).
+
+Um vetor de 2.837 tokens representa **tudo vagamente**. O fragmento focado casava
+melhor com a pergunta que o artigo completo — que é exatamente o mecanismo de
+diluição descrito na ADR-041. Escrevemos aquilo como argumento para não deixar o
+chunk crescer, e não aplicamos a nós mesmos quando o chunk que crescia era o
+artigo.
+
+Escala: **490 chunks** (1,60% do corpus) são artigos inteiros acima de 1.500
+tokens. É cauda — mas o 61-A está no **miolo** dela (p50 2.304), então a regressão
+é típica da faixa, não um extremo.
+
+A #118 segue justificada por **outro** motivo, declarado: o consultor recebia o
+dispositivo em cacos, e peça se escreve sobre artigo inteiro. **Ganho de entrega,
+com custo medido de recuperação.** Nada revertido.
+
+### O instrumento de aceite tinha o defeito que a frente combatia
+
+A métrica dizia que o 61-A continuava `recuperado`. Procurava o texto
+`"art. 61-A"` no **corpo** do chunk — e os chunks do 61-**B** o mencionam. Mediu
+**menção**, não **identidade**: é a #121 cometida pelo medidor, dentro da frente
+cuja Fase 3 existiu para separar as duas coisas.
+
+**Sem essa correção, a fase teria sido reportada como sucesso.**
+
+### Quatro premissas caíram no mesmo dia, todas escritas com evidência na época
+
+| premissa | como caiu |
+|---|---|
+| "o `Art.` seguinte não começa em início de linha" (#117) | a fatia de 1 MB **não tem** outro cabeçalho — não é fronteira perdida, é ausência de fronteira |
+| "a ligadura mascarou a duplicação do `content_hash`" (#122) | 4.530 → 4.529 grupos: não emergiu nada. O hash inclui `source_ref` e nunca colide entre documentos |
+| "4 chars/token, confirmado contra Gemini tokenizer" | verdade para o Gemini; erra até **2,44×** contra o tokenizador da OpenAI, que é quem embarca |
+| "artigo inteiro = melhor recuperação" (#118) | posição 2 → 29 |
+
+O padrão comum virou dívida própria (**#303**): **troca de provider não dispara
+auditoria de premissas**. Três dos casos vêm da migração Gemini → OpenAI da
+Sprint W, e nenhum foi reconferido — `embedding_model` estava gravado desde a
+Sprint U e ninguém lia; `model_used` existia no `AIResponse` e ninguém lia; a
+régua de token era do provider antigo. **O dado existia; ninguém foi olhar.**
+
+### O que melhorou, e é real
+
+- chunks de artigo **partidos por tamanho: 4.935 → 67**
+- **3.380 rótulos falsos** de artigo eliminados — sumário de zoneamento deixou de
+  se apresentar como `Art. 51`
+- **hierarquia em 93,0%**, **dispositivo em 84,9%**, **2.235 referências** como dado
+- na `defesa`, o rótulo mentiroso **saiu do top-8**: dois chunks alegavam ser
+  `Art. 101` e eram prosa doutrinária
+
+O último é **ganho de confiabilidade** — o consultor deixa de receber parecer
+etiquetado como artigo de lei. É o que a peça assinada exige.
+
+### O que não melhorou
+
+Nenhum dos dois alvos de recuperação foi batido. O art. 18 do Decreto 6.514
+continua fora do top-8, e a causa ficou **visível**: a OJN 06/2009, um parecer,
+ocupa **6 das 8 vagas**. Não é chunking. Hipótese registrada na #126: o corpus
+precisa distinguir **norma de interpretação na recuperação**, não só no rótulo.
+
+### Duas garantias estruturais que salvaram o dia
+
+**Transação única.** A reindexação abortou três vezes — coluna faltando, régua de
+token errada, rede caindo. Nas três, o `DELETE` de 30.104 chunks voltou atrás
+sozinho. Escrito da forma natural (apagar, commitar, inserir), o primeiro erro
+teria destruído o corpus.
+
+**E a qualificação que veio depois:** a atomicidade é do **corpo da
+substituição**, não da geração dos vetores. Transação aberta durante 54 minutos
+de chamadas HTTP fica refém da rede — foi o que impediu a passada de terminar.
+Preparar fora, escrever dentro: a transação caiu para 326s.
+
+### Previsão que acertou
+
+`compensacao_rl_go` **não moveu**, exatamente como registrado **antes** de medir.
+O problema lá é dispersão entre coletâneas (#121), não corte (#117) — e a
+previsão certa vale como validação do entendimento das duas dívidas.
