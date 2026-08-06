@@ -1242,8 +1242,30 @@ alguém foi medir por outro motivo. Nenhuma teria aparecido sozinha.
 **Origem:** três achados independentes na Fase 4 da remediação do chunking,
 05/08. Correlatas: #114, #123, #124, ADR-040, ADR-041 (adendo).
 
-**302. 🔴 ABERTA — dev com grafo de alembic inconsistente (duas frentes
-paralelas).** O `alembic_version` do `amigao_db` está em **`b4e1d70c9a35`**,
+**302. ✅ FECHADA em 06/08 — dev com grafo de alembic inconsistente (duas frentes
+paralelas).**
+
+> **Fechada pelo merge do PR #136** (`eddc07a`), como previsto: era ele que
+> levava `b4e1d70c9a35` para a main. Conferido depois do merge, não presumido:
+>
+> - `alembic current` volta a resolver — **`b4e1d70c9a35 (head)`**. Antes
+>   respondia `Can't locate revision identified by 'b4e1d70c9a35'` para qualquer
+>   branch que não fosse a de áudio;
+> - `alembic upgrade head` roda **no-op** — o dev já estava no head;
+> - **o schema corresponde ao que o grafo declara**, que era o risco real do
+>   contorno manual: `knowledge_catalog.dispositivo`, `.dispositivo_origem`,
+>   `.hierarquia`, `.referencias` (aplicadas à mão em 05/08) e
+>   `properties.modulos_fiscais` estão todas presentes.
+>
+> O `b4e1d70c9a35` foi **reparentado** sob `b7e3f1a90c24` antes do merge, pela
+> regra do segundo a mergear — sem isso seriam dois heads a partir do mesmo pai.
+>
+> **O que fica de lição, e não fecha com a dívida:** duas frentes paralelas
+> criando migration a partir do mesmo pai é situação normal, e o custo só
+> apareceu quando uma delas precisou do banco. A faixa de dívidas por frente
+> resolve colisão de NÚMERO; não resolve colisão de GRAFO.
+
+**Registro original:** O `alembic_version` do `amigao_db` está em **`b4e1d70c9a35`**,
 revisão que vive na branch **`feat/audio-conversao-e-diarizacao`** (commit
 `ce4f1a8`) e **não está na main**. Qualquer branch que não a contenha não
 consegue nem resolver o `current`:
