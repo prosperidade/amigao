@@ -23,7 +23,13 @@ inventar: a extração é quem lê o documento, e ela roda de novo quando a
 consultora reconsolidar. Ficam NULL, honestamente.
 
 Revision ID: b4e1d70c9a35
-Revises: a2f6c8d40b17
+Revises: b7e3f1a90c24
+
+REPARENTADA em 06/08: nasceu revisando `a2f6c8d40b17`, mas a frente do corpus
+mergeou primeiro (PR #138, `dd65344`) e trouxe `b7e3f1a90c24` para a main a
+partir do MESMO pai. Duas revisoes com o mesmo `down_revision` sao dois heads, e
+dois heads quebram o `alembic upgrade head`. Regra da casa: o segundo a mergear
+se ajusta.
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "b4e1d70c9a35"
-down_revision = "a2f6c8d40b17"
+down_revision = "b7e3f1a90c24"
 branch_labels = None
 depends_on = None
 
