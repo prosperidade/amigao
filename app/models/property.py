@@ -52,6 +52,14 @@ class Property(Base):
     area_documental_ha = Column(Float, nullable=True)
     area_grafica_ha = Column(Float, nullable=True)
     tipologia = Column(String, nullable=True)           # agricultura | pecuaria | misto | outro
+    # Dívida #200 — módulos fiscais é ATRIBUTO do imóvel (área ÷ módulo fiscal do
+    # município), não do documento que o declara. Decide PORTE, e porte decide as
+    # exceções do Código Florestal que a skill de diagnóstico aplica ("Exceção por
+    # porte — pequeno produtor, agricultura familiar, Módulo Fiscal") e a H19 do
+    # auditor ("exige saber bioma e módulos fiscais"). O RAT declara o número e a
+    # extração o produzia desde sempre; sem coluna, ele era descartado em silêncio
+    # a cada consolidação. Float porque o quociente é fracionário (ex.: 3,7 MF).
+    modulos_fiscais = Column(Float, nullable=True)
     strategic_notes = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

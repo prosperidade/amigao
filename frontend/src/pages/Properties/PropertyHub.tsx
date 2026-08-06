@@ -57,6 +57,8 @@ interface PropertyHubHeader {
   area_documental_ha: number | null;
   area_grafica_ha: number | null;
   tipologia: string | null;
+  // Dívida #200 — módulos fiscais decide porte; fracionário (3,7 MF).
+  modulos_fiscais: number | null;
   strategic_notes: string | null;
   // Sprint 4 (Ficha 07 §9) — contiguidade tri-state + soma anotada
   matriculas_contiguas: boolean | null;
@@ -712,6 +714,24 @@ function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringCon
             value={header.tipologia}
             source={src.tipologia}
             onValidate={onValidate ? () => onValidate(['tipologia']) : undefined}
+          />
+          {/* Dívida #200 — o RAT declara os módulos fiscais e a consolidação os
+              descartava por não haver coluna. Porte decide exceção do Código
+              Florestal (o limiar dos 4 MF), então o número aparece com a fração e
+              com a leitura de porte ao lado: não é a consultora que deve refazer
+              essa conta de cabeça toda vez que abre o imóvel. */}
+          <InfoField
+            label="Módulos fiscais"
+            value={header.modulos_fiscais != null
+              ? header.modulos_fiscais.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+              : null}
+            sub={header.modulos_fiscais != null
+              ? (header.modulos_fiscais <= 4
+                ? 'até 4 MF — pequena propriedade para o Código Florestal'
+                : 'acima de 4 MF')
+              : undefined}
+            source={src.modulos_fiscais}
+            onValidate={onValidate ? () => onValidate(['modulos_fiscais']) : undefined}
           />
         </div>
         {header.regulatory_issues && header.regulatory_issues.length > 0 && (

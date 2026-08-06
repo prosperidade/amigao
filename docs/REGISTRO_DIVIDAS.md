@@ -1310,7 +1310,14 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 206.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 207.**
+
+> **✅ FECHADAS na 2ª rodada (03/08, `feat/audio-conversao-e-diarizacao`):**
+> **#200** (todo `ignorados` diz o motivo; `modulos_fiscais` ganhou destino) e
+> **#201** (o sistema converte o áudio sozinho; a consultora nunca ouve falar de
+> bitrate). **#205** foi absorvida pela **#206**, que é o problema real por trás
+> dela. **#203 segue desligada — agora por decisão técnica medida, não por falta
+> de resposta da Isis** (ver a entrada revista abaixo).
 
 > **✅ FECHAMENTO DA #103 (03/08, `feat/transcricao-audio` · ADR-060).** O sistema
 > passou a ouvir. Áudio virou "documento cuja leitura é a transcrição": Whisper
@@ -1332,7 +1339,22 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `ignorados`. Nenhum `consolidar_falhou` em todo o histórico do caso — o
 > caminho do 500 não era o vetor.
 
-**200. `ignorados` mostra o campo descartado, mas não o motivo.** Medido no
+**200. ✅ FECHADA em 03/08** (`feat/audio-conversao-e-diarizacao`). Todo
+`ignorados` passou a carregar motivo, vindo de uma **fonte única**
+(`motivo_sem_destino`) que o selo durável e o pós-consolidação agora compartilham
+— antes o selo explicava e o `ignorados` não, e a mesma pergunta tinha duas
+respostas de qualidade diferente. A função distingue quatro situações que pediam
+ações opostas e recebiam a mesma string: **recusa declarada** (decisão, com o
+porquê), **sem coluna na base** (campo a pedir), **coluna existe mas a
+consolidação não grava** (mapeamento a ajustar) e **sem campo de destino**.
+Decisão sobre os três campos órfãos do caso 16: `modulos_fiscais` ganhou
+**destino** (coluna em `properties`, allowlist, Hub e selo — é atributo do
+imóvel, decide porte e portanto exceção do Código Florestal); `rat_protocolo` e
+`rat_data_emissao` ganharam **recusa declarada** — metadado que identifica o
+DOCUMENTO, não o imóvel, e dois RATs de datas diferentes são dois documentos.
+Também saiu do vocabulário da tela o "valor incoercível/implausível", que não é
+português de consultora. Texto original abaixo. — **`ignorados` mostra o campo
+descartado, mas não o motivo.** Medido no
 processo 16 em produção (a leitura que fechou a #104). Os três campos que saíram
 em `ignorados` — `imovel.rat_protocolo`, `imovel.modulos_fiscais`,
 `imovel.regulatory_issues` — caem em `staging_consolidation.py:718`, o **único**
@@ -1345,7 +1367,18 @@ onde guardar. **O que destrava:** (a) sufixo de motivo nessa linha, como as
 outras quatro já têm; (b) decidir se esses campos ganham coluna ou se a extração
 deve parar de emiti-los. **Origem:** leitura de produção de 03/08 (#104).
 
-**201. Áudio acima de 25 MB não é transcrito.** O provedor recusa arquivos
+**201. ✅ FECHADA em 03/08** (`feat/audio-conversao-e-diarizacao`) — **na
+conversão, não na segmentação**. `ffmpeg` entrou na imagem e o sistema comprime
+sozinho (mp3 mono 64 kbps / 16 kHz, que é o patamar em que o próprio Whisper
+reamostra internamente — a perda é nenhuma na prática). A consultora **nunca ouve
+falar de bitrate**: só é avisada se, mesmo comprimida, a gravação não couber, e aí
+a instrução é em **horas** ("divida em partes de até uma hora"), unidade que ela
+tem como avaliar. Ganho colateral: formatos que o provedor recusava (`.amr` de
+gravador antigo, `.wma`) passam a ser convertidos e transcritos — recusa virou
+entrega. **Segmentação em pedaços de 25 MB NÃO foi implementada**, por decisão:
+é específica do Whisper e viraria trabalho jogado fora se a medição do #206
+apontar outro provedor. Texto original abaixo. — **Áudio acima de 25 MB não é
+transcrito.** O provedor recusa arquivos
 maiores; uma reunião de 30 min em WAV, ou em MP3 de bitrate alto, passa disso. A
 task falha com motivo acionável ("divida a gravação ou reenvie em mono, 64 kbps")
 em vez de silêncio — mas o consultor não deveria precisar saber o que é bitrate.
@@ -1363,13 +1396,39 @@ como entrada multimodal em `generateContent` e cobra por tokens de áudio (~32
 tokens/segundo) em vez de por minuto. Exige segunda implementação no gateway, com
 contrato de custo diferente. **Origem:** ADR-060.
 
-**203. Resumo estruturado da reunião está pronto e desligado.** Decisão 3a da
-Isis, pendente: transcrição bruta ou transcrição + resumo (o que o cliente pediu ·
-o que prometeu enviar · prazos · decisões). Esta rodada entrega a bruta; o resumo
-está implementado e testado atrás de `AUDIO_TRANSCRICAO_RESUMO_ENABLED=false`.
-**O que destrava:** a resposta dela — vira troca de variável, não sprint. Se
-ligar, medir o custo real do acréscimo (uma chamada de LLM sobre um texto longo)
-antes de deixar ligado por default. **Origem:** ADR-060.
+**203. Resumo estruturado BLOQUEADO por decisão técnica — não por falta de
+resposta da Isis.** *(Revisto em 03/08 com evidência medida. A entrada anterior
+tratava isto como pendência de produto; é impedimento técnico.)*
+
+O resumo promete responder **"o que o CLIENTE prometeu enviar"**. Medição de
+03/08, com duas vozes distintas passadas pelo caminho de produção: o `whisper-1`
+**não faz diarização**. Os `segments` do `verbose_json` trazem
+`id/start/end/text/tokens/avg_logprob/compression_ratio/no_speech_prob/temperature`
+e **não trazem `speaker`**. A saída é bloco corrido, sem quebra na troca de turno:
+
+> "…e protocolar a defesa administrativa até o dia 15. **Certo. E eu te mando o
+> recibo do CAR** e a matrícula do lote 1B até sexta-feira."
+
+Ali, no meio da linha, a voz muda — e nada no texto diz isso. A primeira promessa
+é da consultora, a segunda é do cliente. **Num bloco sem atribuição, "o que o
+cliente prometeu" é inderivável**, e o LLM vai preencher com o palpite mais
+plausível.
+
+**Por que resumo com dono errado é PIOR que resumo nenhum:** a promessa vira
+compromisso no caso. Atribuída ao consultor, nasce **Ação interna**; atribuída ao
+cliente, nasce **pendência dele**, com cobrança e prazo. Trocar os dois cria
+tarefa para quem não assumiu e some com a cobrança de quem assumiu — e, diferente
+do silêncio de hoje, isso **parece informação**, então ninguém confere.
+
+**Cuidado ao ler a medição:** os cortes de segmento caíram perto das trocas de
+turno, mas só porque o áudio de teste foi montado concatenando clipes de voz
+única com corte seco. Em reunião real (sobreposição, sem pausa) o corte é
+prosódico. **Segmento não é proxy de falante** — não construir em cima disso.
+
+**O que destrava:** a #206. Enquanto ela não fechar,
+`AUDIO_TRANSCRICAO_RESUMO_ENABLED` fica `false`, e a resposta da Isis sobre o
+formato do resumo (decisão 3a) não é o que falta. **Origem:** ADR-060; medição de
+03/08.
 
 **204. Visibilidade "material interno" só afeta o portal do cliente.** Decisão 3b
 implementada no default conservador: `Document.is_internal` esconde o documento da
@@ -1379,13 +1438,52 @@ destrava:** definir com a Isis se "interno" deve também sair do dossiê gerado 
 das peças entregues ao cliente — e, se sim, aplicar em `dossier.py` e nos
 geradores de proposta/contrato. **Origem:** ADR-060.
 
-**205. Transcrição não é cronometrada por falante nem por trecho.** O texto sai
-corrido, sem marcas de tempo e sem separação de quem falou. Para achar "onde ele
-disse isso" numa reunião de 30 min, o consultor lê tudo. O Whisper devolve
-`segments` com timestamps no `verbose_json` — hoje descartados. **O que
-destrava:** persistir os segmentos e usá-los para ancorar a citação do
-diagnóstico num minuto do áudio, fechando a fonte clicável até o ponto da fala.
-**Origem:** ADR-060.
+**205. Transcrição não é cronometrada por falante nem por trecho.** *(Absorvida
+pela #206 em 03/08 — o timestamp sozinho não resolve o problema real, que é
+atribuição. Fica registrada porque a parte de "achar onde foi dito" continua
+valendo mesmo que a atribuição venha de outro caminho.)* O texto sai corrido, sem
+marcas de tempo e sem separação de quem falou. Para achar "onde ele disse isso"
+numa reunião de 30 min, o consultor lê tudo. O Whisper devolve `segments` com
+timestamps no `verbose_json` — hoje descartados. **O que destrava:** persistir os
+segmentos e usá-los para ancorar a citação do diagnóstico num minuto do áudio,
+fechando a fonte clicável até o ponto da fala. **Origem:** ADR-060.
+
+**206. ATRIBUIÇÃO DE FALANTE — a medição Gemini × Whisper, com áudio real.**
+Bloqueia a #203 (ver acima). Aberta em 03/08 com a medição **pronta e não
+executada**: falta o insumo.
+
+**Por que não foi medida nesta rodada.** A medição exige **áudio real de reunião
+da Isis**, e não há nenhum no ambiente — o único arquivo de áudio no repositório
+é um `.wav` de health-check do litellm. Medir com áudio sintético seria pior que
+não medir: na montagem por concatenação de clipes de voz única, o corte de
+segmento cai na troca de turno **por artefato**, e a conclusão sairia
+otimista. Em reunião real há sobreposição, muletas ("é... então..."), ruído de
+fundo e duas pessoas falando ao mesmo tempo — que é exatamente onde a atribuição
+quebra. **Parado, por instrução, até o áudio dela chegar.**
+
+**Protocolo já definido, para rodar assim que houver o arquivo** — duas dimensões,
+não uma:
+
+1. **Atribuição** — Gemini 2.5 (áudio nativo, já é provider nosso, já está atrás
+   do LiteLLM) recebe a gravação e é *pedido* a marcar quem falou. Medir: quantas
+   trocas de turno ele acerta, e o que faz nas sobreposições.
+2. **Fidelidade de termo técnico** — `auto de infração`, número de auto/processo,
+   nome de norma, número de matrícula, CCIR, NIRF. **Não adianta ganhar atribuição
+   e perder o vocabulário**: o Whisper só acertou "auto de infração" depois do
+   `VOCABULARIO_DOMINIO` no prompt (antes saía "**alto** de infração"), e um
+   provedor novo começa sem esse ajuste. Comparar lado a lado, mesmo áudio.
+3. **Custo e latência dos dois lados.** A conta estimada inverte a favor do
+   Gemini — áudio ≈32 tokens/s ⇒ 30 min ≈ 57,6k tokens ≈ **US$ 0,058** no Flash,
+   contra **US$ 0,18** do Whisper —, mas estimativa não é medição (foi
+   exatamente assim que o "alto de infração" passou despercebido).
+
+**Declaração honesta, obrigatória se o Gemini vencer:** é **LLM ouvindo e
+atribuindo**, não diarização por impressão vocal. Erro de atribuição é erro de
+modelo, não de assinatura de voz — e por isso tem de chegar à tela como
+**"atribuição sugerida"**, nunca como fato. Um rótulo "Cliente:" que o consultor
+leia como certeza é a #203 de volta, só que com aparência de resolvida.
+
+**Origem:** medição de 03/08; absorve a #205.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 

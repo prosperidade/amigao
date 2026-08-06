@@ -73,6 +73,14 @@ def test_vocabulario_do_dominio_vai_no_prompt_do_whisper(monkeypatch):
 
 
 def test_formato_nao_suportado_falha_antes_de_gastar_a_chamada(monkeypatch):
+    """Sem ffmpeg, `.amr` continua sendo recusa — com motivo, não silêncio.
+
+    `ffmpeg_disponivel` é fixado de propósito: sem isto o teste passaria no
+    Windows do dev (que não tem ffmpeg) e falharia no runner do CI (que pode
+    ter), medindo a máquina em vez do código. Com ffmpeg o `.amr` é convertido e
+    transcrito — coberto em `test_audio_convert.py`.
+    """
+    monkeypatch.setattr("app.services.audio_convert.ffmpeg_disponivel", lambda: False)
     chamou = []
     monkeypatch.setattr(
         "app.core.ai_gateway.transcribe",
@@ -88,22 +96,26 @@ def test_formato_nao_suportado_falha_antes_de_gastar_a_chamada(monkeypatch):
     assert r.cost_usd == 0.0     # zero CONHECIDO, não desconhecido
 
 
-def test_arquivo_acima_do_teto_do_provedor_diz_o_que_fazer(monkeypatch):
-    """Reunião longa em WAV estoura os 25 MB da OpenAI.
+def test_arquivo_acima_do_teto_nao_gasta_a_chamada(monkeypatch):
+    """Acima do teto e sem conversão possível: não paga para ser recusado.
 
-    O consultor não pode receber "erro" — tem que receber a saída: dividir ou
-    reenviar em qualidade menor.
+    **O contrato mudou na 2ª rodada (#201).** Antes este caminho terminava sempre
+    em falha, pedindo à consultora que reenviasse "em mono, 64 kbps". Hoje, com
+    ffmpeg disponível, o sistema comprime e segue — esse caminho é coberto por
+    `tests/services/test_audio_convert.py`. Aqui fica o que não mudou: sem
+    conversão possível, a chamada não é feita e a mensagem é acionável.
     """
     from app.core.config import settings
     monkeypatch.setattr(settings, "AUDIO_TRANSCRIPTION_MAX_BYTES", 1024)
+    monkeypatch.setattr("app.services.audio_convert.ffmpeg_disponivel", lambda: False)
     chamou = []
     monkeypatch.setattr("app.core.ai_gateway.transcribe", lambda *a, **kw: chamou.append(1))
 
     r = transcrever_audio(b"x" * 5000, filename="reuniao.wav", mime_type="audio/wav")
 
-    assert chamou == []
+    assert chamou == [], "não pode gastar a chamada num arquivo que será recusado"
     assert "passa do limite" in r.error
-    assert "Divida a gravação" in r.error
+    assert "divida a gravação" in r.error.lower()
 
 
 def test_falha_do_gateway_vira_motivo_legivel(monkeypatch):

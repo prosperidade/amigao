@@ -6,8 +6,19 @@ Medido em prod (processo 15, 26/07): a consultora aceitou `total_area_ha` e
 linhas recebeu selo. A tela dizia "Aceito", em azul, e pronto.
 
 Selo que não cobre o caminho por onde o dado se perde não é selo.
+
+**Atualizado em 03/08 (dívida #200).** `modulos_fiscais` saiu daqui porque
+**deixou de não ter casa**: ele ganhou coluna em `properties`, entrada na
+allowlist e campo no Hub — é atributo do imóvel (área ÷ módulo fiscal), decide
+porte e portanto exceção do Código Florestal. Este arquivo guardava o SINTOMA
+("o campo some sem selo"); a causa foi curada na origem, então o guard mudou de
+lado: agora exige que ele **não** seja selado, porque selar um campo que pousa
+diria à consultora que o dado se perdeu quando ele foi gravado.
+
+`total_area_ha` continua aqui — aquele é derivado de verdade e nunca vai pousar.
 """
 
+from app.models.property import Property
 from app.services.staging_consolidation import _destino_sem_casa
 
 
@@ -20,11 +31,29 @@ class TestDestinoSemCasaImovel:
         assert "em cada matrícula" in motivo
 
     def test_campo_sem_coluna_na_base(self):
-        """`modulos_fiscais` não existe em `properties` — aceito em 14:32:54, sumiu."""
-        motivo = _destino_sem_casa("imovel", "modulos_fiscais")
+        """Campo que a extração produz e a base não guarda (aqui, `vtn`).
+
+        Era `modulos_fiscais` — aceito às 14:32:54 no caso 15 e sumido. Ele saiu
+        deste teste porque **ganhou coluna** (#200); o cenário continua real com
+        outro campo, e é ele que este guard protege.
+        """
+        motivo = _destino_sem_casa("imovel", "vtn")
         assert motivo is not None
-        assert "modulos_fiscais" in motivo
-        assert "não tem campo na ficha do imóvel" in motivo
+        assert "vtn" in motivo
+        assert "ainda não tem campo" in motivo
+        assert "ficha do imóvel" in motivo
+        # Diz o que fazer, não só o que faltou.
+        assert "é campo a pedir" in motivo
+
+    def test_modulos_fiscais_pousa_e_por_isso_nao_e_selado(self):
+        """O sintoma do caso 15 curado na origem (#200).
+
+        Selar um campo que POUSA é tão errado quanto não selar o que se perde:
+        diria à consultora que o dado sumiu quando ele foi gravado. Este teste
+        existe para quebrar se alguém tirar a coluna ou a entrada na allowlist.
+        """
+        assert "modulos_fiscais" in Property.__table__.columns
+        assert _destino_sem_casa("imovel", "modulos_fiscais") is None
 
     def test_pendencias_do_rat_viram_alerta_nao_campo(self):
         motivo = _destino_sem_casa("imovel", "regulatory_issues")
@@ -60,11 +89,27 @@ class TestMotivoEmLinguagemDeConsultora:
     def test_motivos_nao_usam_jargao(self):
         motivos = [
             _destino_sem_casa("imovel", "total_area_ha"),
-            _destino_sem_casa("imovel", "modulos_fiscais"),
+            _destino_sem_casa("imovel", "vtn"),
             _destino_sem_casa("imovel", "regulatory_issues"),
+            _destino_sem_casa("imovel", "rat_protocolo"),
             _destino_sem_casa("cliente", "profissao"),
+            _destino_sem_casa("matricula", "campo_que_nao_existe"),
         ]
         for motivo in motivos:
             assert motivo
             for termo in self.PROIBIDOS:
                 assert termo not in motivo, f"jargão '{termo}' em: {motivo}"
+
+    def test_motivos_tem_concordancia_correta(self):
+        """"na cadastro do cliente" chegou a existir nesta rodada.
+
+        O gênero muda com a entidade ("ficha" é feminino, "cadastro" é
+        masculino), e a preposição estava fixa no template. Texto que a
+        consultora lê não pode sair torto.
+        """
+        assert "no cadastro do cliente" in _destino_sem_casa("cliente", "profissao")
+        assert "na ficha do imóvel" in _destino_sem_casa("imovel", "vtn")
+        assert "na ficha da matrícula" in _destino_sem_casa("matricula", "inexistente")
+        for entidade, campo in [("cliente", "profissao"), ("imovel", "vtn"),
+                                ("matricula", "inexistente")]:
+            assert "na cadastro" not in _destino_sem_casa(entidade, campo)

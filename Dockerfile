@@ -6,6 +6,18 @@ ENV PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
+# ffmpeg — compressão automática de áudio de reunião (dívida #201 · ADR-060).
+# O provedor de transcrição recusa acima de 25 MB, e uma gravação de uma hora em
+# WAV passa disso com folga. Sem esta ferramenta a saída era pedir à consultora
+# que "reenviasse em mono, 64 kbps" — instrução que só serve a quem sabe o que é
+# bitrate. Com ela, o sistema comprime sozinho e ela nunca ouve falar do assunto.
+# Bônus: formatos que o provedor não lê (.amr de gravador antigo, .wma) passam a
+# ser transcritos em vez de recusados.
+# `--no-install-recommends` mantém o custo em ~60 MB (só o binário e os codecs).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 

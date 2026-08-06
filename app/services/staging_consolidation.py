@@ -61,7 +61,15 @@ _CLIENTE_ALIAS = {"document": "cpf_cnpj", "address": None}
 # caía em `ignorados`, deixando o Hub com "—" em Reserva Legal). app_area_ha já estava.
 _IMOVEL_FIELDS = {"car_code", "car_status", "municipality", "state", "app_area_ha",
                   "area_grafica_ha", "area_documental_ha", "biome", "ccir", "nirf",
-                  "tipologia", "rl_status"}
+                  "tipologia", "rl_status",
+                  # #200 — módulos fiscais é ATRIBUTO do imóvel, não do documento:
+                  # área ÷ módulo fiscal do município. Decide porte e, com ele, as
+                  # exceções do Código Florestal que a skill de diagnóstico aplica
+                  # ("Exceção por porte — pequeno produtor, agricultura familiar,
+                  # Módulo Fiscal") e a H19 do auditor ("exige saber bioma e módulos
+                  # fiscais"). O RAT declara o número; até aqui ele era extraído e
+                  # jogado fora por não ter coluna. Ganhou destino.
+                  "modulos_fiscais"}
 _IMOVEL_ALIAS: dict[str, Optional[str]] = {}
 
 _MATRICULA_FIELDS = {"numero_matricula", "cartorio", "registro_livro_folha_ficha",
@@ -578,7 +586,11 @@ def consolidate_process(
                 continue
             allowed, alias = _MATRICULA_FIELDS, _MATRICULA_ALIAS
         else:
-            ignorados.append(f"{entity or '—'}: sem destino (target_field={target_field})")
+            # #200 — `target_entity=` era vocabulário de log vazando na tela.
+            ignorados.append(
+                f"{entity or '—'}.{target_field or '—'}: "
+                f"{motivo_sem_destino(entity, target_field)}"
+            )
             continue
 
         # ── Coerência matriz×consolidação (Sprint 4 / caso 13) ──────────────
@@ -711,17 +723,33 @@ def _write_entity(
     """
     target = row.target_field or ""
     col = alias.get(target, target) if target in alias else target
-    if col is None:
-        ignorados.append(f"{row.target_entity}.{target} (sem coluna na base)")
-        return False
-    if col not in allowed or col not in obj.__table__.columns:
-        ignorados.append(f"{row.target_entity}.{target}")
+    # Dívida #200 — nenhuma linha aceita sai daqui como identificador nu. Estes
+    # eram os dois pontos (dos cinco que emitem `ignorados`) que não diziam o
+    # motivo; o segundo, pior, colapsava "não tem coluna na base" com "tem coluna
+    # mas a consolidação não grava" — situações que pedem ações OPOSTAS da
+    # consultora. O motivo vem da mesma função que o selo durável usa, para os
+    # dois caminhos nunca mais divergirem em qualidade.
+    if col is None or col not in allowed or col not in obj.__table__.columns:
+        entidade = (row.target_entity or "").lower()
+        motivo = motivo_sem_destino(entidade, target)
+        ignorados.append(
+            f"{row.target_entity or '—'}.{target or '—'}: "
+            f"{motivo or 'não gravado nesta consolidação'}"
+        )
         return False
 
     column = obj.__table__.columns[col]
     coerced = _coerce(value, column.type, col, unidade)
     if coerced is None:
-        ignorados.append(f"{row.target_entity}.{col} (valor incoercível/implausível)")
+        # "incoercível" não é palavra de consultora (#200). O que ela precisa
+        # saber é que o valor foi LIDO e recusado — número fora de ordem de
+        # grandeza, data impossível, texto onde se esperava número — e que a
+        # saída é conferir o documento, não reprocessar.
+        ignorados.append(
+            f"{row.target_entity or '—'}.{col}: o valor lido não é aceitável para "
+            "este campo (formato ou ordem de grandeza) — confira no documento e "
+            "corrija à mão se for o caso"
+        )
         return False
 
     # Forma do container (caso `proprietarios`): coluna JSON de lista/dict não
@@ -1011,7 +1039,22 @@ def _audit(db: Session, tenant_id: int, process_id: int, user_id: Optional[int],
 # Campos do imóvel que o sistema DERIVA e por isso nunca grava da Conferência.
 # Ter o motivo específico (em vez do genérico "não tem lugar") é o que evita a
 # consultora insistir num aceite que jamais vai pousar.
-_IMOVEL_DERIVADOS: dict[str, str] = {
+# ---------------------------------------------------------------------------
+# RECUSA DECLARADA (dívida #200)
+# ---------------------------------------------------------------------------
+# Campos que a consolidação não grava POR DECISÃO — e que por isso devem dizer
+# o PORQUÊ, não sumir como identificador nu. Duas famílias, ambas legítimas:
+#
+#   (a) DERIVADO — o valor existe, mas é calculado de outra fonte; gravá-lo aqui
+#       criaria um segundo número que discorda do primeiro.
+#   (b) IDENTIDADE DO DOCUMENTO — o dado descreve o PAPEL, não o imóvel. Protocolo
+#       e data de emissão do RAT identificam aquele relatório; dois RATs de datas
+#       diferentes são dois documentos, não dois imóveis.
+#
+# A diferença entre isto e "esqueceram de mapear" é o que a #200 existe para
+# tornar visível: no caso 16 (leitura de prod de 03/08) a consultora aceitou
+# quatro campos, nenhum pousou, e a tela mostrou só "imovel.rat_protocolo".
+_IMOVEL_RECUSA_DECLARADA: dict[str, str] = {
     "total_area_ha": (
         "a área total do imóvel é calculada pela soma das matrículas vigentes — "
         "aceite a área em cada matrícula, não aqui"
@@ -1020,15 +1063,39 @@ _IMOVEL_DERIVADOS: dict[str, str] = {
         "pendências do parecer do órgão viram alertas na Visão geral, "
         "não um campo da ficha"
     ),
+    "rat_protocolo": (
+        "o número de protocolo identifica o RAT, não o imóvel — ele já é lido do "
+        "próprio documento e aparece na coluna de fontes da matriz"
+    ),
+    "rat_data_emissao": (
+        "a data de emissão identifica o RAT, não o imóvel — dois RATs de datas "
+        "diferentes são dois documentos, e a diferença entre eles aparece como "
+        "divergência a resolver"
+    ),
 }
 
 
-def _destino_sem_casa(entity: str, target_field: Optional[str]) -> Optional[str]:
-    """Motivo legível quando o destino do aceite não existe na base.
+def motivo_sem_destino(entity: str, target_field: Optional[str]) -> Optional[str]:
+    """Por que este aceite NÃO vai pousar na base — em português de consultora.
 
-    Devolve ``None`` quando o campo tem casa (vai pousar normalmente).
+    Devolve ``None`` quando o campo tem casa (vai gravar normalmente).
+
+    Fonte ÚNICA do motivo (dívida #200). Antes existiam dois caminhos com
+    qualidade desigual: o selo durável (`flag_sem_casa`) explicava, e o
+    `ignorados` do pós-consolidação gravava só ``imovel.rat_protocolo`` — um
+    identificador nu, do qual não se deduz se o campo foi recusado por decisão,
+    se falta coluna, ou se alguém esqueceu de mapear. Os três casos pedem ações
+    opostas da consultora, e ela recebia a mesma string para todos.
+
+    Distingue quatro situações, cada uma com a saída correspondente:
+
+    * **recusa declarada** — decisão de modelagem, com o motivo (nada a fazer);
+    * **sem coluna na base** — a informação não tem onde morar (pedir o campo);
+    * **coluna existe, fora da allowlist** — provável lacuna de mapeamento;
+    * **sem campo de destino** — a extração não disse para onde ia.
     """
     from app.models.client import Client  # noqa: PLC0415
+    from app.models.matricula import Matricula  # noqa: PLC0415
     from app.models.property import Property  # noqa: PLC0415
 
     target = (target_field or "").strip()
@@ -1036,27 +1103,43 @@ def _destino_sem_casa(entity: str, target_field: Optional[str]) -> Optional[str]
         return "aceito sem campo de destino — nada a gravar"
 
     if entity == "imovel":
-        derivado = _IMOVEL_DERIVADOS.get(target)
-        if derivado:
-            return f"não entra na ficha: {derivado}"
-        col = _IMOVEL_ALIAS.get(target, target) if target in _IMOVEL_ALIAS else target
-        tem_coluna = col is not None and col in Property.__table__.columns
-        if col not in _IMOVEL_FIELDS or not tem_coluna:
-            return (
-                f"'{target}' ainda não tem campo na ficha do imóvel — a informação "
-                "fica registrada aqui, mas não aparece no cadastro"
-            )
-        return None
+        recusa = _IMOVEL_RECUSA_DECLARADA.get(target)
+        if recusa:
+            return f"não entra na ficha: {recusa}"
+        # `onde` já carrega a preposição: "cadastro" é masculino e "ficha" é
+        # feminino, então um "na {onde}" fixo produzia "na cadastro do cliente"
+        # na cara da consultora.
+        modelo, fields, alias, onde = Property, _IMOVEL_FIELDS, _IMOVEL_ALIAS, "na ficha do imóvel"
+    elif entity == "cliente":
+        modelo, fields, alias, onde = Client, _CLIENTE_FIELDS, _CLIENTE_ALIAS, "no cadastro do cliente"
+    elif entity == "matricula":
+        modelo, fields, alias, onde = Matricula, _MATRICULA_FIELDS, _MATRICULA_ALIAS, "na ficha da matrícula"
+    else:
+        return f"destino desconhecido ('{entity or '—'}') — não há onde gravar '{target}'"
 
-    if entity == "cliente":
-        col = _CLIENTE_ALIAS.get(target, target) if target in _CLIENTE_ALIAS else target
-        tem_coluna = col is not None and col in Client.__table__.columns
-        if col not in _CLIENTE_FIELDS or not tem_coluna:
-            return (
-                f"'{target}' ainda não tem campo no cadastro do cliente — a "
-                "informação fica registrada aqui, mas não aparece na ficha"
-            )
+    col = alias.get(target, target) if target in alias else target
+    if col is None:
+        return (
+            f"'{target}' não tem correspondente {onde} — a informação fica "
+            "registrada no documento, mas não vai para o cadastro"
+        )
+    if col not in modelo.__table__.columns:
+        return (
+            f"a base ainda não tem campo para '{target}' {onde} — o valor fica "
+            "guardado no documento e aqui na Conferência, mas não aparece no "
+            "cadastro. Se ele deveria aparecer, é campo a pedir"
+        )
+    if col not in fields:
+        return (
+            f"'{target}' existe {onde}, mas não é preenchido pela consolidação "
+            "— se este valor deveria pousar no cadastro, é ajuste a pedir"
+        )
     return None
+
+
+def _destino_sem_casa(entity: str, target_field: Optional[str]) -> Optional[str]:
+    """Compat: nome antigo, hoje um apelido de ``motivo_sem_destino``."""
+    return motivo_sem_destino(entity, target_field)
 
 
 def flag_sem_casa(

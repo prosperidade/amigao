@@ -3088,3 +3088,122 @@ Preparar fora, escrever dentro: a transação caiu para 326s.
 `compensacao_rl_go` **não moveu**, exatamente como registrado **antes** de medir.
 O problema lá é dispersão entre coletâneas (#121), não corte (#117) — e a
 previsão certa vale como validação do entendimento das duas dívidas.
+
+## Motivo em toda linha, e o áudio que se resolve sozinho (03/08/2026 — 2ª rodada)
+
+**Frente:** `feat/audio-conversao-e-diarizacao` · fecha #200 e #201 · abre #206 ·
+revisa #203 · faixa 200-299.
+
+### #200 — o silêncio tinha cinco portas, e uma estava aberta
+
+`ignorados` tem cinco pontos de emissão. Quatro explicavam o motivo. O quinto
+(`staging_consolidation.py:718`) gravava só o identificador — e era por ele que
+saíam os três campos do caso 16 na leitura de produção:
+
+    ["imovel.rat_protocolo", "imovel.modulos_fiscais", "imovel.regulatory_issues"]
+
+Pior que a falta de motivo: aquela linha **colapsava duas situações opostas** —
+"não existe coluna na base" e "a coluna existe, mas a consolidação não grava
+aqui". A primeira pede um campo novo; a segunda, um ajuste de mapeamento. A
+consultora recebia a mesma string para as duas.
+
+O motivo passou a vir de **fonte única** (`motivo_sem_destino`), compartilhada
+com o selo durável — que já explicava. Ter dois caminhos para a mesma pergunta,
+um bom e um mudo, é como a dívida nasceu; unificar é o que impede de renascer.
+São quatro situações agora distintas: recusa declarada (com o porquê), sem coluna
+(campo a pedir), fora da allowlist (mapeamento a ajustar), sem destino declarado.
+
+**As decisões sobre os três campos órfãos, e a linha que as separa:**
+
+| campo | decisão | por quê |
+|---|---|---|
+| `modulos_fiscais` | **destino** (coluna nova) | atributo do IMÓVEL: área ÷ módulo fiscal. Decide porte, e porte decide exceção do Código Florestal — a skill de diagnóstico e a H19 do auditor já dependem disso |
+| `rat_protocolo` | **recusa declarada** | identifica o DOCUMENTO, não o imóvel |
+| `rat_data_emissao` | **recusa declarada** | idem: dois RATs de datas diferentes são dois documentos |
+| `regulatory_issues` | **recusa declarada** | passivo é `RegulatoryIssue` com taxonomia, não texto solto no cadastro |
+
+A linha é essa: **metadado que identifica o papel ≠ atributo do imóvel.** Serve
+para os próximos campos que aparecerem.
+
+Saiu também do vocabulário da tela o `"valor incoercível/implausível"` — não é
+português de consultora. E um teste varre as mensagens atrás de jargão vazado
+(`target_field`, `allowlist`, `NULL`).
+
+### #201 — a medição derrubou a primeira versão do próprio fix
+
+Implementei conversão a 64 kbps fixos, medi, e o número desmontou a entrega:
+
+| | tamanho | cabe nos 25 MB? |
+|---|---|---|
+| 1 h em WAV 44,1 kHz estéreo | **605,6 MB** | não (24× acima) |
+| 1 h em mp3 64 kbps mono | **27,6 MB** | **não** — ainda estoura |
+
+Ou seja: converter a taxa fixa deixaria o **caso-título da dívida** ("reunião de
+uma hora em WAV") falhando do mesmo jeito, só que depois de gastar CPU. A conta
+de guardanapo dizia que 64 kbps resolvia; a medição disse que não.
+
+Correção: **bitrate escolhido pela duração**, com piso de qualidade.
+
+| duração | bitrate escolhido | tamanho |
+|---|---|---|
+| 30 min | 64 kbps | 13,7 MB |
+| 1 hora | 53 kbps | 22,7 MB |
+| 1h30 | 35 kbps | 22,5 MB |
+| 2 horas | 26 kbps | 22,3 MB |
+| 2h30 | 24 kbps (piso) | 25,7 MB — **não cabe** |
+
+Cabe por construção até **2,2 horas**. Só além disso a consultora é incomodada —
+e a mensagem fala em **horas**, unidade que ela avalia olhando a própria
+gravação, com o limite derivado do teto real, não escolhido a dedo. A palavra
+"bitrate" não existe em nenhuma mensagem, e há teste que falha se ela aparecer.
+
+Ganho colateral: `.amr` de gravador antigo e `.wma` eram **recusa** ("formato não
+suportado"); passando pelo ffmpeg viram mp3 e são transcritos. Recusa virou
+entrega.
+
+Custo da infra: `ffmpeg --no-install-recommends` na imagem, que foi de 364 MB.
+Render usa o mesmo Dockerfile nos dois serviços — nada a configurar.
+
+**Fidelidade no piso, um sample:** 24 kbps não degradou o vocabulário técnico
+(9/10 termos contra 8/10 do original de 128 kbps — diferença dentro do ruído de
+uma amostra). Não é evidência forte; é indício de que o piso não é o problema.
+
+### O que NÃO foi feito, de propósito
+
+**Segmentação em pedaços de 25 MB.** É específica do Whisper. Se a medição do
+#206 apontar o Gemini, vira trabalho jogado fora — o teto de lá é outro. A ordem
+(conversão primeiro, segmentação depois) foi decisão do André e a medição a
+confirmou: a conversão sozinha cobre a reunião real.
+
+### #203 mudou de natureza: de pendência de produto para impedimento técnico
+
+Estava registrada como "aguardando a Isis decidir o formato do resumo". A
+medição de 03/08 mostrou que a resposta dela **não é o que falta**: o resumo
+promete dizer "o que o CLIENTE prometeu enviar", e o `whisper-1` não faz
+diarização — `segments` não têm `speaker`, a saída é bloco corrido, a troca de
+turno não aparece nem como quebra de linha.
+
+Resumo com dono errado é **pior que resumo nenhum**: a promessa vira compromisso
+no caso — atribuída ao consultor nasce Ação interna, atribuída ao cliente nasce
+pendência com cobrança e prazo. Trocar os dois cria tarefa para quem não assumiu
+e some com a cobrança de quem assumiu. E, diferente do silêncio de hoje, **parece
+informação**, então ninguém confere.
+
+Fica `false` até a #206 fechar.
+
+### Uma fixture que afirmava verdade sobre premissa falsa
+
+`test_transcricao_entra_no_diagnostico.py` tinha sido escrito à mão como
+`"Consultor: … Cliente: …"` — formato que o Whisper não produz. O teste passava e
+o que ele afirmava era verdade; o problema é que quem o lesse para construir o
+#203 partiria de uma atribuição inexistente. Substituída pela saída real, e um
+teste novo guarda a verdade explicitamente, para quebrar junto quando a
+atribuição existir.
+
+### Registro de método
+
+**Medir o próprio fix antes de declará-lo pronto.** A conversão a 64 kbps passava
+em todos os testes que eu tinha escrito — porque os testes verificavam a
+*decisão* (converteu? avisou?), não o *resultado físico* (cabe?). O erro só
+apareceu ao rodar ffmpeg de verdade e extrapolar para uma hora. Teste de decisão
+não substitui medição de grandeza.
