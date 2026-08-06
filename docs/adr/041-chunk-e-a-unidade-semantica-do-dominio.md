@@ -9,6 +9,18 @@
   #126 (documentos não articulados); ADR-034 (esfera pelo órgão), ADR-036
   (identidade da norma)
 
+> ## ⚠️ Leia junto com o adendo 2
+>
+> **A aposta central desta ADR — "artigo inteiro melhora a recuperação" — foi
+> REFUTADA por medição** na Fase 4 (05/08). O art. 61-A passou a entrar inteiro e
+> **caiu da posição 2 para a 29** (similaridade 0,7764 → 0,6601).
+>
+> A decisão **não foi revertida**, e continua justificada por outro motivo: o
+> consultor recebia o dispositivo em cacos. Mas é **ganho de ENTREGA com custo
+> medido de RECUPERAÇÃO**, não o ganho que a tese abaixo antecipa.
+>
+> **Não leia a tese sem ler o adendo 2**, no fim deste documento.
+
 ## Contexto
 
 O chunker cortava por marcador estrutural e, quando a fatia passava de
