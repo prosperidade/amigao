@@ -1438,6 +1438,12 @@ def list_process_staging_fields(
         r.sem_casa = r.id in motivos
         r.sem_casa_motivo = motivos.get(r.id)
         r.source_doc_nome = nomes.get(r.document_id) if r.document_id else None
+        # "Aceito" ≠ "Gravado": a Conferência passa a distinguir a linha que
+        # pousou na base da que só foi decidida. Sem isto o consultor não tinha
+        # como saber que o clique teve efeito — foi o que produziu o "gravou
+        # apenas três" sobre uma consolidação que gravou dezesseis.
+        r.gravado = r.consolidated_at is not None
+        r.gravado_em = r.consolidated_at
     return rows
 
 

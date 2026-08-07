@@ -597,15 +597,41 @@ ORDER BY created_at DESC;
 qual dos três caminhos cada aceite saiu. **Origem:** item 2 da validação de
 02/08.
 
-**105. Suíte do frontend acusa 10 erros de worker (não relacionados ao código).**
-`npx vitest run` reporta `Test Files 11 passed / Tests 86 passed / Errors 10`.
-Causa raiz: `@asamuzakjp/css-color` (CJS, dependência transitiva do jsdom) faz
-`require()` de `@csstools/css-calc`, que é ESM puro — `ERR_REQUIRE_ESM` na
-partida de alguns workers. **Verificado idêntico na `main`** (mesma contagem),
-portanto não é regressão desta rodada. Os testes passam porque o pool recria o
-worker. **O que destrava:** fixar `@csstools/css-calc` numa versão CJS via
-`overrides` no `package.json`, ou migrar o pool do vitest para `threads`.
-**Origem:** medição de 02/08.
+**105. ✅ FECHADA em 06/08 — e o diagnóstico original estava errado nos dois
+lados.** A entrada dizia: "`npx vitest run` reporta `Test Files 11 passed /
+Tests 86 passed / Errors 10`; os testes passam porque o pool recria o worker".
+Ao reproduzir para destravar o gate do PR "O consultor vê o que foi gravado",
+as duas metades caíram:
+
+* **O comando estava errado.** `npx vitest run` ignora
+  `frontend/scripts/run-vitest.mjs`, o runner que injeta
+  `--experimental-require-module` no `NODE_OPTIONS` dos workers (Dívida #22). O
+  comando do projeto é `npm test`. Com ele, `ERR_REQUIRE_ESM` não acontece.
+* **"Os testes passam porque o pool recria o worker" era falso** — e escondia
+  algo pior. Com `npx vitest run`, os **11 arquivos de jsdom nunca rodam**: cada
+  um falha na partida do worker, entra na contagem como `Errors`, e o resumo
+  final soma só os `.ts` puros. `11 passed / 86 tests` era a suíte SEM nenhum
+  teste de componente — e a linha final dizia verde. Silêncio com aparência de
+  sucesso, que é exatamente o que o P12 proíbe.
+
+O número real, pelo runner do projeto: **22 arquivos / 141 testes** (21/138 na
+`main` antes deste PR).
+
+**Achado novo que a reprodução revelou — a suíte era um sorteio.** Rodando
+`npm test` três vezes na `main`: **4 testes falham em 3 de 3 rodadas**, e o
+conjunto que falha MUDA (`AcaoCard`, `CredentialsTab`, `AlertaCard`). Todas as
+falhas entre **5000 e 5300 ms** — o `testTimeout` default de 5s, que
+`vitest.config.ts` nunca sobrescreveu. Os mesmos testes passam sozinhos (3 de
+3): não são testes ruins, são os que perdem a disputa por CPU, porque
+`userEvent` encadeia dezenas de eventos no jsdom e o pool roda os arquivos em
+paralelo. **Corrigido com `testTimeout: 20_000`** — não afrouxa asserção
+nenhuma, só para de cronometrar a máquina junto com o comportamento. Medido
+depois: **3 de 3 rodadas com 141/141**. **Origem:** medição de 02/08, corrigida
+em 06/08.
+
+> **Regra que fica:** medição de suíte só vale pelo comando que o projeto
+> declara (`npm test`), e "N passed" com `Errors > 0` não é verde — é a
+> contagem dos arquivos que conseguiram rodar.
 
 ### Abertas pelo ingestor curado — Bloco 0 + núcleo 06 (03/08, `feat/ingestor-curado-nucleo06`)
 
