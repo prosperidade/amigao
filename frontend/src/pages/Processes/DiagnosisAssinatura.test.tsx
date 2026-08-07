@@ -113,10 +113,15 @@ describe('DiagnosisAssinatura — gate camada 2 (modal 422)', () => {
     await waitFor(() => {
       expect(screen.getByText(/Faltam decisões para validar/i)).toBeInTheDocument();
     });
-    expect(screen.getByText('GEO_AUSENTE')).toBeInTheDocument();
+    // O modal lista o alerta em português; o código fica no `title` para quem
+    // precisa dele. Uma tela que pede DECISÃO ao consultor não pode expor a
+    // chave de banco no lugar do achado.
+    const alerta = screen.getByText('Matrícula sem georreferenciamento certificado pelo INCRA');
+    expect(alerta).toBeInTheDocument();
+    expect(alerta).toHaveAttribute('title', 'GEO_AUSENTE');
 
     // Click no item dispara onGoToAlerta com o id correto
-    await user.click(screen.getByText('GEO_AUSENTE'));
+    await user.click(alerta);
     expect(onGoToAlerta).toHaveBeenCalledWith(99);
   });
 

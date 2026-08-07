@@ -1358,7 +1358,7 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 207.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 209.**
 
 > **✅ FECHADAS na 2ª rodada (03/08, `feat/audio-conversao-e-diarizacao`):**
 > **#200** (todo `ignorados` diz o motivo; `modulos_fiscais` ganhou destino) e
@@ -1532,6 +1532,82 @@ modelo, não de assinatura de voz — e por isso tem de chegar à tela como
 leia como certeza é a #203 de volta, só que com aparência de resolvida.
 
 **Origem:** medição de 03/08; absorve a #205.
+
+### Abertas pela auditoria de fluxo das validações da Isis (06/08, `audit/fluxo-validacoes-isis` + `fix/trabalho-impossivel`)
+
+> Faixa 200-299 continuada — próximo livre: **209**.
+
+**207. 🔴 PRIORIDADE ALTA — o dado sobrevive ao caso, a PROVA não. Violação do
+Princípio 11.** *Reportada, NÃO implementada: é decisão de produto do André.*
+
+A consultora perguntou, ao ver o imóvel vazio: *"quando o caso finalizar, a base
+de dados some?"*. A resposta medida é **não** — e é boa até a metade.
+
+O valor sobrevive. `Matricula` é filha de `Property`, não de `Process`, e não há
+FK de matrícula para processo:
+
+```
+matriculas.property_id        → properties  ON DELETE CASCADE
+processes.property_id         → properties  ON DELETE SET NULL
+(nenhuma FK de matriculas para processes)
+```
+
+Concluir um caso é mudança de `status`/`macroetapa`; nem o hard delete do
+processo toca matrícula ou imóvel. Até aqui, tudo certo.
+
+**O problema é o outro lado do esquema:**
+
+```
+extracted_field_staging.process_id → processes  ON DELETE CASCADE
+documents.process_id               → processes  ON DELETE CASCADE
+```
+
+Apagado o processo, somem o staging (de qual documento veio cada campo, quem
+decidiu, quando) e somem os documentos. Restam:
+
+* `field_sources`, que diz o **tipo** da fonte (`human_validated`) e não a fonte;
+* `Matricula.lineage`, que guarda `staging_id` e `document_id` — apontando para
+  linhas que **já não existem**.
+
+Ou seja: o número continua na ficha do imóvel afirmando algo, e a evidência que
+o sustentava foi apagada junto com o caso. Para um sistema cujo Princípio 2 é
+"tudo é auditável" e cujo Princípio 11 é "nenhuma afirmação sem fonte", isso é
+uma afirmação órfã de fonte por construção — e o `lineage` piora, porque dá a
+impressão de rastreabilidade que não existe mais.
+
+**Por que não foi consertado aqui:** as duas saídas mudam desenho e nenhuma é
+obviamente certa.
+
+* **(a) o processo deixa de ter hard delete** — `deleted_at` já existe em
+  `Process`; bastaria proibir o DELETE físico. Barato, mas empurra o problema
+  para a política de retenção e para o LGPD (apagar de verdade quando pedido).
+* **(b) o `lineage` passa a guardar o suficiente para sobreviver ao CASCADE** —
+  desnormalizar no momento da consolidação o nome do arquivo, a página, o valor
+  lido, quem decidiu e quando, em vez de só os ids. Mais caro em escrita, mas é
+  o único que mantém a fonte legível depois que o caso morre.
+
+**O que destrava:** decisão do André entre (a) e (b) — ou pelas duas.
+**Origem:** auditoria de fluxo de 06/08, item 5.
+
+**208. O `label` do catálogo de alertas não chega à API — a tela mostra a chave.**
+`regulatory_catalog.label` existe no banco com uma frase para cada código, mas
+`app/schemas/regulatory.py` não expõe o campo: a UI recebia só `codigo_alerta` e
+renderizava `AUTO_INFRACAO_PASSIVO`, `RL_MATRICULA_DIVERGENTE_RL_CAR` em três
+telas (Visão geral, Hub do Imóvel, assinatura do diagnóstico), e ainda usava a
+chave como título de Ação ("Resolver alerta: AUTO_INFRACAO_PASSIVO").
+
+Corrigido **na camada de rótulo** (`frontend/src/lib/labels/alertaLabels.ts`),
+porque o gatilho era de vocabulário e urgente — `AUTO_INFRACAO_PASSIVO` chama de
+"passivo" um ATO do órgão, invertendo a regra de domínio da Isis (o passivo é o
+fato consumado; o auto, o embargo e a multa são atos que ele gerou). Mas isso
+deixa **duas listas de rótulos** para o mesmo catálogo, e o catálogo é evolutivo
+por decisão de projeto: código novo entra sem migration e nasce sem rótulo do
+lado do frontend (degrada em frase capitalizada, não some — mas não é a frase
+que a sócia escreveria).
+
+**O que destrava:** expor `label` (e `familia_label`) no schema de issue e ler
+dele na UI, mantendo o dicionário do frontend só como fallback. **Origem:**
+auditoria de fluxo de 06/08, item 6.5.
 
 ## P3 — robustez e higiene (sem urgência, sem risco externo)
 

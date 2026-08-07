@@ -30,6 +30,7 @@ import {
   STATUS_SANEAMENTO_LABEL,
 } from '@/lib/regulatory/labels';
 import type { RegulatoryIssue } from '@/lib/regulatory/types';
+import { alertaLabel } from '@/lib/labels/alertaLabels';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -1113,8 +1114,8 @@ function AnalysesIssueRow({
             {FAMILIA_LABEL[issue.familia]}
           </span>
         )}
-        <span className="text-xs font-mono text-gray-800 dark:text-slate-200 truncate">
-          {issue.codigo_alerta ?? '(sem código)'}
+        <span className="text-xs text-gray-800 dark:text-slate-200 truncate" title={issue.codigo_alerta ?? undefined}>
+          {alertaLabel(issue.codigo_alerta) ?? '(sem código)'}
         </span>
       </div>
       <div className="mt-1 text-[11px] text-gray-500 dark:text-slate-400 flex flex-wrap gap-x-3">

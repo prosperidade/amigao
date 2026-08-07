@@ -43,6 +43,7 @@ import type {
   DiagnosisGate422Detail,
   ProcessIssueDecision,
 } from '@/lib/regulatory/types';
+import { alertaLabel } from '@/lib/labels/alertaLabels';
 
 interface DiagnosisAssinaturaProps {
   processId: number;
@@ -263,8 +264,8 @@ export default function DiagnosisAssinatura({
                     >
                       {SEVERITY_LABEL[a.severity]}
                     </span>
-                    <span className="text-sm font-mono text-gray-800 dark:text-slate-200 truncate">
-                      {a.codigo_alerta ?? '(sem código)'}
+                    <span className="text-sm text-gray-800 dark:text-slate-200 truncate" title={a.codigo_alerta ?? undefined}>
+                      {alertaLabel(a.codigo_alerta) ?? '(sem código)'}
                     </span>
                     {a.familia && (
                       <span className="text-xs text-gray-500 dark:text-slate-400 ml-auto shrink-0">

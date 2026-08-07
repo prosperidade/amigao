@@ -620,6 +620,27 @@ def consolidate_process(
         # segue o caminho de RECONCILIAÇÃO da Ficha 05 dentro de _write_entity —
         # a decisão anterior do consultor não é rebaixada a divergência nova.
         col = alias.get(target_field, target_field) if target_field in alias else target_field
+
+        # ── O guard de conflito roda DEPOIS da allowlist, e a ordem importa ──
+        # Ele era o PRIMEIRO a rodar, então um campo que não tem onde pousar
+        # ainda podia ser devolvido como divergência — e virar Ação. Medido em
+        # produção: `matricula.vtn` não está em `_MATRICULA_FIELDS` nem existe
+        # como coluna em `matriculas`, e mesmo assim a consolidação do caso 16
+        # criou a Ação id 49, "Resolver divergência de vtn" (audit_log 1675).
+        # O sistema cobrou da consultora trabalho impossível: não há decisão de
+        # fonte que faça esse valor entrar na base.
+        #
+        # Campo sem destino sai por `ignorados`, com o motivo em português — o
+        # mesmo caminho e a mesma fonte de motivo (`motivo_sem_destino`) que o
+        # selo durável usa. Divergir sobre um campo que não existe não é
+        # divergência: é ruído com aparência de trabalho.
+        if _sem_destino(obj, col, allowed):
+            ignorados.append(
+                f"{winner.target_entity or '—'}.{target_field or '—'}: "
+                f"{motivo_sem_destino(entity, target_field) or 'não gravado nesta consolidação'}"
+            )
+            continue
+
         fs_atual = dict(getattr(obj, "field_sources", None) or {})
         ja_consolidado = col is not None and fs_atual.get(col) in (
             "human_validated", "pendente_oficializacao"
@@ -767,7 +788,10 @@ def _write_entity(
     # mas a consolidação não grava" — situações que pedem ações OPOSTAS da
     # consultora. O motivo vem da mesma função que o selo durável usa, para os
     # dois caminhos nunca mais divergirem em qualidade.
-    if col is None or col not in allowed or col not in obj.__table__.columns:
+    # Redundante com a checagem que o chamador faz ANTES do guard de conflito —
+    # e de propósito: `_write_entity` é a porta da escrita e não pode depender
+    # de quem a chama ter perguntado. Mesma função dos dois lados.
+    if _sem_destino(obj, col, allowed):
         entidade = (row.target_entity or "").lower()
         motivo = motivo_sem_destino(entidade, target)
         ignorados.append(
@@ -833,6 +857,17 @@ def _write_entity(
         "fonte": fonte, "staging_id": row.id,
     })
     return "gravado"
+
+
+def _sem_destino(obj: Any, col: Optional[str], allowed: set[str]) -> bool:
+    """Este campo tem onde pousar neste objeto? (allowlist + coluna real)
+
+    Fonte ÚNICA da pergunta, usada nos DOIS pontos que precisam dela: o guard de
+    conflito (que não pode devolver divergência de campo sem destino) e a
+    gravação. Duplicar a condição aqui foi o que permitiu a Ação 49 ("Resolver
+    divergência de vtn") nascer para um campo que nem coluna tem.
+    """
+    return col is None or col not in allowed or col not in obj.__table__.columns
 
 
 def _ser(value: Any) -> Any:
@@ -1175,6 +1210,48 @@ def motivo_sem_destino(entity: str, target_field: Optional[str]) -> Optional[str
             "— se este valor deveria pousar no cadastro, é ajuste a pedir"
         )
     return None
+
+
+def destino_nao_existe_na_base(entity: str, target_field: Optional[str]) -> bool:
+    """Não existe COLUNA para este destino — nem por decisão, por ausência.
+
+    Mais estreita que ``motivo_sem_destino``, e a diferença é o ponto: aquela
+    responde "este aceite vai pousar?" (e diz "não" também para o que a
+    modelagem RECUSA de propósito); esta responde "existe algum estado do mundo
+    em que ele pousaria?".
+
+    Quem precisa desta pergunta é a geração de Ações. Divergir sobre um campo
+    que a base recusa por decisão continua sendo trabalho real — ``total_area_ha``
+    divergente entre o CAR e a soma das matrículas é achado clássico, e a própria
+    recusa de ``rat_data_emissao`` diz que "a diferença entre eles aparece como
+    divergência a resolver". Já divergir sobre um campo que não existe em lugar
+    nenhum é trabalho impossível: nenhuma escolha de fonte muda o resultado.
+
+    Foi essa distinção que faltou no caso 16, onde ``matricula.vtn`` — sem
+    coluna, sem allowlist, sem decisão de ninguém — virou a Ação id 49.
+    """
+    from app.models.client import Client  # noqa: PLC0415
+    from app.models.matricula import Matricula  # noqa: PLC0415
+    from app.models.property import Property  # noqa: PLC0415
+
+    target = (target_field or "").strip()
+    if not target:
+        return True
+
+    modelo, alias = {
+        "imovel": (Property, _IMOVEL_ALIAS),
+        "cliente": (Client, _CLIENTE_ALIAS),
+        "matricula": (Matricula, _MATRICULA_ALIAS),
+    }.get(entity, (None, {}))
+    if modelo is None:
+        return True
+
+    # Recusa declarada é DECISÃO, não ausência — segue gerando trabalho.
+    if entity == "imovel" and target in _IMOVEL_RECUSA_DECLARADA:
+        return False
+
+    col = alias.get(target, target) if target in alias else target
+    return col is None or col not in modelo.__table__.columns
 
 
 def _destino_sem_casa(entity: str, target_field: Optional[str]) -> Optional[str]:

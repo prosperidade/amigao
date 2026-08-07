@@ -172,19 +172,26 @@ def _etapa_from_raw(raw: Any) -> Etapa | None:
 
 
 def orgao_fora_das_esferas(orgao: str | None, esferas: list[str]) -> bool:
-    """O órgão pertence a uma esfera que este caso NÃO tem?
+    """O texto nomeia alguma esfera que este caso NÃO tem?
 
-    Conservador de propósito: só acusa quando o órgão é RECONHECÍVEL e sua esfera
-    está fora das do caso. Órgão não reconhecido ("Cliente / Advogado", cartório,
-    um estado sem sigla catalogada) não é acusado — na dúvida não se apaga o
-    trabalho do agente.
+    Conservador de propósito: só acusa quando algum órgão é RECONHECÍVEL e sua
+    esfera está fora das do caso. Órgão não reconhecido ("Cliente / Advogado",
+    cartório, um estado sem sigla catalogada) não é acusado — na dúvida não se
+    apaga o trabalho do agente.
+
+    Lê o conjunto de esferas, não uma só (auditoria 06/08). O campo
+    ``orgao_competente`` é prosa do LLM e costuma nomear mais de um órgão; com
+    ``esfera_do_orgao`` (que devolve a PRIMEIRA que casa) o texto do caso 16 —
+    "IBAMA (esfera federal) e ... SEMAD (esfera estadual)" — respondia "federal",
+    batia com a esfera do caso e passava inteiro, levando junto a metade
+    estadual errada. Basta UMA esfera estranha para o texto ser acusado: numa
+    peça formal, meia verdade sobre a quem se protocola é o erro caro.
     """
-    from app.services.esfera import esfera_do_orgao  # noqa: PLC0415
+    from app.services.esfera import esferas_do_texto  # noqa: PLC0415
 
     if not orgao or not esferas:
         return False
-    esfera = esfera_do_orgao(orgao)
-    return esfera is not None and esfera not in esferas
+    return bool(esferas_do_texto(orgao) - set(esferas))
 
 
 def aplicar_esfera_do_caso(

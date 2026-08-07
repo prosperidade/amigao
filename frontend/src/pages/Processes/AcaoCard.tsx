@@ -151,7 +151,12 @@ export default function AcaoCard({ acao, processId }: AcaoCardProps) {
             {acao.origem_descricao && (
               <p className="mt-1 flex items-start gap-1 text-xs text-gray-500 dark:text-slate-400">
                 <Link2 className="w-3 h-3 mt-0.5 shrink-0" />
-                <span className="min-w-0">Pendência de origem: {acao.origem_descricao}</span>
+                {/* A direção importa (vocabulário da Isis): a ação RESPONDE ao
+                    passivo — não o carrega nem o resolve. Concluir uma ação é
+                    "trabalho interno feito", nunca "passivo sanado": o passivo
+                    só se resolve após contratação e regularização (ADR-016).
+                    O rótulo anterior punha o gerado no lugar do gerador. */}
+                <span className="min-w-0">Responde ao passivo: {acao.origem_descricao}</span>
               </p>
             )}
           </div>
