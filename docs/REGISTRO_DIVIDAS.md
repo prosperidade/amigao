@@ -870,6 +870,18 @@ estratégia. **Origem:** levantamento de 03/08.
 > corpus** (p50 2.304, p90 4.302). É cauda; mas o 61-A (2.837 e 2.641 tokens)
 > está no miolo dela — a regressão é típica da faixa, não um extremo.
 >
+> **DECISÃO DE 06/08 — a requalificação do teto NÃO se faz agora, e isto é
+> escolha consciente, não pendência esquecida.**
+>
+> A regressão do art. 61-A pode ser efeito **do tamanho do chunk** ou da
+> **competição norma × interpretação** (#126) — na `defesa`, a OJN 06/2009
+> ocupou 6 das 8 vagas sem que o chunking tivesse a ver com isso. **Mexer no teto
+> antes de saber qual das duas é consertaria o sintoma**, e ainda pagaria uma
+> reindexação inteira por um conserto que pode não ser o certo.
+>
+> **A #126 é o experimento que precede a decisão.** Enquanto ele não roda, o teto
+> fica como está: benefício de entrega, custo de recuperação, ambos medidos.
+>
 > **A dívida permanece justificada por OUTRO motivo, declarado:** o consultor
 > recebia o dispositivo em cacos — o 61-A chegava em quatro pedaços no top-8 — e
 > peça se escreve sobre artigo inteiro. **Benefício de ENTREGA, com custo medido
