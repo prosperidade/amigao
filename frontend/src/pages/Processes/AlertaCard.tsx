@@ -25,6 +25,7 @@ import toast from 'react-hot-toast';
 import { AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
 
 import { useCreateAcao } from '@/lib/acoes/hooks';
+import { alertaLabel } from '@/lib/labels/alertaLabels';
 import {
   useDecision,
   useUpdateIssue,
@@ -101,7 +102,9 @@ export default function AlertaCard({ issue, processId }: AlertaCardProps) {
 
   function handleEnviarParaAcoes() {
     const familiaLabel = issue.familia ? FAMILIA_LABEL[issue.familia] : null;
-    const codigo = issue.codigo_alerta ?? familiaLabel ?? 'alerta regulatório';
+    // A Ação nasce com o título em português: "Resolver alerta:
+    // AUTO_INFRACAO_PASSIVO" era chave de banco na lista de trabalho dela.
+    const codigo = alertaLabel(issue.codigo_alerta) ?? familiaLabel ?? 'alerta regulatório';
     const descricao = [
       familiaLabel ? `Família: ${familiaLabel}` : null,
       `Severidade: ${SEVERITY_LABEL[issue.severity]}`,
@@ -198,9 +201,17 @@ export default function AlertaCard({ issue, processId }: AlertaCardProps) {
               </span>
             )}
           </div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mt-1.5 font-mono">
-            {issue.codigo_alerta ?? '(sem código)'}
+          {/* O título do alerta é a frase, não a chave. O código continua
+              visível abaixo, em fonte mono — quem precisa dele (suporte,
+              auditoria) acha; quem precisa entender o achado lê primeiro. */}
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mt-1.5">
+            {alertaLabel(issue.codigo_alerta) ?? '(sem código)'}
           </h3>
+          {issue.codigo_alerta && (
+            <p className="text-[10px] text-gray-400 dark:text-slate-500 font-mono mt-0.5">
+              {issue.codigo_alerta}
+            </p>
+          )}
           {issue.documentos_cruzados && issue.documentos_cruzados.length > 0 && (
             <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
               Documentos: {issue.documentos_cruzados.join(' × ')}

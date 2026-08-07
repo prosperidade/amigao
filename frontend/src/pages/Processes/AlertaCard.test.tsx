@@ -178,6 +178,27 @@ describe('AlertaCard — botão "→ Ações" (Sprint 0)', () => {
     expect(api.post).toHaveBeenCalledTimes(1);
     const [url, payload] = vi.mocked(api.post).mock.calls[0];
     expect(url).toBe('/processes/42/acoes');
-    expect((payload as { titulo: string }).titulo).toContain('AREA_MATRICULA_X_CAR');
+    // A Ação nasce com o título em português. Antes era "Resolver alerta:
+    // AREA_MATRICULA_X_CAR" — chave de banco na lista de trabalho da consultora.
+    expect((payload as { titulo: string }).titulo).toContain('Área da matrícula diverge do CAR');
+    expect((payload as { titulo: string }).titulo).not.toContain('AREA_MATRICULA_X_CAR');
+  });
+
+  it('mostra o alerta em português e mantém o código à mão', async () => {
+    render(withQuery(<AlertaCard issue={makeIssue()} processId={42} />));
+
+    // O título é a frase; o código continua na tela, discreto, para suporte e
+    // auditoria — trocar um pelo outro seria perder rastreabilidade.
+    expect(await screen.findByText('Área da matrícula diverge do CAR')).toBeInTheDocument();
+    expect(screen.getByText('AREA_MATRICULA_X_CAR')).toBeInTheDocument();
+  });
+
+  it('código fora do catálogo degrada em frase, nunca em caixa alta', async () => {
+    // O catálogo é evolutivo por decisão de projeto (código novo entra sem
+    // migration), então a tabela de rótulos sempre estará um passo atrás em
+    // algum momento. Isso não pode virar SCREAMING_SNAKE na cara da consultora.
+    render(withQuery(<AlertaCard issue={makeIssue({ codigo_alerta: 'CODIGO_NOVO_QUALQUER' })} processId={42} />));
+
+    expect(await screen.findByText('Codigo novo qualquer')).toBeInTheDocument();
   });
 });

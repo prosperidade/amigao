@@ -21,7 +21,13 @@ from typing import Literal, Optional
 
 Esfera = Literal["federal", "estadual", "municipal"]
 
-__all__ = ["Esfera", "esfera_do_orgao", "ORGAOS_FEDERAIS", "ORGAOS_ESTADUAIS"]
+__all__ = [
+    "Esfera",
+    "esfera_do_orgao",
+    "esferas_do_texto",
+    "ORGAOS_FEDERAIS",
+    "ORGAOS_ESTADUAIS",
+]
 
 
 # Órgãos federais — nome por extenso e sigla. Ordem não importa (match por token).
@@ -152,6 +158,55 @@ def esfera_do_orgao(orgao: Optional[str]) -> Optional[Esfera]:
         return "estadual"
 
     return None
+
+
+def esferas_do_texto(orgao: Optional[str]) -> set[Esfera]:
+    """TODAS as esferas nomeadas num texto de órgão — não só a primeira.
+
+    ``esfera_do_orgao`` responde com UMA esfera porque a pergunta dela é "de quem
+    é esta exigência?", e uma exigência tem um dono. Mas o campo
+    ``Rota.orgao_competente`` é redigido pelo LLM em prosa e frequentemente
+    nomeia mais de um órgão. Medido em produção, caso 16:
+
+        "IBAMA (esfera federal) e Secretaria de Estado de Meio Ambiente e
+         Desenvolvimento Sustentável de Goiás - SEMAD (esfera estadual)"
+
+    ``esfera_do_orgao`` devolve ``"federal"`` — correto para o IBAMA, e cego para
+    a metade estadual. O guard da ADR-034 então pergunta "federal está entre as
+    esferas do caso?", ouve "está", e deixa passar um texto que manda o consultor
+    à SEMAD por um auto que é do IBAMA. Foi exatamente o que a consultora
+    relatou, e o que a correção de 31/07 não alcançou: ela conserta o órgão do
+    PASSO (uma sigla por vez), não a prosa do órgão competente da rota.
+
+    Devolve conjunto vazio quando nada é reconhecido — silêncio honesto, mesma
+    política do ``None`` de ``esfera_do_orgao``: sem saber, não se chuta.
+    """
+    if not orgao or not orgao.strip():
+        return set()
+
+    texto = _normalizar(orgao)
+    achadas: set[Esfera] = set()
+
+    if any(o in texto for o in ORGAOS_FEDERAIS):
+        achadas.add("federal")
+    if any(o in texto for o in ORGAOS_MUNICIPAIS):
+        achadas.add("municipal")
+    if any(_orgao_estadual_bate(o, texto) for o in ORGAOS_ESTADUAIS) or (
+        _RE_ESTADUAL_GENERICO.search(texto)
+    ):
+        achadas.add("estadual")
+
+    # As pistas genéricas ("governo do estado", "união") só entram quando NENHUM
+    # órgão foi reconhecido — são fracas demais para somar a uma identificação
+    # firme, e o texto do caso 16 contém "estado de" dentro do nome próprio da
+    # SEMAD, o que faria toda menção a secretaria estadual virar dupla contagem.
+    if not achadas:
+        if any(p in texto for p in _PISTAS_FEDERAIS):
+            achadas.add("federal")
+        if any(p in texto for p in _PISTAS_ESTADUAIS):
+            achadas.add("estadual")
+
+    return achadas
 
 
 def _orgao_estadual_bate(sigla: str, texto: str) -> bool:

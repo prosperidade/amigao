@@ -280,7 +280,33 @@ def generate_acoes_from_divergencias(
     # distintos podem colidir na MESMA execução e estourar uq_acoes_tenant_dedupe
     # no flush, derrubando a consolidação inteira.
     seen_this_run: set[str] = set()
+    # O sistema não cobra trabalho impossível (auditoria 06/08). Divergência só
+    # vira Ação se houver decisão que MUDE alguma coisa — e não há, quando o
+    # campo não tem onde pousar. Medido em produção: a consolidação do caso 16
+    # criou a Ação id 49, "Resolver divergência de vtn", para um campo que não
+    # está na allowlist nem existe como coluna em `matriculas`. Nenhuma escolha
+    # de fonte faria aquele valor entrar na base; a Ação só ocupava a lista da
+    # consultora.
+    #
+    # A ordem do guard de conflito na consolidação já foi corrigida, mas fechar
+    # só lá deixaria a outra porta aberta: a divergência também NASCE divergente
+    # no extrator/matriz, sem nunca passar pela consolidação.
+    #
+    # O critério é ESTREITO de propósito: só some o campo que não existe em
+    # lugar nenhum. Campo que a modelagem recusa por DECISÃO continua virando
+    # Ação — `total_area_ha` divergente entre o CAR e a soma das matrículas é
+    # achado clássico, e a recusa de `rat_data_emissao` diz textualmente que "a
+    # diferença entre eles aparece como divergência a resolver". Confundir
+    # "recusado por decisão" com "não existe" apagaria trabalho de verdade.
+    from app.services.staging_consolidation import (  # noqa: PLC0415
+        destino_nao_existe_na_base,
+    )
+
+    sem_destino: list[str] = []
     for (entity, hint, field), group in grupos.items():
+        if destino_nao_existe_na_base(entity, field):
+            sem_destino.append(f"{entity}.{field}")
+            continue
         key = _dedupe_key_divergencia(process.id, entity, hint, field)
         if key in existing_keys or key in seen_this_run:
             continue
@@ -329,12 +355,17 @@ def generate_acoes_from_divergencias(
 
     if created:
         db.flush()
+    if created or sem_destino:
         logger.info(
             "acoes_from_divergencias",
             extra={
                 "process_id": process.id,
                 "tenant_id": tenant_id,
                 "acoes_created": len(created),
+                # Nada é descartado em silêncio: uma divergência que não virou
+                # Ação por falta de destino tem de deixar rastro, senão a
+                # correção vira um novo tipo de sumiço.
+                "divergencias_sem_destino": sem_destino,
             },
         )
 
