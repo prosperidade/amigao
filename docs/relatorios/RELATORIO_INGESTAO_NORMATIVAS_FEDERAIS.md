@@ -398,3 +398,146 @@ abertas agora, por determinação de congelar a missão:
 | Custo gasto | US$ 0,0021 (embeddings descartados no revert) |
 | Código entregue | `scripts/ingest_normativas_federais_ago26.py`, pronto e ensaiado |
 | PR | **não aberto** — por decisão, a entrega espera a remediação |
+
+---
+
+# EXECUÇÃO — 06/08/2026
+
+O congelamento acabou. A ingestão rodou depois que o pré-requisito duro foi
+cumprido: **rebase sobre a main pós-remediação do chunking**.
+
+## Por que o rebase era pré-requisito, e não formalidade
+
+O script sempre importou o chunker compartilhado (`from app.services.chunking
+import chunk_text`) e nunca teve lógica própria — o desenho estava certo. Mas a
+worktree congelada carregava o chunker **antigo**:
+
+```
+app/services/chunking.py:31:  _CHARS_PER_TOKEN = 4
+app/services/chunking.py:35:  return max(1, len(text) // _CHARS_PER_TOKEN)
+```
+
+Rodar dali faria as 11 normas nascerem com os defeitos recém-corrigidos: régua
+que subestima até **2,44×**, sem guarda contra o teto de 8.192 da API, sem
+`dispositivo`/`hierarquia`/`referencias`, e com material não articulado herdando
+rótulo falso de artigo.
+
+Depois do rebase (limpo, sem conflito) a worktree tem `contar_tokens` via
+`tiktoken`, `MAX_ARTIGO_TOKENS = 7000`, `LIMITE_ARTIGO_TOKENS = 8000`,
+`LIMITE_API_TOKENS = 8192`, a guarda `chunking.fatia_absorvedora` e a
+normalização de ligaduras. **Esta é a primeira ingestão do projeto a rodar sobre
+o chunker corrigido.**
+
+## Fingerprint — previsto ANTES, conferido depois
+
+| | declarado antes de executar | observado |
+|---|---:|---:|
+| chunks | **32.161** | **32.161** ✅ |
+| documentos | **113** | **113** ✅ |
+| max id | 210 | 210 |
+| espaço vetorial | `text-embedding-3-small` 768d | único, mesmo |
+
+Nenhum ajuste. Divergência aqui seria achado, não correção.
+
+## As 11, uma transação por norma — zero rollback
+
+| identificador | id | chunks previstos | chunks efetivos | maior chunk |
+|---|---:|---:|---:|---:|
+| IN IBAMA 21/2023 | 208 | 121 | **121** | 3.849 |
+| IN IBAMA 21/2014 | 205 | 76 | **76** | 5.778 |
+| IN IBAMA 24/2024 | 210 | 54 | **54** | 892 |
+| IN RFB 2.203/2024 | 201 | 32 | **32** | 888 |
+| Resolução CONAMA 411/2009 | 204 | 28 | **28** | 923 |
+| IN INCRA 77/2013 | 200 | 24 | **24** | 526 |
+| IN IBAMA 11/2025 | 207 | 23 | **23** | 550 |
+| IN IBAMA 16/2022 | 206 | 23 | **23** | 3.458 |
+| Resolução CONAMA 406/2009 | 203 | 22 | **22** | 822 |
+| Portaria IBAMA 15/2026 | 209 | 10 | **10** | 448 |
+| Resolução CMN 5.193/2024 | 202 | 4 | **4** | 2.903 |
+| **total** | | **417** | **417** | |
+
+**Custo real: US$ 0,0026** (129.841 tokens embarcados) — teto era US$ 1,00.
+Maior chunk do lote: 5.778 tokens reais, sob o teto do artigo e bem sob o da API.
+A guarda dura não disparou nenhuma vez.
+
+**Aditiva, sem exclusão e sem deduplicação**, conforme determinado.
+
+## Um dado que confirma o revert de ontem
+
+As 11 apareceram como **NOVA** no inventário. São exatamente os 11 documentos que
+a ingestão anterior gravou (ids 189–199) e que o revert removeu. Se tivesse
+sobrado resíduo, elas apareceriam como "JÁ EXISTE". **O revert foi completo.**
+
+## Buscas de fumaça — antes × depois
+
+### 1. `impedimento crédito rural embargo ambiental` — MUDOU
+
+| antes | depois |
+|---|---|
+| 0,6087 IN ICMBio 9/2023 | **0,6665 Resolução CMN 5.193/2024** ← nova |
+| 0,6029 Lei 12.651/2012 | **0,6446 Resolução CMN 5.193/2024** ← nova |
+| 0,5938 Lei 12.651/2012 | 0,6087 IN ICMBio 9/2023 |
+| 0,5921 Lei 12.651/2012 | 0,6029 Lei 12.651/2012 |
+| 0,5846 Decreto 6.514/2008 | 0,5939 Lei 12.651/2012 |
+
+**Ganho qualitativo:** a pergunta saía respondida por **analogia com o Código
+Florestal**; passou a ser respondida pela **resolução do Conselho Monetário
+Nacional**, que é a norma que efetivamente disciplina o crédito rural. E com
+similaridade maior que o topo anterior.
+
+### 2. `DOF transporte produto florestal nativo` — MUDOU
+
+| antes | depois |
+|---|---|
+| 0,6887 Decreto 6.660/2008 | **0,7097 IN IBAMA 21/2014** ← nova |
+| 0,6866 Decreto 6.660/2008 | 0,6888 Decreto 6.660/2008 |
+| 0,6691 Decreto 6.660/2008 | 0,6866 Decreto 6.660/2008 |
+| 0,6522 Decreto 5.975/2006 | **0,6857 IN IBAMA 21/2014** ← nova |
+| 0,6507 Decreto 6.660/2008 | **0,6838 IN IBAMA 21/2014** ← nova |
+
+**Ganho qualitativo:** saía do **Decreto 6.660/2008**, que é da **Mata
+Atlântica** — plausível, próximo do tema, e **errado** para uma pergunta sobre
+DOF em geral. Passou a vir da **IN que institui o DOF**.
+
+### 3. `intervenção em APP utilidade pública` — **NÃO MUDOU**
+
+As cinco posições seguem 100% `Res. CONAMA 369/2006`, com variação de 0,0001 na
+similaridade — ruído numérico do IVFFlat, não deslocamento.
+
+**É controle negativo, não falha.** A CONAMA 369/2006 é justamente uma das duas
+puladas por dedupe (id=25), e nenhuma das 11 normas novas trata de intervenção
+em APP por utilidade pública. **Se essa busca tivesse mudado, seria sinal de
+problema** — de norma nova sendo recuperada para pergunta que não é dela.
+
+## O que estas duas mudanças significam
+
+Nos dois casos que mudaram, **resposta certa substituiu resposta plausível**.
+Esse é o erro que o consultor **não pegaria**: o Decreto 6.660/2008 fala de
+transporte de produto florestal, cita DOF, tem tudo para parecer a norma
+aplicável — e é de outro bioma. Uma peça fundamentada nele passaria em qualquer
+leitura apressada.
+
+Corpus incompleto não produz resposta vazia; produz resposta **quase certa**.
+
+## Aprendizado de método: o controle negativo foi acidental
+
+A busca de APP funcionou como **controle negativo** — a pergunta cujo resultado
+esperado é *nenhuma mudança*, e que por isso detecta ganho inventado.
+
+**Mas ela não foi desenhada para isso.** A CONAMA 369/2006 ficou de fora por uma
+decisão de **proveniência** (manter a versão id=25, do CETESB, em vez da captura
+SIAM/MG do pacote), tomada por outro motivo. O controle apareceu de brinde: como
+nenhuma das 11 normas novas trata de intervenção em APP por utilidade pública, a
+pergunta que já era respondida pela 369/2006 continuou sendo.
+
+Deu certo por acaso, e acaso não é método. **Toda ingestão futura deveria levar
+uma pergunta de controle EXPLÍCITA**, escolhida de propósito: um tema que o
+pacote comprovadamente **não** cobre, com resultado esperado declarado como
+"nenhuma mudança".
+
+Sem ela, a medição só sabe dizer que algo mudou — não sabe distinguir **ganho
+real** de **norma nova sendo recuperada para pergunta que não é dela**. As duas
+coisas aparecem como "mudou", e só a segunda é defeito.
+
+É o mesmo princípio do `art. 71` na remediação do chunking: experimento só com
+casos que devem melhorar não detecta regressão.

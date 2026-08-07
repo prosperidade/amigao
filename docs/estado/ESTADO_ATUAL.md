@@ -1,5 +1,21 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-08-06 (Normativas federais INGERIDAS — `chore/ingestao-normativas-federais-ago26`,
+PR aberto, NÃO MERGEAR):** despachada a ingestão que estava **congelada** desde 04/08. Corpus:
+31.744 → **32.161 chunks** (+417) e 102 → **113 documentos** (ids 200–210), custo **US$ 0,0026**.
+Entraram 11 normas federais: IN INCRA 77/2013, IN RFB 2.203/2024, Resolução CMN 5.193/2024,
+Resoluções CONAMA 406/2009 e 411/2009, IN IBAMA 21/2014, 16/2022, 11/2025, 21/2023 e 24/2024,
+Portaria IBAMA 15/2026. Duas puladas por dedupe: IN MMA 2/2014 (id=1) e CONAMA 369/2006 (id=25,
+decisão registrada). **Pré-requisito duro cumprido:** rebase sobre a main pós-#138 — a worktree
+congelada ainda tinha o chunker antigo (`len//4`), e rodar dali faria as 11 nascerem com os
+defeitos recém-corrigidos. **É a primeira ingestão sobre o chunker pós-remediação** (ADR-041),
+então elas nascem com `dispositivo`, `hierarquia` e `referencias`. Fingerprint declarado ANTES
+bateu exato; 11/11 sem rollback. Buscas de fumaça: crédito rural saiu de analogia com o Código
+Florestal para a **Resolução CMN 5.193/2024**; DOF saiu do Decreto 6.660/2008 (Mata Atlântica)
+para a **IN IBAMA 21/2014** — resposta certa substituindo resposta plausível. A terceira (APP
+utilidade pública) **não mudou, e não devia**: é controle negativo, a CONAMA 369/2006 é uma das
+puladas. Relatório: `docs/relatorios/RELATORIO_INGESTAO_NORMATIVAS_FEDERAIS.md`.
+
 **Pulso 2026-08-05 (Remediação do chunking — `feat/chunking-estrutural`, PR aberto,
 NÃO MERGEAR):** quatro fases (#117 guarda de sanidade, #118 teto do artigo, #119 estrutura
 da norma como dado, #122 normalização de ligaduras) + reindexação única do corpus de

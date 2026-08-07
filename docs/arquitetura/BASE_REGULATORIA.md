@@ -2,8 +2,20 @@
 
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar quando estratégia de embedding/chunking mudar ou novos UFs forem ingeridos
-**Última revisão:** 2026-05-15
-**Estado real:** 22.573 chunks em 4 UFs (GO, MS, MT, Federal)
+**Última revisão:** 2026-08-06
+**Estado real:** **32.161 chunks** em **113 documentos**, 5 recortes (GO, MS, MT, AC, Federal),
+100% `text-embedding-3-small` 768d
+
+> **06/08 — normativas federais (11 normas, +417 chunks).** Entraram
+> IN INCRA 77/2013, IN RFB 2.203/2024, Resolução CMN 5.193/2024, Resoluções
+> CONAMA 406/2009 e 411/2009, IN IBAMA 21/2014, 16/2022, 11/2025, 21/2023 e
+> 24/2024, e Portaria IBAMA 15/2026 (ids 200–210). Duas do pacote foram puladas
+> por dedupe: IN MMA 2/2014 (id=1) e Resolução CONAMA 369/2006 (id=25).
+>
+> Primeira ingestão a rodar sobre o chunker **pós-remediação** (ADR-041):
+> contagem real de tokens por `tiktoken`, teto do artigo, guarda de sanidade e
+> normalização de ligaduras. As 11 nascem já com `dispositivo`, `hierarquia` e
+> `referencias` preenchidos — ver `docs/relatorios/RELATORIO_INGESTAO_NORMATIVAS_FEDERAIS.md`.
 
 ---
 
