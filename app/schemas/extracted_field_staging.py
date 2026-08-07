@@ -42,6 +42,13 @@ class ExtractedFieldStagingOut(BaseModel):
     # 15 linhas de 3 documentos diferentes (2 ITRs + um contrato), e o mesmo campo
     # aparecia três vezes sem dizer de onde vinha. Resolvido no read-time.
     source_doc_nome: Optional[str] = None
+    # "Aceito" ≠ "Gravado" (validações 30/07 e 02/08). Depois de consolidar, a
+    # linha que pousou na base e a que foi recusada mostravam a mesma palavra —
+    # e o único sinal de gravação era um toast que morre ao navegar. `gravado`
+    # vem de `consolidated_at`, carimbado pela consolidação e limpo por qualquer
+    # nova decisão do consultor.
+    gravado: bool = False
+    gravado_em: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -93,15 +93,34 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
     if process.property_id:
         prop = db.query(Property).filter(Property.id == process.property_id).first()
         if prop:
+            # Herança caso→imóvel (auditoria 06/08). O Hub do Imóvel aprendeu em
+            # 02/08 a DERIVAR das matrículas consolidadas; o dossiê do CASO ficou
+            # lendo as colunas cruas de `Property` — que a consolidação nunca
+            # grava (matrícula/CCIR/NIRF vivem na `Matricula`; a área é a soma).
+            # Resultado medido no processo 16: quatro matrículas consolidadas,
+            # 16 campos gravados, e a aba Dados exibindo "Matrícula —, CCIR —,
+            # NIRF —, Área —". O bug que ela relatou no imóvel só tinha trocado
+            # de tela. Mesma porta única do Hub (`agregar_das_matriculas`): valor
+            # único quando as matrículas concordam, "349,9022 | 660,6561" quando
+            # divergem, nada quando ninguém tem — nunca um número escolhido nem
+            # fabricado. A coluna própria do imóvel, quando preenchida, mantém
+            # precedência.
+            area_matriculas = prop.area_total_matriculas()
             property_data = {
                 "id": prop.id,
                 "name": prop.name,
-                "registry_number": prop.registry_number,
-                "ccir": prop.ccir,
-                "nirf": prop.nirf,
+                "registry_number": (
+                    prop.registry_number or prop.agregar_das_matriculas("numero_matricula")
+                ),
+                "ccir": prop.ccir or prop.agregar_das_matriculas("numero_ccir"),
+                "nirf": prop.nirf or prop.agregar_das_matriculas("nirf_cib"),
+                "cartorio": prop.agregar_das_matriculas("cartorio"),
+                "codigo_incra_sncr": prop.agregar_das_matriculas("codigo_incra_sncr"),
+                "denominacao_imovel": prop.agregar_das_matriculas("denominacao_imovel"),
+                "area_ha_por_matricula": prop.agregar_das_matriculas("area_ha"),
                 "car_code": prop.car_code,
                 "car_status": prop.car_status,
-                "total_area_ha": prop.total_area_ha,
+                "total_area_ha": prop.total_area_ha or (area_matriculas or None),
                 "municipality": prop.municipality,
                 "state": prop.state,
                 "biome": prop.biome,
@@ -110,6 +129,13 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
                 # Sprint 3 (Ficha 07 §3.4) — selos por campo + campos-chave da
                 # Matrícula (SIGEF, INCRA/SNCR, NIRF) + reconciliação de áreas.
                 "field_sources": prop.field_sources or {},
+                # A correção literal do "gravou apenas NIRF, CCIR e INCRA":
+                # eram esses três (mais o SIGEF, vazio em produção) os ÚNICOS
+                # campos registrais que este payload expunha. Cartório,
+                # denominação, livro/folha, averbações de APP e RL, proprietários
+                # e registro anterior já estavam gravados e carimbados
+                # `human_validated` na `Matricula` — e não tinham por onde chegar
+                # à tela. Onze campos no banco, três na janela.
                 "matriculas": [
                     {
                         "id": m.id,
@@ -120,6 +146,15 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
                         "nirf_cib": m.nirf_cib,
                         "numero_ccir": m.numero_ccir,
                         "area_ha": m.area_ha,
+                        "cartorio": m.cartorio,
+                        "denominacao_imovel": m.denominacao_imovel,
+                        "registro_livro_folha_ficha": m.registro_livro_folha_ficha,
+                        "averbacao_app": m.averbacao_app,
+                        "averbacao_rl": m.averbacao_rl,
+                        "onus_gravames": m.onus_gravames,
+                        "proprietarios": m.proprietarios or [],
+                        "registro_anterior": m.registro_anterior,
+                        "vigencia": m.vigencia,
                         "field_sources": m.field_sources or {},
                     }
                     for m in sorted(prop.matriculas, key=lambda m: m.id)

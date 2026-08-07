@@ -296,6 +296,7 @@ def decide_field(
         row.decided_value = None
         row.decided_by_user_id = None
         row.decided_at = None
+        row.consolidated_at = None
         db.flush()
         _audit(db, tenant_id, process_id, user_id, "staging_reabrir", {
             "field_id": row.id, "target_entity": row.target_entity,
@@ -373,6 +374,10 @@ def decide_field(
 
     row.decided_by_user_id = user_id
     row.decided_at = datetime.now(UTC)
+    # Decisão nova = proposta nova: o "Gravado" da rodada anterior deixa de
+    # valer até a próxima consolidação confirmar. Rótulo que sobrevive à
+    # decisão que o invalidou é pior que rótulo nenhum.
+    row.consolidated_at = None
     db.flush()
 
     _audit(db, tenant_id, process_id, user_id, "staging_decidir", {
@@ -407,6 +412,7 @@ def _reject_siblings(db: Session, tenant_id: int, process_id: int, row: Extracte
         if sib.status in (ExtractedFieldStatus.aceito,):
             continue
         sib.status = ExtractedFieldStatus.rejeitado
+        sib.consolidated_at = None
         rejeitados.append(sib.id)
     return rejeitados
 
@@ -432,6 +438,7 @@ def bulk_accept_consistentes(
         row.decided_value = {"value": _raw_value(row)}
         row.decided_by_user_id = user_id
         row.decided_at = now
+        row.consolidated_at = None  # aceitar não é gravar — só "Gravar na base" carimba
         ids.append(row.id)
     db.flush()
     if ids:
@@ -476,6 +483,7 @@ def consolidate_process(
     imovel_tocado = False
     mat_criadas = 0
     mat_atualizadas = 0
+    agora = datetime.now(UTC)
 
     client = _load_client(db, tenant_id, process.client_id) if process.client_id else None
     prop = _load_property(db, tenant_id, process.property_id) if process.property_id else None
@@ -484,13 +492,17 @@ def consolidate_process(
     # destino → uma vencedora por âncora (Ficha 05). Achados (decided_value None =
     # divergente_fundo aceito como achado) NÃO gravam valor — só roteados na matriz.
     grupos: dict[tuple, list[ExtractedFieldStaging]] = {}
-    matricula_estabelecida: set[str] = set()
+    matricula_estabelecida: dict[str, list[ExtractedFieldStaging]] = {}
     for row in accepted:
         entity = (row.target_entity or "").lower()
         if entity == "matricula" and row.field_name == "matricula_listada":
             if row.matricula_hint:
-                matricula_estabelecida.add(row.matricula_hint)
+                matricula_estabelecida.setdefault(row.matricula_hint, []).append(row)
             continue
+        # Nova consolidação re-decide o que pousa: uma linha carimbada antes
+        # pode ser recusada agora (doc novo divergente vira reconciliação). O
+        # carimbo é reconstruído do zero a cada passagem, nunca acumulado.
+        row.consolidated_at = None
         if row.decided_value is None:
             # Achado (aceito a partir de `divergente_fundo`): por projeto NÃO grava
             # valor — a matriz já roteou como issue/escopo. O que era errado era o
@@ -532,10 +544,15 @@ def consolidate_process(
         return mat
 
     # matrícula citada no CAR mas sem campo próprio aceito ainda existe na base
-    # (o CAR é doc criador — guard fantasma não se aplica aqui).
-    for hint in matricula_estabelecida:
-        if prop is not None:
-            _ensure_matricula(hint)
+    # (o CAR é doc criador — guard fantasma não se aplica aqui). O aceite que a
+    # materializou também é um aceite que POUSOU: a matrícula existe por causa
+    # dele, então ele carimba como os demais.
+    for hint, linhas in matricula_estabelecida.items():
+        for r in linhas:
+            r.consolidated_at = None
+        if prop is not None and _ensure_matricula(hint) is not None:
+            for r in linhas:
+                r.consolidated_at = agora
 
     divergencias_devolvidas: list[dict[str, Any]] = []
 
@@ -623,12 +640,25 @@ def consolidate_process(
         value = _raw_value(winner)
         fonte = _fonte_of(winner)
         unidade = winner.field_value.get("unidade") if isinstance(winner.field_value, dict) else None
-        wrote = _write_entity(obj, winner, value, fonte, unidade,
-                              allowed, alias, writes, ignorados, reconciliacoes)
-        if wrote and entity == "cliente":
+        desfecho = _write_entity(obj, winner, value, fonte, unidade,
+                                 allowed, alias, writes, ignorados, reconciliacoes)
+        if desfecho == "gravado" and entity == "cliente":
             cliente_tocado = True
-        elif wrote and entity == "imovel":
+        elif desfecho == "gravado" and entity == "imovel":
             imovel_tocado = True
+
+        # "Aceito" ≠ "Gravado". Carimba quem AFIRMA o valor que pousou — que
+        # normalmente é o grupo inteiro (o guard de conflito acima só deixa
+        # passar grupo de valor único; a vencedora decide proveniência, não
+        # conteúdo), mas não sempre: o guard é contornado quando a vencedora é
+        # edição do consultor ou quando o destino já estava consolidado, e aí as
+        # irmãs podem discordar. Comparar cada uma com a vencedora pela MESMA
+        # normalização do guard mantém o selo literal: quem discorda continua
+        # dizendo que não gravou, porque não gravou.
+        if desfecho in ("gravado", "reafirmado"):
+            for r in rows:
+                if len(_group_conflict_values([winner, r], target_field)) == 1:
+                    r.consolidated_at = agora
 
     db.flush()
 
@@ -712,8 +742,16 @@ def _write_entity(
     obj: Any, row: ExtractedFieldStaging, value: Any, fonte: str, unidade: Any,
     allowed: set[str], alias: dict[str, Optional[str]],
     writes: list[dict[str, Any]], ignorados: list[str], reconciliacoes: list[dict[str, Any]],
-) -> bool:
+) -> str:
     """Grava 1 campo no objeto ORM (UPSERT versionado, Ficha 05).
+
+    Devolve o DESFECHO, não um booleano: ``gravado`` (valor novo escrito),
+    ``reafirmado`` (o valor já estava na base, idempotente) ou ``recusado``
+    (não pousou — sem destino, incoercível, forma inválida ou reconciliação).
+
+    Os dois primeiros significam "o valor desta linha ESTÁ na base" e é isso
+    que a Conferência precisa dizer ao consultor; o booleano antigo colapsava
+    ``reafirmado`` com ``recusado`` porque só respondia "contou como write?".
 
     - allowlist + alias + coerção por tipo (área pela porta única).
     - RECONCILIAÇÃO: se o campo JÁ foi consolidado (human_validated) e o novo
@@ -736,7 +774,7 @@ def _write_entity(
             f"{row.target_entity or '—'}.{target or '—'}: "
             f"{motivo or 'não gravado nesta consolidação'}"
         )
-        return False
+        return "recusado"
 
     column = obj.__table__.columns[col]
     coerced = _coerce(value, column.type, col, unidade)
@@ -750,7 +788,7 @@ def _write_entity(
             "este campo (formato ou ordem de grandeza) — confira no documento e "
             "corrija à mão se for o caso"
         )
-        return False
+        return "recusado"
 
     # Forma do container (caso `proprietarios`): coluna JSON de lista/dict não
     # recebe escalar nu. Ou o valor é encaixado no shape certo, ou é RECUSADO e
@@ -759,7 +797,7 @@ def _write_entity(
     coerced, erro_forma = fit_json_container(coerced, _json_container_of(column), col)
     if erro_forma is not None:
         ignorados.append(f"{row.target_entity}.{erro_forma}")
-        return False
+        return "recusado"
 
     old = getattr(obj, col, None)
     # Cliente, Imóvel e Matrícula têm field_sources (a Matrícula ganhou a coluna no
@@ -777,13 +815,15 @@ def _write_entity(
             "field": col, "anterior": _ser(old), "novo": _ser(coerced),
             "fonte": fonte, "staging_id": row.id,
         })
-        return False
+        return "recusado"
 
     if not _values_differ(old, coerced):
         # Idempotência: mesmo valor → reafirma proveniência mas não conta como write.
+        # NÃO é recusa: o valor desta linha está na base. Consolidar duas vezes
+        # não pode apagar da tela o "Gravado" da primeira.
         if not ja_consolidado:
             obj.field_sources = {**fs_prev, col: "human_validated"}
-        return False
+        return "reafirmado"
 
     setattr(obj, col, coerced)
     obj.field_sources = {**fs_prev, col: "human_validated"}
@@ -792,7 +832,7 @@ def _write_entity(
         "field": col, "anterior": _ser(old), "novo": _ser(coerced),
         "fonte": fonte, "staging_id": row.id,
     })
-    return True
+    return "gravado"
 
 
 def _ser(value: Any) -> Any:
@@ -1179,6 +1219,10 @@ def flag_sem_casa(
     aceitos: list[ExtractedFieldStaging] = []
     for r in todos_aceitos:
         entity = (r.target_entity or "").lower()
+        # Linha já carimbada pela consolidação tem casa por prova, não por
+        # julgamento — nenhuma heurística aqui pode contradizer o fato.
+        if r.consolidated_at is not None:
+            continue
         # Achado aceito (`divergente_fundo`): decisão legítima, mas NÃO grava valor.
         # Dizer isso na linha é a diferença entre "aceitei e não gravou" e
         # "aceitei como achado, e o sistema me disse".

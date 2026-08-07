@@ -56,6 +56,20 @@ interface DossierMatricula {
   nirf_cib: string | null;
   numero_ccir: string | null;
   area_ha: number | null;
+  // Auditoria 06/08 — o painel mostrava SIGEF, INCRA/SNCR, NIRF e Nº CCIR, e
+  // mais nada. Como o SIGEF é nulo na maioria dos casos, sobravam exatamente
+  // três linhas preenchidas: foi essa janela de três buracos que a consultora
+  // leu como "gravou apenas NIRF, CCIR e INCRA" depois de uma consolidação que
+  // gravou dezesseis campos. Os campos abaixo já estavam no banco.
+  cartorio: string | null;
+  denominacao_imovel: string | null;
+  registro_livro_folha_ficha: string | null;
+  averbacao_app: string | null;
+  averbacao_rl: string | null;
+  onus_gravames: string | null;
+  proprietarios: Array<{ nome?: string; cpf?: string }> | null;
+  registro_anterior: string | null;
+  vigencia?: string;
   field_sources: Record<string, string>;
 }
 
@@ -244,11 +258,16 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
                 <KeyFieldRow label="NIRF" value={m.nirf_cib} entity="matricula" entityId={m.id} field="nirf_cib" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
                 <KeyFieldRow label="Nº CCIR" value={m.numero_ccir} entity="matricula" entityId={m.id} field="numero_ccir" fieldSources={m.field_sources} onSelo={p => seloMutation.mutate(p)} pending={seloMutation.isPending} />
               </div>
+              {/* O resto do que a consolidação já gravou. Não ganha selo: selo é
+                  para campo-chave que se oficializa perante órgão; isto é leitura
+                  da certidão. Some quando não foi lido — campo vazio inventaria
+                  uma lacuna que não existe. */}
+              <DadosRegistrais m={m} />
             </div>
           ))}
           {(!property.matriculas || property.matriculas.length === 0) && (
             <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
-              Nenhuma matrícula consolidada ainda — SIGEF, INCRA/SNCR e NIRF aparecem aqui após a consolidação.
+              Nenhuma matrícula consolidada ainda — os dados da certidão aparecem aqui depois de "Gravar na base".
             </p>
           )}
         </div>
@@ -326,6 +345,16 @@ export default function ProcessDossier({ processId }: ProcessDossierProps) {
               { label: 'Área (ha)', value: property.total_area_ha ? `${property.total_area_ha} ha` : '—' },
               { label: 'Município/UF', value: property.municipality ? `${property.municipality}/${property.state ?? ''}` : '—' },
               { label: 'Bioma', value: property.biome ?? '—' },
+              // Herdados das matrículas consolidadas (mesma derivação do Hub).
+              // Com mais de uma matrícula os valores vêm lado a lado — o imóvel
+              // é a junção das matrículas, e escolher uma delas seria inventar.
+              { label: 'Denominação', value: property.denominacao_imovel ?? '—' },
+              { label: 'Cartório', value: property.cartorio ?? '—' },
+              { label: 'INCRA/SNCR', value: property.codigo_incra_sncr ?? '—' },
+              {
+                label: 'Área por matrícula',
+                value: property.area_ha_por_matricula ? `${property.area_ha_por_matricula} ha` : '—',
+              },
             ].map(f => (
               <div key={f.label} className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
                 <p className="text-xs text-gray-400 dark:text-slate-500 mb-0.5">{f.label}</p>
@@ -478,6 +507,46 @@ const ORIGEM_LABEL: Record<string, string> = {
 function origemLabel(fieldSources: Record<string, string> | undefined, field: string): string {
   const src = fieldSources?.[field];
   return src ? (ORIGEM_LABEL[src] ?? src) : 'Consolidado do staging';
+}
+
+/**
+ * O que a consolidação gravou na matrícula além dos quatro campos-chave.
+ *
+ * Regra: pares "rótulo: valor" omitindo o que ainda não foi lido — a mesma de
+ * `dadosRegistrais` no Hub do Imóvel (Dívida #60), para as duas telas não
+ * divergirem em qualidade. Proprietários vêm como lista de objetos e são
+ * achatados em nomes; averbações e ônus chegam serializados pela consolidação
+ * ("area: 186,1647 · referencia: AV.02-M.4.655") e são exibidos como estão —
+ * inventar um parser aqui seria reinterpretar o que já foi decidido.
+ */
+function DadosRegistrais({ m }: { m: DossierMatricula }) {
+  const proprietarios = (m.proprietarios ?? [])
+    .map(p => p?.nome?.trim())
+    .filter((n): n is string => !!n)
+    .join(', ');
+  const pares: Array<[string, string | null]> = [
+    ['Denominação', m.denominacao_imovel],
+    ['Cartório', m.cartorio],
+    ['Livro/Folha', m.registro_livro_folha_ficha],
+    ['Registro anterior', m.registro_anterior],
+    ['Averbação de RL', m.averbacao_rl],
+    ['Averbação de APP', m.averbacao_app],
+    ['Ônus e gravames', m.onus_gravames],
+    ['Proprietários', proprietarios || null],
+  ];
+  const lidos = pares.filter((p): p is [string, string] => !!p[1]);
+  if (lidos.length === 0) return null;
+
+  return (
+    <dl className="mt-2 pt-2 border-t border-gray-200 dark:border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+      {lidos.map(([rotulo, valor]) => (
+        <div key={rotulo} className="min-w-0">
+          <dt className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-slate-500">{rotulo}</dt>
+          <dd className="text-xs text-gray-700 dark:text-slate-200 break-words">{valor}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function KeyFieldRow({

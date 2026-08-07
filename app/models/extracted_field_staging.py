@@ -89,6 +89,28 @@ class ExtractedFieldStaging(Base):
     )
     decided_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ── "Aceito" ≠ "Gravado" (validação Isis 30/07 e 02/08) ─────────────────
+    # Preenchido pela consolidação quando o valor DESTA linha está na base;
+    # limpo por qualquer nova decisão do consultor (a decisão volta a ser
+    # proposta). Enquanto isto não existia, uma linha gravada e uma linha
+    # recusada eram visualmente idênticas na Conferência — foi assim que 16
+    # campos gravados de fato viraram "gravou apenas três" na cadeira da
+    # consultora.
+    #
+    # Por que uma coluna própria e não derivar de `field_sources` do destino:
+    # `field_sources` é por (entidade, COLUNA) e diz apenas "esta coluna foi
+    # validada por humano alguma vez". Ele não distingue a linha que pousou da
+    # linha que foi RECUSADA sobre uma coluna já consolidada — que é exatamente
+    # o caminho da reconciliação (`_write_entity`: valor novo diverge de campo
+    # já `human_validated` ⇒ NÃO sobrescreve). Nesse caminho `field_sources`
+    # diz "human_validated" e a linha não gravou nada: derivar dali produziria
+    # "Gravado" em cima de um valor que a base recusou. Não é hipótese —
+    # aconteceu no caso 16 em produção (audit_log 1675, reconciliações de
+    # `numero_matricula` e `codigo_incra_sncr`). Some-se a isso que resolver o
+    # destino de uma linha de matrícula exige repetir a cascata de âncora e o
+    # guard fantasma a cada GET.
+    consolidated_at = Column(DateTime(timezone=True), nullable=True)
+
     # Rastreabilidade da origem (qual agente, qual job).
     created_by_agent = Column(String(50), nullable=True)  # extrator | auditor
     ai_job_id = Column(

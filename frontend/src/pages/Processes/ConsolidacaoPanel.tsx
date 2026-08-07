@@ -42,6 +42,13 @@ interface StagingField {
   sem_casa_motivo?: string | null;
   /** Nome do documento de origem — separa os quadros sem número de matrícula. */
   source_doc_nome?: string | null;
+  // "Aceito" ≠ "Gravado" (validações 30/07 e 02/08). Aceitar é decidir; gravar
+  // é o clique seguinte. Enquanto as duas coisas mostravam a mesma palavra, a
+  // consultora não tinha como distinguir o campo que pousou na base do que foi
+  // recusado — e leu "gravou apenas três" numa consolidação de dezesseis
+  // campos. Vem de `consolidated_at` no servidor.
+  gravado?: boolean;
+  gravado_em?: string | null;
 }
 
 interface ConsolidationResult {
@@ -195,6 +202,10 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
   );
   // Campos que GRAVAM na consolidação (escolhido/editado já viram 'aceito').
   const consolidaveis = useMemo(() => fields.filter(f => f.status === 'aceito').length, [fields]);
+  // Já na base (carimbo do servidor). O rodapé conta as duas coisas separadas:
+  // o que ainda vai pousar e o que já pousou — antes só existia a primeira, e
+  // consolidar de novo parecia não ter feito nada.
+  const jaGravados = useMemo(() => fields.filter(f => f.gravado).length, [fields]);
   const grupos = useMemo(() => {
     const by: Record<string, StagingField[]> = {};
     for (const f of fields) {
@@ -243,9 +254,22 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                     {docTypeLabel(f.source_doc_type)} · {fieldValueStr(f)}
                   </p>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded border whitespace-nowrap ${STATUS_CLS[f.status] ?? ''}`}>
-                  {STATUS_LABEL[f.status] ?? f.status}
-                </span>
+                {/* O estado que faltava. "Aceito" é decisão do consultor;
+                    "Gravado na base" é consequência do clique em Gravar. Eram a
+                    mesma palavra na tela, e é por isso que uma consolidação de
+                    16 campos foi lida como "gravou apenas três". */}
+                {f.gravado ? (
+                  <span
+                    title={f.gravado_em ? `Gravado em ${new Date(f.gravado_em).toLocaleString('pt-BR')}` : undefined}
+                    className="flex items-center gap-1 text-xs px-2 py-0.5 rounded border whitespace-nowrap bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40"
+                  >
+                    <Database className="w-3 h-3" /> Gravado na base
+                  </span>
+                ) : (
+                  <span className={`text-xs px-2 py-0.5 rounded border whitespace-nowrap ${STATUS_CLS[f.status] ?? ''}`}>
+                    {STATUS_LABEL[f.status] ?? f.status}
+                  </span>
+                )}
                 {/* Selo legível (26/07): o motivo sai do tooltip e vira texto na
                     linha. Tooltip só é lido por quem já desconfia — e a queixa
                     era exatamente não entender por que o aceite não pousou. */}
@@ -272,8 +296,12 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                   </div>
                 ) : f.status === 'aceito' || f.status === 'rejeitado' ? (
                   <div className="flex items-center gap-2">
+                    {/* Aceite que ainda não pousou diz o que falta acontecer —
+                        e o que falta é um clique, não uma espera. */}
                     <span className="text-xs text-gray-400 dark:text-slate-500">
-                      {f.status === 'aceito' ? 'aceito' : 'rejeitado'}
+                      {f.status === 'rejeitado'
+                        ? 'rejeitado'
+                        : f.gravado ? 'na base' : 'aguardando "Gravar na base"'}
                     </span>
                     {/* Reabrir devolve o campo a PENDENTE — o roteiro da Isis
                         exigia rever uma decisão e não havia botão (o confronto
@@ -375,6 +403,7 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
       <div className="sticky bottom-0 z-10 -mx-5 -mb-5 px-5 py-3 rounded-b-xl border-t border-gray-200 dark:border-white/10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur flex items-center justify-between gap-3 flex-wrap">
         <div className="text-xs text-gray-500 dark:text-slate-400 min-w-0">
           {`${consolidaveis} campo(s) serão gravados`}
+          {jaGravados > 0 && ` · ${jaGravados} já na base`}
           {pendentesObrig > 0 && ` · ${pendentesObrig} divergência(s) virarão ações a resolver`}.
           {/* A REGRA, escrita (26/07): a pergunta "por que aceitei e não gravou?"
               é respondida ANTES do clique, na própria tela — não depois, no
