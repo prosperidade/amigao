@@ -244,3 +244,32 @@ não se cancelam. Registrado sem suavizar: a fase entregou estrutura correta e
 **Nada foi revertido.** A requalificação do teto — se e como — exige decidir o
 que vale mais para a peça assinada, e isso não se decide dentro da fase que
 produziu o número.
+
+---
+
+## Adendo de 06/08 — a requalificação do teto fica para depois, de propósito
+
+O adendo 2 mediu a regressão: o art. 61-A entrou inteiro e caiu da posição 2 para
+a 29. A pergunta seguinte seria "então baixa o teto?". **A resposta é não — não
+agora — e a razão importa mais que a decisão.**
+
+**Não sabemos qual das duas causas produziu a regressão.**
+
+1. **Tamanho.** Um chunk de 2.837 tokens dilui: o vetor representa tudo
+   vagamente. É a explicação que esta ADR oferece, e ela é plausível.
+2. **Competição norma × interpretação (#126).** Na pergunta da `defesa`, a OJN
+   06/2009 — um parecer doutrinário — ocupou **6 das 8 vagas**, e ali o chunking
+   não tinha nada a ver. Material interpretativo é semanticamente mais próximo de
+   uma pergunta em linguagem natural do que o texto seco do dispositivo.
+
+Se a causa dominante for (2), baixar o teto **conserta o sintoma e deixa o
+defeito**: os artigos voltam a chegar em cacos ao consultor, e a busca continua
+perdendo a norma para o comentário sobre a norma. E o preço de descobrir isso
+depois é uma **reindexação inteira** paga por um conserto que não era o certo.
+
+**A #126 é o experimento que precede a decisão.** Enquanto não roda, o teto fica
+como está — com o benefício de entrega e o custo de recuperação **ambos medidos e
+declarados**, que é uma posição honesta de se manter.
+
+Isto não é pendência esquecida: é decisão de **não decidir ainda**, tomada com o
+número na mesa.
