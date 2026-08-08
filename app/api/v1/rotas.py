@@ -5,7 +5,8 @@
 * ``PATCH /rotas/{rota_id}/reordenar``                   (nova ordem dos passos)
 * ``PATCH /rotas/{rota_id}/passos/{passo_id}``           (edita título/prazo/órgão/classificação)
 * ``POST  /rotas/{rota_id}/passos``                      (adiciona passo manual — Ficha §9)
-* ``DELETE /rotas/{rota_id}/passos/{passo_id}``
+* ``DELETE /rotas/{rota_id}/passos/{passo_id}``          (remoção LEMBRADA — não volta na regeneração)
+* ``POST  /rotas/{rota_id}/passos/{passo_id}/restaurar``  (desfaz a remoção)
 * ``POST  /rotas/{rota_id}/passos/{passo_id}/validar``   (exige classificação — Princípio 1)
 * ``POST  /rotas/{rota_id}/fechar``                      (todos validados; AuditLog hash chain)
 * ``GET   /processes/{process_id}/rota/regeneracao-previa`` (o que a atualização vai fazer)
@@ -87,16 +88,30 @@ def _get_rota_or_404(db: Session, rota_id: int, tenant_id: int) -> Rota:
     return rota
 
 
-def _get_passo_or_404(db: Session, rota_id: int, passo_id: int, tenant_id: int) -> RotaPasso:
-    passo = (
-        db.query(RotaPasso)
-        .filter(
-            RotaPasso.id == passo_id,
-            RotaPasso.rota_id == rota_id,
-            RotaPasso.tenant_id == tenant_id,
-        )
-        .first()
+def _get_passo_or_404(
+    db: Session,
+    rota_id: int,
+    passo_id: int,
+    tenant_id: int,
+    *,
+    removido: bool = False,
+) -> RotaPasso:
+    """Busca um passo da rota. Por padrão só os VIVOS.
+
+    Passo removido continua na tabela (lápide — ver ``RotaPasso.deleted_at``),
+    então sem este filtro ``editar``/``validar``/``remover`` operariam sobre algo
+    que sumiu da tela do consultor: validar um passo invisível contaria para o
+    gate da E5. ``removido=True`` é o caminho inverso, da restauração.
+    """
+    query = db.query(RotaPasso).filter(
+        RotaPasso.id == passo_id,
+        RotaPasso.rota_id == rota_id,
+        RotaPasso.tenant_id == tenant_id,
     )
+    query = query.filter(
+        RotaPasso.deleted_at.isnot(None) if removido else RotaPasso.deleted_at.is_(None)
+    )
+    passo = query.first()
     if passo is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -202,7 +217,10 @@ def gerar_rota(
         rota_id=result.rota.id,
         action="rota_materializada",
         new_value=result.rota.status.value,
-        details=f"created={result.created} matched={result.matched} diff={result.is_diff}",
+        details=(
+            f"created={result.created} matched={result.matched} "
+            f"suprimidos={result.suprimidos} diff={result.is_diff}"
+        ),
     )
     db.commit()
     db.refresh(result.rota)
@@ -213,6 +231,7 @@ def gerar_rota(
         rota=RotaOut.model_validate(result.rota),
         orgaos_corrigidos=result.orgaos_corrigidos,
         versao_preservada=result.versao_preservada,
+        suprimidos=result.suprimidos,
     )
 
 
@@ -396,8 +415,55 @@ def remover_passo(
             f"{passo.status.value if passo.status else '—'}"
         ),
     )
-    db.delete(passo)
+    # Lápide, não DELETE: a linha fica com a `dedupe_key` ocupada, e é isso que
+    # faz "Atualizar da IA" reconhecer o passo e NÃO recriá-lo. Antes disso, o
+    # passo removido voltava na regeneração seguinte (medido no caso 16, 02/08).
+    passo.deleted_at = datetime.now(UTC)
+    passo.deleted_by_user_id = current_user.id
     db.commit()
+
+
+@rota_router.post("/{rota_id}/passos/{passo_id}/restaurar", response_model=RotaPassoOut)
+def restaurar_passo(
+    rota_id: int,
+    passo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> RotaPasso:
+    """Traz de volta um passo removido, com classificação e validação intactas.
+
+    Contrapartida obrigatória da remoção lembrada: como o passo removido não
+    volta mais pela regeneração, sem esta porta uma remoção por engano seria
+    definitiva — e a regeneração, que hoje funciona como desfazer acidental,
+    deixaria de socorrer. Restaurar é UPDATE do ``deleted_at``, não INSERT: o
+    passo volta com a mesma identidade, a mesma proveniência e o mesmo trabalho
+    do consultor em cima dele.
+
+    Sem tela por ora (desenho da lista de removidos é decisão de produto, em
+    aberto com a Isis); a porta existe para que remover não seja irreversível.
+    """
+    rota = _get_rota_or_404(db, rota_id, current_user.tenant_id)
+    passo = _get_passo_or_404(
+        db, rota_id, passo_id, current_user.tenant_id, removido=True
+    )
+    # Volta para o fim da rota: a ordem de antes pertencia a um arranjo que o
+    # consultor pode ter refeito desde então. Fim da fila é honesto e visível —
+    # reinserir no meio moveria passos que ninguém pediu para mover.
+    passo.ordem = max((p.ordem for p in rota.passos), default=0) + 1
+    passo.deleted_at = None
+    passo.deleted_by_user_id = None
+    _audit(
+        db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        rota_id=rota_id,
+        action="rota_passo_restaurado",
+        new_value=passo.titulo,
+        details=f"passo {passo.id} · ordem {passo.ordem}",
+    )
+    db.commit()
+    db.refresh(passo)
+    return passo
 
 
 @rota_router.post("/{rota_id}/passos/{passo_id}/validar", response_model=RotaPassoOut)

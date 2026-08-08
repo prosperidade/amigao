@@ -2080,6 +2080,46 @@ prioridade — sem o corpus, o diferencial regulatório/RAG está morto em prod.
 > cobertura das demais UFs (meta 27 UFs), mas os corpora hoje presentes em dev estão
 > todos em prod.
 
+### Abertas pela Sprint 2 da Rota (07/08, `feat/rota-e5-reordenacao`)
+
+**304. Migração da reordenação para `@dnd-kit` — OPÇÃO, não necessidade.** A
+Sprint 2 nasceu com a decisão de trocar o `Reorder` do framer-motion por
+`@dnd-kit/core` + `@dnd-kit/sortable`. O retrato do Passo 0 desfez a premissa: o
+drag-and-drop **já existia e funcionava**, em 464 linhas. O André reverteu a
+aprovação com o motivo escrito: *"reescrever código que funciona para ganhar
+teclado, com três vazios reais na mesa, é trocar valor por elegância — e a Isis
+não sente a diferença."*
+
+O buraco real era acessibilidade de teclado, e ele foi fechado por botões ↑/↓ ao
+lado do handle — duas entradas para a mesma ação, ambas terminando no mesmo
+`PATCH /reordenar`. Padrão de qualquer tabela ordenável; não são mecanismos
+concorrentes.
+
+**O que destravaria a migração:** uma necessidade que os botões não atendam —
+arrastar entre listas (mover passo de uma rota para outra), reordenação por
+arrasto no touch de tablet em campo, ou anúncio de posição por leitor de tela
+durante o arrasto (o `@dnd-kit` traz `screenReaderInstructions` pronto; o
+framer-motion não tem equivalente). Sem um desses, migrar é custo sem retorno
+sentido pelo consultor.
+
+**305. Passo removido não tem tela — só endpoint.** A ADR-061 tornou a remoção
+lembrada: passo removido não volta na regeneração. Como isso fechou o *desfazer
+acidental* que a regeneração fazia sem querer, a contrapartida entrou no backend
+— `POST /rotas/{id}/passos/{id}/restaurar`, que devolve o passo por UPDATE com
+classificação, validação e proveniência intactas. **Não há UI.** Quem remover por
+engano depende de alguém chamar o endpoint.
+
+Não foi construída de propósito: o desenho da lista de removidos é decisão de
+produto e está em aberto com a Isis, junto com a pergunta maior — a ausência de
+um gesto de **"rejeitar"** ao lado da lixeira (ver `docs/trabalhos/` do sprint).
+A trilha do caso 16 mostra 4 remoções em 11 segundos porque apagar era o único
+gesto disponível; se ela quisesse dizer *"este passo não se aplica a este caso"*,
+não tinha como. Inventar a tela antes dessa conversa seria escolher no lugar dela.
+
+**O que destrava:** a resposta da Isis sobre remover × rejeitar. Se "rejeitar"
+existir, a lista de removidos provavelmente vira "passos recusados", com motivo —
+e o restaurar ganha lugar natural ali.
+
 ## Backlog de produto (já versionado em ADR)
 
 **16. Loop de aprendizado com material dos consultores** — ADR-010.

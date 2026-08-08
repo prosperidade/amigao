@@ -304,3 +304,139 @@ def test_tenant_isolation(client: TestClient, db_session, monkeypatch):
         f"/api/v1/rotas/{rota_b['id']}/reordenar", headers=headers_a,
         json={"passo_ids": [p["id"] for p in rota_b["passos"]]},
     ).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Remoção lembrada (Sprint 2) — o gesto do consultor sobrevive à regeneração
+# ---------------------------------------------------------------------------
+
+
+def test_passo_removido_nao_volta_ao_atualizar_da_ia(
+    client: TestClient, db_session, monkeypatch
+):
+    """GATE, pela API: remover → "Atualizar da IA" → o passo NÃO reaparece.
+
+    Reproduz o caso 16 (02/08) inteiro pelo caminho do consultor: gerar, remover
+    da tela, mandar atualizar. Antes das lápides, o passo removido voltava — e
+    era isso que fazia regerar "não dar em nada".
+    """
+    tenant, _ = _seed_user(db_session)
+    process = _seed_case(db_session, tenant=tenant)
+    db_session.commit()
+    _patch_agent(monkeypatch, _ETAPAS)
+    headers = _login(client, "consultor@example.com", "senha123")
+
+    rota = client.post(
+        f"/api/v1/processes/{process.id}/rota/gerar", headers=headers
+    ).json()["rota"]
+    alvo = rota["passos"][1]
+
+    r = client.delete(
+        f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}", headers=headers
+    )
+    assert r.status_code == 204, r.text
+
+    got = client.get(f"/api/v1/processes/{process.id}/rota", headers=headers).json()
+    assert [p["id"] for p in got["passos"]] == [rota["passos"][0]["id"]]
+
+    # A IA repropõe as MESMAS etapas.
+    body = client.post(
+        f"/api/v1/processes/{process.id}/rota/gerar", headers=headers
+    ).json()
+    assert body["created"] == 0
+    assert body["suprimidos"] == 1  # contado, não silencioso
+
+    got = client.get(f"/api/v1/processes/{process.id}/rota", headers=headers).json()
+    assert [p["id"] for p in got["passos"]] == [rota["passos"][0]["id"]], (
+        "o passo removido voltou — regerar desfez o gesto do consultor"
+    )
+
+
+def test_restaurar_devolve_o_passo_com_o_trabalho_intacto(
+    client: TestClient, db_session, monkeypatch
+):
+    """Remover deixou de ser irreversível: restaurar traz o passo como estava.
+
+    Contrapartida obrigatória da remoção lembrada — antes dela, a regeneração
+    funcionava como desfazer acidental; agora não funciona mais, e sem esta
+    porta um clique errado na lixeira seria definitivo.
+    """
+    tenant, _ = _seed_user(db_session)
+    process = _seed_case(db_session, tenant=tenant)
+    db_session.commit()
+    _patch_agent(monkeypatch, _ETAPAS)
+    headers = _login(client, "consultor@example.com", "senha123")
+
+    rota = client.post(
+        f"/api/v1/processes/{process.id}/rota/gerar", headers=headers
+    ).json()["rota"]
+    alvo = rota["passos"][0]
+    client.patch(
+        f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}", headers=headers,
+        json={"classificacao": "item_proposta"},
+    )
+    client.delete(f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}", headers=headers)
+
+    r = client.post(
+        f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}/restaurar", headers=headers
+    )
+    assert r.status_code == 200, r.text
+    # Mesma linha, mesma identidade — UPDATE, não INSERT: a classificação que o
+    # consultor tinha dado continua lá.
+    assert r.json()["id"] == alvo["id"]
+    assert r.json()["classificacao"] == "item_proposta"
+
+    got = client.get(f"/api/v1/processes/{process.id}/rota", headers=headers).json()
+    assert alvo["id"] in [p["id"] for p in got["passos"]]
+
+
+def test_passo_removido_nao_aceita_edicao_nem_validacao(
+    client: TestClient, db_session, monkeypatch
+):
+    """O que saiu da tela saiu do alcance: validar um passo invisível contaria
+    para o gate da E5 sem que o consultor o tivesse visto."""
+    tenant, _ = _seed_user(db_session)
+    process = _seed_case(db_session, tenant=tenant)
+    db_session.commit()
+    _patch_agent(monkeypatch, _ETAPAS)
+    headers = _login(client, "consultor@example.com", "senha123")
+
+    rota = client.post(
+        f"/api/v1/processes/{process.id}/rota/gerar", headers=headers
+    ).json()["rota"]
+    alvo = rota["passos"][0]
+    client.delete(f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}", headers=headers)
+
+    assert client.patch(
+        f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}", headers=headers,
+        json={"titulo": "editado"},
+    ).status_code == 404
+    assert client.post(
+        f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}/validar", headers=headers
+    ).status_code == 404
+    assert client.delete(
+        f"/api/v1/rotas/{rota['id']}/passos/{alvo['id']}", headers=headers
+    ).status_code == 404
+
+
+def test_fechar_ignora_passo_removido(client: TestClient, db_session, monkeypatch):
+    """Passo removido não segura o fechamento — sair da rota é sair do gate."""
+    tenant, _ = _seed_user(db_session)
+    process = _seed_case(db_session, tenant=tenant)
+    db_session.commit()
+    _patch_agent(monkeypatch, _ETAPAS)
+    headers = _login(client, "consultor@example.com", "senha123")
+
+    rota = client.post(
+        f"/api/v1/processes/{process.id}/rota/gerar", headers=headers
+    ).json()["rota"]
+    # Remove um; classifica e valida só o que sobrou.
+    client.delete(
+        f"/api/v1/rotas/{rota['id']}/passos/{rota['passos'][1]['id']}", headers=headers
+    )
+    got = client.get(f"/api/v1/processes/{process.id}/rota", headers=headers).json()
+    _classify_and_validate_all(client, headers, got)
+
+    r = client.post(f"/api/v1/rotas/{rota['id']}/fechar", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "validada"

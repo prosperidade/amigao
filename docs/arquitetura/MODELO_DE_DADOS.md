@@ -406,6 +406,45 @@ fonte (#70), vínculo ao passivo e triagem.
 Unique `(tenant_id, dedupe_key)` garante idempotência da geração. Migration `ac7f01b9e3d5`. Decisão
 ação×passivo: [ADR-016](../adr/016-acao-nao-resolve-passivo.md).
 
+## Rota Regulatória (Ficha 07 §8.1 — E5)
+
+Tabelas `rotas`, `rota_passos`, `rota_versoes`. O caminho regulatório deixa de ser texto dentro do
+JSON do `AIJob` e vira entidade que o consultor **ordena, classifica, valida e assina**. Uma rota
+ativa por `(tenant_id, process_id, demand_type)`.
+
+`rota_passos` — colunas que exigem contexto (as demais são diretas: `ordem`, `titulo`, `descricao`,
+`orgao`, `prazo_estimado_dias`):
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `classificacao` | enum `rota_passo_classificacao` | `item_proposta` (faturável) / `direcao`. **NULL até o consultor decidir**; exigido para validar |
+| `origem` | enum `rota_passo_origem` | `ia` / `manual`. Passo manual nunca é tocado pela regeneração |
+| `status` | enum `rota_passo_status` | `proposto` / `validado` |
+| `prazo_fonte` | String | `norma` (com `SourceRef`) ou `estimativa_profissional` (sem fonte, marcado honestamente) |
+| `sources` | JSONB | lista de `SourceRef` (#70) |
+| `origem_issue_id` / `origem_acao_id` | FK (SET NULL) | proveniência ADR-039: de qual achado/ação o passo nasceu |
+| `dedupe_key` | String(120) | unique `(tenant_id, dedupe_key)`; **higiene, não oráculo** (dívida #48) |
+| `deleted_at` / `deleted_by_user_id` | DateTime / FK users (SET NULL) | **remoção lembrada** — ver abaixo |
+
+### Remoção lembrada (`deleted_at`) — ADR-061
+
+Passo removido pelo consultor **não é apagado**: recebe lápide. A linha fica segurando sua
+`dedupe_key`, e é a chave ocupada que faz a reconciliação reconhecer o passo e **não recriá-lo**.
+Sem isso, "Atualizar da IA" ressuscitava o que o humano tinha tirado (medido no caso 16, 02/08:
+`created=5`, seguido de 4 remoções manuais em 11 segundos).
+
+`Rota.passos` **filtra as lápides na própria relação** — os ~20 consumidores (gate da macroetapa,
+proposta, snapshot, "fechar rota") querem a rota viva. Quem precisa das lápides pede por
+`Rota.passos_removidos` (viewonly). Reversível por `POST /rotas/{id}/passos/{id}/restaurar`.
+
+`rota_versoes` guarda a foto completa (rota + passos em JSON) **antes** de cada regeneração —
+snapshot, não vínculo vivo: precisa sobreviver ao passo apagado.
+
+Migrations: criação na Sprint 2; lápides em `d3b8a1f0c94e`. Decisões:
+[ADR-039](../adr/039-rota-nasce-do-diagnostico-fundamentado.md) (a rota nasce do diagnóstico
+fundamentado), [ADR-034](../adr/034-esfera-pelo-orgao-do-passivo.md) (guard de esfera),
+[ADR-061](../adr/061-remocao-de-passo-da-rota-e-lembrada.md) (remoção lembrada).
+
 ## Próximas leituras
 
 - [`API_v1.md`](./API_v1.md) — como acessar essas entidades pela superfície REST
