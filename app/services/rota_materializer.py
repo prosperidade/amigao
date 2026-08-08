@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.agents.base import AgentContext, AgentRegistry
 from app.core.logging import get_logger
@@ -71,6 +71,10 @@ class RotaMaterializeResult:
     orgaos_corrigidos: list[dict[str, Any]] = field(default_factory=list)
     # Versão em que a rota anterior ficou guardada antes desta regeneração.
     versao_preservada: int | None = None
+    # Passos que a IA propôs de novo e que o consultor já tinha removido — não
+    # voltaram. Sobe até a tela: "nenhum passo novo" sem esta contagem esconderia
+    # que houve proposta recusada em nome do consultor.
+    suprimidos: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -401,7 +405,7 @@ def _upsert_rota(
 
 def _reconcile_passos(
     *, rota: Rota, tenant_id: int, etapas: list[Etapa], contexto: Any = None
-) -> tuple[int, int, bool]:
+) -> tuple[int, int, bool, int]:
     """Reconcilia as ``etapas`` da IA contra os ``RotaPasso`` existentes.
 
     Regras (aditiva, mediada por humano):
@@ -409,22 +413,43 @@ def _reconcile_passos(
     - passo IA que casa dedupe → PRESERVA ordem/edições/classificação; NÃO
       sobrescreve conteúdo (a 1ª materialização vale) — só sinaliza diff;
     - passo ``origem=manual`` → NUNCA tocado (chave própria, nunca casa aqui);
+    - passo que o consultor REMOVEU → não volta (lápide; ver abaixo);
     - remoção pela IA não apaga passo existente (mediado por humano).
 
-    Retorna ``(created, matched, is_diff)``.
+    Retorna ``(created, matched, is_diff, suprimidos)``.
     """
-    existing = {p.dedupe_key: p for p in rota.passos}
+    existing = {p.dedupe_key: p for p in rota.passos if p.deleted_at is None}
+    # Remoção é gesto humano e tem a mesma força de uma validação: o que o
+    # consultor tirou da rota não volta pela mão da IA. Antes das lápides, a
+    # linha apagada simplesmente não estava em `existing` — a etapa não casava
+    # com nada, caía no ramo `match is None` e era recriada como passo novo.
+    #
+    # Consultado por QUERY, não pela coleção `rota.passos_removidos`: numa mesma
+    # sessão a coleção pode ter sido carregada ANTES da remoção (é o que faz uma
+    # regeneração anterior, que já leu as lápides) e continuaria vazia, deixando
+    # o passo removido voltar exatamente no caminho que este código fecha.
+    session = object_session(rota)
+    lapides: list[RotaPasso] = (
+        session.query(RotaPasso)
+        .filter(RotaPasso.rota_id == rota.id, RotaPasso.deleted_at.isnot(None))
+        .all()
+        if session is not None and rota.id is not None
+        else []
+    )
+    removidas = {p.dedupe_key for p in lapides}
+    removidas_por_identidade = {_identidade_passo(p.orgao, p.titulo) for p in lapides}
     # Índice de compatibilidade: passos gravados ANTES de a `norma_ref` sair da
     # identidade têm chave legada. Sem isto, a primeira regeneração pós-mudança
     # duplicaria a rota inteira uma última vez — exatamente o que o fix combate.
     por_identidade = {
         _identidade_passo(p.orgao, p.titulo): p for p in rota.passos
-        if p.origem == RotaPassoOrigem.ia
+        if p.origem == RotaPassoOrigem.ia and p.deleted_at is None
     }
     max_ordem = max((p.ordem for p in rota.passos), default=0)
 
     created = 0
     matched = 0
+    suprimidos = 0
     seen: set[str] = set()
 
     for etapa in etapas:
@@ -434,9 +459,21 @@ def _reconcile_passos(
             continue
         seen.add(key)
 
-        match = existing.get(key) or por_identidade.get(
-            _identidade_passo(etapa.orgao, etapa.titulo)
-        )
+        # A IA propôs de novo um passo que o consultor tinha removido. Não volta
+        # — e não passa em silêncio: `suprimidos` sobe até a tela, senão o
+        # consultor veria "nenhum passo novo" sem saber que houve proposta
+        # recusada em seu nome. Casa por chave OU por identidade (órgão+título),
+        # porque o título varia entre execuções do LLM (dívida #48).
+        identidade = _identidade_passo(etapa.orgao, etapa.titulo)
+        if key in removidas or identidade in removidas_por_identidade:
+            suprimidos += 1
+            logger.info(
+                "rota: passo proposto pela IA já fora removido pelo consultor — mantido fora",
+                extra={"rota_id": rota.id, "passo": etapa.titulo},
+            )
+            continue
+
+        match = existing.get(key) or por_identidade.get(identidade)
         if match is None:
             max_ordem += 1
             passo = RotaPasso(
@@ -482,8 +519,12 @@ def _reconcile_passos(
         k for k, p in existing.items() if p.origem == RotaPassoOrigem.ia
     }
     removed_by_ia = ia_keys_antes - seen
+    # `suprimidos` de propósito FORA do diff: um passo que o consultor removeu e
+    # a IA insiste em propor seria diferença eterna, rebaixando a rota assinada
+    # para 'desatualizada' a cada regeneração e travando "Fechar rota" para
+    # sempre — o mesmo beco sem saída que a validação de 02/08 já custou uma vez.
     is_diff = created > 0 or bool(removed_by_ia)
-    return created, matched, is_diff
+    return created, matched, is_diff, suprimidos
 
 
 def materialize_rota(
@@ -559,7 +600,7 @@ def materialize_rota(
         orgao=orgao,
         ai_job_id=ai_job_id,
     )
-    created, matched, is_diff = _reconcile_passos(
+    created, matched, is_diff, suprimidos = _reconcile_passos(
         rota=rota, tenant_id=tenant_id, etapas=etapas, contexto=contexto
     )
 
@@ -582,6 +623,7 @@ def materialize_rota(
             "demand_type": demand_type,
             "passos_created": created,
             "passos_matched": matched,
+            "passos_suprimidos": suprimidos,
             "is_diff": is_diff,
             "status": rota.status.value,
         },
@@ -590,4 +632,5 @@ def materialize_rota(
         rota=rota, created=created, matched=matched, is_diff=is_diff,
             orgaos_corrigidos=orgaos_corrigidos,
         versao_preservada=versao_preservada,
+        suprimidos=suprimidos,
     )

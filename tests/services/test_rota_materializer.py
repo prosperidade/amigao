@@ -235,3 +235,109 @@ def test_validated_rota_becomes_desatualizada_on_diff(db_session, monkeypatch):
     res2 = materialize_rota(db_session, process=process, tenant_id=tenant.id)
     assert res2.is_diff is True
     assert res2.rota.status == RotaStatus.desatualizada  # não rebaixa: sinaliza
+
+
+# ---------------------------------------------------------------------------
+# Remoção LEMBRADA — o gate deste PR
+#
+# Queixa literal da consultora (02/08): "gerar rota não deu em nada". A trilha
+# do caso 16 mostrou o mecanismo: created=5 às 15:37, e às 15:43 ela removeu 4
+# passos em 11 segundos. Como a linha era APAGADA, o passo saía de `rota.passos`
+# e a regeneração seguinte não tinha com o que casar — recriava tudo. O trabalho
+# dela voltava desfeito, e regerar virava um gesto que "não dava em nada".
+# ---------------------------------------------------------------------------
+
+
+def _remover(db_session, passo, user_id=None) -> None:
+    """Remove como o endpoint remove — lápide, não DELETE."""
+    passo.deleted_at = datetime.now(UTC)
+    passo.deleted_by_user_id = user_id
+    db_session.flush()
+
+
+def test_passo_removido_nao_volta_na_regeneracao(db_session, monkeypatch):
+    """GATE: o consultor remove um passo; "Atualizar da IA" NÃO o ressuscita."""
+    tenant, process = _seed_process(db_session)
+    _patch_agent(monkeypatch, _fake_agent_data(_ETAPAS_V1))
+    res = materialize_rota(db_session, process=process, tenant_id=tenant.id)
+    assert res.created == 2
+
+    alvo = [p for p in res.rota.passos if p.titulo == "Retificar área"][0]
+    _remover(db_session, alvo)
+    db_session.expire_all()
+    assert [p.titulo for p in res.rota.passos] == ["Protocolar CAR"]
+
+    # A IA repropõe exatamente as mesmas duas etapas.
+    res2 = materialize_rota(db_session, process=process, tenant_id=tenant.id)
+
+    db_session.expire_all()
+    titulos = [p.titulo for p in res2.rota.passos]
+    assert titulos == ["Protocolar CAR"], "o passo removido voltou — regerar desfez o gesto humano"
+    assert res2.created == 0
+    # A supressão é CONTADA, não silenciosa: sem isto a tela diria "nenhum passo
+    # novo" e o consultor concluiria que a atualização não rodou.
+    assert res2.suprimidos == 1
+
+
+def test_supressao_nao_desatualiza_rota_assinada(db_session, monkeypatch):
+    """Passo removido reproposto para sempre não pode travar a E5 para sempre.
+
+    Se `suprimidos` contasse como diff, toda regeneração rebaixaria a rota
+    assinada para 'desatualizada' e "Fechar rota" nunca mais liberaria — o mesmo
+    beco sem saída que a validação de 02/08 já custou uma vez.
+    """
+    tenant, process = _seed_process(db_session)
+    _patch_agent(monkeypatch, _fake_agent_data(_ETAPAS_V1))
+    res = materialize_rota(db_session, process=process, tenant_id=tenant.id)
+    alvo = [p for p in res.rota.passos if p.titulo == "Retificar área"][0]
+    _remover(db_session, alvo)
+    res.rota.status = RotaStatus.validada
+    db_session.flush()
+
+    res2 = materialize_rota(db_session, process=process, tenant_id=tenant.id)
+    assert res2.suprimidos == 1
+    assert res2.is_diff is False
+    assert res2.rota.status == RotaStatus.validada  # segue assinada
+
+
+def test_remocao_lembrada_nao_atinge_passo_manual(db_session, monkeypatch):
+    """Remover um passo IA não arrasta o manual do consultor para a lápide."""
+    tenant, process = _seed_process(db_session)
+    _patch_agent(monkeypatch, _fake_agent_data(_ETAPAS_V1))
+    res = materialize_rota(db_session, process=process, tenant_id=tenant.id)
+    rota = res.rota
+    manual = mat.RotaPasso(
+        tenant_id=tenant.id, rota_id=rota.id, ordem=99, titulo="Ofício à secretaria",
+        sources=[], origem=RotaPassoOrigem.manual, status=RotaPassoStatus.proposto,
+        dedupe_key=f"r{rota.id}:manual:pY",
+    )
+    db_session.add(manual)
+    db_session.flush()
+
+    _remover(db_session, [p for p in rota.passos if p.titulo == "Protocolar CAR"][0])
+    res2 = materialize_rota(db_session, process=process, tenant_id=tenant.id)
+
+    db_session.expire_all()
+    titulos = {p.titulo for p in res2.rota.passos}
+    assert "Ofício à secretaria" in titulos
+    assert "Protocolar CAR" not in titulos
+
+
+def test_passo_removido_sai_das_leituras_que_alimentam_o_gate(db_session, monkeypatch):
+    """Passo removido não conta como pendente nem entra no snapshot da versão.
+
+    São ~20 consumidores lendo `rota.passos` (gate da macroetapa, proposta,
+    "fechar rota"); o filtro mora na relação justamente para que nenhum deles
+    precise lembrar da lápide.
+    """
+    tenant, process = _seed_process(db_session)
+    _patch_agent(monkeypatch, _fake_agent_data(_ETAPAS_V1))
+    res = materialize_rota(db_session, process=process, tenant_id=tenant.id)
+    _remover(db_session, [p for p in res.rota.passos if p.titulo == "Retificar área"][0])
+
+    db_session.expire_all()
+    assert len(res.rota.passos) == 1
+    assert len(res.rota.passos_removidos) == 1
+    assert mat._snapshot_rota(res.rota)["passos"] == [
+        s for s in mat._snapshot_rota(res.rota)["passos"] if s["titulo"] == "Protocolar CAR"
+    ]

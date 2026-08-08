@@ -168,6 +168,13 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
+      # A regra da casa é que funcionalidade com gesto humano só merge com E2E do
+      # gesto na UI. Gate que roda só na máquina de quem escreveu não é gate: o PR
+      # fica verde sem que ninguém o tenha exercido. Até 07/08 o CI parava no
+      # build e os 23 arquivos de teste do frontend nunca rodavam aqui.
+      - name: Vitest
+        run: npm test
+
       - name: Build
         run: npm run build
 

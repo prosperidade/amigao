@@ -59,6 +59,9 @@ export interface RotaMaterializeResponse {
   matched: number;
   is_diff: boolean;
   rota: Rota;
+  /** Passos repropostos pela IA que continuam removidos por decisão do
+   *  consultor — regerar não desfaz gesto humano. */
+  suprimidos: number;
 }
 
 export interface PassoCreatePayload {

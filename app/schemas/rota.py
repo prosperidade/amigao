@@ -101,6 +101,14 @@ class RotaMaterializeOut(BaseModel):
         default=None,
         description="Número da versão em que a rota anterior foi preservada, se houve",
     )
+    # Remoção lembrada: a IA repropôs passos que o consultor já tinha removido e
+    # eles NÃO voltaram. Vai à tela porque o silêncio aqui seria enganoso — o
+    # consultor leria "nenhum passo novo" sem saber que houve proposta recusada
+    # em seu nome, e concluiria que a atualização não rodou.
+    suprimidos: int = Field(
+        default=0,
+        description="Passos repropostos pela IA que continuam removidos por decisão do consultor",
+    )
 
 
 class RotaVersaoOut(BaseModel):

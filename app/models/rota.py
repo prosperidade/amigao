@@ -179,11 +179,30 @@ class Rota(Base):
     tenant = relationship("Tenant")
     process = relationship("Process")
     validator = relationship("User", foreign_keys=[validated_by])
+    # A rota VIVA — passos que o consultor removeu ficam de fora (tombstone; ver
+    # `RotaPasso.deleted_at`). O filtro mora aqui, na relação, e não em cada
+    # consumidor: são ~20 leitores (proposta, gate da macroetapa, snapshot,
+    # "fechar rota", contexto) e todos querem a rota viva. Quem precisa das
+    # lápides é só a reconciliação, e essa pede por `passos_removidos`.
     passos = relationship(
         "RotaPasso",
         back_populates="rota",
         cascade="all, delete-orphan",
         order_by="RotaPasso.ordem",
+        primaryjoin=(
+            "and_(Rota.id == RotaPasso.rota_id, RotaPasso.deleted_at.is_(None))"
+        ),
+    )
+    # Lápides: o que o consultor tirou da rota. `viewonly` de propósito — esta
+    # coleção é memória, não um lugar de onde se apaga; quem restaura é o
+    # endpoint, virando o `deleted_at` de volta a NULL.
+    passos_removidos = relationship(
+        "RotaPasso",
+        primaryjoin=(
+            "and_(Rota.id == RotaPasso.rota_id, RotaPasso.deleted_at.isnot(None))"
+        ),
+        order_by="RotaPasso.ordem",
+        viewonly=True,
     )
     versoes = relationship(
         "RotaVersao",
@@ -334,6 +353,27 @@ class RotaPasso(Base):
     )
 
     dedupe_key = Column(String(120), nullable=False)
+
+    # ── Remoção LEMBRADA (Sprint 2 / E5) ────────────────────────────────────
+    # Apagar a linha fazia a regeneração RESSUSCITAR o passo: `_reconcile_passos`
+    # casa a proposta da IA contra os passos que existem, e a linha apagada não
+    # estava mais lá para casar. Medido no caso 16 (02/08): a consultora removeu
+    # 4 dos 5 passos em 11 segundos — o próximo "Atualizar da IA" traria os
+    # quatro de volta, um a um, e o trabalho dela viraria trabalho a refazer.
+    #
+    # Tirar um passo da rota é decisão humana e vale o mesmo que validar um:
+    # regerar nunca desfaz gesto humano. A linha fica, segurando sua
+    # `dedupe_key` (é a chave ocupada que faz a reconciliação reconhecer o passo
+    # e NÃO recriá-lo), e sai de `Rota.passos` pelo filtro da relação.
+    #
+    # Reversível de propósito: o passo removido por engano volta com um UPDATE,
+    # não com um INSERT que perderia classificação, validação e proveniência.
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    deleted_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     created_at = Column(
         DateTime(timezone=True),

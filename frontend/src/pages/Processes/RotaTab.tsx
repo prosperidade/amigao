@@ -16,6 +16,8 @@ import toast from 'react-hot-toast';
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
+  ChevronUp,
   GripVertical,
   Loader2,
   Lock,
@@ -82,9 +84,26 @@ interface PassoCardProps {
   rotaId: number;
   fechada: boolean;
   onCommitOrder: () => void;
+  /** Posição visível (1-based). Vem do índice, não de `passo.ordem`: entre o
+   *  gesto e a resposta do servidor a `ordem` gravada ainda é a antiga, e o
+   *  consultor veria dois passos com o mesmo número. */
+  posicao: number;
+  total: number;
+  /** Move o passo N casas (−1 sobe, +1 desce). Mesma ação do arrastar, mesmo
+   *  endpoint — só a entrada é outra (teclado). */
+  onMover: (delta: -1 | 1) => void;
 }
 
-function PassoCard({ passo, processId, rotaId, fechada, onCommitOrder }: PassoCardProps) {
+function PassoCard({
+  passo,
+  processId,
+  rotaId,
+  fechada,
+  onCommitOrder,
+  posicao,
+  total,
+  onMover,
+}: PassoCardProps) {
   const controls = useDragControls();
   const updateMut = useUpdatePasso(processId);
   const removeMut = useRemovePasso(processId);
@@ -133,20 +152,46 @@ function PassoCard({ passo, processId, rotaId, fechada, onCommitOrder }: PassoCa
       }`}
     >
       <div className="flex items-start gap-3">
-        {/* Handle de arraste (desabilitado quando a rota está fechada) */}
-        <button
-          type="button"
-          onPointerDown={e => !fechada && controls.start(e)}
-          className={`mt-0.5 shrink-0 text-gray-300 dark:text-slate-600 ${
-            fechada ? 'cursor-not-allowed' : 'cursor-grab hover:text-gray-500 dark:hover:text-slate-400'
-          }`}
-          aria-label="Reordenar passo"
-        >
-          <GripVertical className="w-4 h-4" />
-        </button>
+        {/* Reordenar: arrastar (mouse) e ↑/↓ (teclado) — duas entradas para a
+            mesma ação, ambas terminando no mesmo PATCH /reordenar. O arrastar
+            sozinho deixava de fora quem opera no teclado, e esta é tela de
+            trabalho diário. */}
+        <div className="mt-0.5 shrink-0 flex flex-col items-center">
+          <button
+            type="button"
+            onClick={() => onMover(-1)}
+            disabled={fechada || posicao === 1}
+            className="text-gray-300 dark:text-slate-600 enabled:hover:text-gray-600 dark:enabled:hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label={`Subir passo ${posicao} de ${total}`}
+            title="Subir"
+          >
+            <ChevronUp className="w-4 h-4" />
+          </button>
+
+          <span
+            onPointerDown={e => !fechada && controls.start(e)}
+            className={`text-gray-300 dark:text-slate-600 ${
+              fechada ? 'cursor-not-allowed' : 'cursor-grab hover:text-gray-500 dark:hover:text-slate-400'
+            }`}
+            aria-hidden="true"
+          >
+            <GripVertical className="w-4 h-4" />
+          </span>
+
+          <button
+            type="button"
+            onClick={() => onMover(1)}
+            disabled={fechada || posicao === total}
+            className="text-gray-300 dark:text-slate-600 enabled:hover:text-gray-600 dark:enabled:hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label={`Descer passo ${posicao} de ${total}`}
+            title="Descer"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
 
         <span className="mt-0.5 shrink-0 w-6 h-6 rounded-full bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center">
-          {passo.ordem}
+          {posicao}
         </span>
 
         <div className="min-w-0 flex-1">
@@ -216,6 +261,10 @@ function PassoCard({ passo, processId, rotaId, fechada, onCommitOrder }: PassoCa
               onClick={remover}
               disabled={removeMut.isPending}
               title="Remover passo"
+              // Nome acessível com o título: com vários cards na tela, "Remover
+              // passo" sozinho não diz QUAL — nem para o leitor de tela, nem
+              // para o teste que exerce o gesto.
+              aria-label={`Remover passo ${posicao}: ${passo.titulo}`}
               className="p-1.5 rounded-lg text-gray-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
@@ -250,27 +299,58 @@ export default function RotaTab({ processId }: RotaTabProps) {
   const gerar = () => {
     gerarMut.mutate(undefined, {
       onSuccess: data => {
+        // Passo que o consultor removeu e a IA repropôs não volta — mas também
+        // não some do relato. Sem esta frase, ele leria "nenhum passo novo" e
+        // concluiria que a atualização não rodou (foi a leitura do 02/08).
+        const suprimidos = data.suprimidos
+          ? ` ${data.suprimidos} passo(s) que você removeu continuam fora.`
+          : '';
         if (data.rota.status === 'desatualizada') {
-          toast('Rota atualizada: há passos novos para validar.', { icon: '⚠️' });
+          toast(`Rota atualizada: há passos novos para validar.${suprimidos}`, { icon: '⚠️' });
         } else if (data.created === 0 && data.matched > 0) {
-          toast('Rota já estava em dia — nenhum passo novo.', { icon: '✓' });
+          toast(`Rota já estava em dia — nenhum passo novo.${suprimidos}`, { icon: '✓' });
         } else {
-          toast.success(`Rota gerada: ${data.created} passo(s).`);
+          toast.success(`Rota gerada: ${data.created} passo(s).${suprimidos}`);
         }
       },
       onError: err => toast.error(detalheErro(err, 'Falha ao gerar a rota.')),
     });
   };
 
-  const commitOrder = () => {
+  /** Porta única da reordenação — arrastar e ↑/↓ passam por aqui.
+   *
+   *  O sucesso FALA. Antes só o erro tinha voz: o consultor arrastava, o card
+   *  assentava e nada dizia se aquilo tinha ficado gravado — mesma lição do
+   *  #141 (o sistema gravava certo e a tela não mostrava). Ordem que some no
+   *  recarregar e ordem que salvou em silêncio são indistinguíveis na tela. */
+  const salvarOrdem = (novos: RotaPasso[]) => {
     if (!rota) return;
-    const ids = order.map(p => p.id);
+    const ids = novos.map(p => p.id);
     const atuais = rota.passos.map(p => p.id);
     if (ids.length === atuais.length && ids.every((v, i) => v === atuais[i])) return; // sem mudança
     reordenarMut.mutate(
       { rotaId: rota.id, passoIds: ids },
-      { onError: () => toast.error('Falha ao reordenar.') },
+      {
+        onSuccess: () => toast.success('Ordem salva.'),
+        onError: () => {
+          // Devolve a lista ao que o servidor tem: manter na tela uma ordem que
+          // não foi gravada é a mentira que o #141 ensinou a não contar.
+          setOrder(rota.passos);
+          toast.error('Falha ao reordenar — a ordem anterior foi restaurada.');
+        },
+      },
     );
+  };
+
+  const commitOrder = () => salvarOrdem(order);
+
+  const moverPasso = (index: number, delta: -1 | 1) => {
+    const destino = index + delta;
+    if (destino < 0 || destino >= order.length) return;
+    const novos = [...order];
+    [novos[index], novos[destino]] = [novos[destino], novos[index]];
+    setOrder(novos);
+    salvarOrdem(novos);
   };
 
   const addManual = (e: React.FormEvent) => {
@@ -349,6 +429,13 @@ export default function RotaTab({ processId }: RotaTabProps) {
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${ROTA_STATUS_CLS[rota.status]}`}>
               {ROTA_STATUS_LABEL[rota.status]}
             </span>
+            {/* Sinal de gravação em curso — o toast confirma depois, este diz
+                que a ordem está a caminho do servidor e não só na tela. */}
+            {reordenarMut.isPending && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-slate-400">
+                <Loader2 className="w-3 h-3 animate-spin" /> salvando ordem…
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
             {`A IA propõe a rota; você reordena, classifica e assina. Nenhum passo sem decisão.`}
@@ -384,7 +471,7 @@ export default function RotaTab({ processId }: RotaTabProps) {
         </div>
       ) : (
         <Reorder.Group axis="y" values={order} onReorder={setOrder} className="space-y-3">
-          {order.map(passo => (
+          {order.map((passo, index) => (
             <PassoCard
               key={passo.id}
               passo={passo}
@@ -392,6 +479,9 @@ export default function RotaTab({ processId }: RotaTabProps) {
               rotaId={rota.id}
               fechada={fechada}
               onCommitOrder={commitOrder}
+              posicao={index + 1}
+              total={order.length}
+              onMover={delta => moverPasso(index, delta)}
             />
           ))}
         </Reorder.Group>

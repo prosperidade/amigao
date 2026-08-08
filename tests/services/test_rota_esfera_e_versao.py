@@ -148,11 +148,13 @@ def test_regeneracao_casa_passo_legado_em_vez_de_duplicar(db_session):
         ordem=1, titulo="Recebimento e análise do auto de infração e notificação",
         orgao="IBAMA",
     )]
-    created, matched, _is_diff = _reconcile_passos(
+    created, matched, _is_diff, suprimidos = _reconcile_passos(
         rota=rota, tenant_id=tenant.id, etapas=etapas
     )
     assert created == 0, "mesmo título+órgão não pode virar passo novo"
     assert matched == 1
+    # Casou por identidade com um passo VIVO — nada a ver com lápide (ADR-061).
+    assert suprimidos == 0
     assert len(rota.passos) == 1
     # E a validação do consultor sobrevive.
     assert rota.passos[0].status == RotaPassoStatus.validado
