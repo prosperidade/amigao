@@ -1238,7 +1238,48 @@ de ninguém lembrar — e passaria a depender de alguém lembrar de dois lugares
 consumida pelas duas rotas. **Não fazer agora.** **Origem:** Fase 4 da
 remediação do chunking, 05/08.
 
-**PRÓXIMO LIVRE: 128.**
+### Abertas pela Frente 1 — integridade de tenant na escrita (10/08, `fix/tenant-integridade-escrita`)
+
+*A frente fechou os achados D1, D2, D3 e D7 da triagem (PR #146) mais os quatro
+endpoints que a varredura de classe do Passo 0 revelou e as seis leituras
+cross-tenant. As duas dívidas abaixo foram **deliberadamente adiadas** — estão
+aqui para que a escolha seja verificável, não para que se esqueça dela.*
+
+**128. FK composta `(tenant_id, id)` — o cinto que falta embaixo da validação.**
+A Frente 1 fechou a escrita **na aplicação**: `app/services/tenant_guard.py`
+resolve toda FK do payload dentro do tenant antes de gravar. Isso cobre a escrita
+nova e é a barreira que existe hoje. **Não cobre** escrita que não passe pelos
+endpoints (script de migração, `psql` na mão, worker futuro que esqueça a guarda)
+— para essas, o banco continua aceitando `processes.client_id` apontando para
+cliente de outro tenant, porque as FKs são simples (`process.py:100-101`).
+
+É o **AUD-02-003** da auditoria Codex, e não entrou aqui por escopo declarado: a
+constraint exige `UNIQUE (tenant_id, id)` em toda tabela referenciada e migration
+em **todas** as tabelas tenantizadas — capítulo próprio, com janela própria.
+
+**O que destrava:** a garantia deixar de depender de disciplina de código. Hoje o
+teste de fumaça (`tests/api/test_tenant_smoke_escrita.py`) é o que impede a
+regressão; a constraint tornaria a regressão **impossível**, não apenas detectável.
+**Origem:** Frente 1 (10/08), decisão de escopo do André.
+
+**129. `storage_key` ainda é ACEITA do cliente — validada, não derivada.**
+O Passo 2 da Frente 1 escolheu a opção (b): a chave devolvida na confirmação é
+conferida contra `tenant_{caller}/{process|draft}_{id}/{uuid}` (`validar_storage_key`,
+`app/services/storage.py`). Isso fecha cross-tenant **e** cross-processo, que era o
+buraco medido.
+
+A opção (a) — o backend nunca aceitar a chave — foi descartada **por medição, não
+por preferência**: `generate_presigned_put_url` devolve a chave e não persiste
+nada, e a chave carrega um UUID aleatório. Não há como o backend reconstruí-la na
+confirmação sem (i) guardar a chave emitida numa tabela de uploads pendentes, ou
+(ii) assiná-la e exigir a assinatura de volta. As duas mudam o contrato com o
+frontend, e a frente é de segurança do backend.
+
+**O que destrava:** um campo a menos sob controle do cliente. Ganho real mas
+marginal frente ao que a validação já garante — por isso adiada, não esquecida.
+**Origem:** Frente 1 (10/08), Passo 2.
+
+**PRÓXIMO LIVRE: 130.**
 
 ---
 

@@ -55,17 +55,46 @@ Toda função de router que precisa de dados do tenant injeta `current_user` ou 
 
 Convenção: todo `db.query(Entidade).filter(Entidade.tenant_id == current_user.tenant_id)`. Quebrar essa convenção em um router vira bug de segurança.
 
-**Auditoria periódica** dessa convenção está pendente — hoje não há lint automático que detecte query sem filtro de tenant. Recomendação: adicionar regra customizada de `ruff` ou teste de fumaça que faça `SELECT` cross-tenant em ambiente de teste e verifique 403.
+**Auditoria periódica** dessa convenção: entregue como **teste de fumaça** em
+`tests/api/test_tenant_smoke_escrita.py` (2026-08-10) — dois tenants reais, e cada endpoint
+de escrita que aceita FK no corpo é exercitado com id do outro tenant, exigindo 404. Lint
+estático de `ruff` continua não existindo: uma regra que detectasse `query()` sem filtro
+teria falso positivo demais (query global legítima do corpus, agregação por tenant já
+escopada). O teste roda o caminho real e não depende de heurística sobre o código.
 
-### Camada 4 — Validação na escrita
+### Camada 4 — Validação na escrita: o `tenant_id` da linha **e** as relações que ela aponta
 
-Quando o JWT diz `tenant_id = 5` e o body da requisição tenta criar entidade com `tenant_id = 7`, o serviço **valida** e rejeita com 403. Mesmo se a aplicação cliente conseguir forjar o campo, o backend recusa.
+São duas coisas distintas, e por muito tempo só a primeira existia:
+
+1. **O `tenant_id` da própria entidade** vem sempre do JWT, nunca do corpo.
+   `BaseRepository.create` (`app/repositories/base.py`) injeta `tenant_id=self.tenant_id`;
+   os routers que montam o ORM à mão passam `tenant_id=current_user.tenant_id`. Um
+   `tenant_id` forjado no corpo é ignorado, não copiado.
+
+2. **As FKs que chegam no corpo** (`client_id`, `process_id`, `property_id`, `proposal_id`,
+   `responsible_user_id`, …) são resolvidas **dentro do tenant** antes de qualquer escrita,
+   por `app/services/tenant_guard.py`. Entidade que não pertence ao tenant do requisitante
+   responde **404**.
+
+> **Por que 404 e não 403** (decisão de 2026-08-10): um 403 confirma que a entidade existe.
+> O endpoint vira oráculo de enumeração — o atacante varre ids e aprende o tamanho e o mapa
+> do outro tenant sem ler um único byte de dado. "Não existe para você" é a semântica
+> correta, e é a que `BaseRepository.get_or_404` já praticava para a entidade principal.
+>
+> *Histórico: até 2026-08-10 este documento afirmava que a Camada 4 rejeitava relação
+> cross-tenant com 403. Era falso nos dois sentidos — não havia validação de relação, e a
+> resposta pretendida estava errada. A auditoria Codex (AUD-04-01/02) mediu, a triagem
+> (PR #146, achados D1-D3) confirmou, e a Frente 1 corrigiu código e documento juntos.*
 
 ### Camada 5 — Tests de isolamento
 
-`tests/api/test_tenant_isolation.py` cobre cenários:
-- Usuário do tenant A tenta ler entidade do tenant B → 404 (não vaza existência) ou 403
-- Usuário do tenant A tenta editar entidade do tenant B → 403
+`tests/api/test_tenant_isolation.py` cobre leitura e edição de entidade de outro tenant;
+`tests/api/test_tenant_smoke_escrita.py` cobre a criação com FK de outro tenant. Cenários:
+- Usuário do tenant A tenta ler entidade do tenant B → **404** (não vaza existência)
+- Usuário do tenant A tenta editar entidade do tenant B → **404**
+- Usuário do tenant A cria entidade referenciando FK de B → **404**
+- Usuário do tenant A confirma upload com `storage_key` de B → **400** (a chave não é
+  entidade cuja existência se possa vazar; é campo malformado do próprio payload)
 - Lista de recursos só retorna entidades do tenant do usuário
 
 ## Cost cap por tenant

@@ -811,6 +811,18 @@ def confirm_draft_upload(
             detail="Rascunho já commitado.",
         )
 
+    # Mesma guarda do /documents/confirm-upload: a chave tem de ser a que este
+    # tenant recebeu para ESTE rascunho (ver app/services/storage.py).
+    from app.services.storage import StorageKeyInvalida, validar_storage_key  # noqa: PLC0415
+    try:
+        validar_storage_key(
+            body.storage_key,
+            tenant_id=current_user.tenant_id,
+            draft_id=draft_id,
+        )
+    except StorageKeyInvalida as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
     ext = body.filename.split(".")[-1].lower() if "." in body.filename else None
     # CAM2IH-010 (Sprint H) — normaliza categoria para a taxonomia Regente canônica.
     from app.models.document import DocumentSource  # noqa: PLC0415

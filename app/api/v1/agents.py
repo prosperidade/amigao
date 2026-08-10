@@ -22,6 +22,7 @@ from app.agents import AgentContext, AgentRegistry, OrchestratorAgent
 from app.agents.orchestrator import CHAINS
 from app.api.deps import get_current_internal_user, get_db
 from app.core.config import settings
+from app.models.process import Process
 from app.models.user import User
 from app.schemas.agent import (
     AgentInfo,
@@ -31,6 +32,7 @@ from app.schemas.agent import (
     ChainRunRequest,
     ChainRunResponse,
 )
+from app.services.tenant_guard import exigir_do_tenant
 
 DbDep = Annotated[Session, Depends(get_db)]
 UserDep = Annotated[User, Depends(get_current_internal_user)]
@@ -180,6 +182,11 @@ def run_agent_async(
     if not AgentRegistry.get(body.agent_name):
         raise HTTPException(status_code=400, detail=f"Agente '{body.agent_name}' nao encontrado")
 
+    # Barreira primária: validar a posse ANTES de enfileirar. A task revalida
+    # (defesa em profundidade), mas um job que já entrou na fila com id alheio
+    # consome orçamento de IA do tenant errado antes de qualquer checagem.
+    exigir_do_tenant(db, Process, body.process_id, current_user.tenant_id, rotulo="Caso")
+
     from app.workers.agent_tasks import run_agent  # noqa: PLC0415
 
     task = run_agent.delay(
@@ -207,6 +214,8 @@ def run_chain_async(
     """Enfileira execucao de chain via Celery."""
     if body.chain_name not in CHAINS:
         raise HTTPException(status_code=400, detail=f"Chain '{body.chain_name}' nao encontrada")
+
+    exigir_do_tenant(db, Process, body.process_id, current_user.tenant_id, rotulo="Caso")
 
     from app.workers.agent_tasks import run_agent_chain  # noqa: PLC0415
 

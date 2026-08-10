@@ -95,7 +95,9 @@ def get_inconsistencies(
     process = _get_process_or_404(db, process_id, current_user.tenant_id)
 
     prop = (
-        db.query(Property).filter(Property.id == process.property_id).first()
+        db.query(Property)
+        .filter(Property.id == process.property_id, Property.tenant_id == current_user.tenant_id)
+        .first()
         if process.property_id else None
     )
     documents = (

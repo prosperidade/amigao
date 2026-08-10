@@ -38,6 +38,7 @@ from app.services.proposal_generator import (
     generate_proposal_from_rota,
 )
 from app.services.storage import get_storage_service
+from app.services.tenant_guard import exigir_relacoes_do_tenant
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -222,6 +223,10 @@ def create_proposal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
+    # `client_id`, `process_id` e `rota_id` chegam do corpo. A auditoria nomeou
+    # este endpoint na tabela do AUD-04 ("criação não valida client/process/rota
+    # do body") mas ele ficou fora da lista D1-D7; entra pela decisão de escopo.
+    exigir_relacoes_do_tenant(db, current_user.tenant_id, body.model_dump())
     expires = datetime.now(UTC) + timedelta(days=body.validity_days)
     proposal = Proposal(
         tenant_id=current_user.tenant_id,

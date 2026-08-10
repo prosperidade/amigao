@@ -20,6 +20,7 @@ from app.models.user import User
 from app.repositories import TaskRepository
 from app.schemas.task import Task, TaskCreate, TaskStatusUpdate, TaskUpdate
 from app.services.notifications import publish_realtime_event
+from app.services.tenant_guard import exigir_relacoes_do_tenant
 
 router = APIRouter()
 
@@ -111,6 +112,12 @@ def _apply_task_update(
     update_data = task_in.model_dump(exclude_unset=True)
     previous_status = task_obj.status
 
+    # PATCH também é escrita: `TaskUpdate` carrega `process_id`, `property_id`,
+    # `document_id` e `assigned_to_user_id`, então repontar uma tarefa própria
+    # para entidade de outro tenant era o mesmo furo da criação por outra porta.
+    # `exclude_unset=True` garante que só o que veio no corpo é conferido.
+    exigir_relacoes_do_tenant(repo.db, repo.tenant_id, update_data)
+
     if "status" in update_data and update_data["status"] is not None:
         _validate_task_status_transition(task_obj, update_data["status"])
 
@@ -162,7 +169,12 @@ def create_task(
     current_user: User = Depends(deps.get_current_internal_user),
 ):
     repo = TaskRepository(db, current_user.tenant_id)
-    db_obj = repo.create({**task_in.model_dump(), "created_by_user_id": current_user.id})
+    dados = task_in.model_dump()
+    # `process_id`, `property_id`, `document_id` e `assigned_to_user_id` chegam do
+    # corpo. Não estava na lista D1-D7 da triagem — apareceu na varredura de
+    # classe do Passo 0 e entra pela decisão de escopo do André (2026-08-10).
+    exigir_relacoes_do_tenant(db, current_user.tenant_id, dados)
+    db_obj = repo.create({**dados, "created_by_user_id": current_user.id})
     repo.add_audit(
         user_id=current_user.id,
         task=db_obj,

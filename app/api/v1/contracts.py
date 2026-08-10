@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
 from app.models.contract import Contract, ContractStatus
+from app.models.contract_template import ContractTemplate
 from app.models.process import Process
 from app.models.proposal import Proposal
 from app.models.stage_output import StageOutput
@@ -37,6 +38,11 @@ from app.services.mirante_documents import (
 )
 from app.services.mirante_documents import render_pdf as render_mirante_pdf
 from app.services.storage import get_storage_service
+from app.services.tenant_guard import (
+    exigir_do_tenant,
+    exigir_do_tenant_ou_global,
+    exigir_relacoes_do_tenant,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -115,14 +121,34 @@ def _audit_contract(db: Session, c: Contract, user_id: Optional[int], action: st
 
 
 def _resolve_demand_type(db: Session, contract: Contract) -> Optional[str]:
+    """Deduz o `demand_type` a partir do processo (direto ou via proposta).
+
+    As três resoluções abaixo eram `filter(X.id == …)` puro. Um contrato que
+    tivesse nascido apontando para processo/proposta de outro tenant (o que o
+    `POST /contracts` permitia até esta frente) fazia o template ser escolhido
+    pelo `demand_type` alheio. Agora tudo passa pelo tenant do próprio contrato.
+    """
+    tenant_id = contract.tenant_id
     if contract.process_id:
-        proc = db.query(Process).filter(Process.id == contract.process_id).first()
+        proc = (
+            db.query(Process)
+            .filter(Process.id == contract.process_id, Process.tenant_id == tenant_id)
+            .first()
+        )
         if proc and proc.demand_type:
             return proc.demand_type.value
     if contract.proposal_id:
-        prop = db.query(Proposal).filter(Proposal.id == contract.proposal_id).first()
+        prop = (
+            db.query(Proposal)
+            .filter(Proposal.id == contract.proposal_id, Proposal.tenant_id == tenant_id)
+            .first()
+        )
         if prop and prop.process_id:
-            proc = db.query(Process).filter(Process.id == prop.process_id).first()
+            proc = (
+                db.query(Process)
+                .filter(Process.id == prop.process_id, Process.tenant_id == tenant_id)
+                .first()
+            )
             if proc and proc.demand_type:
                 return proc.demand_type.value
     return None
@@ -160,12 +186,27 @@ def create_contract(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
+    # `client_id`, `proposal_id` e `process_id` chegam do corpo e eram gravados
+    # sem conferência: o contrato nascia no tenant A com o cliente e o processo
+    # de B, e a geração de conteúdo/PDF incorporava dados de B numa peça de A.
+    exigir_relacoes_do_tenant(db, current_user.tenant_id, body.model_dump())
+
+    # `template_id` tem tenancy DUAL (`ContractTemplate.tenant_id` nullable:
+    # None = template global do produto). Nullable não quer dizer "qualquer um
+    # serve": o template PRIVADO de outro tenant vira o texto de uma peça
+    # assinada. Global passa; do vizinho, não.
+    exigir_do_tenant_ou_global(
+        db, ContractTemplate, body.template_id, current_user.tenant_id, rotulo="Modelo de contrato"
+    )
+
     # Resolver template se não informado
     template_id = body.template_id
     if not template_id:
         demand_type: Optional[str] = None
         if body.process_id:
-            proc = db.query(Process).filter(Process.id == body.process_id).first()
+            proc = exigir_do_tenant(
+                db, Process, body.process_id, current_user.tenant_id, rotulo="Caso"
+            )
             if proc and proc.demand_type:
                 demand_type = proc.demand_type.value
         tmpl = find_template_for_demand(db, current_user.tenant_id, demand_type)
@@ -502,9 +543,18 @@ async def assinar_contrato(
     db.add(contract)
 
     # Caso CONCLUI: a E7 é terminal; contrato assinado marca o fecho do caso.
+    #
+    # Este era o ponto mais grave da Frente 1: a resolução do processo era
+    # `filter(Process.id == …)` puro e o `closed_at` logo abaixo é ESCRITA. Um
+    # contrato do tenant A apontando para processo de B (o que o POST legado
+    # permitia) fechava o caso de B — dado alheio alterado, não apenas lido.
+    # Se a relação for inconsistente, o caso simplesmente não existe para quem
+    # assina: 404, e o contrato não é assinado.
     concluido_em = None
     if contract.process_id:
-        proc = db.query(Process).filter(Process.id == contract.process_id).first()
+        proc = exigir_do_tenant(
+            db, Process, contract.process_id, contract.tenant_id, rotulo="Caso"
+        )
         if proc and proc.closed_at is None:
             proc.closed_at = datetime.now(UTC)
             db.add(proc)

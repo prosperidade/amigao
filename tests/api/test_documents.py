@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 import app.workers.ocr_tasks as ocr_tasks
@@ -70,7 +72,13 @@ def test_confirm_upload_enqueues_portal_notification(client: TestClient, db_sess
         "/api/v1/documents/confirm-upload",
         json={
             "process_id": process.id,
-            "storage_key": "tenant_1/process_1/upload-confirmado.pdf",
+            # A chave tem de ser a que o backend emitiria para ESTE tenant e ESTE
+            # processo: `tenant_{id}/process_{id}/{uuid}.{ext}` (`_build_key`).
+            # Antes daqui havia `tenant_1/process_1/upload-confirmado.pdf` — nome
+            # de arquivo no lugar do UUID e ids fixos, forma que `_build_key`
+            # nunca produz. Passava porque nada conferia a chave; hoje
+            # `validar_storage_key` confere (Frente 1 / D3).
+            "storage_key": f"tenant_{process.tenant_id}/process_{process.id}/{uuid4()}.pdf",
             "filename": "upload-confirmado.pdf",
             "content_type": "application/pdf",
             "file_size_bytes": 2048,
