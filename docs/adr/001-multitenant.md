@@ -67,10 +67,26 @@ Exceções deliberadas ao isolamento por tenant:
 |---|---|
 | `tenant_id` em todas as tabelas transacionais | ✅ |
 | Dependency injection extraindo `tenant_id` do JWT | ✅ `app/api/deps.py` |
-| Validação de tenant na escrita | ✅ Service layer |
-| Tests de isolamento | ✅ `tests/api/test_tenant_isolation.py` |
-| Lint automático que detecte query sem filtro | ❌ Pendente |
+| Validação de tenant na escrita — `tenant_id` da própria linha | ✅ Service layer |
+| Validação de tenant na escrita — **FKs recebidas no payload** | ✅ `app/services/tenant_guard.py` (10/08) |
+| Tests de isolamento (leitura e edição) | ✅ `tests/api/test_tenant_isolation.py` |
+| **Fumaça cross-tenant na escrita** | ✅ `tests/api/test_tenant_smoke_escrita.py` (10/08) |
+| FK composta `(tenant_id, id)` no banco | ❌ Dívida #128 |
 | `Tenant.ai_monthly_budget_usd` (cost cap por tenant) | ✅ Sprint R |
+
+> **Nota de execução — 2026-08-10 (`fix/tenant-integridade-escrita`).** A linha
+> "lint automático que detecte query sem filtro" estava ❌ Pendente desde a
+> abertura deste ADR, em 26/03/2026. Foi **entregue como teste de fumaça**, não
+> como lint: uma regra estática que procurasse `query()` sem filtro de tenant
+> teria falso positivo demais (busca global legítima no corpus legislativo,
+> agregação já escopada uma camada acima) e nenhum poder sobre o caso que de
+> fato causou dano — a FK que **chega no corpo da requisição** e nunca era
+> olhada. O teste exercita o caminho real com dois tenants.
+>
+> Os quatro meses e meio de pendência não foram inócuos: nesse intervalo
+> nasceram os achados AUD-04-01/02/04/07 da auditoria Codex — seis endpoints
+> aceitando FK alheia, um deles **gravando** `closed_at` em processo de outro
+> tenant. A mitigação prevista aqui teria pegado todos.
 
 ## Relação com outros ADRs
 

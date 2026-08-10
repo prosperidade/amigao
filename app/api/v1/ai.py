@@ -22,7 +22,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_internal_user, get_db
 from app.core.config import settings
 from app.models.ai_job import AIJob
+from app.models.document import Document
+from app.models.process import Process
 from app.models.user import User
+from app.services.tenant_guard import exigir_do_tenant
 
 router = APIRouter(prefix="/ai", tags=["IA"])
 logger = logging.getLogger(__name__)
@@ -183,6 +186,10 @@ def classify_async(
     if not settings.ai_configured:
         raise HTTPException(status_code=503, detail="IA não configurada.")
 
+    # Posse antes da fila (Frente 1 / D7): sem isto, o id de outro tenant já
+    # tinha consumido o teto de custo verificado acima antes de a task olhar.
+    exigir_do_tenant(db, Process, body.process_id, current_user.tenant_id, rotulo="Caso")
+
     check_tenant_cost_limit(current_user.tenant_id, db)
     check_tenant_monthly_budget(current_user.tenant_id, db)
 
@@ -210,6 +217,8 @@ def extract_async(
 
     if not settings.ai_configured:
         raise HTTPException(status_code=503, detail="IA não configurada.")
+
+    exigir_do_tenant(db, Document, body.document_id, current_user.tenant_id, rotulo="Documento")
 
     check_tenant_cost_limit(current_user.tenant_id, db)
     check_tenant_monthly_budget(current_user.tenant_id, db)

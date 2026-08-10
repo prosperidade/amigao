@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import re
 import uuid
 from functools import lru_cache
 from threading import Lock
@@ -14,6 +15,78 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 BUCKET_NAME = "regente-docs"
+
+
+class StorageKeyInvalida(ValueError):
+    """A `storage_key` enviada na confirmação não é uma chave que este tenant,
+    neste processo/rascunho, poderia ter recebido do backend."""
+
+
+# `tenant_{id}/process_{id}/{uuid}[.ext]` ou `tenant_{id}/draft_{id}/{uuid}[.ext]`
+# — exatamente o que `_build_key` e `generate_presigned_put_url_for_draft` emitem.
+# Ancorado nas duas pontas: sem `..`, sem barra extra, sem prefixo de outro tenant.
+_CHAVE_ESPERADA = re.compile(
+    r"^tenant_(?P<tenant>\d+)/(?P<escopo>process|draft)_(?P<escopo_id>\d+)/"
+    # A extensão é o que sobra do `split('.')[-1]` do nome original: o
+    # `/documents` restringe pela ALLOWED_EXTENSIONS, mas o `/intake` não —
+    # então aceitamos qualquer sufixo alfanumérico razoável em vez da lista.
+    # O que importa para a segurança é o que está PROIBIDO: `/` (segmento extra
+    # ou traversal) e `.` (segunda extensão disfarçando caminho).
+    r"(?P<uuid>[0-9a-fA-F-]{36})(?:\.[A-Za-z0-9]{1,20})?$"
+)
+
+
+def validar_storage_key(
+    storage_key: str,
+    *,
+    tenant_id: int,
+    process_id: int | None = None,
+    draft_id: int | None = None,
+) -> str:
+    """Confere que `storage_key` é a chave que o backend emitiria para ESTE
+    chamador, neste destino. Levanta `StorageKeyInvalida` se não for.
+
+    O upload é presigned: o backend gera a chave (`_build_key`), o cliente faz
+    PUT direto no storage e depois **devolve a chave** na confirmação. Até esta
+    frente a chave devolvida era persistida crua — quem conhecesse ou enumerasse
+    a chave de outro tenant fazia o banco do tenant A apontar para o objeto de B,
+    e o endpoint de download de A gerava presigned URL para o objeto de B.
+
+    Por que validar em vez de derivar no backend: nada é persistido no momento
+    da emissão (`generate_presigned_put_url` devolve e esquece), e a chave carrega
+    um UUID aleatório — o backend não tem como reconstruí-la sozinha na
+    confirmação. Derivar de verdade exige guardar a chave emitida (ou assiná-la)
+    e mudar o contrato com o frontend; ficou registrado como dívida. A validação
+    abaixo fecha o buraco pelo mesmo efeito prático: a chave **tem** de carregar
+    o tenant de quem confirma e o processo/rascunho que está sendo confirmado,
+    então nem cross-tenant nem cross-processo passam.
+
+    Não é 404 e sim erro de entrada (400 no chamador): a chave não é uma entidade
+    cuja existência se possa vazar — é um campo malformado do próprio payload.
+    """
+    m = _CHAVE_ESPERADA.match(storage_key or "")
+    if not m:
+        raise StorageKeyInvalida(
+            "Chave de upload em formato inválido. Solicite uma nova URL de upload."
+        )
+    if int(m.group("tenant")) != tenant_id:
+        raise StorageKeyInvalida(
+            "Chave de upload não pertence a este tenant. Solicite uma nova URL de upload."
+        )
+
+    escopo, escopo_id = m.group("escopo"), int(m.group("escopo_id"))
+    if process_id is not None:
+        if escopo != "process" or escopo_id != process_id:
+            raise StorageKeyInvalida(
+                "Chave de upload não corresponde a este caso. Solicite uma nova URL de upload."
+            )
+    elif draft_id is not None:
+        if escopo != "draft" or escopo_id != draft_id:
+            raise StorageKeyInvalida(
+                "Chave de upload não corresponde a este rascunho. "
+                "Solicite uma nova URL de upload."
+            )
+    return storage_key
 
 
 class StorageDownloadError(Exception):

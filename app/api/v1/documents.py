@@ -23,7 +23,12 @@ from app.schemas.document import (
     DocumentUploadUrlRequest,
     DocumentUploadUrlResponse,
 )
-from app.services.storage import StorageService, get_storage_service
+from app.services.storage import (
+    StorageKeyInvalida,
+    StorageService,
+    get_storage_service,
+    validar_storage_key,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -177,6 +182,18 @@ def confirm_upload(
     process = proc_repo.get_scoped_or_404(body.process_id, client_id=access_context.client_id)
 
     ext = _validate_file(body.filename, body.content_type)
+
+    # A chave devolvida pelo cliente tem de ser a que ESTE tenant recebeu para
+    # ESTE processo. Sem isto, o Document do tenant A passava a apontar para um
+    # objeto sob o prefixo de B, e o download de A presignava o arquivo de B.
+    try:
+        validar_storage_key(
+            body.storage_key,
+            tenant_id=access_context.tenant_id,
+            process_id=body.process_id,
+        )
+    except StorageKeyInvalida as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     doc_repo = DocumentRepository(db, access_context.tenant_id)
     # CAM2IH-010 (Sprint H) — normaliza categoria para a taxonomia Regente canônica.

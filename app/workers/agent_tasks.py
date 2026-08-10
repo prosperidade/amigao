@@ -199,7 +199,15 @@ def run_agent_chain(
                 from app.models.process import Process  # noqa: PLC0415
                 from app.services.macroetapa_engine import mark_stage_agents_done  # noqa: PLC0415
 
-                proc = db.query(Process).filter(Process.id == process_id).first()
+                # `tenant_id` já estava em escopo e não era usado: a task marcava
+                # o checklist da etapa de um processo de outro tenant se o id
+                # chegasse pela fila. O endpoint agora barra antes (agents.py);
+                # esta é a segunda barreira.
+                proc = (
+                    db.query(Process)
+                    .filter(Process.id == process_id, Process.tenant_id == tenant_id)
+                    .first()
+                )
                 if proc is not None:
                     marked = mark_stage_agents_done(
                         db, proc, tenant_id=tenant_id, chain_name=chain_name,

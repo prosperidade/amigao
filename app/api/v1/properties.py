@@ -42,6 +42,7 @@ from app.schemas.property_hub import (
     PropertyHubTechnicalKpis,
 )
 from app.services.audit_hash import stamp_audit_hash
+from app.services.tenant_guard import exigir_relacoes_do_tenant
 
 router = APIRouter()
 
@@ -60,7 +61,11 @@ def create_property(
     current_user: User = Depends(deps.get_current_internal_user),
 ):
     repo = PropertyRepository(db, current_user.tenant_id)
-    db_obj = repo.create(property_in.model_dump())
+    dados = property_in.model_dump()
+    # `client_id` vem do corpo — sem esta conferência o imóvel nasce vinculado a
+    # cliente de outro tenant (mesma classe do POST /processes).
+    exigir_relacoes_do_tenant(db, current_user.tenant_id, dados)
+    db_obj = repo.create(dados)
     db.commit()
     db.refresh(db_obj)
     return db_obj

@@ -8,6 +8,7 @@ from app.models.communication import CommunicationThread as ThreadModel
 from app.models.communication import Message as MessageModel
 from app.models.user import User
 from app.schemas.communication import CommunicationThread, CommunicationThreadCreate, Message, MessageCreate
+from app.services.tenant_guard import exigir_relacoes_do_tenant
 
 router = APIRouter()
 
@@ -18,8 +19,12 @@ def create_thread(
     thread_in: CommunicationThreadCreate,
     current_user: User = Depends(deps.get_current_internal_user),
 ):
+    dados = thread_in.model_dump()
+    # `process_id` e `client_id` vêm do corpo. Achado da varredura de classe do
+    # Passo 0 — fora da lista D1-D7, incluído por decisão de escopo.
+    exigir_relacoes_do_tenant(db, current_user.tenant_id, dados)
     db_obj = ThreadModel(
-        **thread_in.model_dump(),
+        **dados,
         tenant_id=current_user.tenant_id
     )
     db.add(db_obj)

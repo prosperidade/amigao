@@ -1238,7 +1238,70 @@ de ninguém lembrar — e passaria a depender de alguém lembrar de dois lugares
 consumida pelas duas rotas. **Não fazer agora.** **Origem:** Fase 4 da
 remediação do chunking, 05/08.
 
-**PRÓXIMO LIVRE: 128.**
+### Abertas pela Frente 1 — integridade de tenant na escrita (10/08, `fix/tenant-integridade-escrita`)
+
+*A frente fechou os achados D1, D2, D3 e D7 da triagem (PR #146) mais os quatro
+endpoints que a varredura de classe do Passo 0 revelou e as seis leituras
+cross-tenant. As duas dívidas abaixo foram **deliberadamente adiadas** — estão
+aqui para que a escolha seja verificável, não para que se esqueça dela.*
+
+**128. FK composta `(tenant_id, id)` — o cinto que falta embaixo da validação.**
+A Frente 1 fechou a escrita **na aplicação**: `app/services/tenant_guard.py`
+resolve toda FK do payload dentro do tenant antes de gravar. Isso cobre a escrita
+nova e é a barreira que existe hoje. **Não cobre** escrita que não passe pelos
+endpoints (script de migração, `psql` na mão, worker futuro que esqueça a guarda)
+— para essas, o banco continua aceitando `processes.client_id` apontando para
+cliente de outro tenant, porque as FKs são simples (`process.py:100-101`).
+
+É o **AUD-02-003** da auditoria Codex, e não entrou aqui por escopo declarado: a
+constraint exige `UNIQUE (tenant_id, id)` em toda tabela referenciada e migration
+em **todas** as tabelas tenantizadas — capítulo próprio, com janela própria.
+
+**O que destrava:** a garantia deixar de depender de disciplina de código. Hoje o
+teste de fumaça (`tests/api/test_tenant_smoke_escrita.py`) é o que impede a
+regressão; a constraint tornaria a regressão **impossível**, não apenas detectável.
+**Origem:** Frente 1 (10/08), decisão de escopo do André.
+
+**129. `storage_key` ainda é ACEITA do cliente — validada, não derivada.**
+O Passo 2 da Frente 1 escolheu a opção (b): a chave devolvida na confirmação é
+conferida contra `tenant_{caller}/{process|draft}_{id}/{uuid}` (`validar_storage_key`,
+`app/services/storage.py`). Isso fecha cross-tenant **e** cross-processo, que era o
+buraco medido.
+
+A opção (a) — o backend nunca aceitar a chave — foi descartada **por medição, não
+por preferência**: `generate_presigned_put_url` devolve a chave e não persiste
+nada, e a chave carrega um UUID aleatório. Não há como o backend reconstruí-la na
+confirmação sem (i) guardar a chave emitida numa tabela de uploads pendentes, ou
+(ii) assiná-la e exigir a assinatura de volta. As duas mudam o contrato com o
+frontend, e a frente é de segurança do backend.
+
+**O que destrava:** um campo a menos sob controle do cliente. Ganho real mas
+marginal frente ao que a validação já garante — por isso adiada, não esquecida.
+
+**FRONTEIRA DA GUARDA — declarada, não descoberta depois.** `validar_storage_key`
+cobre o **upload do usuário**: `POST /documents/confirm-upload` e
+`POST /intake/drafts/{id}/documentos`. São os dois pontos em que uma chave
+**volta do cliente** e, portanto, os dois em que ela pode ser forjada.
+
+Há outros **dois produtores** de `storage_key` no sistema, e a guarda **não os
+alcança** — porque não passam por confirmação nenhuma:
+
+| produtor | onde | por que fica fora |
+|---|---|---|
+| mídia recebida no WhatsApp | `app/api/v1/messaging.py:150` | a chave nasce no servidor ao baixar o anexo; o cliente nunca a envia |
+| PDF gerado (proposta, contrato, dossiê) | `app/workers/pdf_generator.py:241` | idem — `upload_bytes` gera e grava na mesma transação |
+
+**Não é furo desta frente; é o limite dela.** Nos dois casos a chave é produzida e
+consumida dentro do servidor, sem passar pelo cliente, então não há o que forjar.
+**A avaliar quando a #129 for tratada:** se esses dois devem receber a mesma
+âncora (`tenant_{id}/…`) por consistência estrutural — hoje eles seguem o formato
+por convenção do código que os escreve, não por contrato verificado. Se um deles
+um dia ganhar um caminho em que a chave transite pelo cliente, a guarda tem de vir
+junto.
+
+**Origem:** Frente 1 (10/08), Passo 2.
+
+**PRÓXIMO LIVRE: 130.**
 
 ---
 

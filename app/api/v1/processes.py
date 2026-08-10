@@ -90,6 +90,7 @@ from app.services.requisito_documental import (
     contar_pendentes_checklist,
     documentos_sem_requisito,
 )
+from app.services.tenant_guard import exigir_relacoes_do_tenant
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -116,7 +117,13 @@ def create_process(
 ) -> Any:
     """Cria um novo processo ambiental."""
     repo = ProcessRepository(db, current_user.tenant_id)
-    process = repo.create(process_in.model_dump(exclude={"tenant_id"}))
+    dados = process_in.model_dump(exclude={"tenant_id"})
+    # O `tenant_id` da linha vem do JWT (BaseRepository.create), mas `client_id`,
+    # `property_id` e `responsible_user_id` chegam do corpo e não eram conferidos:
+    # o processo nascia no tenant A apontando para cliente/imóvel de B, e todo
+    # consumidor a jusante (dossiê, PDF, dashboard) herdava a relação torta.
+    exigir_relacoes_do_tenant(db, current_user.tenant_id, dados)
+    process = repo.create(dados)
     repo.add_audit(
         user_id=current_user.id,
         process=process,
@@ -382,8 +389,18 @@ def get_process(
     process = repo.get_scoped_or_404(process_id, client_id=access_context.client_id)
 
     # Gate: base mínima (cliente com contato + imóvel com nome)
-    client = db.query(Client).filter(Client.id == process.client_id).first() if process.client_id else None
-    prop = db.query(Property).filter(Property.id == process.property_id).first() if process.property_id else None
+    # Leitura tenant-scoped: o processo já veio filtrado, mas as relações dele
+    # eram resolvidas só por id. Um vínculo cross-tenant herdado (gravado antes
+    # desta frente) devolveria dados de outro tenant nesta resposta.
+    tid = access_context.tenant_id
+    client = (
+        db.query(Client).filter(Client.id == process.client_id, Client.tenant_id == tid).first()
+        if process.client_id else None
+    )
+    prop = (
+        db.query(Property).filter(Property.id == process.property_id, Property.tenant_id == tid).first()
+        if process.property_id else None
+    )
     has_min = bool(
         client
         and client.full_name
@@ -909,7 +926,11 @@ def _compute_can_advance(
 
     gaps: list[str] = []
     if process.client_id:
-        cli = db.query(Client).filter(Client.id == process.client_id).first()
+        cli = (
+            db.query(Client)
+            .filter(Client.id == process.client_id, Client.tenant_id == process.tenant_id)
+            .first()
+        )
         if cli:
             if not cli.email:
                 gaps.append("E-mail do cliente não preenchido")
@@ -918,7 +939,11 @@ def _compute_can_advance(
             if cli.client_type and cli.client_type.value == "pj" and not cli.legal_name:
                 gaps.append("Razão social do cliente PJ não preenchida")
     if process.property_id:
-        prop = db.query(Property).filter(Property.id == process.property_id).first()
+        prop = (
+            db.query(Property)
+            .filter(Property.id == process.property_id, Property.tenant_id == process.tenant_id)
+            .first()
+        )
         if prop:
             mats_count = len(prop.matriculas or [])
             if not prop.registry_number and mats_count == 0:

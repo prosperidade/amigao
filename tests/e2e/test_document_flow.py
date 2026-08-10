@@ -2,6 +2,7 @@
 E2E Test — Document upload flow: presigned URL → confirm upload → verify in DB.
 """
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -101,7 +102,11 @@ def test_confirm_upload_persists_document(client: TestClient, db_session, monkey
 
     headers = _login(client, "doc.e2e@example.com", "DocTest1")
 
-    storage_key = f"tenant_{tenant.id}/process_{process.id}/laudo_ambiental.pdf"
+    # Forma real emitida por `_build_key`: o último segmento é um UUID, não o
+    # nome do arquivo. A guarda de `storage_key` (Frente 1 / D3) confere isso —
+    # antes daqui a chave era `.../laudo_ambiental.pdf`, que nenhuma chamada a
+    # `generate_presigned_put_url` produziria.
+    storage_key = f"tenant_{tenant.id}/process_{process.id}/{uuid4()}.pdf"
     confirm_resp = client.post(
         "/api/v1/documents/confirm-upload",
         json={

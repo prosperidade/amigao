@@ -128,7 +128,7 @@ Detalhes em [`GOVERNANCA_IA.md`](./GOVERNANCA_IA.md).
 
 ### Multi-tenant por linha (`tenant_id`)
 
-Toda tabela transacional tem `tenant_id` como FK não-nula. Toda query do backend filtra explicitamente por `tenant_id` extraído do JWT. Tentativa de manipular entidade de outro tenant retorna 403. Exceção: `pre_cadastros` (waitlist é lead anônimo pré-conta).
+Toda tabela transacional tem `tenant_id` como FK não-nula. Toda query do backend filtra explicitamente por `tenant_id` extraído do JWT. Isso vale tanto para a entidade que está sendo acessada quanto para as **FKs recebidas no corpo da requisição** — resolvidas dentro do tenant por `app/services/tenant_guard.py` antes de qualquer escrita. Tentativa de referenciar ou manipular entidade de outro tenant retorna **404**: um 403 confirmaria a existência e transformaria o endpoint em oráculo de enumeração. Exceção: `pre_cadastros` (waitlist é lead anônimo pré-conta).
 
 Detalhes em [`MULTITENANT_LGPD.md`](./MULTITENANT_LGPD.md).
 
