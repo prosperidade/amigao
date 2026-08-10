@@ -1277,6 +1277,28 @@ frontend, e a frente é de segurança do backend.
 
 **O que destrava:** um campo a menos sob controle do cliente. Ganho real mas
 marginal frente ao que a validação já garante — por isso adiada, não esquecida.
+
+**FRONTEIRA DA GUARDA — declarada, não descoberta depois.** `validar_storage_key`
+cobre o **upload do usuário**: `POST /documents/confirm-upload` e
+`POST /intake/drafts/{id}/documentos`. São os dois pontos em que uma chave
+**volta do cliente** e, portanto, os dois em que ela pode ser forjada.
+
+Há outros **dois produtores** de `storage_key` no sistema, e a guarda **não os
+alcança** — porque não passam por confirmação nenhuma:
+
+| produtor | onde | por que fica fora |
+|---|---|---|
+| mídia recebida no WhatsApp | `app/api/v1/messaging.py:150` | a chave nasce no servidor ao baixar o anexo; o cliente nunca a envia |
+| PDF gerado (proposta, contrato, dossiê) | `app/workers/pdf_generator.py:241` | idem — `upload_bytes` gera e grava na mesma transação |
+
+**Não é furo desta frente; é o limite dela.** Nos dois casos a chave é produzida e
+consumida dentro do servidor, sem passar pelo cliente, então não há o que forjar.
+**A avaliar quando a #129 for tratada:** se esses dois devem receber a mesma
+âncora (`tenant_{id}/…`) por consistência estrutural — hoje eles seguem o formato
+por convenção do código que os escreve, não por contrato verificado. Se um deles
+um dia ganhar um caminho em que a chave transite pelo cliente, a guarda tem de vir
+junto.
+
 **Origem:** Frente 1 (10/08), Passo 2.
 
 **PRÓXIMO LIVRE: 130.**
