@@ -240,8 +240,12 @@ class TestReHome:
 
 class TestIntegridadeConsolidacao:
     def test_conflito_de_docs_distintos_devolvido_ao_consultor(self, client, db_session):
-        """2 CCIRs completos conflitantes no mesmo destino: NUNCA desempate
-        silencioso — devolve a divergente_transcricao e vira Ação."""
+        """ADR-062 (fonte única registral) supera o cenário original deste teste
+        (2 CCIRs conflitantes em `denominacao_imovel`, caso 13/ADR-023): CCIR
+        não escreve mais esse campo — nenhum dos dois chega a `_group_conflict_
+        values` para desempatar. Nada vira `Acao` de consolidação (o achado
+        agora nasceria da matriz de inconsistências, canal separado); as duas
+        linhas ficam em `ignorados`, nada gravado."""
         tenant, proc, cli, prop, _ = _setup(db_session, "s4o@example.com", matriculas=0)
         db_session.add_all([
             _st(tenant.id, proc.id, "ccir", "denominacao", "Fazenda Shangri-lá ( Parte 2)",
@@ -254,11 +258,63 @@ class TestIntegridadeConsolidacao:
         r = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h)
         assert r.status_code == 200, r.text
         res = r.json()
+        assert res["divergencias_devolvidas"] == []
+        assert res["acoes_criadas"] == 0
+        assert len([i for i in res["ignorados"] if "denominacao_imovel" in i]) == 2
+
+        # nada gravado; staging fica como estava (não vira divergente_transcricao —
+        # a fonte simplesmente não compete, não há decisão a devolver)
+        mat = db_session.query(Matricula).filter(
+            Matricula.property_id == prop.id, Matricula.numero_matricula == "2923").first()
+        assert mat is None or mat.denominacao_imovel is None
+
+    def test_conflito_entre_duas_certidoes_ainda_e_devolvido_ao_consultor(self, client, db_session):
+        """O que sobra para o guard de conflito resolver em `matricula` pós-
+        ADR-062: certidão × certidão (re-upload, retificação) — jurídico de
+        verdade, não ruído de fonte. `area_ha` não está entre os campos
+        redirecionados para a matriz (item 4 do ADR — só denominação e
+        INCRA/SNCR têm emissor de achado ligado hoje), então continua virando
+        `Acao`, como sempre."""
+        tenant, proc, cli, prop, _ = _setup(db_session, "s4o2@example.com", matriculas=0)
+        db_session.add_all([
+            _st(tenant.id, proc.id, "matricula", "area", "349,9022",
+                entity="matricula", target="area_ha", hint="2923"),
+            _st(tenant.id, proc.id, "matricula", "area", "352,0000",
+                entity="matricula", target="area_ha", hint="2923"),
+        ])
+        db_session.commit()
+        h = _login(client, "s4o2@example.com")
+        r = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h)
+        assert r.status_code == 200, r.text
+        res = r.json()
         assert len(res["divergencias_devolvidas"]) == 1
-        assert res["divergencias_devolvidas"][0]["field"] == "denominacao_imovel"
+        assert res["divergencias_devolvidas"][0]["field"] == "area_ha"
         assert res["acoes_criadas"] == 1
 
-        # nada gravado; staging devolvido ao estado divergente
+    def test_conflito_de_denominacao_entre_certidoes_e_devolvido_mas_nao_vira_acao(self, client, db_session):
+        """Mesmo entre DUAS certidões (fonte igual, `_group_conflict_values`
+        segue devolvendo normalmente), `denominacao_imovel` é um dos 2 campos
+        já redirecionados para a matriz (ADR-062, item 4) — a Ação não nasce
+        mais aqui, redundante seria duplicar o achado. O `Acao`-generator não
+        distingue fonte, só campo: quem decide se compete é o filtro de
+        fonte única na consolidação (que aqui deixou o conflito acontecer,
+        por serem duas certidões)."""
+        tenant, proc, cli, prop, _ = _setup(db_session, "s4o3@example.com", matriculas=0)
+        db_session.add_all([
+            _st(tenant.id, proc.id, "matricula", "denominacao", "Fazenda Shangri-lá ( Parte 2)",
+                entity="matricula", target="denominacao_imovel", hint="2923"),
+            _st(tenant.id, proc.id, "matricula", "denominacao", "Fazenda Sao Jorge Lote 1 B",
+                entity="matricula", target="denominacao_imovel", hint="2923"),
+        ])
+        db_session.commit()
+        h = _login(client, "s4o3@example.com")
+        r = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h)
+        assert r.status_code == 200, r.text
+        res = r.json()
+        assert len(res["divergencias_devolvidas"]) == 1
+        assert res["divergencias_devolvidas"][0]["field"] == "denominacao_imovel"
+        assert res["acoes_criadas"] == 0
+
         mat = db_session.query(Matricula).filter(
             Matricula.property_id == prop.id, Matricula.numero_matricula == "2923").first()
         assert mat is None or mat.denominacao_imovel is None
@@ -285,6 +341,9 @@ class TestIntegridadeConsolidacao:
         assert mat.denominacao_imovel == "Fazenda São Jorge Lote 1B"
 
     def test_guard_fantasma_sigef_nao_cria_matricula(self, client, db_session):
+        """ADR-062 endureceu o guard fantasma da Sprint 4 (que já vetava só
+        `sigef` para criação): agora SIGEF nem chega a competir pela ESCRITA
+        do campo — a recusa é fonte única registral, não mais só "não cria"."""
         tenant, proc, cli, prop, _ = _setup(db_session, "s4q@example.com", matriculas=0)
         db_session.add(_st(tenant.id, proc.id, "sigef", "area_georreferenciada_ha", "3,1256",
                            entity="matricula", target="area_ha", hint="492262"))
@@ -292,18 +351,39 @@ class TestIntegridadeConsolidacao:
         h = _login(client, "s4q@example.com")
         res = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h).json()
         assert res["matriculas_criadas"] == 0
-        assert any("guard fantasma" in ig for ig in res["ignorados"])
+        assert any("certidão de matrícula" in ig for ig in res["ignorados"])
         assert db_session.query(Matricula).filter(
             Matricula.numero_matricula == "492262").count() == 0
 
-    def test_guard_fantasma_sigef_atualiza_matricula_existente(self, client, db_session):
-        """sigef não CRIA, mas atualiza matrícula que já existe (dado legítimo)."""
+    def test_sigef_nao_atualiza_mais_matricula_existente(self, client, db_session):
+        """ADR-062 supera o comportamento antigo deste teste ("sigef não CRIA,
+        mas atualiza matrícula que já existe"): geo_certificação é campo
+        registral (item 1) — SIGEF não escreve nem quando a matrícula já
+        existe. Matrícula existir deixou de bastar; só a certidão escreve."""
         tenant, proc, cli, prop, mats = _setup(db_session, "s4r@example.com", matriculas=1)
+        valor_original = mats[0].geo_certificacao_codigo
         db_session.add(_st(tenant.id, proc.id, "sigef", "codigo_certificacao", "ABC-123",
                            entity="matricula", target="geo_certificacao_codigo",
                            hint=mats[0].numero_matricula))
         db_session.commit()
         h = _login(client, "s4r@example.com")
+        res = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h).json()
+        assert res["matriculas_criadas"] == 0
+        assert res["campos_gravados"] == 0
+        assert any("certidão de matrícula" in ig for ig in res["ignorados"])
+        db_session.refresh(mats[0])
+        assert mats[0].geo_certificacao_codigo == valor_original
+
+    def test_certidao_atualiza_matricula_existente(self, client, db_session):
+        """A própria certidão de matrícula (fonte autorizada, ADR-062) segue
+        atualizando um registro que já existe — o guard fantasma nunca vetou
+        a fonte que tem permissão de escrever."""
+        tenant, proc, cli, prop, mats = _setup(db_session, "s4r2@example.com", matriculas=1)
+        db_session.add(_st(tenant.id, proc.id, "matricula", "codigo_certificacao", "ABC-123",
+                           entity="matricula", target="geo_certificacao_codigo",
+                           hint=mats[0].numero_matricula))
+        db_session.commit()
+        h = _login(client, "s4r2@example.com")
         res = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h).json()
         assert res["matriculas_criadas"] == 0
         assert res["campos_gravados"] == 1

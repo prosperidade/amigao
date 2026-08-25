@@ -233,6 +233,23 @@ class TestRegulatoryIssue:
         # type legado fica None em registros novos (PROMPT_5)
         assert issue.type is None
 
+    def test_codigo_alerta_incra_sncr_divergente_adr062(self, db_session, tenant, property_record):
+        """ADR-062, item 4 — novo código do catálogo (migration
+        `e4f6a8c2b1d9`), redirecionado da matriz de inconsistências pelo
+        `auditor_imovel._registral_findings_from_matriz`."""
+        issue = RegulatoryIssue(
+            tenant_id=tenant.id,
+            property_id=property_record.id,
+            codigo_alerta="IDENT_CODIGO_INCRA_SNCR_DIVERGENTE",
+            familia=RegulatoryFamilia.identificacao,
+            severity=RegulatoryIssueSeverity.atencao,
+            detected_by="auditor_imovel",
+        )
+        db_session.add(issue)
+        db_session.flush()
+        assert issue.id is not None
+        assert issue.codigo_alerta == "IDENT_CODIGO_INCRA_SNCR_DIVERGENTE"
+
     def test_default_severity_is_atencao(self, db_session, tenant, property_record):
         """Default mudou de `warning` (3 níveis) para `atencao` (4 níveis)."""
         issue = RegulatoryIssue(

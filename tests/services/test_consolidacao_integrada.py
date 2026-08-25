@@ -70,10 +70,16 @@ def _aceito(db_session, tenant, proc, doc, campo, valor, alvo, *, hint=None, tip
     return row
 
 
-def test_nirf_do_itr_encontra_dono_pela_cascata(db_session):
-    """O buraco do caso 15: ITR sem hint → aceite sem destino.
-
-    Agora a cascata ancora pelo INCRA (degrau 2) e o NIRF é gravado.
+def test_nirf_do_itr_nao_grava_mais_so_certidao_escreve(db_session):
+    """ADR-062 (fonte única registral) supera o comportamento que este teste
+    validava (ADR-032/caso 15): o NIRF do ITR, mesmo achando dono pela cascata
+    de vínculo (degrau 2, INCRA), NÃO grava mais em `matricula.nirf_cib` — só a
+    própria certidão de matrícula escreve campo de `target_entity=matricula`.
+    A linha vira `ignorados` (achado do diagnóstico via matriz de
+    inconsistências), a matrícula não é tocada por ela. A cascata de vínculo em
+    si (ADR-032) segue existindo para a linha que sobrevive ao filtro (edição
+    do consultor); só deixou de rodar para decidir escrita de fonte não
+    autorizada — não há mais decisão de fonte a arbitrar aqui.
     """
     tenant, proc, prop, cli = _seed(db_session)
 
@@ -92,7 +98,7 @@ def test_nirf_do_itr_encontra_dono_pela_cascata(db_session):
             "nirf_cib", hint=None)
     db_session.commit()
 
-    consolidate_process(db_session, tenant_id=tenant.id, process_id=proc.id, user_id=None)
+    r = consolidate_process(db_session, tenant_id=tenant.id, process_id=proc.id, user_id=None)
 
     db_session.expire_all()
     mat = (
@@ -101,7 +107,9 @@ def test_nirf_do_itr_encontra_dono_pela_cascata(db_session):
         .first()
     )
     assert mat is not None
-    assert mat.nirf_cib == "9.153.765-7", "o NIRF do ITR chegou à matrícula"
+    assert mat.nirf_cib is None, "ITR não escreve mais nirf_cib — só a certidão (ADR-062)"
+    linha = next(i for i in r["ignorados"] if "nirf_cib" in i)
+    assert "certidão de matrícula" in linha
 
 
 def test_matricula_nasce_com_lineage(db_session):
@@ -126,14 +134,36 @@ def test_matricula_nasce_com_lineage(db_session):
 
 
 def test_aceito_sem_ancora_vira_pendencia_visivel(db_session):
-    """Sem sinal nenhum para ancorar, o aceite não some: entra em `ignorados`.
-
-    Antes a mensagem era técnica ("matricula sem matricula_hint"); agora diz o
-    que o consultor precisa fazer.
+    """ADR-062: linha de fonte não-matrícula é recusada pela fonte única
+    registral ANTES de a cascata de vínculo ter chance de rodar — a escrita
+    para ela está fechada de qualquer forma, então tentar achar o dono
+    (`_ancorar_documento`) seria trabalho void. O motivo agora é "só a
+    certidão escreve", não mais "sem vínculo" (que segue existindo para a
+    própria certidão sem hint — ver `test_matricula_sem_hint_ainda_aguarda_vinculo`).
     """
     tenant, proc, prop, cli = _seed(db_session)
     itr = _doc(db_session, tenant, proc, "itr")
     _aceito(db_session, tenant, proc, itr, "nirf_cib", "9.153.765-7",
+            "nirf_cib", hint=None)
+    db_session.commit()
+
+    r = consolidate_process(db_session, tenant_id=tenant.id, process_id=proc.id,
+                            user_id=None)
+
+    linha = next(i for i in r["ignorados"] if "nirf_cib" in i)
+    assert "certidão de matrícula" in linha
+
+
+def test_matricula_sem_hint_ainda_aguarda_vinculo(db_session):
+    """A própria certidão de matrícula (fonte autorizada, ADR-062) sem hint
+    próprio ainda passa pela cascata de vínculo (ADR-032) — e, sem outro
+    registro na base para ancorar, cai em "aguardando vínculo" como antes.
+    Prova que o filtro de fonte única não desligou a cascata para quem tem
+    permissão de escrever; só parou de rodá-la para quem não tem.
+    """
+    tenant, proc, prop, cli = _seed(db_session)
+    cert = _doc(db_session, tenant, proc, "matricula")
+    _aceito(db_session, tenant, proc, cert, "nirf_cib", "9.153.765-7",
             "nirf_cib", hint=None)
     db_session.commit()
 
@@ -214,12 +244,18 @@ def test_lote_do_caso_16_todo_ignorado_tem_motivo(db_session):
 
 
 def test_flag_sem_casa_pendencia_duravel(db_session):
-    """Item 6 (pós-teste Isis): aceite que não vai pousar na base é flagado a
-    CADA leitura — durável, não só na caixa efêmera do pós-consolidação.
+    """Item 6 (pós-teste Isis) + ADR-062 (fonte única registral): aceite que
+    não vai pousar na base é flagado a CADA leitura — durável, não só na caixa
+    efêmera do pós-consolidação.
 
-    - hint de doc NÃO-criador (sigef) e sem matrícula na base → sem casa;
-    - hint de doc criador (ccir) → terá casa (será criada) → não flaga;
-    - hint que já existe na base → tem casa → não flaga.
+    Pós-ADR-062, a matrícula já EXISTIR deixou de ser suficiente para dar casa
+    a uma fonte não-matrícula — só a certidão escreve `target_entity=matricula`:
+
+    - fonte não-matrícula (sigef) para hint que NÃO existe → sem casa;
+    - fonte não-matrícula (ccir) para hint NOVO → sem casa (não cria mais);
+    - fonte não-matrícula (ccir) para hint que JÁ existe → sem casa TAMBÉM
+      agora (existir não basta; a fonte é que decide);
+    - fonte MATRÍCULA para hint novo → tem casa (só ela cria/escreve).
     """
     from app.services.staging_consolidation import flag_sem_casa
 
@@ -230,23 +266,30 @@ def test_flag_sem_casa_pendencia_duravel(db_session):
     db_session.add(m)
     db_session.flush()
 
-    # Aceite para 4698 vindo de SIGEF (guard fantasma — não cria) e sem 4698 na
-    # base → órfão.
+    # Aceite para 4698 vindo de SIGEF, hint que não existe → sem casa.
     sigef = _doc(db_session, tenant, proc, "sigef")
     orfao = _aceito(db_session, tenant, proc, sigef, "codigo_certificacao", "GEO-1",
                     "geo_certificacao_codigo", hint="4698", tipo="sigef")
-    # Aceite para 8001 vindo de CCIR (criador) → será criada.
+    # Aceite para 8001 vindo de CCIR (não cria mais) → sem casa.
     ccir = _doc(db_session, tenant, proc, "ccir")
-    criavel = _aceito(db_session, tenant, proc, ccir, "codigo_sncr_incra", "111.222.333.444-5",
-                      "codigo_incra_sncr", hint="8001", tipo="ccir")
-    # Aceite para 6776 (já existe) → tem casa.
-    existente = _aceito(db_session, tenant, proc, ccir, "cartorio", "Cartório X",
+    sem_criador = _aceito(db_session, tenant, proc, ccir, "codigo_sncr_incra", "111.222.333.444-5",
+                          "codigo_incra_sncr", hint="8001", tipo="ccir")
+    # Aceite para 6776 (JÁ existe) vindo de CCIR → sem casa mesmo assim: a
+    # matrícula existir não autoriza o CCIR a escrever nela.
+    existir_nao_basta = _aceito(db_session, tenant, proc, ccir, "cartorio", "Cartório X",
                         "cartorio", hint="6776", tipo="ccir")
+    # Aceite para 9999 vindo da própria certidão → tem casa (única fonte que cria).
+    cert = _doc(db_session, tenant, proc, "matricula")
+    da_certidao = _aceito(db_session, tenant, proc, cert, "numero_matricula", "9999",
+                          "numero_matricula", hint="9999", tipo="matricula")
     db_session.commit()
 
     motivos = flag_sem_casa(db_session, tenant.id, proc.id, prop)
 
     assert orfao.id in motivos
-    assert "4698" in motivos[orfao.id]
-    assert criavel.id not in motivos
-    assert existente.id not in motivos
+    assert "certidão de matrícula" in motivos[orfao.id]
+    assert sem_criador.id in motivos
+    assert "certidão de matrícula" in motivos[sem_criador.id]
+    assert existir_nao_basta.id in motivos
+    assert "certidão de matrícula" in motivos[existir_nao_basta.id]
+    assert da_certidao.id not in motivos

@@ -1,9 +1,24 @@
 # ADR-017 — Consolidação parcial (divergente → ação) + ponte matrícula→imóvel (RL)
 
-- **Status:** Aceita
+- **Status:** Aceita — **ponto 1 (concorrência simétrica de fontes) SUPERADO por ADR-062** (2026-08-25)
 - **Data:** 2026-06-28
 - **Validada por:** Isis (sócia, validadora de domínio) — decisão "opção b"; André (decisões técnicas 28/06)
 - **Relacionada a:** Ficha 01 Fase 4 (decisão + consolidação), Ficha 07 (`Acao`), ADR-015 (matrícula/staging), ADR-016 (ação não resolve passivo), contrato de fontes #70, Princípio 11 ("nenhuma afirmação sem fonte"), Princípio 3 (camadas separadas)
+
+> ⚑ **Superação parcial (ADR-062, 2026-08-25 — fonte única registral na E2):**
+> o **ponto 1** deste ADR (divergência entre fontes ACEITAS no mesmo destino →
+> devolve a `divergente_transcricao` → vira `Acao`) tratava matrícula, CCIR,
+> SIGEF, ITR e CAR como concorrentes simétricos por um mesmo campo registral.
+> Isso mudou: para os 7 campos de `target_entity=matricula` que descrevem o
+> registro jurídico do imóvel (área, denominação, titular, INCRA/SNCR, NIRF,
+> RL averbada, geo_certificação), **só a certidão de matrícula escreve** — as
+> demais fontes não competem mais, e a divergência delas em relação à
+> matrícula vira achado do diagnóstico (matriz de inconsistências →
+> `RegulatoryIssue`), não mais `Acao` de consolidação. O mecanismo deste ADR
+> (guard de conflito → `Acao`) **continua vigente** para o que sobrou: duas
+> certidões de matrícula discordando entre si, e a concorrência não-registral
+> em `target_entity=imovel` (CAR × ITR × RAT). O **ponto 2** (ponte RL
+> matrícula→imóvel) não é afetado. Ver ADR-062 para o desenho completo.
 
 ## Contexto
 

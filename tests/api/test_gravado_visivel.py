@@ -70,6 +70,10 @@ def _setup(db_session, email):
         _st(tenant.id, proc.id, "area_registrada_ha", "349,9022", entity="matricula", target="area_ha", hint="6.776"),
         _st(tenant.id, proc.id, "denominacao", "Fazenda São Jorge Lote 01-C", entity="matricula", target="denominacao_imovel", hint="6.776"),
         _st(tenant.id, proc.id, "nirf", "6.907.469-0", entity="matricula", target="nirf_cib", hint="6.776"),
+        # ADR-062 (fonte única registral): numero_ccir/codigo_incra_sncr só têm
+        # `_FieldSpec` em `ccir` — nenhum doc-type `matricula` os extrai — e CCIR
+        # deixou de escrever campo registral. Continuam aceitos/consistentes na
+        # Conferência, mas não pousam mais sozinhos (só edição do consultor).
         _st(tenant.id, proc.id, "ccir", "65077345244", entity="matricula", target="numero_ccir", hint="6.776", source="ccir"),
         _st(tenant.id, proc.id, "codigo_incra", "951.048.549.371-0", entity="matricula", target="codigo_incra_sncr", hint="6.776", source="ccir"),
         # Campo aceito que NÃO tem destino — o contraexemplo que mantém o selo
@@ -104,14 +108,20 @@ def test_gesto_completo_consolidar_marca_o_que_pousou_e_so_o_que_pousou(
 
     # 3) a assimetria: o que pousou admite, o que não pousou continua negando.
     depois = {f["target_field"]: f for f in client.get(f"{base}/staging-fields", headers=h).json()}
-    pousaram = ["cartorio", "area_ha", "denominacao_imovel", "nirf_cib",
-                "numero_ccir", "codigo_incra_sncr", "numero_matricula"]
+    pousaram = ["cartorio", "area_ha", "denominacao_imovel", "nirf_cib", "numero_matricula"]
     for campo in pousaram:
         assert depois[campo]["gravado"] is True, f"{campo} gravou na base e a tela não diz"
         assert depois[campo]["gravado_em"] is not None
     # Recusa declarada: aceito, sem destino — e a linha NÃO pode dizer "gravado".
     assert depois["rat_protocolo"]["gravado"] is False
     assert depois["rat_protocolo"]["sem_casa"] is True
+    # ADR-062: numero_ccir/codigo_incra_sncr vieram do CCIR — fonte única
+    # registral recusa a escrita (mesma assimetria honesta do rat_protocolo,
+    # motivo diferente: aqui é fonte, não ausência de coluna).
+    assert depois["numero_ccir"]["gravado"] is False
+    assert depois["numero_ccir"]["sem_casa"] is True
+    assert depois["codigo_incra_sncr"]["gravado"] is False
+    assert depois["codigo_incra_sncr"]["sem_casa"] is True
 
     # 4) idempotência: consolidar de novo não desmarca o que já está na base.
     # (`_write_entity` devolve "reafirmado", não "recusado" — era esse colapso
@@ -165,20 +175,24 @@ def test_dossie_do_caso_mostra_o_que_a_consolidacao_gravou(client: TestClient, d
 
     # Derivado das matrículas — a coluna crua continua vazia, e deve continuar.
     assert prop_data["registry_number"] == "6.776"
-    assert prop_data["ccir"] == "65077345244"
     assert prop_data["nirf"] == "6.907.469-0"
-    assert prop_data["codigo_incra_sncr"] == "951.048.549.371-0"
     assert prop_data["cartorio"] == "CRI de São João d'Aliança"
     assert prop_data["total_area_ha"] == 349.9022
+    # ADR-062: ccir/codigo_incra_sncr vieram só do CCIR neste fixture — fonte
+    # única registral recusa a escrita, então o derivado continua vazio (não é
+    # mais "gravou e a tela não mostra"; agora é "não gravou mesmo").
+    assert prop_data["ccir"] is None
+    assert prop_data["codigo_incra_sncr"] is None
 
     # E a matrícula expõe o que estava gravado e não tinha por onde chegar à
     # tela — a correção literal do "gravou apenas três".
     mat = prop_data["matriculas"][0]
     assert mat["cartorio"] == "CRI de São João d'Aliança"
     assert mat["denominacao_imovel"] == "Fazenda São Jorge Lote 01-C"
-    assert mat["codigo_incra_sncr"] == "951.048.549.371-0"
     assert mat["nirf_cib"] == "6.907.469-0"
-    assert mat["numero_ccir"] == "65077345244"
+    # ADR-062: nem chegam a pousar (só CCIR os provia neste fixture).
+    assert mat["codigo_incra_sncr"] is None
+    assert mat["numero_ccir"] is None
 
 
 def test_imovel_com_duas_matriculas_mostra_as_duas_nunca_escolhe(client: TestClient, db_session):

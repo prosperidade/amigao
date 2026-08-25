@@ -32,6 +32,12 @@ REGULATORY_ISSUE_CATALOG_SEED: list[tuple[str, str, str, str, str, bool, bool, l
     ("IDENT_MATRICULAS_MULTIPLAS_NAO_CLARAS", "identificacao",
      "Múltiplas matrículas sem composição clara",
      "documental", "alto", True, True, ["Matricula"]),
+    # ADR-062 (fonte única registral) — a matriz de inconsistências já
+    # comparava código INCRA/SNCR entre fontes (Ficha 02); faltava o código
+    # para persistir como achado (redirecionado de generate_acoes_from_divergencias).
+    ("IDENT_CODIGO_INCRA_SNCR_DIVERGENTE", "identificacao",
+     "Código INCRA/SNCR diverge entre fontes",
+     "documental", "atencao", False, True, ["Matricula", "CCIR"]),
 
     # --- Titularidade (todas 📄) ---
     ("TIT_PROP_MATRICULA_X_CAR", "titularidade",

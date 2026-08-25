@@ -173,6 +173,17 @@ Matrícula, sem verificação cruzada possível hoje.
 
 ## 5. Prioridade em divergência
 
+> ⚑ **SUPERADA por ADR-062 (25/08/2026) — fonte única registral na consolidação (E2).**
+> Esta seção documenta a investigação de domínio original (duas cadeias de prioridade),
+> mas **não é mais a regra vigente**: a Isis decidiu que, para os campos registrais do
+> imóvel (área, denominação, titular, INCRA/SNCR, NIRF, RL averbada, geo_certificação),
+> **só a certidão de matrícula escreve** — não há mais hierarquia entre CCIR, SIGEF, ITR
+> e CAR a arbitrar campo a campo. Divergência entre a matrícula e qualquer uma dessas
+> fontes vira achado do diagnóstico, não arbitragem na consolidação. A dívida #75 (que
+> propunha implementar as duas cadeias abaixo) foi reescrita como superada em
+> `docs/REGISTRO_DIVIDAS.md`. Mantida como registro histórico da investigação que
+> originou a decisão — não usar como fonte de verdade operacional.
+
 A hierarquia de confiança para arbitrar conflitos **não segue uma única escada** — os campos
 se dividem em duas cadeias paralelas, uma jurídica e uma geométrica/técnica.
 
@@ -415,6 +426,6 @@ Esta seção **não faz parte da ficha da Isis** — registra o que já virou c�
 | §4 — Livro, Folha, Ficha, Módulo Fiscal, nº CCIR (completude) | ❌ dívida **#74** | — |
 | §5.1 — hierarquia declarada no confronto de identidade | ✅ implementado | `confronto_identidade.py` |
 | §8 — normalização de código antes de comparar | ✅ implementado | `norm_incra` (só dígitos) |
-| §5 — duas cadeias de prioridade | ❌ dívida **#75** | — |
+| §5 — duas cadeias de prioridade | ⚑ **superada (ADR-062)** — vira fonte única | — |
 | §8 — normalização (UTM×geodésica, vértices, Gleba×Lote) | ❌ dívida **#76** | — |
 | §8 — CAR aponta pendência → Conferência responde com doc já presente | 💡 oportunidade de produto (#77) | — |

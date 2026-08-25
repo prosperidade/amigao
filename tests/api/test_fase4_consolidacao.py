@@ -313,9 +313,11 @@ def _setup_min(db_session, email):
     return tenant, proc, cli, prop
 
 
-def test_ancora_sigef_define_fonte_multiplas_consistentes(client: TestClient, db_session):
-    """Mesmo destino (matrícula 4655 area_ha) por CCIR e SIGEF, mesmo valor: sem
-    escolha do consultor, a âncora é o SIGEF (Ficha 05) — vence a proveniência."""
+def test_ccir_e_sigef_nao_escrevem_mais_area_mesmo_concordando(client: TestClient, db_session):
+    """ADR-062 (fonte única registral) supera a âncora SIGEF que este teste
+    validava (Ficha 05): CCIR e SIGEF nunca escrevem `area_ha` de matrícula —
+    nem quando concordam entre si — só a certidão. Sem nenhuma fonte
+    matrícula, o registro 4655 nem chega a ser criado (item 3 do ADR)."""
     tenant, proc, cli, prop = _setup_min(db_session, "f4sigef@example.com")
     C = ExtractedFieldStatus
     db_session.add_all([
@@ -329,17 +331,18 @@ def test_ancora_sigef_define_fonte_multiplas_consistentes(client: TestClient, db
     r = client.post(f"/api/v1/processes/{proc.id}/consolidar", headers=h)
     assert r.status_code == 200, r.text
     res = r.json()
-    assert res["campos_gravados"] == 1  # 1 destino, não 2
-    area_writes = [w for w in res["writes"] if w["field"] == "area_ha"]
-    assert len(area_writes) == 1
-    assert area_writes[0]["fonte"] == "sigef"
+    assert res["campos_gravados"] == 0
+    assert len([i for i in res["ignorados"] if "area_ha" in i]) == 2
     mat = db_session.query(Matricula).filter(Matricula.numero_matricula == "4655").first()
-    assert mat is not None and mat.area_ha == 349.9022
+    assert mat is None, "sem fonte matrícula, o registro 4655 nem é criado (ADR-062, item 3)"
 
 
-def test_reconciliacao_nao_sobrescreve_valor_ja_consolidado(client: TestClient, db_session):
-    """Campo já consolidado + doc novo com valor diferente → NÃO sobrescreve,
-    volta como reconciliação (alerta) — Ficha 05."""
+def test_divergencia_de_fonte_nao_matricula_nao_vira_mais_reconciliacao(client: TestClient, db_session):
+    """ADR-062: campo já consolidado (pela certidão) + doc de OUTRA fonte com
+    valor divergente NÃO vira mais reconciliação no payload de `/consolidar`
+    — a outra fonte nem chega a competir com o que a certidão gravou. O valor
+    da certidão fica intocado; a divergência com o SIGEF passa a ser achado
+    do diagnóstico (matriz de inconsistências), fora deste payload."""
     tenant, proc, cli, prop = _setup_min(db_session, "f4rec@example.com")
     C = ExtractedFieldStatus
     row1 = _st(tenant.id, proc.id, "matricula", "area_registrada_ha", "349,9022", C.aceito,
@@ -354,17 +357,16 @@ def test_reconciliacao_nao_sobrescreve_valor_ja_consolidado(client: TestClient, 
     mat = db_session.query(Matricula).filter(Matricula.numero_matricula == "4655").first()
     assert mat.area_ha == 349.9022
 
-    # doc novo: valor divergente para o MESMO campo já consolidado
+    # doc novo, de OUTRA fonte: valor divergente para o MESMO campo já consolidado
     db_session.add(_st(tenant.id, proc.id, "sigef", "area_georreferenciada_ha", "400,0000",
                        C.aceito, entity="matricula", target="area_ha", hint="4655"))
     db_session.commit()
     r2 = client.post(f"{base}/consolidar", headers=h)
     res2 = r2.json()
     assert res2["campos_gravados"] == 0           # não regravou
-    assert len(res2["reconciliacoes"]) == 1       # voltou como alerta
-    rec = res2["reconciliacoes"][0]
-    assert rec["field"] == "area_ha"
-    assert rec["anterior"] == 349.9022 and rec["novo"] == 400.0
+    assert res2["reconciliacoes"] == []           # nem chega a virar reconciliação
+    linha = next(i for i in res2["ignorados"] if "area_ha" in i)
+    assert "certidão de matrícula" in linha
     db_session.refresh(mat)
     assert mat.area_ha == 349.9022                # NÃO sobrescrito
 
@@ -377,10 +379,13 @@ def test_rejeitar_staging_desativa_matricula_e_sai_da_soma(client: TestClient, d
     tenant, proc, cli, prop = _setup_min(db_session, "f4desativa@example.com")
     C = ExtractedFieldStatus
     # 4655 (ficha anterior, docs próprios) + 6776 (ficha vigente) — as duas somam.
+    # ADR-062: quem materializa/escreve é sempre a certidão de matrícula —
+    # o mecanismo sob teste aqui (desativar/reativar ao rejeitar/reaceitar) é
+    # ortogonal à fonte única, então as duas hints usam `source="matricula"`.
     db_session.add_all([
-        _st(tenant.id, proc.id, "ccir", "area_ha", "349,9022", C.aceito,
+        _st(tenant.id, proc.id, "matricula", "area_ha", "349,9022", C.aceito,
             entity="matricula", target="area_ha", hint="4655"),
-        _st(tenant.id, proc.id, "ccir", "denominacao", "Fazenda Shangri-lá", C.aceito,
+        _st(tenant.id, proc.id, "matricula", "denominacao", "Fazenda Shangri-lá", C.aceito,
             entity="matricula", target="denominacao_imovel", hint="4655"),
         _st(tenant.id, proc.id, "matricula", "area_registrada_ha", "349,9022", C.aceito,
             entity="matricula", target="area_ha", hint="6776"),
