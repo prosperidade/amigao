@@ -61,14 +61,20 @@ def test_repro_caso13_consolidar(client: TestClient, db_session):
         _st(t, p, "matricula", "averbacao_app", {"area": "186,1647", "referencia": "matrícula n° 4.655"}, C.aceito, entity="matricula", target="averbacao_app", hint="6776"),
         _st(t, p, "matricula", "averbacao_rl", {"area": "186,1647", "referencia": "AV.10/M3.026"}, C.aceito, entity="matricula", target="averbacao_rl", hint="6776"),
         _st(t, p, "matricula", "numero", "6.776", C.aceito, entity="matricula", target="numero_matricula", hint="6776"),
-        # proprietarios como STRING (não lista) — destino matricula.proprietarios (PortableJSON)
+        # proprietarios como STRING (não lista) — destino matricula.proprietarios (PortableJSON).
+        # ADR-062: proprietarios é dado de titularidade — só a certidão escreve;
+        # CCIR não compete mais aqui, então o conflito entre os dois nunca se
+        # forma (nenhum dos dois chega a `_write_entity`).
         _st(t, p, "ccir", "proprietario", "Leonardo Ribeiro", C.aceito, entity="matricula", target="proprietarios", hint="2923"),
         _st(t, p, "ccir", "proprietario", "Gabriela Ribeiro Werner", C.aceito, entity="matricula", target="proprietarios", hint="2923"),
-        # matricula 2923 e 492262 com áreas
+        # matricula 2923 e 492262 — só CCIR/SIGEF, sem certidão própria no fixture:
+        # ADR-062 faz os dois nem chegarem a materializar registro (item 3).
         _st(t, p, "ccir", "area", "660,6561", C.aceito, entity="matricula", target="area_ha", hint="2923"),
         _st(t, p, "sigef", "area", "3,1256", C.aceito, entity="matricula", target="area_ha", hint="492262"),
         _st(t, p, "ccir", "codigo_incra", "950.084.286.346", C.aceito, entity="matricula", target="codigo_incra_sncr", hint="2923"),
-        # 4 divergências de denominação (transcrição) em destinos distintos → geram ações
+        # 3 divergências de denominação (transcrição) em destinos distintos.
+        # ADR-062, item 4: `denominacao_imovel` de `matricula` é redirecionada
+        # para a matriz de inconsistências — não vira mais `Acao` aqui.
         _st(t, p, "matricula", "denominacao", "Fazenda SÃO JORGE LOTE 01-C", C.divergente_transcricao, entity="matricula", target="denominacao_imovel", hint="6776"),
         _st(t, p, "ccir", "denominacao", "Fazenda Shangri-la parte 2", C.divergente_transcricao, entity="matricula", target="denominacao_imovel", hint="6776"),
         _st(t, p, "matricula", "denominacao", "FAZENDA SÃO JORGE – GLEBA 01 B", C.divergente_transcricao, entity="matricula", target="denominacao_imovel", hint="4698"),
@@ -85,28 +91,28 @@ def test_repro_caso13_consolidar(client: TestClient, db_session):
     assert r.status_code == 200, r.text
     res = r.json()
 
-    # Gravou: matrículas criadas + ações das divergências de denominação.
+    # Gravou: os campos do imóvel + matrícula 6776 (fonte certidão).
     assert res["campos_gravados"] > 0
-    # Sprint 4 (guard fantasma): 492262 vinha SÓ de sigef (certidão de embargo
-    # mal-classificada) — não cria mais matrícula. Ficam 6776 e 2923.
-    assert res["matriculas_criadas"] == 2
-    # Sprint 4 (coerência matriz×consolidação): os DOIS proprietarios aceitos e
-    # conflitantes da 2923 não são desempatados em silêncio — voltam como
-    # divergência devolvida e viram a 4ª ação (3 denominações + 1 proprietarios).
-    assert res["acoes_criadas"] == 4
-    devolvidas = res["divergencias_devolvidas"]
-    assert len(devolvidas) == 1
-    assert devolvidas[0]["field"] == "proprietarios"
-    assert devolvidas[0]["matricula_hint"] == "2923"
+    # ADR-062, item 3: 2923 e 492262 não têm NENHUMA linha de fonte matrícula
+    # neste fixture — nem chegam a materializar registro. Só 6776 (certidão).
+    assert res["matriculas_criadas"] == 1
+    # ADR-062: proprietarios de 2923 (só CCIR) nunca chega a competir — não há
+    # mais divergência a devolver aqui (o achado, se houver, nasce da matriz).
+    assert res["acoes_criadas"] == 0
+    assert res["divergencias_devolvidas"] == []
 
     from app.models.acao import Acao, AcaoOrigem
     from app.models.audit_log import AuditLog
     from app.models.matricula import Matricula
 
-    # guard fantasma: a "matrícula" 492262 (nº da certidão de embargo) NÃO existe.
+    # 492262 (nº da certidão de embargo, sigef) e 2923 (só CCIR) NÃO existem —
+    # fonte única registral: sem certidão própria, nenhum registro nasce.
     assert db_session.query(Matricula).filter(
         Matricula.numero_matricula == "492262").first() is None
-    assert any("492262" in ig for ig in res["ignorados"])
+    assert db_session.query(Matricula).filter(
+        Matricula.numero_matricula == "2923").first() is None
+    assert any("492262" in ig and "certidão de matrícula" in ig for ig in res["ignorados"])
+    assert len([ig for ig in res["ignorados"] if "2923" in ig]) == 4  # area, incra, 2x proprietarios
 
     # averbacao_app/rl gravados como TEXTO legível (não dict cru).
     m6776 = db_session.query(Matricula).filter(Matricula.numero_matricula == "6776").first()
@@ -114,14 +120,10 @@ def test_repro_caso13_consolidar(client: TestClient, db_session):
     assert isinstance(m6776.averbacao_app, str) and "186,1647" in m6776.averbacao_app
     assert isinstance(m6776.averbacao_rl, str)
 
-    # proprietarios da 2923 NÃO gravados (conflito devolvido ao consultor).
-    m2923 = db_session.query(Matricula).filter(Matricula.numero_matricula == "2923").first()
-    assert m2923 is not None and m2923.proprietarios in (None, [])
-
     # audit 'consolidar' passou a existir (era ZERO).
     assert db_session.query(AuditLog).filter(
         AuditLog.entity_id == proc.id, AuditLog.action == "consolidar").count() >= 1
 
-    # ações nascidas das divergências, com origem própria.
+    # nenhuma Ação nasce da consolidação neste cenário (redirecionado/filtrado).
     acoes = db_session.query(Acao).filter(Acao.process_id == proc.id, Acao.origem == AcaoOrigem.consolidacao).all()
-    assert len(acoes) == 4
+    assert len(acoes) == 0

@@ -138,11 +138,25 @@ no plural. Não implementado. **Fix:** resolver titular antes do cruzamento.
 Módulo Fiscal e Número do CCIR entram na base como campos próprios (alguns sem par de
 cruzamento, §4.1). O extrator hoje não os emite. **Fix:** ampliar `_FIELD_SPECS`.
 
-**75. Ficha 08 §5 — duas cadeias de prioridade, não uma.** A arbitragem de divergência
-segue cadeia **jurídica** (Matrícula → SNCR/CCIR → Cafir/CIB → ITR → CAR) para
-titularidade/INCRA/RL averbada, e cadeia **técnica** (Memorial/SIGEF → Matrícula → CAR)
-para área/perímetro/coordenadas. O código usa hierarquia genérica única. **Fix:** aplicar
-a cadeia correspondente ao campo.
+**75. SUPERADA (25/08, ADR-062) — Ficha 08 §5, duas cadeias de prioridade, não uma.**
+Descrição original: a arbitragem de divergência seguiria cadeia **jurídica**
+(Matrícula → SNCR/CCIR → Cafir/CIB → ITR → CAR) para titularidade/INCRA/RL
+averbada, e cadeia **técnica** (Memorial/SIGEF → Matrícula → CAR) para
+área/perímetro/coordenadas — o código usava hierarquia genérica única, e o fix
+proposto era implementar as duas cadeias campo a campo. **Não será
+implementada.** A Isis substituiu a pergunta "qual documento vence, campo a
+campo" por uma resposta mais simples: para os campos registrais de
+`target_entity=matricula` (área, denominação, titular, NIRF, RL
+averbada, geo_certificação), **só a certidão de matrícula escreve** — nenhuma
+hierarquia entre CCIR/SIGEF/ITR/CAR a disputar. Mais uma hierarquia
+condicional por campo era exatamente a complexidade que produzia o
+travamento relatado (cada exceção é mais uma decisão que o sistema tenta
+automatizar e erra). Divergência da matrícula contra qualquer uma dessas
+fontes vira achado do diagnóstico (matriz de inconsistências), não mais
+arbitragem na consolidação. **Atualizado no mesmo dia (ADR-062, item 7):**
+`numero_ccir`/`codigo_incra_sncr` não entram nesta lista — são natureza
+CADASTRAL (CCIR/ITR mandam), não registral. Ver ADR-062 (fonte única
+registral na E2) e a nota de superação em Ficha 08 §5.
 
 **76. Ficha 08 §8 — normalização antes do cruzamento.** Três falsos positivos medidos em
 simulação: coordenadas UTM (Matrícula) × geodésicas (SIGEF) comparadas sem conversão;

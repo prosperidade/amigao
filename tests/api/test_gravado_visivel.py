@@ -70,6 +70,10 @@ def _setup(db_session, email):
         _st(tenant.id, proc.id, "area_registrada_ha", "349,9022", entity="matricula", target="area_ha", hint="6.776"),
         _st(tenant.id, proc.id, "denominacao", "Fazenda São Jorge Lote 01-C", entity="matricula", target="denominacao_imovel", hint="6.776"),
         _st(tenant.id, proc.id, "nirf", "6.907.469-0", entity="matricula", target="nirf_cib", hint="6.776"),
+        # ADR-062, item 7 (natureza CADASTRAL): numero_ccir/codigo_incra_sncr só
+        # têm `_FieldSpec` em `ccir` (nenhum doc-type `matricula` os extrai) —
+        # CCIR/ITR são a fonte autoritativa por natureza (não registral), então
+        # continuam pousando sozinhos, sem exigir edição do consultor.
         _st(tenant.id, proc.id, "ccir", "65077345244", entity="matricula", target="numero_ccir", hint="6.776", source="ccir"),
         _st(tenant.id, proc.id, "codigo_incra", "951.048.549.371-0", entity="matricula", target="codigo_incra_sncr", hint="6.776", source="ccir"),
         # Campo aceito que NÃO tem destino — o contraexemplo que mantém o selo
@@ -104,8 +108,8 @@ def test_gesto_completo_consolidar_marca_o_que_pousou_e_so_o_que_pousou(
 
     # 3) a assimetria: o que pousou admite, o que não pousou continua negando.
     depois = {f["target_field"]: f for f in client.get(f"{base}/staging-fields", headers=h).json()}
-    pousaram = ["cartorio", "area_ha", "denominacao_imovel", "nirf_cib",
-                "numero_ccir", "codigo_incra_sncr", "numero_matricula"]
+    pousaram = ["cartorio", "area_ha", "denominacao_imovel", "nirf_cib", "numero_matricula",
+                "numero_ccir", "codigo_incra_sncr"]
     for campo in pousaram:
         assert depois[campo]["gravado"] is True, f"{campo} gravou na base e a tela não diz"
         assert depois[campo]["gravado_em"] is not None
@@ -165,19 +169,24 @@ def test_dossie_do_caso_mostra_o_que_a_consolidacao_gravou(client: TestClient, d
 
     # Derivado das matrículas — a coluna crua continua vazia, e deve continuar.
     assert prop_data["registry_number"] == "6.776"
-    assert prop_data["ccir"] == "65077345244"
     assert prop_data["nirf"] == "6.907.469-0"
-    assert prop_data["codigo_incra_sncr"] == "951.048.549.371-0"
     assert prop_data["cartorio"] == "CRI de São João d'Aliança"
     assert prop_data["total_area_ha"] == 349.9022
+    # ADR-062, item 7 (natureza CADASTRAL): CCIR volta a escrever numero_ccir/
+    # codigo_incra_sncr na matrícula — e `Property.agregar_das_matriculas`
+    # (properties.py) sobe o dado para o cabeçalho do imóvel, como já fazia
+    # para cartório/NIRF/área.
+    assert prop_data["ccir"] == "65077345244"
+    assert prop_data["codigo_incra_sncr"] == "951.048.549.371-0"
 
     # E a matrícula expõe o que estava gravado e não tinha por onde chegar à
     # tela — a correção literal do "gravou apenas três".
     mat = prop_data["matriculas"][0]
     assert mat["cartorio"] == "CRI de São João d'Aliança"
     assert mat["denominacao_imovel"] == "Fazenda São Jorge Lote 01-C"
-    assert mat["codigo_incra_sncr"] == "951.048.549.371-0"
     assert mat["nirf_cib"] == "6.907.469-0"
+    # ADR-062, item 7 (natureza CADASTRAL): CCIR volta a escrever estes dois.
+    assert mat["codigo_incra_sncr"] == "951.048.549.371-0"
     assert mat["numero_ccir"] == "65077345244"
 
 

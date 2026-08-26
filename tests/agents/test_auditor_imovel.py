@@ -149,6 +149,77 @@ class TestExecuteSemLLM:
         assert data["issue_ids"] == [101, 102]  # do mock
 
 
+class TestRegistralFindingsFromMatriz:
+    """ADR-062, item 4 — o achado de matrícula×CCIR/SIGEF/ITR/CAR nasce da
+    matriz de inconsistências, não mais de `generate_acoes_from_divergencias`
+    (consolidação). Testa a tradução pura (`MatrixRow` serializado → `AuditFinding`),
+    sem DB — a comparação em si é responsabilidade de `inconsistency_matrix`."""
+
+    def _agent(self):
+        return AuditorImovelAgent(_ctx())
+
+    def test_denominacao_divergente_vira_finding_do_catalogo(self):
+        matriz = {"linhas": [
+            {"item": "denominacao_imovel", "label": "Denominação do imóvel",
+             "situacao": "divergente", "fontes": {"matricula": "Fazenda X", "ccir": "Fazenda Y"}},
+        ]}
+        findings = self._agent()._registral_findings_from_matriz(matriz)
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.codigo_alerta == "IDENT_NOME_IMOVEL_DIVERGENTE"
+        assert f.familia == "identificacao"
+        assert f.grade == "atencao"
+        assert set(f.documentos_cruzados) == {"Matricula", "CCIR"}
+
+    def test_codigo_incra_sncr_divergente_vira_finding_do_catalogo(self):
+        matriz = {"linhas": [
+            {"item": "codigo_incra_sncr", "label": "Código INCRA/SNCR",
+             "situacao": "atencao", "fontes": {"ccir": "111", "itr": "222"}},
+        ]}
+        findings = self._agent()._registral_findings_from_matriz(matriz)
+        assert len(findings) == 1
+        assert findings[0].codigo_alerta == "IDENT_CODIGO_INCRA_SNCR_DIVERGENTE"
+
+    def test_linha_consistente_nao_vira_finding(self):
+        matriz = {"linhas": [
+            {"item": "denominacao_imovel", "label": "Denominação do imóvel",
+             "situacao": "consistente", "fontes": {"matricula": "Fazenda X"}},
+        ]}
+        assert self._agent()._registral_findings_from_matriz(matriz) == []
+
+    def test_item_fora_do_catalogo_e_ignorado_nao_duplica(self):
+        """`area_matricula:*` já tem emissor próprio (`property_audit.
+        AREA_MATRICULA_X_*`) — não é redirecionado daqui para não duplicar."""
+        matriz = {"linhas": [
+            {"item": "area_matricula:2923", "label": "Área — matrícula 2923 (ha)",
+             "situacao": "divergente", "fontes": {"matricula": 100, "ccir": 90}},
+        ]}
+        assert self._agent()._registral_findings_from_matriz(matriz) == []
+
+    def test_matriz_vazia_ou_ausente_nao_quebra(self):
+        agent = self._agent()
+        assert agent._registral_findings_from_matriz({}) == []
+        assert agent._registral_findings_from_matriz({"linhas": []}) == []
+        assert agent._registral_findings_from_matriz(None) == []
+
+
+class TestExecuteRedirecionaMatrizParaAchado:
+    def test_findings_da_matriz_entram_no_payload(self):
+        agent = AuditorImovelAgent(_ctx())
+        with ExitStack() as stack:
+            _enter_default_patches(stack)
+            stack.enter_context(patch.object(
+                AuditorImovelAgent, "_build_matriz_inconsistencias",
+                return_value={"linhas": [
+                    {"item": "denominacao_imovel", "label": "Denominação do imóvel",
+                     "situacao": "divergente", "fontes": {"matricula": "X", "ccir": "Y"}},
+                ]},
+            ))
+            data = agent.run().data
+        raw_codigos = [f["codigo_alerta"] for f in data["findings_raw"]]
+        assert "IDENT_NOME_IMOVEL_DIVERGENTE" in raw_codigos
+
+
 class TestNaoTocaDiagnostico:
     """Garantia arquitetural: A2 NÃO importa nada de diagnostico.py (escopo do A3)."""
 

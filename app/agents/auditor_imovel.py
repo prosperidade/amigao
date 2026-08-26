@@ -24,11 +24,24 @@ from typing import Any
 from app.agents.base import AgentRegistry, BaseAgent
 from app.models.ai_job import AIJobType
 from app.services.property_audit import (
+    GRADE_ATENCAO,
     AuditFinding,
     audit_property,
 )
 
 logger = logging.getLogger(__name__)
+
+_DOC_LABELS = {
+    "matricula": "Matricula", "ccir": "CCIR", "sigef": "SIGEF",
+    "itr": "ITR", "car": "CAR", "rat": "RAT",
+}
+
+
+def _doc_label(fonte_key: str) -> str:
+    """Rótulo de exibição de uma chave de fonte da matriz (``ccir``,
+    ``ccir#123`` com N documentos do mesmo tipo → ``CCIR``)."""
+    base = fonte_key.split("#", 1)[0].lower()
+    return _DOC_LABELS.get(base, base.upper())
 
 
 @AgentRegistry.register
@@ -60,13 +73,23 @@ class AuditorImovelAgent(BaseAgent):
             ano_corrente=datetime.now(UTC).year,
         )
 
-        # Persistir cada finding como RegulatoryIssue (quando há property_id real)
-        issue_ids = self._persist_issues(property_data, findings)
-
         # Ficha 02 / FASE 3 — Matriz de Inconsistências (saída canônica do auditor).
         # Determinística: lê o staging da Fase 2, confronta as fontes e marca o
         # status das linhas confrontadas. Campo NOVO no resultado (não quebra shape).
         matriz = self._build_matriz_inconsistencias()
+
+        # ADR-062 (fonte única registral) — item 4: o achado de matrícula×
+        # CCIR/SIGEF/ITR/CAR passa a nascer AQUI (matriz), não mais de
+        # `generate_acoes_from_divergencias` na consolidação (que só via as
+        # linhas ACEITAS competindo pelo mesmo destino — e essa competição
+        # deixou de existir para campo registral). Redireciona o que a matriz
+        # já calcula para o mesmo canal `RegulatoryIssue` dos findings
+        # determinísticos acima — fato perene do imóvel, decisão do
+        # consultor contextual ao processo (ADR-012).
+        findings.extend(self._registral_findings_from_matriz(matriz))
+
+        # Persistir cada finding como RegulatoryIssue (quando há property_id real)
+        issue_ids = self._persist_issues(property_data, findings)
 
         # Payload (consumível pela chain — vide Divergencia em stage_output.py)
         divergencias = [
@@ -150,6 +173,68 @@ class AuditorImovelAgent(BaseAgent):
         except Exception as exc:  # pragma: no cover - blindagem
             logger.warning("auditor_imovel: matriz de inconsistências falhou (ignorada): %s", exc)
             return {"fontes": [], "linhas": [], "resumo": {}}
+
+    # Item da matriz → (codigo_alerta, familia) no catálogo (ADR-062, item 4).
+    # Só os itens onde a fonte única registral (matrícula) deixou de competir
+    # com CCIR/SIGEF/ITR/CAR na escrita — a lista é a mesma do item 1 do ADR:
+    # área e RL já têm emissor próprio em `audit_property` (`AREA_MATRICULA_X_*`,
+    # `RL_MATRICULA_DIVERGENTE_RL_CAR`); titular/NIRF ainda não têm comparação
+    # na matriz (dívida #73 e follow-on do ADR-062) — ficam de fora até existir.
+    _REGISTRAL_ITEM_CATALOG: dict[str, tuple[str, str]] = {
+        "denominacao_imovel": ("IDENT_NOME_IMOVEL_DIVERGENTE", "identificacao"),
+        "codigo_incra_sncr": ("IDENT_CODIGO_INCRA_SNCR_DIVERGENTE", "identificacao"),
+    }
+
+    # ADR-062, item 7 (25/08): codigo_incra_sncr é natureza CADASTRAL, não
+    # registral — CCIR/ITR voltaram a escrevê-lo. A mensagem de impacto não
+    # pode dizer "só a certidão de matrícula" para um campo que a certidão nem
+    # extrai (`_FIELD_SPECS`). denominacao_imovel segue registral (item 1) —
+    # mensagem padrão inalterada.
+    _IMPACTO_POR_ITEM: dict[str, str] = {
+        "codigo_incra_sncr": (
+            "Dado cadastral do INCRA (ADR-062, item 7) — CCIR/ITR divergem "
+            "entre si; nenhum grava sozinho enquanto a divergência não é "
+            "resolvida (escolha manual na Conferência)."
+        ),
+    }
+    _IMPACTO_REGISTRAL_PADRAO = (
+        "Dado registral vem só da certidão de matrícula (ADR-062) — "
+        "a divergência não é gravada automaticamente na base; "
+        "confirme qual documento está desatualizado."
+    )
+
+    def _registral_findings_from_matriz(self, matriz: dict[str, Any]) -> list[AuditFinding]:
+        """Traduz linhas da matriz de inconsistências em ``AuditFinding`` — o
+        achado de campo registral (matrícula × CCIR/SIGEF/ITR/CAR) passa a
+        nascer aqui (ADR-062, item 4), não mais de
+        ``generate_acoes_from_divergencias`` na consolidação.
+
+        NÃO recalcula divergência: lê o que ``inconsistency_matrix.build_matrix``
+        já decidiu (``situacao``) — a mesma leitura que a Conferência mostra.
+        Redireciona o canal de saída, não duplica a comparação.
+        """
+        out: list[AuditFinding] = []
+        for linha in (matriz or {}).get("linhas", []) or []:
+            item = linha.get("item")
+            par = self._REGISTRAL_ITEM_CATALOG.get(item)
+            if par is None or linha.get("situacao") == "consistente":
+                continue
+            codigo_alerta, familia = par
+            fontes = linha.get("fontes") or {}
+            docs = sorted({_doc_label(k) for k in fontes}) or None
+            valores = "; ".join(f"{_doc_label(k)}={v}" for k, v in fontes.items())
+            label = linha.get("label") or item
+            out.append(AuditFinding(
+                codigo_alerta=codigo_alerta,
+                familia=familia,
+                grade=GRADE_ATENCAO,
+                tema=label,
+                descricao=f"{label} diverge entre fontes: {valores}",
+                impacto=self._IMPACTO_POR_ITEM.get(item, self._IMPACTO_REGISTRAL_PADRAO),
+                evidencia={"fontes": fontes, "situacao": linha.get("situacao")},
+                documentos_cruzados=docs,
+            ))
+        return out
 
     # ------------------------------------------------------------------
 

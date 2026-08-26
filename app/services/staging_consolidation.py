@@ -82,13 +82,31 @@ _MATRICULA_FIELDS = {"numero_matricula", "cartorio", "registro_livro_folha_ficha
                      "numero_ccir"}
 _MATRICULA_ALIAS: dict[str, Optional[str]] = {}
 
-# Guard fantasma (Sprint 4): só documentos que legitimamente DECLARAM matrícula
-# criam Matricula nova na consolidação. `sigef` fica de fora da criação (só
-# atualiza existente): foi o vetor real do caso 13 — certidão de embargo e
-# contrato PRAD mal-classificados como `sigef` criaram a "matrícula" 492262
-# (nº da certidão). Hint órfão fica no staging (ignorados) — o cadastro manual
+# Fonte única registral (ADR-062): só a própria certidão de matrícula cria OU
+# escreve campo de `target_entity=matricula` na consolidação. Endureceu o guard
+# fantasma (Sprint 4) — que já vetava `sigef` — para vetar TAMBÉM `ccir`/`itr`/
+# `car`: matrícula é o registro jurídico; os demais são achado do diagnóstico
+# quando divergem dela (matriz de inconsistências), nunca escrita direta.
+# Hint/valor órfão fica no staging (ignorados) — o cadastro manual
 # (POST /properties/{id}/matriculas) segue sendo a via legítima.
-_MATRICULA_CREATOR_DOC_TYPES = {"matricula", "ccir", "itr", "car"}
+_MATRICULA_CREATOR_DOC_TYPES = {"matricula"}
+
+# ADR-062, item 7 (25/08, natureza CADASTRAL): número do CCIR e código
+# INCRA/SNCR não são dado REGISTRAL — são dado do CADASTRO do INCRA. A
+# matrícula não os CRIA, ela os REPRODUZ por averbação; quem os declara por
+# natureza é o próprio CCIR (fallback ITR — `_FIELD_SPECS` de
+# `app/services/ficha01_extraction.py` mostra que só `ccir`/`itr` os
+# extraem, nunca `matricula`). Ficam de FORA do veto de fonte única acima —
+# a regra do item 1 não é "matrícula vence tudo", é "cada dado tem a fonte
+# autoritativa da sua natureza": REGISTRAL (matrícula manda, item 1) ·
+# AMBIENTAL (CAR manda, item 2) · CADASTRAL (CCIR/INCRA manda, este item).
+# O guard fantasma (item 3, `_MATRICULA_CREATOR_DOC_TYPES` acima) continua
+# valendo sem exceção: CCIR/ITR podem ATUALIZAR uma matrícula já existente
+# com estes dois campos, nunca CRIAR uma. Divergência entre fontes segue o
+# guard de reconciliação normal de `_write_entity` (campo já consolidado
+# nunca é sobrescrito silenciosamente) e, para `codigo_incra_sncr`, o achado
+# já calculado por `inconsistency_matrix.build_matrix` (item 4).
+_MATRICULA_CADASTRAL_FIELDS = {"numero_ccir", "codigo_incra_sncr"}
 
 
 def _raw_value(row: ExtractedFieldStaging) -> Any:
@@ -178,11 +196,13 @@ def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = 
 
 
 # ---------------------------------------------------------------------------
-# Seleção de fonte vencedora (multi-fonte → âncora SIGEF; Ficha 05)
+# Seleção de fonte vencedora (multi-fonte, Ficha 05 — só entre fontes que
+# chegam a competir; ADR-062 já filtrou área/denominação/titular/NIRF/RL/
+# geo_certificação de `matricula` para uma fonte só antes daqui — numero_ccir
+# e codigo_incra_sncr são natureza CADASTRAL, item 7, e continuam competindo
+# normalmente entre CCIR/ITR aqui)
 # ---------------------------------------------------------------------------
 _CONF_RANK = {"high": 3, "medium": 2, "low": 1}
-# Campos cuja âncora, sem escolha explícita do consultor, é o SIGEF (Ficha 05).
-_SIGEF_ANCHORED = {"area_ha", "denominacao_imovel"}
 
 
 def _field_value_scalar(row: ExtractedFieldStaging) -> Any:
@@ -204,16 +224,20 @@ def _fonte_of(row: ExtractedFieldStaging) -> str:
     return (row.source_doc_type or "—").lower()
 
 
-def _pick_winner(rows: list[ExtractedFieldStaging], *, prefer_sigef: bool) -> ExtractedFieldStaging:
-    """Vencedor do grupo (mesmo destino): edição do consultor > âncora SIGEF >
-    confiança > menor id. ``escolher_fonte`` já rejeita irmãos, então grupos com
-    >1 sobrevivente são campos consistentes (mesmo valor) — a âncora só fixa a
-    proveniência."""
+def _pick_winner(rows: list[ExtractedFieldStaging]) -> ExtractedFieldStaging:
+    """Vencedor do grupo (mesmo destino): edição do consultor > confiança > menor
+    id. ``escolher_fonte`` já rejeita irmãos, então grupos com >1 sobrevivente são
+    campos consistentes (mesmo valor) — o desempate só fixa a proveniência.
+
+    Para `target_entity=matricula` nos campos da fonte única registral
+    (ADR-062), o grupo que chega aqui já foi filtrado para uma fonte só
+    (`source_doc_type='matricula'`, ou edição do consultor) — não há mais
+    âncora SIGEF a aplicar; o antigo `_SIGEF_ANCHORED` saiu por virar código
+    morto (nenhuma linha de outra fonte chega a competir)."""
     def score(r: ExtractedFieldStaging) -> tuple:
         edited = _is_consultor_edit(r)
-        sigef = (r.source_doc_type or "").lower() == "sigef"
         conf = _CONF_RANK.get((r.confidence or "").lower(), 0)
-        return (1 if edited else 0, 1 if (prefer_sigef and sigef) else 0, conf, -(r.id or 0))
+        return (1 if edited else 0, conf, -(r.id or 0))
     return max(rows, key=score)
 
 
@@ -520,6 +544,30 @@ def consolidate_process(
                 "no documento — nada a gravar"
             )
             continue
+        # ADR-062 — fonte única registral: em `target_entity=matricula`, só a
+        # própria certidão de matrícula escreve (`source_doc_type='matricula'`).
+        # Edição explícita do consultor (Princípio 1: humano decide e assina)
+        # sempre pode gravar, veio de onde vier. As demais fontes (CCIR, SIGEF,
+        # ITR, CAR) nunca competem aqui — não é mais "duas fontes discordam,
+        # escolha uma" (ADR-017 §1, agora restrito a certidão×certidão); a
+        # divergência delas em relação à matrícula é achado do diagnóstico
+        # (matriz de inconsistências), nunca escrita disputada.
+        # Exceção declarada (ADR-062, item 7): numero_ccir/codigo_incra_sncr são
+        # natureza CADASTRAL, não registral — CCIR/ITR seguem competindo neles
+        # normalmente (guard de conflito + reconciliação abaixo, sem atalho).
+        if (entity == "matricula" and row.target_field not in _MATRICULA_CADASTRAL_FIELDS
+                and (row.source_doc_type or "").lower() != "matricula"
+                and not _is_consultor_edit(row)):
+            motivo = motivo_sem_destino(entity, row.target_field)
+            if motivo is None:
+                mat_ref = f", matrícula {row.matricula_hint}" if row.matricula_hint else ""
+                motivo = (
+                    "não escreve — dado registral vem só da certidão de matrícula "
+                    f"(fonte aqui é '{row.source_doc_type or '—'}'{mat_ref}); divergência "
+                    "em relação à matrícula é achado do diagnóstico, não escrita disputada"
+                )
+            ignorados.append(f"{row.target_entity or '—'}.{row.target_field or '—'}: {motivo}")
+            continue
         key = ((entity, row.matricula_hint, row.target_field)
                if entity == "matricula" else (entity, row.target_field))
         grupos.setdefault(key, []).append(row)
@@ -543,22 +591,33 @@ def consolidate_process(
                 mat_atualizadas += 1
         return mat
 
-    # matrícula citada no CAR mas sem campo próprio aceito ainda existe na base
-    # (o CAR é doc criador — guard fantasma não se aplica aqui). O aceite que a
-    # materializou também é um aceite que POUSOU: a matrícula existe por causa
-    # dele, então ele carimba como os demais.
+    # Matrícula CITADA no CAR (`matricula_listada` — só o CAR produz este
+    # field_name, Ficha 08 §4 "Contiguidade de matrículas | CAR (fonte única)").
+    # ADR-062, item 3: CAR deixou de criar Matricula — só a certidão cria (mesmo
+    # endurecimento do guard fantasma da Sprint 4, agora sem exceção de tipo).
+    # Se a matrícula já existe (criada pela própria certidão), o aceite do CAR
+    # carimba como pousado — ele confirma o vínculo, não materializa o registro.
+    # Se NÃO existe, não é mais criação silenciosa: vira achado visível
+    # ("documento cita matrícula não cadastrada"), a materializar só via
+    # cadastro manual ou a chegada da própria certidão.
     for hint, linhas in matricula_estabelecida.items():
         for r in linhas:
             r.consolidated_at = None
-        if prop is not None and _ensure_matricula(hint) is not None:
+        if prop is not None and _ensure_matricula(hint, allow_create=False) is not None:
             for r in linhas:
                 r.consolidated_at = agora
+        else:
+            ignorados.append(
+                f"matricula.numero_matricula: o CAR cita a matrícula {hint}, que não "
+                "está cadastrada — a certidão de matrícula é a única fonte que cria o "
+                "registro (cadastre-a manualmente ou anexe a certidão)"
+            )
 
     divergencias_devolvidas: list[dict[str, Any]] = []
 
     for key, rows in grupos.items():
         target_field = key[-1]
-        winner = _pick_winner(rows, prefer_sigef=(target_field in _SIGEF_ANCHORED))
+        winner = _pick_winner(rows)
         entity = key[0]
 
         # ── Resolve o objeto de destino (guard fantasma para matrícula) ─────
@@ -587,8 +646,10 @@ def consolidate_process(
                         "Conferência)"
                     )
                     continue
-            # Guard fantasma: hint vindo só de tipos que não declaram matrícula
-            # (sigef, outro…) não CRIA matrícula — atualiza se já existir.
+            # Guard fantasma (ADR-062): só a própria certidão CRIA matrícula —
+            # linha que sobrevive ao filtro de fonte única por ser edição do
+            # consultor também pode (é decisão humana, Princípio 1); qualquer
+            # outra fonte só atualiza se a matrícula já existir.
             allow_create = any(
                 (r.source_doc_type or "").lower() in _MATRICULA_CREATOR_DOC_TYPES
                 or _is_consultor_edit(r)
@@ -612,13 +673,23 @@ def consolidate_process(
 
         # ── Coerência matriz×consolidação (Sprint 4 / caso 13) ──────────────
         # Dois valores completos conflitantes de docs distintos no MESMO destino
-        # (ex.: 2 CCIRs na matrícula 2923) NÃO são desempatados aqui: voltam a
-        # `divergente_transcricao` — a matriz/Conferência acusa e a divergência
-        # vira Ação (generate_acoes_from_divergencias, logo abaixo). Duas saídas
-        # NÃO passam pelo guard: edição explícita do consultor É decisão (vence
-        # e grava); e destino JÁ consolidado (human_validated/pendente_oficializacao)
+        # NÃO são desempatados aqui: voltam a `divergente_transcricao` — a
+        # matriz/Conferência acusa e a divergência vira Ação
+        # (generate_acoes_from_divergencias, logo abaixo). Duas saídas NÃO
+        # passam pelo guard: edição explícita do consultor É decisão (vence e
+        # grava); e destino JÁ consolidado (human_validated/pendente_oficializacao)
         # segue o caminho de RECONCILIAÇÃO da Ficha 05 dentro de _write_entity —
         # a decisão anterior do consultor não é rebaixada a divergência nova.
+        #
+        # ADR-062 (fonte única registral): em `target_entity=matricula`, o
+        # filtro de fonte já rodou lá em cima — só chegam aqui linhas de
+        # `matricula` (ou edição do consultor). O exemplo histórico deste guard
+        # (2 CCIRs discordando na matrícula 2923, caso 13/ADR-023) hoje nem
+        # forma grupo: cada CCIR é excluído antes, individualmente, por não ser
+        # a fonte registral. O que sobra para este guard resolver em
+        # `matricula` é só certidão×certidão (re-upload, retificação) — e, sem
+        # mudança, `imovel`/`cliente` continuam com concorrência real entre
+        # fontes (ex.: CAR × ITR × RAT em `car_code`).
         col = alias.get(target_field, target_field) if target_field in alias else target_field
 
         # ── O guard de conflito roda DEPOIS da allowlist, e a ordem importa ──
@@ -1310,6 +1381,26 @@ def flag_sem_casa(
             )
             continue
         if entity == "matricula":
+            # ADR-062 — mesmo veto de fonte da consolidação: matrícula já
+            # existir não basta, porque só a certidão escreve estes campos.
+            # `matricula_listada` fica de fora (não escreve valor — só
+            # confirma/materializa o registro; a existência do registro já
+            # é o julgamento certo para ela, via `hints_com_criador` abaixo).
+            # numero_ccir/codigo_incra_sncr (item 7 — natureza CADASTRAL) ficam
+            # de fora do veto: mesma exceção da consolidação, MESMA função —
+            # um selo que dissesse "não vai gravar" para um campo que a
+            # consolidação grava seria o badge mentindo.
+            if (r.field_name != "matricula_listada"
+                    and r.target_field not in _MATRICULA_CADASTRAL_FIELDS
+                    and (r.source_doc_type or "").lower() != "matricula"
+                    and not _is_consultor_edit(r)):
+                mat_ref = f", matrícula {r.matricula_hint}" if r.matricula_hint else ""
+                out_geral[r.id] = (
+                    "não vai gravar — dado registral vem só da certidão de "
+                    f"matrícula (esta linha veio de '{r.source_doc_type or '—'}'{mat_ref}); "
+                    "divergência em relação à matrícula é achado do diagnóstico"
+                )
+                continue
             aceitos.append(r)
             continue
         if entity in ("imovel", "cliente"):
@@ -1325,8 +1416,11 @@ def flag_sem_casa(
         for m in (prop.matriculas_ativas() if prop is not None else [])
         if m.numero_matricula
     }
-    # Um hint terá matrícula criada se ALGUM aceite dele vem de tipo criador
-    # (matricula/ccir/itr/car) — é o que liga o allow_create na consolidação.
+    # Um hint terá matrícula criada se ALGUM aceite dele vem de tipo criador —
+    # hoje só `matricula` (ADR-062) — é o que liga o allow_create na
+    # consolidação. Só se aplica a `matricula_listada` aqui (as demais linhas
+    # de fonte não-matrícula já foram desviadas acima, existindo ou não a
+    # matrícula).
     hints_com_criador = {
         _clean_matricula_hint(r.matricula_hint)
         for r in aceitos

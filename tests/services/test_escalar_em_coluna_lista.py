@@ -161,8 +161,12 @@ def _aceito(db_session, tenant, proc, doc, campo, valor, alvo, *, hint=None):
     return row
 
 
-def test_detentor_escalar_do_ccir_nunca_grava_string_nua(db_session):
-    """A cadeia do caso 15, ponta a ponta: o CCIR não corrompe mais a coluna."""
+def test_detentor_escalar_do_ccir_nunca_grava_automaticamente(db_session):
+    """ADR-062 (fonte única registral) fecha a cadeia do caso 15 numa camada
+    anterior à do embrulho de shape: `proprietarios` é dado de titularidade —
+    só a certidão de matrícula escreve — então o `detentor` do CCIR nem chega
+    a `_write_entity` mais. Estruturalmente impossível, não só corrigido.
+    """
     tenant, proc, prop = _seed(db_session)
 
     cert = _doc(db_session, tenant, proc, "matricula")
@@ -172,6 +176,44 @@ def test_detentor_escalar_do_ccir_nunca_grava_string_nua(db_session):
     ccir = _doc(db_session, tenant, proc, "ccir")
     _aceito(db_session, tenant, proc, ccir, "detentor", "Leonardo Ribeiro",
             "proprietarios", hint="2923")
+    db_session.commit()
+
+    r = consolidate_process(db_session, tenant_id=tenant.id, process_id=proc.id, user_id=None)
+
+    db_session.expire_all()
+    mat = (
+        db_session.query(Matricula)
+        .filter(Matricula.property_id == prop.id, Matricula.numero_matricula == "2923")
+        .first()
+    )
+    assert mat is not None
+    assert not mat.proprietarios, "CCIR não escreve mais proprietarios (ADR-062)"
+    linha = next(i for i in r["ignorados"] if "proprietarios" in i)
+    assert "certidão de matrícula" in linha
+
+
+def test_edicao_do_consultor_ainda_embrulha_escalar_em_shape(db_session):
+    """A única via que ainda grava `proprietarios` de fonte não-matrícula é a
+    edição explícita do consultor (Princípio 1 — humano decide e assina). O
+    embrulho de shape do caso 15 continua valendo para ela: nunca grava
+    string nua, venha de onde vier."""
+    tenant, proc, prop = _seed(db_session)
+
+    cert = _doc(db_session, tenant, proc, "matricula")
+    _aceito(db_session, tenant, proc, cert, "numero_matricula", "2923",
+            "numero_matricula", hint="2923")
+
+    ccir = _doc(db_session, tenant, proc, "ccir")
+    row = ExtractedFieldStaging(
+        tenant_id=tenant.id, process_id=proc.id, document_id=ccir.id,
+        field_name="detentor", field_value={"value": "Leonardo Ribeiro (OCR)"},
+        status=ExtractedFieldStatus.aceito,
+        decided_value={"value": "Leonardo Ribeiro"},  # difere do extraído → edição
+        decided_at=datetime.now(UTC),
+        target_entity="matricula", target_field="proprietarios",
+        matricula_hint="2923", source_doc_type="ccir",
+    )
+    db_session.add(row)
     db_session.commit()
 
     consolidate_process(db_session, tenant_id=tenant.id, process_id=proc.id, user_id=None)
@@ -184,7 +226,7 @@ def test_detentor_escalar_do_ccir_nunca_grava_string_nua(db_session):
     )
     assert mat is not None
     assert mat.proprietarios == [{"nome": "Leonardo Ribeiro"}], (
-        "escalar tem que pousar no shape da coluna, nunca como string nua"
+        "escalar tem que pousar no shape da coluna, nunca como string nua — mesmo vindo de edição"
     )
 
     # E o que foi gravado é seguro para o consumidor que quebrava.

@@ -303,9 +303,23 @@ def generate_acoes_from_divergencias(
     )
 
     sem_destino: list[str] = []
+    redirecionadas_para_matriz: list[str] = []
     for (entity, hint, field), group in grupos.items():
         if destino_nao_existe_na_base(entity, field):
             sem_destino.append(f"{entity}.{field}")
+            continue
+        # ADR-062, item 4 — "redirecionar, não duplicar": campo registral de
+        # matrícula cujo achado já nasce da matriz de inconsistências
+        # (`auditor_imovel._registral_findings_from_matriz`, persistido como
+        # `RegulatoryIssue`) não vira MAIS `Acao` aqui — duas linhas para o
+        # mesmo fato confundiriam o consultor sobre onde tratar. Escopo
+        # estreito de propósito: só os campos com emissor de achado já ligado
+        # (denominação, INCRA/SNCR). Os demais campos do item 1 do ADR
+        # (titular, NIRF, nº CCIR, geo_certificação) ainda não têm comparação
+        # na matriz — CONTINUAM virando Ação aqui até ganharem emissor
+        # próprio, para a divergência não sumir em silêncio nesse meio-tempo.
+        if entity == "matricula" and field in ("denominacao_imovel", "codigo_incra_sncr"):
+            redirecionadas_para_matriz.append(f"{entity}.{field}")
             continue
         key = _dedupe_key_divergencia(process.id, entity, hint, field)
         if key in existing_keys or key in seen_this_run:
@@ -355,7 +369,7 @@ def generate_acoes_from_divergencias(
 
     if created:
         db.flush()
-    if created or sem_destino:
+    if created or sem_destino or redirecionadas_para_matriz:
         logger.info(
             "acoes_from_divergencias",
             extra={
@@ -366,6 +380,9 @@ def generate_acoes_from_divergencias(
                 # Ação por falta de destino tem de deixar rastro, senão a
                 # correção vira um novo tipo de sumiço.
                 "divergencias_sem_destino": sem_destino,
+                # ADR-062 — idem para o que foi redirecionado (não descartado,
+                # virou achado por outro canal — ver auditor_imovel).
+                "divergencias_redirecionadas_para_matriz": redirecionadas_para_matriz,
             },
         )
 
