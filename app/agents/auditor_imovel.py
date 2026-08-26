@@ -185,6 +185,24 @@ class AuditorImovelAgent(BaseAgent):
         "codigo_incra_sncr": ("IDENT_CODIGO_INCRA_SNCR_DIVERGENTE", "identificacao"),
     }
 
+    # ADR-062, item 7 (25/08): codigo_incra_sncr é natureza CADASTRAL, não
+    # registral — CCIR/ITR voltaram a escrevê-lo. A mensagem de impacto não
+    # pode dizer "só a certidão de matrícula" para um campo que a certidão nem
+    # extrai (`_FIELD_SPECS`). denominacao_imovel segue registral (item 1) —
+    # mensagem padrão inalterada.
+    _IMPACTO_POR_ITEM: dict[str, str] = {
+        "codigo_incra_sncr": (
+            "Dado cadastral do INCRA (ADR-062, item 7) — CCIR/ITR divergem "
+            "entre si; nenhum grava sozinho enquanto a divergência não é "
+            "resolvida (escolha manual na Conferência)."
+        ),
+    }
+    _IMPACTO_REGISTRAL_PADRAO = (
+        "Dado registral vem só da certidão de matrícula (ADR-062) — "
+        "a divergência não é gravada automaticamente na base; "
+        "confirme qual documento está desatualizado."
+    )
+
     def _registral_findings_from_matriz(self, matriz: dict[str, Any]) -> list[AuditFinding]:
         """Traduz linhas da matriz de inconsistências em ``AuditFinding`` — o
         achado de campo registral (matrícula × CCIR/SIGEF/ITR/CAR) passa a
@@ -212,11 +230,7 @@ class AuditorImovelAgent(BaseAgent):
                 grade=GRADE_ATENCAO,
                 tema=label,
                 descricao=f"{label} diverge entre fontes: {valores}",
-                impacto=(
-                    "Dado registral vem só da certidão de matrícula (ADR-062) — "
-                    "a divergência não é gravada automaticamente na base; "
-                    "confirme qual documento está desatualizado."
-                ),
+                impacto=self._IMPACTO_POR_ITEM.get(item, self._IMPACTO_REGISTRAL_PADRAO),
                 evidencia={"fontes": fontes, "situacao": linha.get("situacao")},
                 documentos_cruzados=docs,
             ))

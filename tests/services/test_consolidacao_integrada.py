@@ -252,9 +252,13 @@ def test_flag_sem_casa_pendencia_duravel(db_session):
     a uma fonte não-matrícula — só a certidão escreve `target_entity=matricula`:
 
     - fonte não-matrícula (sigef) para hint que NÃO existe → sem casa;
-    - fonte não-matrícula (ccir) para hint NOVO → sem casa (não cria mais);
+    - fonte não-matrícula (ccir) para campo CADASTRAL (item 7) e hint NOVO →
+      sem casa MESMO ASSIM: o item 7 dá a CCIR permissão de FONTE, não de
+      CRIAÇÃO — o guard fantasma (item 3) segue inalterado, e o motivo agora é
+      "matrícula não existe", não mais "fonte errada";
     - fonte não-matrícula (ccir) para hint que JÁ existe → sem casa TAMBÉM
-      agora (existir não basta; a fonte é que decide);
+      agora (existir não basta; a fonte é que decide) — vale para campo
+      REGISTRAL (não-cadastral), que segue 100% vetado por fonte;
     - fonte MATRÍCULA para hint novo → tem casa (só ela cria/escreve).
     """
     from app.services.staging_consolidation import flag_sem_casa
@@ -270,7 +274,9 @@ def test_flag_sem_casa_pendencia_duravel(db_session):
     sigef = _doc(db_session, tenant, proc, "sigef")
     orfao = _aceito(db_session, tenant, proc, sigef, "codigo_certificacao", "GEO-1",
                     "geo_certificacao_codigo", hint="4698", tipo="sigef")
-    # Aceite para 8001 vindo de CCIR (não cria mais) → sem casa.
+    # Aceite para 8001 vindo de CCIR num campo CADASTRAL (item 7 — CCIR TEM
+    # permissão de fonte para codigo_incra_sncr) mas a matrícula 8001 não
+    # existe e CCIR não cria (item 3, guard fantasma inalterado) → sem casa.
     ccir = _doc(db_session, tenant, proc, "ccir")
     sem_criador = _aceito(db_session, tenant, proc, ccir, "codigo_sncr_incra", "111.222.333.444-5",
                           "codigo_incra_sncr", hint="8001", tipo="ccir")
@@ -289,7 +295,10 @@ def test_flag_sem_casa_pendencia_duravel(db_session):
     assert orfao.id in motivos
     assert "certidão de matrícula" in motivos[orfao.id]
     assert sem_criador.id in motivos
-    assert "certidão de matrícula" in motivos[sem_criador.id]
+    # Item 7: motivo mudou de "fonte errada" para "matrícula não existe" —
+    # CCIR TEM permissão de fonte aqui, só não pode criar o registro.
+    assert "guard fantasma" in motivos[sem_criador.id]
+    assert "8001" in motivos[sem_criador.id]
     assert existir_nao_basta.id in motivos
     assert "certidão de matrícula" in motivos[existir_nao_basta.id]
     assert da_certidao.id not in motivos

@@ -173,16 +173,19 @@ Matrícula, sem verificação cruzada possível hoje.
 
 ## 5. Prioridade em divergência
 
-> ⚑ **SUPERADA por ADR-062 (25/08/2026) — fonte única registral na consolidação (E2).**
+> ⚑ **SUPERADA por ADR-062 (25/08/2026, atualizado no mesmo dia — item 7) — fonte
+> única registral na consolidação (E2).**
 > Esta seção documenta a investigação de domínio original (duas cadeias de prioridade),
 > mas **não é mais a regra vigente**: a Isis decidiu que, para os campos registrais do
-> imóvel (área, denominação, titular, INCRA/SNCR, NIRF, RL averbada, geo_certificação),
+> imóvel (área, denominação, titular, NIRF, RL averbada, geo_certificação),
 > **só a certidão de matrícula escreve** — não há mais hierarquia entre CCIR, SIGEF, ITR
 > e CAR a arbitrar campo a campo. Divergência entre a matrícula e qualquer uma dessas
-> fontes vira achado do diagnóstico, não arbitragem na consolidação. A dívida #75 (que
-> propunha implementar as duas cadeias abaixo) foi reescrita como superada em
-> `docs/REGISTRO_DIVIDAS.md`. Mantida como registro histórico da investigação que
-> originou a decisão — não usar como fonte de verdade operacional.
+> fontes vira achado do diagnóstico, não arbitragem na consolidação. **Exceção declarada
+> (item 7): número do CCIR e código INCRA/SNCR não são registrais, são CADASTRAIS — a
+> fonte autoritativa é o próprio CCIR (fallback ITR), que voltam a escrever esses dois
+> campos.** A dívida #75 (que propunha implementar as duas cadeias abaixo) foi reescrita
+> como superada em `docs/REGISTRO_DIVIDAS.md`. Mantida como registro histórico da
+> investigação que originou a decisão — não usar como fonte de verdade operacional.
 
 A hierarquia de confiança para arbitrar conflitos **não segue uma única escada** — os campos
 se dividem em duas cadeias paralelas, uma jurídica e uma geométrica/técnica.

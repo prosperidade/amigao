@@ -146,15 +146,17 @@ averbada, e cadeia **técnica** (Memorial/SIGEF → Matrícula → CAR) para
 proposto era implementar as duas cadeias campo a campo. **Não será
 implementada.** A Isis substituiu a pergunta "qual documento vence, campo a
 campo" por uma resposta mais simples: para os campos registrais de
-`target_entity=matricula` (área, denominação, titular, INCRA/SNCR, NIRF, RL
+`target_entity=matricula` (área, denominação, titular, NIRF, RL
 averbada, geo_certificação), **só a certidão de matrícula escreve** — nenhuma
 hierarquia entre CCIR/SIGEF/ITR/CAR a disputar. Mais uma hierarquia
 condicional por campo era exatamente a complexidade que produzia o
 travamento relatado (cada exceção é mais uma decisão que o sistema tenta
 automatizar e erra). Divergência da matrícula contra qualquer uma dessas
 fontes vira achado do diagnóstico (matriz de inconsistências), não mais
-arbitragem na consolidação. Ver ADR-062 (fonte única registral na E2) e a
-nota de superação em Ficha 08 §5.
+arbitragem na consolidação. **Atualizado no mesmo dia (ADR-062, item 7):**
+`numero_ccir`/`codigo_incra_sncr` não entram nesta lista — são natureza
+CADASTRAL (CCIR/ITR mandam), não registral. Ver ADR-062 (fonte única
+registral na E2) e a nota de superação em Ficha 08 §5.
 
 **76. Ficha 08 §8 — normalização antes do cruzamento.** Três falsos positivos medidos em
 simulação: coordenadas UTM (Matrícula) × geodésicas (SIGEF) comparadas sem conversão;

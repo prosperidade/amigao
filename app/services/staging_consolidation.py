@@ -91,6 +91,23 @@ _MATRICULA_ALIAS: dict[str, Optional[str]] = {}
 # (POST /properties/{id}/matriculas) segue sendo a via legítima.
 _MATRICULA_CREATOR_DOC_TYPES = {"matricula"}
 
+# ADR-062, item 7 (25/08, natureza CADASTRAL): número do CCIR e código
+# INCRA/SNCR não são dado REGISTRAL — são dado do CADASTRO do INCRA. A
+# matrícula não os CRIA, ela os REPRODUZ por averbação; quem os declara por
+# natureza é o próprio CCIR (fallback ITR — `_FIELD_SPECS` de
+# `app/services/ficha01_extraction.py` mostra que só `ccir`/`itr` os
+# extraem, nunca `matricula`). Ficam de FORA do veto de fonte única acima —
+# a regra do item 1 não é "matrícula vence tudo", é "cada dado tem a fonte
+# autoritativa da sua natureza": REGISTRAL (matrícula manda, item 1) ·
+# AMBIENTAL (CAR manda, item 2) · CADASTRAL (CCIR/INCRA manda, este item).
+# O guard fantasma (item 3, `_MATRICULA_CREATOR_DOC_TYPES` acima) continua
+# valendo sem exceção: CCIR/ITR podem ATUALIZAR uma matrícula já existente
+# com estes dois campos, nunca CRIAR uma. Divergência entre fontes segue o
+# guard de reconciliação normal de `_write_entity` (campo já consolidado
+# nunca é sobrescrito silenciosamente) e, para `codigo_incra_sncr`, o achado
+# já calculado por `inconsistency_matrix.build_matrix` (item 4).
+_MATRICULA_CADASTRAL_FIELDS = {"numero_ccir", "codigo_incra_sncr"}
+
 
 def _raw_value(row: ExtractedFieldStaging) -> Any:
     """Valor efetivo da decisão: decided_value se houver, senão a fonte."""
@@ -180,8 +197,10 @@ def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = 
 
 # ---------------------------------------------------------------------------
 # Seleção de fonte vencedora (multi-fonte, Ficha 05 — só entre fontes que
-# chegam a competir; ADR-062 já filtrou área/denominação/titular/INCRA-SNCR/
-# NIRF/RL/geo_certificação de `matricula` para uma fonte só antes daqui)
+# chegam a competir; ADR-062 já filtrou área/denominação/titular/NIRF/RL/
+# geo_certificação de `matricula` para uma fonte só antes daqui — numero_ccir
+# e codigo_incra_sncr são natureza CADASTRAL, item 7, e continuam competindo
+# normalmente entre CCIR/ITR aqui)
 # ---------------------------------------------------------------------------
 _CONF_RANK = {"high": 3, "medium": 2, "low": 1}
 
@@ -533,7 +552,11 @@ def consolidate_process(
         # escolha uma" (ADR-017 §1, agora restrito a certidão×certidão); a
         # divergência delas em relação à matrícula é achado do diagnóstico
         # (matriz de inconsistências), nunca escrita disputada.
-        if (entity == "matricula" and (row.source_doc_type or "").lower() != "matricula"
+        # Exceção declarada (ADR-062, item 7): numero_ccir/codigo_incra_sncr são
+        # natureza CADASTRAL, não registral — CCIR/ITR seguem competindo neles
+        # normalmente (guard de conflito + reconciliação abaixo, sem atalho).
+        if (entity == "matricula" and row.target_field not in _MATRICULA_CADASTRAL_FIELDS
+                and (row.source_doc_type or "").lower() != "matricula"
                 and not _is_consultor_edit(row)):
             motivo = motivo_sem_destino(entity, row.target_field)
             if motivo is None:
@@ -1363,7 +1386,12 @@ def flag_sem_casa(
             # `matricula_listada` fica de fora (não escreve valor — só
             # confirma/materializa o registro; a existência do registro já
             # é o julgamento certo para ela, via `hints_com_criador` abaixo).
+            # numero_ccir/codigo_incra_sncr (item 7 — natureza CADASTRAL) ficam
+            # de fora do veto: mesma exceção da consolidação, MESMA função —
+            # um selo que dissesse "não vai gravar" para um campo que a
+            # consolidação grava seria o badge mentindo.
             if (r.field_name != "matricula_listada"
+                    and r.target_field not in _MATRICULA_CADASTRAL_FIELDS
                     and (r.source_doc_type or "").lower() != "matricula"
                     and not _is_consultor_edit(r)):
                 mat_ref = f", matrícula {r.matricula_hint}" if r.matricula_hint else ""

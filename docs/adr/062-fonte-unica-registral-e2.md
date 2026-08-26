@@ -2,6 +2,10 @@
 
 - **Status:** Aceita
 - **Data:** 2026-08-25
+- **Atualizada:** 2026-08-25 (item 7 — natureza CADASTRAL declarada;
+  `numero_ccir`/`codigo_incra_sncr` voltam a ser escritos por CCIR/ITR).
+  Mesma sessão, antes do merge — ver "Custos e limites" e "Alternativas
+  descartadas" abaixo, marcados como revistos.
 - **Validada por:** Isis (sócia, validadora de domínio)
 - **Branch:** `audit/consolidacao-fonte-unica`
 - **Relacionada a:** ADR-017 (consolidação parcial — ponto 1 superado por
@@ -112,6 +116,43 @@ de precedência no filtro de fonte única aplica primeiro `motivo_sem_destino`
 (um campo sem coluna — ex.: `vtn` — continua com o motivo antigo, não vira
 "fonte errada") e só then a recusa por fonte.
 
+**7. `numero_ccir` e `codigo_incra_sncr` têm natureza CADASTRAL, não
+registral — ficam FORA da fonte única do item 1.** A regra do item 1 nunca
+foi "a matrícula vence tudo": é "cada dado tem uma fonte autoritativa pela
+sua natureza, e a matrícula é a autoridade do registral" — o mesmo raciocínio
+que já separava o item 2 (AMBIENTAL, CAR manda) do item 1 (REGISTRAL,
+matrícula manda). Faltava nomear a terceira natureza que a implementação
+original varreu para dentro do item 1 por a regra ser aplicada por
+**entidade** (`target_entity=matricula`), não por **campo**: `numero_ccir` e
+`codigo_incra_sncr` são identificadores do CADASTRO do INCRA — a matrícula
+não os CRIA, ela os REPRODUZ por averbação quando a certidão cita o CCIR/o
+código SNCR na descrição do imóvel. A fonte autoritativa por natureza é o
+próprio **CCIR** (fallback **ITR**, que também declara o código INCRA/SNCR
+quando o imóvel já tinha um — `_FIELD_SPECS` em
+`app/services/ficha01_extraction.py`: só `ccir`/`itr` extraem estes dois
+campos, nenhum `_FieldSpec` de `matricula` os lê hoje).
+
+Implementação: `_MATRICULA_CADASTRAL_FIELDS` em
+`app/services/staging_consolidation.py` exclui os dois campos do filtro de
+fonte única em **ambos** os pontos que o aplicavam (`consolidate_process` e
+`flag_sem_casa` — o selo durável tinha o mesmo veto duplicado, corrigido
+junto para não mentir "não vai gravar" de um campo que volta a gravar).
+CCIR/ITR voltam a competir entre si normalmente pelo destino
+(`_pick_winner`, guard de conflito, reconciliação) — exatamente o
+comportamento anterior a este ADR para estes dois campos específicos.
+
+O que **não muda**: o guard fantasma do item 3 continua sem exceção — CCIR/
+ITR podem ATUALIZAR uma matrícula que a certidão já criou, nunca CRIAR uma
+só com estes dois campos. E divergência entre o que a matrícula já tiver
+consolidado (edição do consultor, ou o dia em que a extração de `matricula`
+passar a ler estes campos) e o que CCIR/ITR relatam depois nunca sobrescreve
+silenciosamente — cai no guard de reconciliação padrão de `_write_entity`
+(`reconciliacoes`, campo já `human_validated` não é tocado por doc
+divergente) e, para `codigo_incra_sncr`, no achado já calculado por
+`inconsistency_matrix.build_matrix` (item 4) quando as próprias fontes
+concorrentes (CCIR × ITR) discordam entre si — a divergência é achado do
+diagnóstico como todo o resto, nunca escrita disputada.
+
 ## Consequências
 
 **Boas**
@@ -133,23 +174,21 @@ de precedência no filtro de fonte única aplica primeiro `motivo_sem_destino`
 
 **Custos e limites**
 
-- **`matricula.numero_ccir` E `matricula.codigo_incra_sncr` ficam
-  estruturalmente sem fonte que os escreva pela consolidação automática.**
-  Por `_FIELD_SPECS` (`app/services/ficha01_extraction.py`), nenhum doc-type
+- **REVISTO pelo item 7 (mesma sessão, antes do merge) — `matricula.numero_ccir`
+  E `matricula.codigo_incra_sncr` NÃO ficam mais sem fonte.** A primeira versão
+  deste ADR aplicava a regra 1 por entidade (`target_entity=matricula`), sem
+  distinguir a natureza do campo — e isso varreu `numero_ccir`/
+  `codigo_incra_sncr` para dentro do veto mesmo sem estarem entre os 7 campos
+  que o item 1 de fato descreve (registro jurídico do imóvel). Por
+  `_FIELD_SPECS` (`app/services/ficha01_extraction.py`), nenhum doc-type
   `matricula` tem `_FieldSpec` para `numero_ccir` (só `ccir` tem) nem para
   `codigo_incra_sncr`/`codigo_sncr_incra` (só `ccir` e `itr` têm — a certidão
-  de matrícula não é hoje lida para código INCRA/SNCR). Aplicando a regra 1
-  sem exceção, os dois campos nunca mais são gravados automaticamente, mesmo
-  sem qualquer conflito — o único caminho que resta é a edição explícita do
-  consultor (medido em `tests/api/test_gravado_visivel.py`, que dependia de
-  ambos pousarem via CCIR). Isto é reportado aqui porque contraria a
-  expectativa de uso (os dois campos existiam e eram preenchidos antes); a
-  decisão foi aplicar a regra tal como dada, sem abrir exceção por conta
-  própria, e registrar a consequência para revisão de produto. Duas saídas
-  possíveis para quem revisar: (a) aceitar que são campos de edição manual
-  daqui em diante, ou (b) estender o prompt/schema de extração do doc-type
-  `matricula` para também ler INCRA/SNCR e nº do CCIR do próprio texto da
-  certidão (quando citados), fechando a lacuna pela fonte certa.
+  de matrícula não é hoje lida para código INCRA/SNCR): a regra 1, aplicada
+  sem essa distinção, deixava os dois campos estruturalmente sem escritor
+  automático (medido em `tests/api/test_gravado_visivel.py`). A revisão do
+  produto pedida abaixo veio no mesmo dia: os dois campos são natureza
+  CADASTRAL (item 7), não registral — CCIR volta a escrevê-los (fallback
+  ITR), e a lacuna fecha pela fonte certa, não por edição manual permanente.
 - Titular (`proprietarios`) e NIRF (`nirf_cib`) estão na lista do item 1, mas
   não têm comparação na matriz de inconsistências hoje — o redirect do item 4
   só cobre denominação e código INCRA/SNCR. Título e NIRF perdem a escrita
@@ -203,16 +242,24 @@ de precedência no filtro de fonte única aplica primeiro `motivo_sem_destino`
   fantasma) — o guard fantasma da Sprint 4 já apontava nessa direção; este
   ADR só termina de fechar a porta.
 - **Deixar `numero_ccir` como exceção silenciosa à regra 1** (permitir CCIR
-  escrever só esse campo). Descartada por decisão própria: a regra foi dada
-  "sem exceção de campo"; abrir uma exceção não pedida seria reinterpretar a
-  decisão, não implementá-la. A consequência fica registrada acima para
-  revisão de produto, não corrigida por conta própria.
+  escrever só esse campo). Descartada por decisão própria na primeira versão
+  deste ADR: a regra foi dada "sem exceção de campo"; abrir uma exceção não
+  pedida seria reinterpretar a decisão, não implementá-la — por isso a
+  consequência ficou registrada para revisão de produto, não corrigida por
+  conta própria. **O que o item 7 faz é categoricamente diferente disto**: não
+  é uma exceção silenciosa a uma regra — é o reconhecimento de que
+  `numero_ccir`/`codigo_incra_sncr` nunca foram, por natureza, o mesmo tipo de
+  dado que a regra 1 descreve (registro jurídico do imóvel); são CADASTRAL,
+  uma terceira natureza declarada explicitamente, simétrica ao item 2
+  (AMBIENTAL) já ter saído do item 1 pela mesma razão. Revisão de produto
+  pedida e aplicada nesta mesma sessão, não decisão unilateral.
 
 ## Referências
 
 - `app/services/staging_consolidation.py` — filtro de fonte única
   (`consolidate_process`, `flag_sem_casa`), guard fantasma
-  (`_MATRICULA_CREATOR_DOC_TYPES`)
+  (`_MATRICULA_CREATOR_DOC_TYPES`), exceção CADASTRAL do item 7
+  (`_MATRICULA_CADASTRAL_FIELDS`)
 - `app/services/inconsistency_matrix.py:build_matrix` — matriz já existente,
   fonte do redirect
 - `app/agents/auditor_imovel.py:_registral_findings_from_matriz` — o redirect
