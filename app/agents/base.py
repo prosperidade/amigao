@@ -114,6 +114,13 @@ class BaseAgent(ABC):
         self.ctx = ctx
         self._started_at: float = 0.0
         self._llm_response: AIResponse | None = None
+        # ADR-064, contenção 4 — chamadas LLM feitas por SERVIÇOS que o agente
+        # orquestra (o extrator chama `document_extractor` e `ficha01_extraction`,
+        # que falam com o gateway direto). Elas nunca passavam por `call_llm` e,
+        # por isso, `_complete_job` não tinha o que gravar: os `ai_jobs` do
+        # extrator saíam com modelo, provider, tokens, custo e `raw_output` TODOS
+        # nulos. O que o LLM devolveu deixava de existir depois da chamada.
+        self._llm_calls: list[tuple[str, AIResponse]] = []
         # AIJob da execução corrente, exposto para subclasses que precisam do
         # ai_job_id durante execute() (ex.: ExtratorAgent grava rastreabilidade
         # no staging da Ficha 01). Setado em run() logo após a criação do job.
@@ -305,6 +312,69 @@ class BaseAgent(ABC):
         self._llm_response = response
         return response
 
+    def registrar_chamada_llm(self, response: AIResponse, *, rotulo: str = "") -> None:
+        """Contabiliza uma chamada LLM feita FORA de ``call_llm`` (ADR-064, N3).
+
+        Um agente que delega a chamada a um serviço (o extrator é o caso: uma
+        chamada de preview + uma por fatia de cada documento) fica sem nada em
+        ``_llm_response`` e o ``AIJob`` nasce cego. Aqui as chamadas são somadas
+        e viram um ``AIResponse`` agregado que ``_complete_job`` grava do jeito
+        de sempre — `raw_output` com CADA resposta bruta rotulada, tokens e
+        custo somados, modelos e providers listados.
+
+        Não mexe em ``call_llm``: agentes que usam o caminho normal seguem
+        gravando a resposta única, com o mesmo shape de antes. Um agente que use
+        os dois caminhos grava o AGREGADO — o que é o mais completo dos dois.
+
+        A agregação acontece em :meth:`_complete_job`, uma vez por execução.
+        """
+        self._llm_calls.append((rotulo, response))
+
+    # `raw_output` é auditoria, não arquivo: cada resposta entra inteira até este
+    # teto (uma extração de matrícula tem ~2 KB) e o conjunto respeita o total.
+    _RAW_MAX_POR_CHAMADA = 20_000
+    _RAW_MAX_TOTAL = 200_000
+
+    def _agregar_chamadas_llm(self) -> AIResponse:
+        """Funde ``_llm_calls`` num ``AIResponse`` só, para o AIJob."""
+        import json  # noqa: PLC0415
+
+        blocos: list[dict[str, Any]] = []
+        gasto = 0
+        for rotulo, resp in self._llm_calls:
+            conteudo = (resp.content or "")[: self._RAW_MAX_POR_CHAMADA]
+            if gasto + len(conteudo) > self._RAW_MAX_TOTAL:
+                blocos.append({"rotulo": rotulo, "truncado_na_auditoria": True})
+                continue
+            gasto += len(conteudo)
+            blocos.append({
+                "rotulo": rotulo,
+                "model_used": resp.model_used,
+                "provider": resp.provider,
+                "finish_reason": resp.finish_reason,
+                "tokens_in": resp.tokens_in,
+                "tokens_out": resp.tokens_out,
+                "cost_usd": resp.cost_usd,
+                "content": conteudo,
+            })
+
+        modelos = list(dict.fromkeys(r.model_used for _, r in self._llm_calls if r.model_used))
+        providers = list(dict.fromkeys(r.provider for _, r in self._llm_calls if r.provider))
+        return AIResponse(
+            content=json.dumps(blocos, ensure_ascii=False),
+            # Colunas são String(100)/String(50) — o corte é do schema, não escolha.
+            model_used=", ".join(modelos)[:100],
+            provider=", ".join(providers)[:50],
+            tokens_in=sum(r.tokens_in or 0 for _, r in self._llm_calls),
+            tokens_out=sum(r.tokens_out or 0 for _, r in self._llm_calls),
+            cost_usd=sum(r.cost_usd or 0.0 for _, r in self._llm_calls),
+            duration_ms=sum(r.duration_ms or 0 for _, r in self._llm_calls),
+            finish_reason=(
+                "length" if any(r.finish_reason == "length" for _, r in self._llm_calls)
+                else "stop"
+            ),
+        )
+
     def _audit_ai_key_use(self, prefs: dict) -> None:
         """Registra no AuditLog o uso da api_key do consultor (dívida #33).
 
@@ -429,6 +499,12 @@ class BaseAgent(ABC):
         from datetime import UTC, datetime  # noqa: PLC0415
 
         try:
+            # ADR-064 (contenção 4): chamadas registradas por serviços que o
+            # agente orquestra viram UM `AIResponse` agregado aqui, no fim — não a
+            # cada chamada. Um processo com dezenas de documentos faria a
+            # serialização do bruto N vezes, e só a última importa.
+            if self._llm_calls:
+                self._llm_response = self._agregar_chamadas_llm()
             job.status = AIJobStatus.completed
             job.result = result.data
             job.finished_at = datetime.now(UTC)
@@ -461,6 +537,18 @@ class BaseAgent(ABC):
             job.error = str(getattr(exc, "message", exc))[:2000]
             job.finished_at = datetime.now(UTC)
             job.duration_ms = int((time.monotonic() - self._started_at) * 1000)
+
+            # ADR-064 (contenção 4): o que JÁ foi gasto antes da falha não pode
+            # sumir — é o número que a auditoria do teto financeiro precisa, e é
+            # exatamente no job que falhou que ele mais importa.
+            if self._llm_calls:
+                gasto = self._agregar_chamadas_llm()
+                job.model_used = gasto.model_used
+                job.provider = gasto.provider
+                job.tokens_in = gasto.tokens_in
+                job.tokens_out = gasto.tokens_out
+                job.cost_usd = gasto.cost_usd
+                job.raw_output = gasto.content
 
             if isinstance(exc, AIGatewayError):
                 if exc.cost_usd:

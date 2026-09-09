@@ -724,10 +724,22 @@ def consolidate_process(
             # Só chega aqui quem NÃO resolveu destino acima — inclusive o
             # `cliente`/`representante` de um caso sem cliente vinculado.
             # #200 — `target_entity=` era vocabulário de log vazando na tela.
-            ignorados.append(
-                f"{entity or '—'}.{target_field or '—'}: "
-                f"{motivo_sem_destino(entity, target_field)}"
-            )
+            #
+            # ADR-064: a linha SEM ÂNCORA chega aqui de propósito (nasce sem
+            # destino, para nunca pousar na base). O motivo genérico — "aceito
+            # sem campo de destino" — mandaria a consultora procurar mapeamento
+            # onde o problema é outro: o valor não existe no documento.
+            fv = winner.field_value if isinstance(winner.field_value, dict) else {}
+            if fv.get("sem_ancora"):
+                motivo = fv.get("motivo") or (
+                    "valor sem âncora no documento — não foi encontrado no texto lido"
+                )
+                ignorados.append(f"{winner.field_name}: {motivo}")
+            else:
+                ignorados.append(
+                    f"{entity or '—'}.{target_field or '—'}: "
+                    f"{motivo_sem_destino(entity, target_field)}"
+                )
             continue
 
         # ── Coerência matriz×consolidação (Sprint 4 / caso 13) ──────────────

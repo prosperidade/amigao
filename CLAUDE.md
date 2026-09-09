@@ -216,7 +216,7 @@ Mesma política do client-portal. Quando descongelar:
 - `OPENAI_API_KEY` (e/ou `GEMINI_API_KEY` se `LEGISLATION_USE_GEMINI_DEFAULT=true`)
 - Para waitlist: `RESEND_API_KEY`, `RESEND_AUDIENCE_ID`, `RESEND_FROM_EMAIL`
 
-Lista completa em `_env.example`.
+Lista completa em `.env.example` (o arquivo nunca se chamou `_env.example`).
 
 ## Endpoints principais
 

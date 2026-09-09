@@ -73,12 +73,19 @@ def test_reextracao_identica_nao_duplica(db_session):
         "denominacao": "Fazenda Shangri-lá (Parte 2)",
         "confidence": {"numero_matricula": "high"},
     }
-    with patch("app.services.ficha01_extraction._extract_structured", return_value=canned):
+    # ADR-064: o texto precisa CONTER os valores — sem âncora eles viram linha
+    # barrada, sem destino, e este teste é sobre dedup, não sobre o gate.
+    texto = (
+        "CERTIDÃO DE MATRÍCULA Nº 6.776 — Fazenda Shangri-lá (Parte 2), "
+        "com área de 349,9022 ha."
+    )
+    with patch("app.services.ficha01_extraction._extract_structured",
+               return_value=(canned, None)):
         r1 = extract_and_stage(
-            text="...", doc_type="matricula", tenant_id=tenant.id, db_session=db_session,
+            text=texto, doc_type="matricula", tenant_id=tenant.id, db_session=db_session,
         )
         r2 = extract_and_stage(
-            text="...", doc_type="matricula", tenant_id=tenant.id, db_session=db_session,
+            text=texto, doc_type="matricula", tenant_id=tenant.id, db_session=db_session,
         )
     assert r1.rows_written >= 2
     assert r2.rows_written == 0  # tudo já existia → dedup
@@ -95,11 +102,19 @@ def test_valor_diferente_mesma_fonte_e_mantido(db_session):
     tenant = _tenant(db_session)
     v1 = {"denominacao": "Fazenda Shangri-lá (Parte 2)", "confidence": {}}
     v2 = {"denominacao": "Fazenda São Jorge Lote 01-C", "confidence": {}}
-    with patch("app.services.ficha01_extraction._extract_structured", return_value=v1):
-        extract_and_stage(text="...", doc_type="matricula", tenant_id=tenant.id,
+    # As DUAS denominações estão no texto: é a divergência interna real (o
+    # documento cita a denominação atual e a anterior), não valor inventado.
+    texto = (
+        "Fazenda Shangri-lá (Parte 2), anteriormente denominada "
+        "Fazenda São Jorge Lote 01-C."
+    )
+    with patch("app.services.ficha01_extraction._extract_structured",
+               return_value=(v1, None)):
+        extract_and_stage(text=texto, doc_type="matricula", tenant_id=tenant.id,
                           db_session=db_session)
-    with patch("app.services.ficha01_extraction._extract_structured", return_value=v2):
-        extract_and_stage(text="...", doc_type="matricula", tenant_id=tenant.id,
+    with patch("app.services.ficha01_extraction._extract_structured",
+               return_value=(v2, None)):
+        extract_and_stage(text=texto, doc_type="matricula", tenant_id=tenant.id,
                           db_session=db_session)
     denoms = (
         db_session.query(ExtractedFieldStaging)

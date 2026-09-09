@@ -30,7 +30,21 @@ interface StagingField {
   id: number;
   source_doc_type: string | null;
   field_name: string;
-  field_value: { value?: unknown; unidade?: string } | null;
+  field_value: {
+    value?: unknown;
+    unidade?: string;
+    // ADR-064 (contenção 1) — o valor não foi encontrado no texto do documento.
+    // Chega SEM destino: não pousa na base nem que alguém aceite.
+    sem_ancora?: boolean;
+    motivo?: string;
+    // Onde o valor está no documento, quando está.
+    ancora?: { pos?: number; trecho?: string; metodo?: string; escopo?: string } | null;
+    // ADR-064 (contenção 3) — notação registral `hectares,ares.centiares`
+    // decodificada por regra; o bruto acima nunca é reescrito.
+    normalizado_ha?: number;
+    metodo_normalizacao?: string;
+    extenso_confere?: boolean;
+  } | null;
   confidence: string | null;
   target_entity: string | null;
   target_field: string | null;
@@ -273,6 +287,38 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                 {/* Selo legível (26/07): o motivo sai do tooltip e vira texto na
                     linha. Tooltip só é lido por quem já desconfia — e a queixa
                     era exatamente não entender por que o aceite não pousou. */}
+                {/* ADR-064 (contenção 1): o valor não está no documento. É mais
+                    forte que "não tem casa" — ali o dado é bom e falta destino;
+                    aqui a afirmação não tem fonte. Em 09/09 um NIRF gravado com
+                    confiança alta em três processos era o EXEMPLO escrito no
+                    prompt. Vermelho, com o valor à vista e o caminho de saída. */}
+                {f.field_value?.sem_ancora && (
+                  <span className="basis-full order-last flex items-start gap-1.5 text-[11px] text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded px-2 py-1">
+                    <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="font-semibold">Sem fonte no documento:</strong>{' '}
+                      {f.field_value.motivo ?? 'o valor lido não foi encontrado no texto deste documento.'}{' '}
+                      Confira no documento e digite o valor certo, ou rejeite a linha.
+                    </span>
+                  </span>
+                )}
+                {/* ADR-064 (contenção 3): área em notação registral antiga
+                    (`926,36.54` = 926 ha, 36 ares, 54 centiares). O literal do
+                    documento fica à vista; ao lado, o valor que o sistema usa. */}
+                {f.field_value?.normalizado_ha != null && (
+                  <span className="basis-full order-last flex items-start gap-1.5 text-[11px] text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 rounded px-2 py-1">
+                    <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="font-semibold">Notação registral:</strong>{' '}
+                      o documento escreve <code>{String(f.field_value.value)}</code> (hectares,
+                      ares.centiares) — o sistema usa{' '}
+                      <strong>{f.field_value.normalizado_ha.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ha</strong>
+                      {f.field_value.extenso_confere === true && ', confirmado pelo extenso do próprio documento'}
+                      {f.field_value.extenso_confere === false && '. Atenção: o extenso do documento NÃO confere com o número — confira antes de aceitar'}
+                      .
+                    </span>
+                  </span>
+                )}
                 {f.sem_casa && (
                   <span className="basis-full order-last flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1">
                     <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />

@@ -20,7 +20,14 @@ from app.models.process import Process, ProcessStatus
 from app.models.tenant import Tenant
 from app.models.user import User
 
-_CAR_TEXT = "RECIBO DE INSCRIÇÃO no Cadastro Ambiental Rural — Município Uirapuru/GO"
+# ADR-064 (âncora): o texto do documento precisa CONTER os valores que o
+# mock diz ter extraído — senão eles viram linha barrada, sem destino, e o
+# teste passaria a medir o gate em vez do mapeamento por tipo.
+_CAR_TEXT = (
+    "RECIBO DE INSCRIÇÃO no Cadastro Ambiental Rural — Município Uirapuru/GO\n"
+    "Número do CAR: GO-5221080-A1B2C3  ·  Área declarada: 1010,5583 ha\n"
+    "Matrículas vinculadas: 4.698 (12/03/2001) e 6.776 (05/08/2010), Livro 2, CRI\n"
+)
 
 _LEGACY_FIELDS = {
     "numero_car": "GO-5221080-A1B2C3",
@@ -83,7 +90,7 @@ def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session):
         return_value=(dict(_LEGACY_FIELDS), None),
     ), patch(
         "app.services.ficha01_extraction._extract_structured",
-        return_value=dict(_STRUCTURED),
+        return_value=(dict(_STRUCTURED), None),
     ):
         agent = AgentRegistry.create("extrator", ctx)
         result = agent.run()

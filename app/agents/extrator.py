@@ -66,6 +66,9 @@ class ExtratorAgent(BaseAgent):
                         tenant_id=self.ctx.tenant_id,
                         save_job=False,
                         db_session=self.ctx.session,
+                        on_llm_response=lambda r, rot, _d=d: self._registrar_llm(
+                            r, f"doc{_d.id}:{rot}"
+                        ),
                     )
                     per_doc.append(
                         {"document_id": d.id, "doc_type": d.document_type, "fields_count": len(f)}
@@ -162,6 +165,11 @@ class ExtratorAgent(BaseAgent):
             tenant_id=self.ctx.tenant_id,
             save_job=False,  # BaseAgent.run() cuida do AIJob
             db_session=self.ctx.session,
+            # Todo bloco do `raw_output` nomeia o documento — auditoria de um
+            # job que processou vários docs precisa dizer qual é qual.
+            on_llm_response=lambda r, rot, _d=document_id: self._registrar_llm(
+                r, f"doc{_d}:{rot}"
+            ),
         )
 
         # Ficha 01 / FASE 2 — gravação ADICIONAL no staging.
@@ -193,6 +201,20 @@ class ExtratorAgent(BaseAgent):
         if auto_infracao_fato is not None:
             out["auto_infracao_fato"] = auto_infracao_fato
         return out
+
+    def _registrar_llm(self, response, rotulo: str) -> None:
+        """Contabiliza no AIJob uma chamada feita pelos serviços que este agente
+        orquestra (ADR-064, contenção 4).
+
+        O extrator nunca usou `call_llm`: ele delega a chamada a
+        `document_extractor` e a `ficha01_extraction`, que falam com o gateway
+        direto. Resultado medido em 09/09: os `ai_jobs` 1467–1471 e 1473 do
+        extrator têm `model_used`, `provider`, `tokens_in/out`, `cost_usd` e
+        `raw_output` TODOS nulos — o que o LLM devolveu não existe em lugar
+        nenhum depois da chamada, e por isso a origem dos erros da ELODI só pôde
+        ser tratada como hipótese até a reprodução manual.
+        """
+        self.registrar_chamada_llm(response, rotulo=rotulo)
 
     def _stage_ficha01(
         self,
@@ -250,6 +272,9 @@ class ExtratorAgent(BaseAgent):
                 document_id=document_id,
                 ai_job_id=ai_job_id,
                 created_by_agent="extrator",
+                on_llm_response=lambda r, rot, _d=document_id: self._registrar_llm(
+                    r, f"doc{_d}:{rot}"
+                ),
             )
             # Fase 1 (N1, item 3) — P12 na prática: nenhum documento mudo. O
             # skipped_reason já existia (StagingResult) mas nunca era lido nem
@@ -260,7 +285,9 @@ class ExtratorAgent(BaseAgent):
             # não achado regulatório, e por isso É gravado (não recomputado).
             if document_id is not None:
                 if result.skipped_reason:
-                    self._record_extraction_note(document_id, effective_type, result.skipped_reason)
+                    self._record_extraction_note(
+                        document_id, effective_type, result.skipped_reason, texto=text
+                    )
                 elif result.rows_written > 0:
                     self._clear_extraction_note(document_id)
             return None
@@ -286,11 +313,16 @@ class ExtratorAgent(BaseAgent):
             extract_auto_infracao_fato,
         )
 
-        fato = extract_auto_infracao_fato(text)
+        fato = extract_auto_infracao_fato(
+            text,
+            on_llm_response=lambda r, rot, _d=document_id: self._registrar_llm(
+                r, f"doc{_d}:{rot}"
+            ),
+        )
         if fato is None:
             if document_id is not None:
                 self._record_extraction_note(
-                    document_id, "auto_infracao", "extração de fato falhou/vazia"
+                    document_id, "auto_infracao", "extração de fato falhou/vazia", texto=text
                 )
             return None
         if document_id is not None:
@@ -326,13 +358,27 @@ class ExtratorAgent(BaseAgent):
                 document_id, res.tipo_proposto, res.item_vinculado,
             )
 
-    def _record_extraction_note(self, document_id: int, doc_type: str, reason: str) -> None:
-        """Grava a nota de processamento no `Document` (best-effort)."""
+    def _record_extraction_note(
+        self, document_id: int, doc_type: str, reason: str, texto: str | None = None
+    ) -> None:
+        """Grava a nota de processamento no `Document` (best-effort).
+
+        N4 (09/09) — quando o OCR não produziu texto legível, essa é a causa e é
+        ela que a nota diz. A CNH-e do representante da ELODI (doc 551) ficou na
+        tela como "tipo sem schema de staging", que manda mexer em mapeamento,
+        quando o que faltava era reprocessar o OCR.
+        """
         from app.models.document import Document  # noqa: PLC0415
+        from app.services.ficha01_extraction import (  # noqa: PLC0415
+            MOTIVO_OCR_ILEGIVEL,
+            texto_sem_conteudo_legivel,
+        )
 
         doc = self.ctx.session.query(Document).filter(Document.id == document_id).first()
         if doc is None:
             return
+        if texto is not None and texto_sem_conteudo_legivel(texto):
+            reason = MOTIVO_OCR_ILEGIVEL
         doc.extraction_status = f"recebido, não processado ({doc_type}) — revisar: {reason}"
         self.ctx.session.flush()
 
