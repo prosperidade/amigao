@@ -1447,7 +1447,60 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 209.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 213.**
+
+### Abertas pela Frente A — identidade PF/PJ e representante (08/09, `fix/identidade-pj-representante` · ADR-063)
+
+*A frente fechou **ENT-001**, **ENT-002** e **DATA-001** da spec Isis v0.1: P3 e
+P6 da matriz de perfis viraram SIM sem regredir P1, P2, P4, P5 e P7. As quatro
+dívidas abaixo foram **deliberadamente adiadas** — três delas porque a própria
+spec veta resolvê-las automaticamente.*
+
+**209. Casos PJ já consolidados com o CPF do representante no lugar do CNPJ.**
+O conserto impede o defeito daqui para a frente e redireciona o staging legado na
+próxima consolidação, mas **não reescreve o que já está gravado**: um Client PJ
+cujo `cpf_cnpj` foi sobrescrito pelo CPF do representante continua errado na base
+até correção manual. Detectável por varredura (`client_type='pj'` cujo `cpf_cnpj`
+normalizado tem 11 dígitos).
+
+Não entrou porque corrigir em migration é **reescrita histórica automática**, que
+a spec veta na mesma cláusula da fusão (ENT-002, observação) — e porque o valor
+certo do CNPJ nem sempre está no sistema: se o cadastro perdeu o CNPJ, ele não é
+recuperável do próprio banco, precisa vir do consultor.
+**O que destrava:** relatório de afetados + tela de correção assistida.
+**Origem:** Frente A (08/09), decisão de escopo declarada no ADR-063.
+
+**210. Plano de fusão dos duplicados históricos por CPF/CNPJ.**
+A migration ADR-063 **para e reporta** se encontrar duplicados, em vez de aplicar
+a constraint — a spec proíbe fusão automática sem plano de migração e auditoria.
+Enquanto não houver plano, um banco com duplicados **não sobe a migration**.
+`scripts/relatorio_duplicados_documento.py` lista os grupos sem alterar nada.
+
+Fundir exige decidir qual cadastro é canônico e para onde vão processos, imóveis,
+contratos, documentos e comunicações — decisão de produto com auditoria, não
+efeito colateral de `alembic upgrade`.
+**O que destrava:** aplicar ENT-002 em banco de produção que já tenha duplicado.
+**Origem:** Frente A (08/09), veto explícito da spec.
+
+**211. Representante criado a partir de documentos distintos vira duas linhas.**
+A âncora do representante na consolidação é o `source_document_id` (linhas do
+mesmo documento = mesma pessoa) com um degrau anterior por CPF normalizado. Isso
+resolve a CNH inteira virando um representante só, e duas CNHs virando dois. Mas
+CNH **e** RG do mesmo Joel, em documentos separados, só se unificam se o CPF
+chegar antes do nome — senão viram dois registros da mesma pessoa.
+
+Não é o defeito do P3 (nenhum deles encosta no titular), é ruído de cadastro.
+**O que destrava:** ação de "unir representantes" na tela, que é também onde a
+#209 seria resolvida. **Origem:** Frente A (08/09), limite medido do conserto.
+
+**212. Gestão do representante na tela é só leitura.**
+O backend tem CRUD completo (`GET/POST/PATCH/DELETE
+/clients/{id}/representatives`) e o Hub mostra o bloco **Representação**
+separado do titular — que é o critério de aceite do ENT-001. Falta o formulário:
+hoje o representante só nasce pela consolidação de um documento pessoal, e não há
+como criar, corrigir o papel ou remover pela interface.
+**O que destrava:** consultora cadastrar o representante sem depender de haver
+uma CNH anexada. **Origem:** Frente A (08/09), escopo do PR fechado no aceite.
 
 > **✅ FECHADAS na 2ª rodada (03/08, `feat/audio-conversao-e-diarizacao`):**
 > **#200** (todo `ignorados` diz o motivo; `modulos_fiscais` ganhou destino) e
