@@ -263,6 +263,43 @@ class _FieldSpec:
     unidade: Optional[str] = None
 
 
+# ── ENT-001: de QUEM é o documento pessoal ──────────────────────────────────
+# `rg_cpf` (RG/CPF/CNH) prova a identidade de uma PESSOA FÍSICA. Isso não diz
+# de quem: num caso de cliente PF é do próprio titular; num caso de cliente PJ
+# não pode ser do titular (o titular é o CNPJ) — é do representante. Mapear
+# `rg_cpf` cegamente para "cliente" foi o que fez a CNH do Joel sobrescrever o
+# CNPJ da ELODI com o CPF dele, com carimbo de consolidado (spec Isis §4.2.3).
+DOC_PESSOAL_TYPES = {"rg_cpf"}
+
+ENTIDADE_CLIENTE = "cliente"
+ENTIDADE_REPRESENTANTE = "representante"
+
+# Nomes de coluna diferem entre as duas entidades: no Client o documento é
+# `cpf_cnpj` (via alias "document"); no representante é `cpf`, e nunca há CNPJ.
+_REPRESENTANTE_TARGET_FIELD = {
+    "full_name": "full_name",
+    "document": "cpf",
+    "birth_date": "birth_date",
+}
+
+
+def rota_documento_pessoal(titular_tipo: Optional[str]) -> Optional[str]:
+    """Entidade de destino de um documento pessoal, dado o tipo do titular.
+
+    - titular PF  → "cliente" (o documento é do próprio titular).
+    - titular PJ  → "representante" (não há outra pessoa física possível no caso).
+    - desconhecido → None: a linha fica SEM destino e vira pendência explícita
+      para o consultor na Conferência. Ambíguo nunca escreve — a regra é a mesma
+      do guard fantasma da matrícula.
+    """
+    t = (titular_tipo or "").strip().lower()
+    if t == "pf":
+        return ENTIDADE_CLIENTE
+    if t == "pj":
+        return ENTIDADE_REPRESENTANTE
+    return None
+
+
 # Specs escalares por tipo. Listas (car.matriculas, rat.pendencias) têm
 # tratamento próprio em ``build_staging_fields``.
 _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
@@ -622,7 +659,8 @@ def _dedup_token(field_name: str, value: Any, unidade: Optional[str]) -> str:
 
 
 def build_staging_fields(
-    doc_type: str, parsed: dict[str, Any], *, texto: Optional[str] = None
+    doc_type: str, parsed: dict[str, Any], *, texto: Optional[str] = None,
+    titular_tipo: Optional[str] = None,
 ) -> list[StagingField]:
     """Mapeia o JSON extraído → linhas de staging (sem persistir).
 
@@ -632,6 +670,10 @@ def build_staging_fields(
     ``texto`` (opcional) é o conteúdo lido do documento. Quando fornecido, ativa o
     guard de identidade: denominação/proprietário só saem de documento que prova
     ser do tipo declarado (ver `_pode_declarar_identidade`).
+
+    ``titular_tipo`` ("pf" | "pj" | None) roteia o DOCUMENTO PESSOAL (ENT-001):
+    em caso PJ ele descreve o representante, não o titular. Sem essa informação
+    a linha sai sem destino — pendência, nunca escrita no cliente.
     """
     if not isinstance(parsed, dict):
         return []
@@ -688,12 +730,23 @@ def build_staging_fields(
         if fmt_ok is False:
             fv["format_ok"] = False
             confidence = "low"
+        # ENT-001 — documento pessoal só sabe onde pousar depois de saber de
+        # quem ele é. Fora desse caso o destino segue o spec, intocado.
+        target_entity, target_field = spec.target_entity, spec.target_field
+        if doc_type in DOC_PESSOAL_TYPES:
+            target_entity = rota_documento_pessoal(titular_tipo)
+            if target_entity == ENTIDADE_REPRESENTANTE:
+                target_field = _REPRESENTANTE_TARGET_FIELD.get(spec.target_field)
+            elif target_entity is None:
+                target_field = None
+            if target_entity is not None and target_field is None:
+                continue
         rows.append(StagingField(
             field_name=spec.field_name,
             field_value=fv,
             confidence=confidence,
-            target_entity=spec.target_entity,
-            target_field=spec.target_field,
+            target_entity=target_entity,
+            target_field=target_field,
             matricula_hint=doc_hint,
         ))
 
@@ -774,6 +827,31 @@ def _extract_structured(text: str, doc_type: str) -> Optional[dict[str, Any]]:
     return _parse_json(response.content)
 
 
+def titular_tipo_do_processo(db_session, tenant_id: int,
+                             process_id: Optional[int]) -> Optional[str]:
+    """"pf" | "pj" do titular do caso, ou None quando não dá para saber.
+
+    None é resposta legítima e frequente (documento subido antes de o caso ter
+    cliente). Quem chama trata como ambiguidade — não como PF por omissão, que
+    era justamente o default cego.
+    """
+    if not process_id:
+        return None
+    from app.models.client import Client  # noqa: PLC0415
+    from app.models.process import Process  # noqa: PLC0415
+
+    row = (
+        db_session.query(Client.client_type)
+        .join(Process, Process.client_id == Client.id)
+        .filter(Process.id == process_id, Process.tenant_id == tenant_id)
+        .first()
+    )
+    if not row or row[0] is None:
+        return None
+    tipo = row[0]
+    return getattr(tipo, "value", tipo)
+
+
 def extract_and_stage(
     *,
     text: str,
@@ -806,7 +884,11 @@ def extract_and_stage(
 
     # `texto=` liga o guard de identidade: o próprio conteúdo do documento é a
     # prova de que ele pode nomear o imóvel/dono (26/07, caso 15).
-    fields = build_staging_fields(dt, parsed, texto=text)
+    # `titular_tipo=` liga o roteamento do documento pessoal (ENT-001).
+    fields = build_staging_fields(
+        dt, parsed, texto=text,
+        titular_tipo=titular_tipo_do_processo(db_session, tenant_id, process_id),
+    )
 
     # 4c — dedup na persistência: não recriar linha já existente (mesma fonte +
     # campo + hint + valor). Resolve a triplicação de re-extrações. Valores

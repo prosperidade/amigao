@@ -361,6 +361,8 @@ def check_autuado_diverge_titular(
     *,
     titular_nome: Optional[str] = None,
     titular_cpf: Optional[str] = None,
+    titular_nomes: Optional[list[str]] = None,
+    representantes: Optional[list[dict[str, Any]]] = None,
     matricula_proprietarios: Optional[list[dict[str, Any]]] = None,
 ) -> Optional[str]:
     """Compara o autuado do auto de infração contra o titular atual (Client
@@ -371,6 +373,12 @@ def check_autuado_diverge_titular(
 
     candidatos_cpf = {_digits(titular_cpf)} if titular_cpf else set()
     candidatos_nome = {(titular_nome or "").strip().lower()} if titular_nome else set()
+    # ENT-001 — pessoa jurídica tem DOIS nomes legítimos (fantasia e razão
+    # social) e o auto de infração usa o que quiser. Comparar contra um só
+    # produzia "autuado difere do titular" para a própria ELODI.
+    for extra in (titular_nomes or []):
+        if extra and str(extra).strip():
+            candidatos_nome.add(str(extra).strip().lower())
     # Defesa em profundidade: a assinatura promete `list[dict]`, mas este é o
     # ponto onde o shape torto DE FATO estourou (caso 15). Uma nota informativa
     # sobre titular não pode derrubar o diagnóstico inteiro — item não-dict é
@@ -385,6 +393,26 @@ def check_autuado_diverge_titular(
 
     autuado_cpf_d = _digits(autuado_cpf)
     autuado_nome_l = (autuado_nome or "").strip().lower()
+
+    # ENT-001 — o autuado pode ser o REPRESENTANTE da PJ. Isso não é indício de
+    # transferência de titularidade (a nota genérica mandaria a consultora
+    # investigar uma venda que não houve): é a assinatura de quem responde pela
+    # empresa. Situação diferente, nota diferente.
+    for rep in (representantes or []):
+        if not isinstance(rep, dict):
+            continue
+        mesmo_cpf = autuado_cpf_d and _digits(rep.get("cpf")) == autuado_cpf_d
+        mesmo_nome = (
+            autuado_nome_l
+            and str(rep.get("nome") or "").strip().lower() == autuado_nome_l
+        )
+        if mesmo_cpf or mesmo_nome:
+            papel = str(rep.get("papel") or "representante").replace("_", " ")
+            return (
+                f"Autuado do auto de infração ({autuado_nome or autuado_cpf}) é o "
+                f"{papel} da pessoa jurídica titular, não um terceiro — "
+                "titularidade do imóvel permanece com a empresa."
+            )
 
     if autuado_cpf_d and candidatos_cpf:
         if autuado_cpf_d in candidatos_cpf:

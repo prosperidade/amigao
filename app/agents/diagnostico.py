@@ -562,6 +562,8 @@ class DiagnosticoAgent(BaseAgent):
 
         # Titular atual (item 9): Client do processo + proprietários da Matrícula.
         titular_nome = titular_cpf = None
+        titular_nomes: list[str] = []
+        representantes: list[dict[str, Any]] = []
         matricula_proprietarios: list[dict[str, Any]] = []
         process = (
             self.ctx.session.query(Process)
@@ -571,7 +573,23 @@ class DiagnosticoAgent(BaseAgent):
         if process and process.client_id:
             client = self.ctx.session.query(Client).filter(Client.id == process.client_id).first()
             if client:
-                titular_nome, titular_cpf = client.full_name, client.cpf_cnpj
+                # ENT-001 — o titular é o CLIENT (PF ou PJ). Numa PJ o nome
+                # oficial é a razão social; o representante NUNCA entra aqui,
+                # porque representar não é ser titular. Era essa confusão que
+                # fazia o agente assumir pessoa física como proprietária.
+                tipo_cliente = getattr(client.client_type, "value", client.client_type)
+                titular_nome = (
+                    client.legal_name or client.full_name
+                    if (tipo_cliente or "").lower() == "pj"
+                    else client.full_name
+                )
+                titular_cpf = client.cpf_cnpj
+                titular_nomes = [n for n in (client.full_name, client.legal_name) if n]
+                representantes = [
+                    {"nome": r.full_name, "cpf": r.cpf, "papel": r.papel}
+                    for r in (client.representatives or [])
+                    if r.deleted_at is None
+                ]
         if process and process.property_id:
             prop = self.ctx.session.query(Property).filter(Property.id == process.property_id).first()
             if prop:
@@ -640,6 +658,8 @@ class DiagnosticoAgent(BaseAgent):
                 fato.get("autuado_cpf"),
                 titular_nome=titular_nome,
                 titular_cpf=titular_cpf,
+                titular_nomes=titular_nomes,
+                representantes=representantes,
                 matricula_proprietarios=matricula_proprietarios,
             )
             fatos.append(enriched)

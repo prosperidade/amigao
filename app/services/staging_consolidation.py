@@ -57,6 +57,16 @@ _DIVERGENTES = {
 _CLIENTE_FIELDS = {"full_name", "legal_name", "cpf_cnpj", "email", "phone", "secondary_phone", "birth_date"}
 _CLIENTE_ALIAS = {"document": "cpf_cnpj", "address": None}
 
+# ENT-001 — representante da PJ. `document` aqui é o CPF da pessoa física;
+# representante NUNCA tem CNPJ, e por isso o alias aponta para outra coluna
+# que a do cliente. É essa diferença de destino que impede a CNH de pousar
+# no documento do titular.
+_REPRESENTANTE_FIELDS = {"full_name", "cpf", "rg", "birth_date", "papel", "email", "phone"}
+_REPRESENTANTE_ALIAS: dict[str, Optional[str]] = {"document": "cpf", "address": None}
+
+# Tipos de documento que provam identidade de PESSOA FÍSICA.
+_DOC_PESSOAL_SOURCE_TYPES = {"rg_cpf"}
+
 # rl_status entra na allowlist (antes era descartado: rl_declarada_ha → imovel.rl_status
 # caía em `ignorados`, deixando o Hub com "—" em Reserva Legal). app_area_ha já estava.
 _IMOVEL_FIELDS = {"car_code", "car_status", "municipality", "state", "app_area_ha",
@@ -505,6 +515,9 @@ def consolidate_process(
     reconciliacoes: list[dict[str, Any]] = []
     cliente_tocado = False
     imovel_tocado = False
+    representante_tocado = False
+    representantes_criados: list[int] = []
+    representantes_da_passagem: dict[tuple, Any] = {}
     mat_criadas = 0
     mat_atualizadas = 0
     agora = datetime.now(UTC)
@@ -568,8 +581,21 @@ def consolidate_process(
                 )
             ignorados.append(f"{row.target_entity or '—'}.{row.target_field or '—'}: {motivo}")
             continue
-        key = ((entity, row.matricula_hint, row.target_field)
-               if entity == "matricula" else (entity, row.target_field))
+        # O agrupamento é por DESTINO, e destino de representante é PESSOA. Duas
+        # CNHs não são duas fontes disputando o mesmo campo (aí uma venceria e a
+        # outra sumiria): são duas pessoas distintas, cada uma com o seu CPF. O
+        # documento de origem discrimina, como `matricula_hint` discrimina a
+        # matrícula. Inclui o caso legado (`cliente` + doc pessoal sobre PJ), que
+        # só será redirecionado para `representante` na hora da escrita.
+        if entity == "matricula":
+            key: tuple = (entity, row.matricula_hint, row.target_field)
+        elif entity == "representante" or (
+            entity == "cliente" and client is not None
+            and _documento_pessoal_sobre_pj(row, client)
+        ):
+            key = (entity, row.document_id, row.target_field)
+        else:
+            key = (entity, row.target_field)
         grupos.setdefault(key, []).append(row)
 
     # cache de matrículas por hint (upsert idempotente). Miss com criação vetada
@@ -625,7 +651,38 @@ def consolidate_process(
         allowed: set[str]
         alias: dict[str, Optional[str]]
         if entity == "cliente" and client is not None:
-            obj, allowed, alias = client, _CLIENTE_FIELDS, _CLIENTE_ALIAS
+            # ENT-001 (guard de ESCRITA, não de roteamento). O roteamento certo
+            # já acontece na extração (`rota_documento_pessoal`), mas a porta da
+            # escrita não pode depender de quem a chama ter perguntado — mesma
+            # doutrina de `_write_entity`. Linha de documento pessoal que chegue
+            # aqui apontando para um titular PJ é a assinatura exata do P3
+            # (staging legado, extração de versão anterior): não pousa no
+            # titular, é redirecionada para o representante.
+            if _documento_pessoal_sobre_pj(winner, client):
+                entity = "representante"
+                # Corrige o destino NA LINHA, não só nesta passagem: a
+                # Conferência passa a mostrar "representante" e o AuditLog
+                # registra onde o valor pousou de verdade. Reroteamento
+                # silencioso seria trocar um dado errado por outro invisível.
+                for r in rows:
+                    r.target_entity = "representante"
+            else:
+                obj, allowed, alias = client, _CLIENTE_FIELDS, _CLIENTE_ALIAS
+        # A cadeia abaixo é UMA só (if/elif encadeados até o fallback). Quebrá-la
+        # em `if`s independentes faria o `else` final capturar `cliente` — que já
+        # resolveu — e mandar todo campo do cliente para `ignorados`.
+        if entity == "representante" and client is not None:
+            obj = _resolve_representante(db, tenant_id, client, winner,
+                                         representantes_criados,
+                                         representantes_da_passagem)
+            allowed, alias = _REPRESENTANTE_FIELDS, _REPRESENTANTE_ALIAS
+            if obj is None:
+                ignorados.append(
+                    f"representante.{target_field or '—'}: documento pessoal em caso "
+                    "de cliente pessoa física não cria representante — confira a quem "
+                    "o documento pertence"
+                )
+                continue
         elif entity == "imovel" and prop is not None:
             obj, allowed, alias = prop, _IMOVEL_FIELDS, _IMOVEL_ALIAS
         elif entity == "matricula" and prop is not None:
@@ -663,7 +720,9 @@ def consolidate_process(
                 )
                 continue
             allowed, alias = _MATRICULA_FIELDS, _MATRICULA_ALIAS
-        else:
+        elif obj is None:
+            # Só chega aqui quem NÃO resolveu destino acima — inclusive o
+            # `cliente`/`representante` de um caso sem cliente vinculado.
             # #200 — `target_entity=` era vocabulário de log vazando na tela.
             ignorados.append(
                 f"{entity or '—'}.{target_field or '—'}: "
@@ -736,6 +795,8 @@ def consolidate_process(
                                  allowed, alias, writes, ignorados, reconciliacoes)
         if desfecho == "gravado" and entity == "cliente":
             cliente_tocado = True
+        elif desfecho == "gravado" and entity == "representante":
+            representante_tocado = True
         elif desfecho == "gravado" and entity == "imovel":
             imovel_tocado = True
 
@@ -800,6 +861,7 @@ def consolidate_process(
             "matriculas_desativadas": mat_desativadas,
             "matriculas_reativadas": mat_reativadas,
             "acoes_criadas": acoes_criadas,
+            "representantes_criados": representantes_criados,
             "acoes": [{"id": a.id, "titulo": a.titulo} for a in acoes],
             "writes": writes, "reconciliacoes": reconciliacoes,
             # `ignorados` no AUDIT (26/07): antes só voltava no corpo da resposta e
@@ -817,6 +879,8 @@ def consolidate_process(
         "matriculas_criadas": mat_criadas,
         "matriculas_atualizadas": mat_atualizadas,
         "cliente_atualizado": cliente_tocado,
+        "representante_atualizado": representante_tocado,
+        "representantes_criados": len(representantes_criados),
         "imovel_atualizado": imovel_tocado,
         "area_total_matriculas": area_total,
         "area_total_nota": prop.nota_soma_matriculas() if prop is not None else None,
@@ -1159,6 +1223,100 @@ def registrar_falha_consolidacao(
         db.rollback()
 
 
+def _e_pj(client: Any) -> bool:
+    """O titular é pessoa jurídica?"""
+    tipo = getattr(client, "client_type", None)
+    return (getattr(tipo, "value", tipo) or "").lower() == "pj"
+
+
+def _documento_pessoal_sobre_pj(row: ExtractedFieldStaging, client: Any) -> bool:
+    """Esta linha é documento pessoal apontando para um titular PJ? (P3)
+
+    É a condição exata do defeito ENT-001: RG/CPF/CNH descreve pessoa física e o
+    titular é um CNPJ. Nenhuma pessoa física é titular num caso de PJ, então o
+    documento só pode ser de representante.
+    """
+    return (row.source_doc_type or "").lower() in _DOC_PESSOAL_SOURCE_TYPES and _e_pj(client)
+
+
+def _resolve_representante(db: Session, tenant_id: int, client: Any,
+                           row: ExtractedFieldStaging,
+                           criados: Optional[list] = None,
+                           cache: Optional[dict] = None):
+    """Representante de destino desta linha — encontra ou cria. None se não cabe.
+
+    Só existe representante sob titular PJ (ENT-001: representante é registro
+    subordinado). Em cliente PF o documento pessoal é do próprio titular e nunca
+    passa por aqui.
+
+    Âncora, nesta ordem:
+      1. CPF igual (normalizado) a representante já cadastrado — a mesma pessoa
+         reconhecida mesmo vinda de outro documento.
+      2. Mesmo documento de origem — as várias linhas de uma CNH (nome, CPF,
+         nascimento) descrevem UMA pessoa e têm de pousar na mesma linha.
+      3. Nenhum dos dois: cria. Uma segunda CNH vira um segundo representante,
+         nunca sobrescreve o primeiro.
+    """
+    from app.models.client_representative import ClientRepresentative  # noqa: PLC0415
+    from app.services.identity import normalize_doc  # noqa: PLC0415
+
+    if not _e_pj(client):
+        return None
+
+    # Uma CNH vira TRÊS grupos de destino (nome, CPF, nascimento) e cada um
+    # chega aqui separado. Sem memória da passagem, cada campo criaria o seu
+    # próprio representante — três Joéis com um terço dos dados cada. A chave é
+    # o documento de origem, que é o que define "a mesma pessoa".
+    chave = (client.id, row.document_id)
+    if cache is not None and chave in cache:
+        return cache[chave]
+
+    existentes = (
+        db.query(ClientRepresentative)
+        .filter(
+            ClientRepresentative.tenant_id == tenant_id,
+            ClientRepresentative.client_id == client.id,
+            ClientRepresentative.deleted_at.is_(None),
+        )
+        .order_by(ClientRepresentative.id.asc())
+        .all()
+    )
+
+    col = _REPRESENTANTE_ALIAS.get(row.target_field, row.target_field)
+    if col == "cpf":
+        alvo = normalize_doc(_ser(_raw_value(row)))
+        if alvo:
+            for r in existentes:
+                if normalize_doc(r.cpf) == alvo:
+                    return r
+
+    # Mesmo documento (ou, na falta dele, o representante igualmente sem
+    # documento) — reconsolidar não pode duplicar o que já existe.
+    for r in existentes:
+        if r.source_document_id == row.document_id:
+            if cache is not None:
+                cache[chave] = r
+            return r
+
+    novo = ClientRepresentative(
+        tenant_id=tenant_id,
+        client_id=client.id,
+        source_document_id=row.document_id,
+        field_sources={},
+    )
+    db.add(novo)
+    db.flush()
+    if cache is not None:
+        cache[chave] = novo
+    if criados is not None:
+        criados.append(novo.id)
+    logger.info(
+        "ENT-001: representante %s criado para cliente PJ %s (documento %s)",
+        novo.id, client.id, row.document_id,
+    )
+    return novo
+
+
 def _load_client(db: Session, tenant_id: int, client_id: int):
     from app.models.client import Client  # noqa: PLC0415
     return db.query(Client).filter(Client.id == client_id, Client.tenant_id == tenant_id).first()
@@ -1258,6 +1416,14 @@ def motivo_sem_destino(entity: str, target_field: Optional[str]) -> Optional[str
         modelo, fields, alias, onde = Property, _IMOVEL_FIELDS, _IMOVEL_ALIAS, "na ficha do imóvel"
     elif entity == "cliente":
         modelo, fields, alias, onde = Client, _CLIENTE_FIELDS, _CLIENTE_ALIAS, "no cadastro do cliente"
+    elif entity == "representante":
+        from app.models.client_representative import (  # noqa: PLC0415
+            ClientRepresentative,
+        )
+        modelo, fields, alias, onde = (
+            ClientRepresentative, _REPRESENTANTE_FIELDS, _REPRESENTANTE_ALIAS,
+            "no bloco do representante",
+        )
     elif entity == "matricula":
         modelo, fields, alias, onde = Matricula, _MATRICULA_FIELDS, _MATRICULA_ALIAS, "na ficha da matrícula"
     else:
@@ -1403,7 +1569,7 @@ def flag_sem_casa(
                 continue
             aceitos.append(r)
             continue
-        if entity in ("imovel", "cliente"):
+        if entity in ("imovel", "cliente", "representante"):
             motivo = _destino_sem_casa(entity, r.target_field)
             if motivo:
                 out_geral[r.id] = motivo
