@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Stethoscope, Brain, AlertTriangle, CheckCircle2, Loader2, Info, ArrowRight } from 'lucide-react';
+import { Brain, AlertTriangle, CheckCircle2, Loader2, Info, ArrowRight, Tag } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Process } from './ProcessDetailTypes';
 import type { AIJob } from '@/types/agent';
@@ -145,30 +145,42 @@ export default function DiagnosisTab({ process, onGoToAlerta }: DiagnosisTabProp
         </div>
       )}
 
+      {/* DIAG-001 -- este bloco NÃO é diagnóstico. É o rótulo do tipo de
+          demanda, atribuído no intake antes de qualquer documento ser lido, mais
+          a orientação padrão daquele tipo. Chamá-lo de "Diagnóstico
+          Inicial — automático", em caixa verde com estetoscópio, fazia a
+          consultora ler como conclusão do sistema sobre o caso. O diagnóstico
+          de verdade são os alertas e a leitura acima, que saem de documento com
+          fonte por afirmação. Cor e ícone mudaram junto com o rótulo: caixa
+          neutra e etiqueta, não veredito clínico. */}
       {process.initial_diagnosis ? (
-        <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/5 dark:to-teal-500/5 border border-emerald-100 dark:border-emerald-500/20 p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
-              <Stethoscope className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+        <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-white/10 flex items-center justify-center">
+              <Tag className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400" />
             </div>
-            <h2 className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
-              {`Diagn\u00f3stico Inicial \u2014 autom\u00e1tico`}
+            <h2 className="text-sm font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wider">
+              Tipo de demanda
             </h2>
           </div>
+          <p className="text-xs text-gray-500 dark:text-slate-500 mb-3 ml-9">
+            Classificação da entrada, anterior à leitura dos documentos — não
+            é o diagnóstico do caso.
+          </p>
           <p className="text-gray-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap text-sm">
             {process.initial_diagnosis}
           </p>
         </div>
       ) : (
         <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-dashed border-gray-200 dark:border-white/10 p-8 text-center">
-          <Stethoscope className="w-8 h-8 text-gray-300 dark:text-slate-600 mx-auto mb-2" />
-          <p className="text-gray-500 dark:text-slate-400 text-sm">{`Nenhum diagn\u00f3stico gerado ainda.`}</p>
+          <Tag className="w-8 h-8 text-gray-300 dark:text-slate-600 mx-auto mb-2" />
+          <p className="text-gray-500 dark:text-slate-400 text-sm">Tipo de demanda ainda não classificado.</p>
           <p className="text-gray-400 dark:text-slate-500 text-xs mt-1">
             Use o{' '}
             <button onClick={() => navigate('/intake')} className="text-emerald-600 dark:text-emerald-400 underline">
               Intake Wizard
             </button>{' '}
-            {`para gerar um diagn\u00f3stico autom\u00e1tico.`}
+            para classificar a demanda.
           </p>
         </div>
       )}
