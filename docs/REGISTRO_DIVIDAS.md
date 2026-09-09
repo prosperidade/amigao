@@ -8,10 +8,13 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 216.** (#215 aberta pela limpeza dos cadastros de
+> **PRÓXIMO NÚMERO LIVRE: 218.** (#217 aberta pela limpeza dos cadastros de
 > teste da ELODI em produção, 09/09 — hash chain do `audit_logs` sob escrita
-> concorrente; ver faixa 200-299. O contador estava parado em 91 enquanto a
-> série já ia em 214 — corrigido aqui.)
+> concorrente; ver faixa 200-299. **#215 e #216 são da contenção da entrada
+> (PR #152), que ainda não estava mergeado quando o número foi tirado — a
+> reserva não é visível na `main`, só na branch. Conferir branches abertas
+> antes de numerar.** O contador estava parado em 91 enquanto a série já ia
+> em 214.)
 > (#85 a #90 abertas pela remediação de 26/07,
 > `fix/validacao-26-07`: vigia de revogação, editor de rota do consultor,
 > `SourceRef.pagina`, área gravada em coluna de status, linguagem técnica na UI
@@ -1541,7 +1544,7 @@ uma CNH anexada. **Origem:** Frente A (08/09), escopo do PR fechado no aceite.
 
 ### Aberta pela limpeza dos cadastros de teste da ELODI (09/09, medida em produção)
 
-**215. A hash chain do `audit_logs` quebra sob escrita concorrente.**
+**217. A hash chain do `audit_logs` quebra sob escrita concorrente.**
 Percorrendo a cadeia do tenant 1 por `id`, **10 registros têm `hash_previous` que
 não aponta para o `hash_sha256` do anterior**. O verificador (`verify_chain` em
 `app/services/audit_hash.py`) classifica isso como `broken_previous_link` — o
