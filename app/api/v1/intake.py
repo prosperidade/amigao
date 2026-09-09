@@ -70,8 +70,12 @@ def classify_intake(
     """
     Classifica uma demanda de entrada por tipo ambiental.
 
-    Retorna: tipo de demanda, diagnóstico inicial, documentos esperados e
-    próximos passos — tudo calculado por regras estáticas (sem LLM).
+    Retorna: tipo de demanda, a orientação padrão daquele tipo, documentos
+    esperados e próximos passos — tudo por regras estáticas (sem LLM).
+
+    NÃO retorna diagnóstico (DIAG-001): nada foi lido, nada foi verificado. O
+    campo se chama `initial_diagnosis` por compatibilidade com a coluna e com o
+    contexto dos agentes; o que ele carrega é orientação por tipo.
     """
     result = classify_demand(
         description=payload.description,
@@ -108,7 +112,7 @@ def create_case(
     1. Cria ou vincula cliente
     2. Cria ou vincula imóvel
     3. Classifica a demanda
-    4. Cria processo com diagnóstico inicial
+    4. Cria processo com o tipo de demanda classificado (não é diagnóstico)
     5. Gera checklist documental automaticamente
     """
     # --- Validação básica ---

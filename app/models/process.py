@@ -129,7 +129,12 @@ class Process(Base):
     # app/models/regulatory.py:RegulatoryDiagnosis (versionado, JSONB).
     # Sprint A1 D — coexistência permitida; manter este campo enquanto a UI antiga
     # não migrar.
-    initial_diagnosis = Column(Text, nullable=True)             # pré-diagnóstico por regras
+    # DIAG-001 — apesar do nome, NÃO é diagnóstico: guarda a orientação padrão
+    # do TIPO DE DEMANDA classificado no intake, antes de qualquer documento.
+    # O diagnóstico do caso vive em RegulatoryDiagnosis/RegulatoryIssue, com
+    # fonte por afirmação. Nome mantido: é lido por 5 agentes cuja config
+    # está congelada, e renomear coluna não melhora o que a tela mostra.
+    initial_diagnosis = Column(Text, nullable=True)
     suggested_checklist_template = Column(String, nullable=True) # demand_type do template sugerido
     initial_summary = Column(Text, nullable=True)               # resumo curto da demanda (voz do cliente)
     intake_notes = Column(Text, nullable=True)                  # observações do intake
