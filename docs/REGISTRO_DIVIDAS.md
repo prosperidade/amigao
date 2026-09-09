@@ -1447,7 +1447,12 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 217.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 218.**
+> (#217 foi ocupada pela hash chain do `audit_logs` no PR #154, que renumerou
+> a entrada do PR #153 justamente por ter colidido com o #215 desta frente.
+> A faixa fica: 210-214 Frentes A/B · 215-216 contenção da entrada · 217 hash
+> chain. O merge de três pontas resolveria este contador em 217 — número já
+> tomado —, então ele é corrigido aqui, na origem, e não depois na main.)
 
 ### Abertas pela Frente C — contenção da entrada (09/09, `fix/contencao-entrada` · ADR-064)
 
