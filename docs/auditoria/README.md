@@ -24,6 +24,12 @@ Confronto da auditoria documental acima contra o código real, item a item, com 
 
 Fase 1 (só leitura) do PR `fix/fonte-unica-requisitos-documentais`, disparada por um sintoma concreto: o sistema acusava matrícula ausente num caso em que a certidão de inteiro teor tinha sido enviada. Conclusão: **não existe no código nenhuma noção compartilhada de "requisito documental satisfeito"** — são 8 lugares respondendo à mesma pergunta com fontes da verdade diferentes, e no caso real três deles discordavam entre si.
 
+## 0.4 Auditoria de fluxo — validações da Isis (30/07 e 02/08)
+
+**SHA:** `50d8c7e`, mergeada no PR #145 · **Data:** 06/08/2026 · **Arquivo:** [AUDITORIA_FLUXO_ISIS_2026-08-06.md](./AUDITORIA_FLUXO_ISIS_2026-08-06.md)
+
+Fase 1 em leitura, medida contra **produção** (processo 16, Fazenda São Jorge; processo 17 como controle) para explicar duas queixas da consultora: "gravou só três campos" e "os dados não aparecem no imóvel". Conclusão: a hipótese de que as duas eram a mesma doença estava **parcialmente certa, e a parte certa não era a que parecia** — a consolidação havia gravado 16 campos em 4 matrículas, e os três que ela via eram exatamente os que a tela renderiza; a promoção para `Property` é que de fato não existia. O nome da doença comum ficou: **o sistema grava certo e não sabe mostrar o que gravou**. É a origem direta do `consolidated_at` ("Aceito" ≠ "Gravado"), que o modelo de staging cita até hoje.
+
 ---
 
 ## 1. Auditoria Codex — inventário e arquitetura real
