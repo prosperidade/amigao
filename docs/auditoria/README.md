@@ -6,11 +6,23 @@ Regra da pasta: auditoria é fotografia de um SHA. Não se edita um relatório d
 
 ---
 
-## Anteriores (2026-05 / 2026-07)
+## 0.1 Auditoria documental — inventário de dívidas e pendências
 
-- **[AUDITORIA_DOCUMENTAL_2026-05-23.md](./AUDITORIA_DOCUMENTAL_2026-05-23.md)** — leitura consolidada dos docs vivos, sem tocar o código; levantou divergências entre as próprias fontes para a Fase 0 resolver.
-- **[MAPA_GAPS_CONFIRMADO_2026-05-23.md](./MAPA_GAPS_CONFIRMADO_2026-05-23.md)** — confronto daquela auditoria documental contra o código real; onde os dois divergiam, o código venceu.
-- **[AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md](./AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md)** — origem do "4 documentos pendentes" com a matrícula já enviada; achou 8 lugares respondendo "requisito documental satisfeito" com fontes da verdade diferentes, três deles discordando no caso real.
+**SHA:** `7877652` · **Data:** 23/05/2026 · **Arquivo:** [AUDITORIA_DOCUMENTAL_2026-05-23.md](./AUDITORIA_DOCUMENTAL_2026-05-23.md)
+
+Leitura consolidada dos documentos vivos (ESTADO_ATUAL, TESTING, GOVERNANCA_IA, BASE_REGULATORIA, SEED_DADOS, ADRs) sem confrontar o código, marcando com `[CONFIRMAR NO CÓDIGO]` tudo o que as fontes não resolviam sozinhas. Conclusão: as próprias fontes divergiam entre si, e essas divergências não eram dívidas — eram incertezas de estado que só o código resolveria, o que virou a pauta da Fase 0.
+
+## 0.2 Mapa de gaps confirmado — Fase 0 da skill de diagnóstico
+
+**SHA:** `7877652` · **Data:** 23/05/2026 · **Arquivo:** [MAPA_GAPS_CONFIRMADO_2026-05-23.md](./MAPA_GAPS_CONFIRMADO_2026-05-23.md)
+
+Confronto da auditoria documental acima contra o código real, item a item, com o comando objetivo que decidiu cada caso. Conclusão: onde documento e código divergiam, **o código venceu** — e a regra ficou valendo para as auditorias seguintes.
+
+## 0.3 Fonte única de requisitos documentais
+
+**SHA:** `4261b0a` · **Data:** 20/07/2026 · **Arquivo:** [AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md](./AUDITORIA_REQUISITOS_DOCUMENTAIS_2026-07-20.md)
+
+Fase 1 (só leitura) do PR `fix/fonte-unica-requisitos-documentais`, disparada por um sintoma concreto: o sistema acusava matrícula ausente num caso em que a certidão de inteiro teor tinha sido enviada. Conclusão: **não existe no código nenhuma noção compartilhada de "requisito documental satisfeito"** — são 8 lugares respondendo à mesma pergunta com fontes da verdade diferentes, e no caso real três deles discordavam entre si.
 
 ---
 
@@ -34,15 +46,15 @@ Especificação funcional e histórico de validação do MVP1, de autoria da Isi
 
 ## 4. Auditoria independente — Fase 1 (leitura)
 
-**Arquivo:** *ainda não versionado — texto com o André.*
+**SHA:** `3d1a78f` — `HEAD` local no momento da leitura; `origin/main` já estava em `4a96b5d`, ou seja, **#148 estava no remoto e não no checkout auditado** · **Data:** 09/2026 · **Arquivo:** [AUDITORIA_INDEPENDENTE_FASE1_2026-09.md](./AUDITORIA_INDEPENDENTE_FASE1_2026-09.md)
 
-Fase de leitura que precedeu a execução da matriz de perfis. É citada como insumo pela auditoria independente do item 6 ("os cinco documentos de validação de 20/07, 21/07, 26/07, 30/07 e 02/08"), mas o texto não está no repositório. **Pendente de versionamento neste diretório.**
+Auditoria de generalidade em modo leitura: percorre o caminho completo do dado (upload → OCR → extração → staging → agrupamento → consolidação → escrita → tela → diagnóstico) anotando onde há perda ou silêncio, e cruza SAVE-001 por perfil, o modelo PF/PJ, DIAG-001, STATE-001 e o que os testes de #141, #143, #144, #147 e #148 realmente provam. Limites que o próprio relatório declara: nenhuma suíte executada, nenhum arquivo alterado, `amigao_db` inexistente na máquina, reprodução contra banco não feita por conflito com "somente leitura" e spec v0.1 ainda não versionada naquele checkout. Conclusão: **as correções recentes não provaram generalidade** — nenhuma das cinco se classifica como correção sistêmica, os testes cobrem fixtures PF com uma ou duas matrículas conhecidas, e a CNH/CPF de um representante tende a ser gravada como dado do próprio `Client`, por não existir separação estrutural entre titular e representante.
 
 ## 5. Matriz P1–P7 — Fase 2 (execução)
 
-**Arquivo:** *ainda não versionado — texto com o André.*
+**SHA:** `4a96b5d` (main com #148; spec commitada isoladamente em `130d715`) · **Data:** 09/2026 · **Arquivo:** [MATRIZ_PERFIS_FASE2_2026-09.md](./MATRIZ_PERFIS_FASE2_2026-09.md)
 
-Execução dos sete perfis de caso (P1 a P7) contra o sistema, com staging preparado, para medir o que a consolidação de fato grava. Conclusão, conforme citada pela auditoria do item 6: **P1/P2/P5/P7 passaram, P4 verificou criação por certidão e guard, P3 gravou na pessoa errada e P6 expôs duplicidade** — o "5 de 7" não é taxa de confiabilidade do produto, e sim o resultado de sete cenários preparados. **Pendente de versionamento neste diretório.**
+O que a Fase 1 não pôde executar, executado: os sete perfis rodados de verdade contra banco descartável (`127.0.0.1:55433/amigao_audit`, migration head `e4f6a8c2b1d9`), produção não acessada, chamando `consolidate_process` — o mesmo serviço do `POST /{process_id}/consolidar`. Mede preparados × persistidos × ignorados × divergências, matrículas antes/depois e `consolidated_at` linha a linha. Fronteira declarada: perfis com **staging já formado** — não mede upload, OCR, classificação, extração nem tela. Conclusão: **5 de 7 passaram; P3 e P6 falharam semanticamente** — em P3 a CNH do representante virou dado do `Client` PJ e a ELODI perdeu o CNPJ original; em P6 o mesmo CNPJ existe duas vezes no tenant, por não haver unicidade `tenant_id + cpf_cnpj`; P4 confirmou o guard do #148 (CCIR/CAR não criam matrícula, e as linhas ficam visíveis em `ignorados`); P7 persistiu os 28 campos com carimbo em todos, provando SAVE-001 **no cenário controlado**, não no ELODI real. O achado mais duro é transversal: **`consolidated_at` carimba mesmo quando a gravação semântica está errada**. P3 e P6 foram fechados depois pela Frente A (PR #149, ADR-063).
 
 ## 6. Auditoria independente — Regente Ambiental (Astra)
 
