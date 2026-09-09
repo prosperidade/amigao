@@ -99,14 +99,19 @@ def test_extract_and_stage_nao_duplica_formato(db_session, monkeypatch):
     db_session.add(proc)
     db_session.flush()
 
+    # ADR-064: texto real do documento — os dois formatos ("349,9022" e
+    # "349.9022") ancoram no MESMO trecho, que é exatamente o ponto do teste.
+    texto = "CCIR nº 6776 — área total 349,9022 ha, exercício 2025."
     # 1ª extração: formato BR (mock substitui o LLM inteiro)
     monkeypatch.setattr(fe, "_extract_structured",
-                        lambda text, dt: {"area_ha": "349,9022", "numero_matricula": "6776"})
-    fe.extract_and_stage(text="x", doc_type="ccir", tenant_id=tenant.id, db_session=db_session, process_id=proc.id)
+                        lambda text, dt, **kw: ({"area_ha": "349,9022",
+                                                 "numero_matricula": "6776"}, None))
+    fe.extract_and_stage(text=texto, doc_type="ccir", tenant_id=tenant.id, db_session=db_session, process_id=proc.id)
     # 2ª extração (re-run): MESMO dado em formato US
     monkeypatch.setattr(fe, "_extract_structured",
-                        lambda text, dt: {"area_ha": "349.9022", "numero_matricula": "6776"})
-    fe.extract_and_stage(text="x", doc_type="ccir", tenant_id=tenant.id, db_session=db_session, process_id=proc.id)
+                        lambda text, dt, **kw: ({"area_ha": "349.9022",
+                                                 "numero_matricula": "6776"}, None))
+    fe.extract_and_stage(text=texto, doc_type="ccir", tenant_id=tenant.id, db_session=db_session, process_id=proc.id)
 
     areas = db_session.query(ExtractedFieldStaging).filter(
         ExtractedFieldStaging.tenant_id == tenant.id,

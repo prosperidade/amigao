@@ -1454,7 +1454,71 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 215.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 218.**
+> (#217 foi ocupada pela hash chain do `audit_logs` no PR #154, que renumerou
+> a entrada do PR #153 justamente por ter colidido com o #215 desta frente.
+> A faixa fica: 210-214 Frentes A/B · 215-216 contenção da entrada · 217 hash
+> chain. O merge de três pontas resolveria este contador em 217 — número já
+> tomado —, então ele é corrigido aqui, na origem, e não depois na main.)
+
+### Abertas pela Frente C — contenção da entrada (09/09, `fix/contencao-entrada` · ADR-064)
+
+*A frente fechou **N1** (valor sem fonte no documento não entra na base), **N3**
+(o `AIJob` do extrator guarda o que o LLM devolveu), **OCR-001** (número
+registral por regra) e a parte de JANELA do **OCR-002**. As duas dívidas abaixo
+são o que ficou de fora, com o número medido.*
+
+**215. A mesma entrada ainda produz observações diferentes a cada execução (N2).**
+Medido nesta frente, banco descartável, mesmo texto, mesmo código, duas execuções
+de cada lado, doc 549 (matrícula 3.673), campos escalares:
+
+| | antes | depois |
+|---|---|---|
+| campos que variaram | **5 de 10** | **3 de 10** |
+| linhas de staging | 10 e 9 | 10 e 8 |
+
+Pararam de variar: `nirf_cib` (`950.041.396.737-1` × `950.041.396-737-1` →
+estável em `6.816.752-0`, o valor certo) e `denominacao` (duas redações → uma).
+Continuam variando os TRÊS compostos — `averbacao_app`, `averbacao_rl` e `onus` —
+que são o material da frente seguinte. O relatório de 09/09 tinha medido 3 de 14
+campos entre duas execuções em produção; o denominador aqui é outro (10 escalares,
+sem a lista), a metodologia é a mesma. **A variação caiu, não sumiu.**
+
+A âncora e a janela reduzem a variação porque tiram do caminho as duas causas
+que eram do SISTEMA (valor sem fonte e documento cortado). O que sobra é do
+modelo, e resolver isso é outra conversa: temperatura fixa, cache por (texto,
+prompt, modelo), ou votação entre execuções — cada uma com custo e efeito
+colateral próprios. Não entrou porque escolher entre as três exige medir as três,
+e porque um caso de regressão que compare valores exatos **vai piscar** enquanto
+isso não for decidido: o que é estável hoje é a CLASSE do erro, não o valor.
+**O que destrava:** comparação de regressão por valor exato entre execuções.
+**Origem:** Frente C (09/09), fora de escopo declarado no enunciado.
+
+**216. O classificador de documento não normaliza acento — a CNH-e da ELODI caiu em `doc_pessoal`.**
+Achado no caminho do N4, e é a razão pela qual o doc 551 nunca chegou a ter
+schema de staging. `_CLASSIFY_RULES` casa `"republica federativa do brasil"` (sem
+acento) contra `text.lower()` (com acento): o OCR do doc 551 diz
+`REPÚBLICA FEDERATIVA DO BRASIL` e **não casa**. A regra de `rg_cpf` tem par
+acentuado para `carteira nacional de habilitação`, mas não para essa.
+
+Varredura da lista inteira: **27 gatilhos** não têm par acentuado. A maioria não
+tem acento no mundo real (`sicar`, `ccir`, `nirf`, `logradouro`, `inteiro teor`,
+`registro geral`) e está bem. **Três** estão de fato quebrados, porque a grafia
+real é acentuada: `republica federativa do brasil` (RG/CNH),
+`documento de informacao e apuracao do itr` (informação/apuração) e
+`conta de agua` (água). Reproduzido nesta frente:
+`classify_doc_type(<texto do doc 551>, "doc_pessoal")` devolve `"doc_pessoal"`, e
+com `current=None` cai em `"outro"`.
+
+Não entrou porque classificação não é uma das quatro contenções desta frente, e
+mexer na precedência de tipos sem medir é a classe de erro que o caso 15 e o caso
+13 já produziram (documento inteiro lido com a ficha de outro tipo). O N4 desta
+frente conserta o que era mentira na tela — a nota agora diz "OCR não extraiu
+texto legível" em vez de "tipo sem schema" — mas o documento segue mal
+classificado.
+**O que destrava:** normalizar acento nos dois lados de `_gatilho_bate` e varrer a
+lista inteira atrás de gatilhos sem par acentuado, com um caso por tipo.
+**Origem:** Frente C (09/09), medido em `_CLASSIFY_RULES` contra o texto do doc 551.
 
 ### Abertas pela Frente B — rótulo não é veredito (09/09, `fix/diagnostico-nao-e-rotulo`)
 

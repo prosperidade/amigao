@@ -25,11 +25,24 @@ def _fullmatch(pattern: re.Pattern[str]) -> Callable[[str], bool]:
 
 
 def _is_area_ha(s: str) -> bool:
-    """Área plausível: número PT-BR positivo (ex.: '349,9022', '1.010,7113')."""
-    from app.services.inconsistency_matrix import _to_float_br  # noqa: PLC0415
+    """Área plausível: número PT-BR positivo NA ORDEM DE GRANDEZA do domínio.
+
+    ADR-064, contenção 3. "Positivo" era pouco: `926,36.54` (notação registral
+    `hectares,ares.centiares`) virava 92.636,54 ha, e `check_format` aprovava —
+    a linha entrava no staging com `confidence: high`, status `aceito`, cem
+    vezes maior que o real. A conversão agora é feita pela regra (`parse_area_ha`
+    decodifica a notação), e a faixa de plausibilidade do domínio
+    (`is_area_plausible`, 0,1 ha a 100.000 ha) passa a ser condição de formato:
+    área fora dela é quase certo erro de parse e vai para revisão — rebaixada e
+    marcada, nunca descartada nem reescrita (item 4b).
+    """
+    from app.services.inconsistency_matrix import (  # noqa: PLC0415
+        _to_float_br,
+        is_area_plausible,
+    )
 
     v = _to_float_br(s)
-    return v is not None and v > 0
+    return v is not None and v > 0 and is_area_plausible(v)
 
 
 # field_name (staging) → validador de formato. Onde não há entrada, não valida.

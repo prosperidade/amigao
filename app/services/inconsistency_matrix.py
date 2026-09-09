@@ -36,6 +36,12 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Optional
 
+# ADR-064 (contencao 3): a decodificacao da notacao registral
+# `hectares,ares.centiares` vive em modulo PURO, que nao importa nada daqui —
+# `parse_area_ha` e a porta unica de area e nao pode fechar ciclo com a regra
+# que ela consome.
+from app.services.area_registral import normalizar_area_registral
+
 # Tolerância de área: ≤ 0,5% entre fontes ⇒ divergência de transcrição (pequena,
 # justificável); acima ⇒ de fundo. Diferença exatamente 0 ⇒ consistente.
 AREA_TOLERANCE_PCT = Decimal("0.005")
@@ -224,6 +230,14 @@ def _to_float_br(value: Any) -> Optional[float]:
     s = re.sub(r"[^0-9.,-]", "", s)
     if not s or s in ("-", ".", ","):
         return None
+    # ADR-064, contenção 3 — notação registral `hectares,ares.centiares`.
+    # PRECISA vir antes de `_normalize_number_str`: a regra do "último separador
+    # é o decimal" lê `926,36.54` como 92.636,54 (cem vezes o real), e o
+    # documento diz 926,3654 ha — com o extenso ao lado provando. Medido nos
+    # docs 547 e 548 da ELODI em 09/09.
+    registral = normalizar_area_registral(s)
+    if registral is not None:
+        return registral.valor_ha
     s = _normalize_number_str(s)
     try:
         return float(s)

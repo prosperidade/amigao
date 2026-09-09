@@ -263,6 +263,25 @@ class Settings(BaseSettings):
     # None. 30k chars cobre os docs reais (~7,5k tokens no gpt-4o-mini, folgado
     # nos 128k de contexto). Configurável p/ ajustar sem deploy.
     EXTRACTOR_MAX_CHARS: int = 30_000
+    # ── ADR-064, contenção 2: a janela do extrator de STAGING ───────────────
+    # 09/09: `EXTRACTOR_MAX_CHARS` cortava o doc 547 (82.117 chars) em 30.000 e
+    # o NIRF do imóvel, no caractere 53.775, nunca chegava ao modelo — o que
+    # chegou foi o Código INCRA do CONFRONTANTE, no caractere 1.286. O extrator
+    # de staging (`ficha01_extraction`) passou a percorrer o documento INTEIRO
+    # em fatias sequenciais com sobreposição. `EXTRACTOR_MAX_CHARS` segue
+    # valendo para a camada de PREVIEW (`document_extractor`), que não alimenta
+    # a base — fronteira declarada no ADR.
+    #
+    # 45k chars ≈ 11k tokens no gpt-4o-mini: um documento de até 45k continua
+    # sendo UMA chamada (o caso da maioria), o de 82k vira duas.
+    EXTRACTOR_CHUNK_CHARS: int = 45_000
+    # Sobreposição entre fatias: um valor que caísse exatamente na emenda ficaria
+    # partido e invisível dos dois lados.
+    EXTRACTOR_CHUNK_OVERLAP_CHARS: int = 2_000
+    # Teto de chamadas por documento — o custo cresce com o tamanho, mas não sem
+    # limite. 8 fatias ≈ 344k chars; acima disso a cobertura parcial é REGISTRADA
+    # (`JanelaResultado.truncado`), nunca silenciosa.
+    EXTRACTOR_MAX_CHUNKS: int = 8
     # Diagnóstico — trecho de cada documento levado ao contexto (validação 30/07).
     # A consultora subiu 2 relatórios analíticos na E4, re-rodou o diagnóstico e
     # nada foi incorporado: o contexto listava os documentos só por

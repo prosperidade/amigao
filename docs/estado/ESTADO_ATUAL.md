@@ -1,5 +1,45 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-09-09 (CONTENÇÃO DA ENTRADA — `fix/contencao-entrada`, ADR-064, PR aberto,
+NÃO MERGEAR):** quatro contenções antes do staging, todas nascidas de medição, não de
+suspeita (`docs/auditoria/CONFIRMACAO_ENTRADA_2026-09-09.md`). **(1) Âncora:** todo valor
+extraído carrega a posição e o trecho do `extracted_text` de onde veio; valor que NÃO está
+no texto não entra na base — vira linha visível, sem destino, com o motivo escrito. Fecha o
+achado N1, em que o `nirf_cib` `6.442.022-1` — o **exemplo escrito no prompt** — foi gravado
+com confiança alta em três processos de produção. **(2) Janela:** o extrator de staging
+percorre o documento INTEIRO em fatias com sobreposição; `EXTRACTOR_MAX_CHARS=30.000`
+cortava o doc 547 (82.117 chars) e o NIRF do imóvel, no caractere 53.775, nunca chegava ao
+modelo — entrava o Código INCRA do **confrontante**, do caractere 1.286. **(3) Número
+registral:** `926,36.54` é notação `hectares,ares.centiares` e vale **926,3654 ha**, não
+92.636,54; a regra decodifica e o extenso do próprio documento verifica. **(4) Auditoria:**
+o `AIJob` do extrator passou a guardar modelo, provider, tokens, custo e `raw_output`
+rotulado por documento/camada/fatia — eram todos nulos, e é por isso que a origem dos erros
+da ELODI só pôde ser hipótese até 09/09. Fecha também o N4 (a nota de status da CNH-e vazia
+dizia "tipo sem schema" quando a causa era OCR ilegível).
+
+**Medido** em banco descartável (`amigao_entrada`, 55433) com texto de produção e LLM real,
+antes × depois, duas execuções de cada: `nirf_cib` do doc 549 saiu de dois valores errados
+para `6.816.752-0` estável e ancorado no char 10.837; a variação entre execuções caiu de
+**5/10** para **1/8** campos. Tabela completa em `docs/trabalhos/contencao_entrada.md`.
+**O gate está INCOMPLETO e isso está declarado:** a premissa de que `amigao_entrada` tinha
+o texto dos 8 documentos não se confirmou — tem de 2 (546 e 549). Os outros seis vivem só em
+produção e esta máquina não tem credencial. Falta carregá-los para fechar o gate.
+**Não mudaram, e não deviam:** OCR-002 (categoria), DATA-002 e HIST-001 — frentes seguintes.
+Dívidas novas: **#215** (determinismo do LLM, N2) e **#216** (classificador não normaliza
+acento — 3 gatilhos quebrados de fato).
+
+**⛔ ORDEM DE DEPLOY:** este deploy sobe **antes** de qualquer "Gravar na base" no processo
+**23**. As áreas `926,36.54` e `725,46.63` estão lá em staging com status **aceito** e
+confiança alta; sem a contenção 3 a próxima consolidação as grava como 92.636,54 e
+72.546,63 ha no imóvel 18 — e valor errado com selo de decisão humana é o que a
+reconciliação da Ficha 05 passa a proteger (aconteceu no caso 15). Sequência: merge →
+limpeza dos cadastros da ELODI (guard ENT-002 em zero) → deploy → só então reprocessar o #23.
+
+**A frente NÃO fecha no merge.** Fecha com o gate de aceite pós-deploy: rodar os seis
+documentos que não existem nesta máquina (544, 545, 547, 548, 550, 551) em produção, contra
+os textos reais, duas vezes, com a mesma tabela. Os quatro pontos que só o documento real
+responde estão listados em `docs/trabalhos/contencao_entrada.md`.
+
 **Pulso 2026-08-06 (Normativas federais INGERIDAS — `chore/ingestao-normativas-federais-ago26`,
 PR aberto, NÃO MERGEAR):** despachada a ingestão que estava **congelada** desde 04/08. Corpus:
 31.744 → **32.161 chunks** (+417) e 102 → **113 documentos** (ids 200–210), custo **US$ 0,0026**.

@@ -161,12 +161,18 @@ def extract_document_fields(
     tenant_id: Optional[int] = None,
     save_job: bool = True,
     db_session=None,
+    on_llm_response=None,
 ) -> tuple[dict, Optional[int]]:
     """
     Extrai campos estruturados de um documento via LLM.
 
     Retorna (campos_extraidos, ai_job_id | None).
     Retorna ({}, None) se IA nao estiver configurada.
+
+    ``on_llm_response(response, rotulo)`` (ADR-064, contencao 4) recebe a
+    resposta do gateway mesmo quando ``save_job=False`` — que e como o
+    ExtratorAgent chama este servico. Sem isso a chamada nao deixava rastro
+    nenhum: o AIJob do agente nascia sem modelo, tokens, custo nem raw_output.
     """
     if not settings.ai_configured:
         logger.info("document_extractor: AI desabilitada, retornando vazio")
@@ -193,6 +199,11 @@ def extract_document_fields(
 
     try:
         response = complete(prompt, system=system_prompt)
+        if on_llm_response is not None:
+            try:
+                on_llm_response(response, f"preview:{doc_type}")
+            except Exception as exc:  # pragma: no cover - auditoria nunca derruba
+                logger.warning("document_extractor: falha ao registrar chamada LLM: %s", exc)
         parsed = _parse_json(response.content)
 
         if parsed is None:

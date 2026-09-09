@@ -39,6 +39,12 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.core.config import settings
+from app.services.area_registral import (
+    entorno_do_valor,
+    normalizar_area_registral,
+)
+from app.services.extraction_window import JanelaResultado, fatiar, mesclar
+from app.services.text_anchor import Ancora, TextoIndexado, ancorar_composto
 
 logger = logging.getLogger(__name__)
 
@@ -454,10 +460,13 @@ Instruções de completude:
   de origem da RL).
 - "codigo_certificacao": código do georreferenciamento (SIGEF/INCRA), se houver,
   SEM texto de vértice grudado.
-- "nirf_cib": o NIRF/CIB do imóvel na Receita Federal (ex.: "6.442.022-1").
-  Costuma aparecer REPETIDO ao longo dos registros e hipotecas ("NIRF n°...",
-  "CIB n°..."). É o mesmo identificador do ITR e serve para casar os dois
-  documentos. Copie o número como está.
+- "nirf_cib": o NIRF/CIB DESTE imóvel na Receita Federal — 8 dígitos, no
+  formato X.XXX.XXX-X. Costuma aparecer REPETIDO ao longo dos registros e
+  averbações ("NIRF n°...", "CIB n°...", "na Receita Federal sob o nº ...").
+  NÃO é o código do INCRA/SNCR (13 dígitos, 000.000.000.000-0) e NÃO é o
+  código de um imóvel CONFRONTANTE citado na descrição de limites ("cravado
+  na confrontação da Fazenda X, Código INCRA nº ..." descreve o VIZINHO).
+  Copie o número exatamente como está no texto; se não houver, null.
 {
   "numero_matricula": null,
   "registro_livro_folha": null,
@@ -510,6 +519,46 @@ central do diagnóstico. Retorne APENAS JSON. Campos ausentes = null; listas = [
 TEXTO:
 {text}""",
 }
+
+
+# ── N4 (09/09) — o documento que chegou vazio e ninguém foi avisado ────────
+# Doc 551, a CNH-e do representante da ELODI: `ocr_status='done'`, 444 chars de
+# boilerplate de assinatura digital ("QR-CODE … Medida Provisória nº 2200-2/2001
+# … SENATRAN"), nenhum nome, nenhum CPF, 0 linhas de staging — e a nota na tela
+# dizia "tipo sem schema de staging". A causa é OUTRA: o OCR não leu a CNH (PDF
+# com o conteúdo em imagem). Motivo errado manda a consultora para o lugar
+# errado: um pede mapeamento de tipo, o outro pede reprocessar o OCR.
+#
+# O sinal é a AUSÊNCIA DE NÚMERO LONGO num texto curto. Todo documento cadastral
+# desta base carrega ao menos uma sequência de 6+ dígitos (CPF, matrícula, CAR,
+# CCIR, NIRF, área): o RG da Valéria tem 849 chars e traz "2715425388"; a CNH-e
+# tem 444 chars e o número mais longo é "2001". Os dois critérios juntos, porque
+# nenhum sozinho basta — um texto longo sem número longo pode ser um parecer.
+OCR_TEXTO_MINIMO_CHARS = 600
+# Um número de 6+ dígitos CORRIDOS, ou um CPF/CNPJ formatado. Sem colar grupos
+# separados antes de medir: "Medida Provisória nº 2200-2/2001" viraria "220022001"
+# e a CNH-e vazia passaria por documento legível — foi o primeiro desenho e ele
+# falhou no próprio caso que motivou a regra.
+_SINAL_DE_DADO_RE = re.compile(
+    r"\d{6,}"
+    r"|\d{3}\.\d{3}\.\d{3}-\d{2}"
+    r"|\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}"
+)
+
+MOTIVO_OCR_ILEGIVEL = (
+    "OCR não extraiu texto legível deste documento (provável PDF de imagem) — "
+    "reprocessar o OCR; sem texto não há o que extrair"
+)
+
+
+def texto_sem_conteudo_legivel(texto: Optional[str]) -> bool:
+    """True quando o OCR devolveu texto, mas texto que não carrega dado nenhum."""
+    limpo = (texto or "").strip()
+    if not limpo:
+        return True
+    if len(limpo) >= OCR_TEXTO_MINIMO_CHARS:
+        return False
+    return _SINAL_DE_DADO_RE.search(limpo) is None
 
 
 def _conf_for(parsed: dict[str, Any], key: str) -> Optional[str]:
@@ -658,9 +707,107 @@ def _dedup_token(field_name: str, value: Any, unidade: Optional[str]) -> str:
     return _value_key(value)
 
 
+# ── Contenção 1 (ADR-064) — âncora no texto ────────────────────────────────
+# Sentinela de "o valor não está no documento". Distinta de `None`, que aqui
+# significa "não há como julgar" (sem texto em mãos, ou valor curto demais para
+# a busca provar coisa alguma) — as duas respostas levam a caminhos opostos e
+# colapsá-las num só `None` reintroduziria o silêncio que esta frente mata.
+_SEM_ANCORA = object()
+
+MOTIVO_SEM_ANCORA = (
+    "valor sem âncora no documento — não foi encontrado no texto lido; "
+    "não é gravado na base sem conferência"
+)
+
+
+def _ancorar(
+    fv: dict[str, Any], value: Any, indice: Optional[TextoIndexado]
+) -> Any:
+    """Escreve a âncora em ``fv`` e diz se o valor pode entrar no staging.
+
+    Devolve a :class:`Ancora` quando achou, ``None`` quando não há o que julgar,
+    e :data:`_SEM_ANCORA` quando o valor NÃO está no documento — único caso que
+    barra a linha.
+
+    Sem ``texto`` em mãos não bloqueia nada: é a mesma regra do guard de
+    identidade (`_pode_declarar_identidade`) — não é papel deste guard adivinhar.
+    """
+    if indice is None:
+        return None
+    if isinstance(value, (dict, list)):
+        # Fronteira declarada (ADR-064): valor composto é descrição redigida
+        # pelo modelo, não literal do documento. Ancoramos as folhas e
+        # informamos a cobertura; barrar aqui apagaria o material da frente
+        # seguinte (tipo de observação e temporalidade de ato).
+        fv["ancora"] = ancorar_composto(value, indice)
+        return None
+    if not indice.valor_e_verificavel(value):
+        fv["ancora"] = {"escopo": "nao_verificavel"}
+        return None
+    ancora = indice.buscar(value)
+    if ancora is None:
+        return _SEM_ANCORA
+    fv["ancora"] = ancora.as_dict()
+    return ancora
+
+
+def _linha_sem_ancora(
+    spec: _FieldSpec, value: Any, doc_hint: Optional[str], fv: dict[str, Any]
+) -> StagingField:
+    """A linha explícita do valor que não existe no documento.
+
+    Sem destino (`target_entity`/`target_field` nulos): não pousa na base nem
+    que alguém aceite — mesma regra do documento pessoal ambíguo (ENT-001).
+    Fica visível na Conferência com o motivo escrito, porque "nada some sem
+    dizer" (P12) vale principalmente para o que o sistema decidiu não usar.
+    """
+    logger.warning(
+        "ficha01_extraction: %s SEM ÂNCORA no documento (não entra na base): %r",
+        spec.field_name, value,
+    )
+    novo: dict[str, Any] = {"value": value, "sem_ancora": True, "motivo": MOTIVO_SEM_ANCORA}
+    for chave in ("unidade", "fatia"):
+        if chave in fv:
+            novo[chave] = fv[chave]
+    return StagingField(
+        field_name=spec.field_name,
+        field_value=novo,
+        confidence="low",
+        target_entity=None,
+        target_field=None,
+        matricula_hint=doc_hint,
+    )
+
+
+def _normalizar_area(
+    fv: dict[str, Any], value: Any, texto: Optional[str], ancora: Any
+) -> None:
+    """Contenção 3 (ADR-064) — decodifica `hectares,ares.centiares` por REGRA.
+
+    O bruto continua em ``fv["value"]`` (Item 1 da Isis: quem converte é o
+    sistema, e o literal do documento nunca é reescrito); o normalizado entra ao
+    lado, com o método. Quando a âncora localizou o número, o entorno é lido
+    para achar o extenso — a verificação que estava a duas linhas do valor e
+    ninguém lia.
+    """
+    entorno = entorno_do_valor(texto, ancora.pos) if isinstance(ancora, Ancora) else None
+    area = normalizar_area_registral(value, entorno)
+    if area is None:
+        return
+    fv["normalizado_ha"] = area.valor_ha
+    fv["metodo_normalizacao"] = area.metodo
+    if area.extenso_confere is not None:
+        fv["extenso_confere"] = area.extenso_confere
+        fv["extenso_ha"] = area.extenso_ha
+    logger.info(
+        "ficha01_extraction: área registral %r → %s ha (%s, extenso=%s)",
+        value, area.valor_ha, area.metodo, area.extenso_confere,
+    )
+
+
 def build_staging_fields(
     doc_type: str, parsed: dict[str, Any], *, texto: Optional[str] = None,
-    titular_tipo: Optional[str] = None,
+    titular_tipo: Optional[str] = None, janela: Optional[JanelaResultado] = None,
 ) -> list[StagingField]:
     """Mapeia o JSON extraído → linhas de staging (sem persistir).
 
@@ -674,11 +821,17 @@ def build_staging_fields(
     ``titular_tipo`` ("pf" | "pj" | None) roteia o DOCUMENTO PESSOAL (ENT-001):
     em caso PJ ele descreve o representante, não o titular. Sem essa informação
     a linha sai sem destino — pendência, nunca escrita no cliente.
+
+    ``janela`` (ADR-064, contenção 2) traz de qual fatia do documento cada
+    campo veio — vai para o ``field_value`` como rastro da leitura.
     """
     if not isinstance(parsed, dict):
         return []
 
     identidade_ok = _pode_declarar_identidade(doc_type, texto)
+    # Índice de busca do documento: montado UMA vez e reusado por todos os
+    # campos (contenção 1). Sem texto, o gate de âncora não roda.
+    indice = TextoIndexado(texto) if texto else None
 
     from app.services.field_validators import check_format  # noqa: PLC0415
     from app.services.inconsistency_matrix import _clean_matricula_hint  # noqa: PLC0415
@@ -724,6 +877,23 @@ def build_staging_fields(
         if spec.unidade:
             fv["unidade"] = spec.unidade
         confidence = _conf_for(parsed, spec.json_key) or embedded_conf
+        if janela is not None and spec.json_key in janela.origem:
+            fv["fatia"] = janela.origem[spec.json_key]
+
+        # ── Contenção 1 (ADR-064) — o valor está mesmo no documento? ────────
+        ancora = _ancorar(fv, value, indice)
+        if ancora is _SEM_ANCORA:
+            rows.append(_linha_sem_ancora(spec, value, doc_hint, fv))
+            continue
+
+        # ── Contenção 3 (ADR-064) — número registral por regra ──────────────
+        if spec.unidade == "ha":
+            _normalizar_area(fv, value, texto, ancora)
+            if fv.get("extenso_confere") is False:
+                # O extenso do próprio documento discorda da regra: não há como
+                # afirmar a área. Rebaixa e manda para revisão, sem escolher.
+                confidence = "low"
+
         # 4b — validação de formato: fora do esperado → rebaixa + marca p/ revisão,
         # SEM tocar no valor bruto (preservado em fv["value"]).
         fmt_ok = check_format(spec.field_name, value)
@@ -756,9 +926,12 @@ def build_staging_fields(
             if not isinstance(item, dict) or _is_empty(item):
                 continue
             numero, _ = _unwrap_llm_value(item.get("numero"))
+            fv_item: dict[str, Any] = {"value": item}
+            if indice is not None:
+                fv_item["ancora"] = ancorar_composto(item, indice)
             rows.append(StagingField(
                 field_name="matricula_listada",
-                field_value={"value": item},
+                field_value=fv_item,
                 confidence=_conf_for(parsed, "matriculas"),
                 target_entity="matricula",
                 target_field="numero_matricula",
@@ -769,9 +942,12 @@ def build_staging_fields(
     if doc_type == "rat":
         pendencias = parsed.get("pendencias")
         if pendencias and not _is_empty(pendencias):
+            fv_pend: dict[str, Any] = {"value": pendencias}
+            if indice is not None:
+                fv_pend["ancora"] = ancorar_composto(pendencias, indice)
             rows.append(StagingField(
                 field_name="pendencias_rat",
-                field_value={"value": pendencias},
+                field_value=fv_pend,
                 confidence=_conf_for(parsed, "pendencias"),
                 target_entity="imovel",
                 target_field="regulatory_issues",
@@ -791,40 +967,136 @@ class StagingResult:
     rows_written: int
     fields: list[StagingField] = field(default_factory=list)
     skipped_reason: Optional[str] = None
+    # ADR-064, contenção 2 — quanto do documento foi efetivamente lido, e em
+    # quantas fatias. Vai para o resultado do agente (e daí para o `AIJob`):
+    # cobertura parcial deixa de ser invisível.
+    janela: Optional[dict[str, Any]] = None
+    # ADR-064, contenção 1 — linhas barradas por não existirem no texto.
+    sem_ancora: list[str] = field(default_factory=list)
 
 
-def _extract_structured(text: str, doc_type: str) -> Optional[dict[str, Any]]:
-    """Roda 1 chamada LLM com o esqueleto do tipo e devolve o JSON parseado."""
+_SYSTEM_STAGING = (
+    "Voce e um especialista em documentos fundiarios e ambientais brasileiros. "
+    "Extraia os campos solicitados e retorne APENAS JSON valido. "
+    "Para cada campo extraido inclua a confianca em \"confidence\": "
+    "\"high\" | \"medium\" | \"low\". "
+    # Item 1 (Isis 16/06): preservar o numero verbatim — quem converte e o sistema.
+    "Numeros e areas: copie como STRING literal, EXATAMENTE como aparece no "
+    "documento, preservando os separadores brasileiros (ex.: a area \"1.010,7113\" "
+    "deve sair como \"1.010,7113\", nunca 1.0107113 nem 1010.7113). NUNCA converta "
+    "o numero voce mesmo (a virgula e decimal, o ponto e milhar). Vale para "
+    "area_*_ha, vtn e modulos_fiscais. "
+    # ADR-064, contencao 1 — o achado N1: o `nirf_cib` "6.442.022-1" gravado na
+    # matricula 3.673 nao existia no documento; era o EXEMPLO escrito no proprio
+    # prompt. A regra de ancora barra isso depois; aqui a instrucao evita produzi-lo.
+    "TODO valor deve ser COPIADO do texto recebido. Se o campo nao estiver no "
+    "texto, responda null — nunca preencha com um exemplo, com um valor de outro "
+    "documento, nem com um numero inventado. "
+    # ADR-064, contencao 2 — o texto chega em pedacos sequenciais de documentos
+    # longos; o modelo nao deve deduzir o que estaria fora do pedaco.
+    "O texto pode ser um TRECHO de um documento maior: responda apenas sobre o "
+    "que estiver neste trecho."
+)
+
+
+def _validador_de_formato(doc_type: str):
+    """Fecha `check_format` sobre o mapa json_key → field_name deste tipo.
+
+    A mesclagem entre fatias (contenção 2) precisa julgar candidatos pelo campo
+    de STAGING, mas o JSON do LLM vem com a chave do prompt. Sem essa tradução a
+    validação de formato não teria como ser consultada — e é ela que separa o
+    NIRF do imóvel do código SNCR do confrontante no doc 547.
+    """
+    from app.services.field_validators import check_format  # noqa: PLC0415
+
+    mapa = {s.json_key: s.field_name for s in _FIELD_SPECS.get(doc_type, [])}
+
+    def validar(json_key: str, value: Any) -> Optional[bool]:
+        field_name = mapa.get(json_key)
+        return check_format(field_name, value) if field_name else None
+
+    return validar
+
+
+def _extract_structured(
+    text: str,
+    doc_type: str,
+    *,
+    on_llm_response=None,
+) -> tuple[Optional[dict[str, Any]], Optional[JanelaResultado]]:
+    """Extrai o JSON do documento INTEIRO e devolve (parsed, janela).
+
+    ADR-064 contenção 2 — o documento é percorrido em fatias sequenciais com
+    sobreposição (uma só fatia quando ele cabe, que é o caso da maioria), e os
+    JSONs das fatias são mesclados por regra em ``extraction_window.mesclar``.
+    Antes, `text[:EXTRACTOR_MAX_CHARS]` cortava em 30.000 chars e o resto do
+    documento simplesmente não existia para o extrator.
+
+    ADR-064 contenção 4 — ``on_llm_response(response, rotulo)`` recebe CADA
+    resposta do gateway, para que o ``AIJob`` do extrator passe a guardar
+    `raw_output`, modelo, provider, tokens e custo (hoje todos nulos).
+
+    Fatia que falha no gateway não derruba as outras: perder um pedaço é melhor
+    que perder o documento, e a cobertura efetiva fica registrada na janela.
+    """
     prompt_template = _STAGING_PROMPTS.get(doc_type)
     if prompt_template is None:
-        return None
+        return None, None
     if not settings.ai_configured or not (text or "").strip():
-        return None
+        return None, None
 
     from app.core.ai_gateway import AIGatewayError, complete  # noqa: PLC0415
 
-    system = (
-        "Voce e um especialista em documentos fundiarios e ambientais brasileiros. "
-        "Extraia os campos solicitados e retorne APENAS JSON valido. "
-        "Para cada campo extraido inclua a confianca em \"confidence\": "
-        "\"high\" | \"medium\" | \"low\". "
-        # Item 1 (Isis 16/06): preservar o numero verbatim — quem converte e o sistema.
-        "Numeros e areas: copie como STRING literal, EXATAMENTE como aparece no "
-        "documento, preservando os separadores brasileiros (ex.: a area \"1.010,7113\" "
-        "deve sair como \"1.010,7113\", nunca 1.0107113 nem 1010.7113). NUNCA converta "
-        "o numero voce mesmo (a virgula e decimal, o ponto e milhar). Vale para "
-        "area_*_ha, vtn e modulos_fiscais."
+    fatias = fatiar(
+        text,
+        chunk_chars=settings.EXTRACTOR_CHUNK_CHARS,
+        overlap_chars=settings.EXTRACTOR_CHUNK_OVERLAP_CHARS,
+        max_chunks=settings.EXTRACTOR_MAX_CHUNKS,
     )
-    prompt = prompt_template.replace("{text}", text[: settings.EXTRACTOR_MAX_CHARS])
-    try:
-        response = complete(prompt, system=system)
-    except AIGatewayError as exc:
-        logger.warning("ficha01_extraction: LLM falhou doc_type=%s: %s", doc_type, exc.message)
-        return None
-    except Exception as exc:  # pragma: no cover - defensivo
-        logger.warning("ficha01_extraction: erro inesperado doc_type=%s: %s", doc_type, exc)
-        return None
-    return _parse_json(response.content)
+    por_fatia: list[tuple[Any, dict[str, Any]]] = []
+    for fatia in fatias:
+        prompt = prompt_template.replace("{text}", text[fatia.inicio: fatia.fim])
+        try:
+            response = complete(prompt, system=_SYSTEM_STAGING)
+        except AIGatewayError as exc:
+            logger.warning(
+                "ficha01_extraction: LLM falhou doc_type=%s %s: %s",
+                doc_type, fatia.rotulo, exc.message,
+            )
+            continue
+        except Exception as exc:  # pragma: no cover - defensivo
+            logger.warning(
+                "ficha01_extraction: erro inesperado doc_type=%s %s: %s",
+                doc_type, fatia.rotulo, exc,
+            )
+            continue
+        if on_llm_response is not None:
+            try:
+                on_llm_response(response, f"staging:{doc_type}:{fatia.rotulo}")
+            except Exception as exc:  # pragma: no cover - auditoria nunca derruba
+                logger.warning("ficha01_extraction: falha ao registrar chamada LLM: %s", exc)
+        parsed = _parse_json(response.content)
+        if parsed:
+            por_fatia.append((fatia, parsed))
+
+    if not por_fatia:
+        return None, None
+
+    janela = mesclar(por_fatia, validar=_validador_de_formato(doc_type))
+    janela.fatias = fatias
+    janela.total_chars = len(text)
+    janela.cobertura_chars = fatias[-1].fim if fatias else 0
+    janela.truncado = janela.cobertura_chars < janela.total_chars
+    if janela.truncado:
+        logger.warning(
+            "ficha01_extraction: teto de fatias atingido doc_type=%s — lidos %d de %d chars",
+            doc_type, janela.cobertura_chars, janela.total_chars,
+        )
+    logger.info(
+        "ficha01_extraction: janela doc_type=%s fatias=%d cobertura=%d/%d",
+        doc_type, len(fatias), janela.cobertura_chars, janela.total_chars,
+    )
+    return janela.parsed, janela
 
 
 def titular_tipo_do_processo(db_session, tenant_id: int,
@@ -862,6 +1134,7 @@ def extract_and_stage(
     document_id: Optional[int] = None,
     ai_job_id: Optional[int] = None,
     created_by_agent: str = "extrator",
+    on_llm_response=None,
 ) -> StagingResult:
     """Extrai campos estruturados do documento e grava linhas em ExtractedFieldStaging.
 
@@ -878,7 +1151,7 @@ def extract_and_stage(
     if dt not in _STAGING_PROMPTS:
         return StagingResult(doc_type=dt, rows_written=0, skipped_reason="tipo sem schema de staging")
 
-    parsed = _extract_structured(text, dt)
+    parsed, janela = _extract_structured(text, dt, on_llm_response=on_llm_response)
     if not parsed:
         return StagingResult(doc_type=dt, rows_written=0, skipped_reason="extração vazia/falha")
 
@@ -888,6 +1161,7 @@ def extract_and_stage(
     fields = build_staging_fields(
         dt, parsed, texto=text,
         titular_tipo=titular_tipo_do_processo(db_session, tenant_id, process_id),
+        janela=janela,
     )
 
     # 4c — dedup na persistência: não recriar linha já existente (mesma fonte +
@@ -933,11 +1207,20 @@ def extract_and_stage(
         written += 1
     db_session.flush()
 
+    sem_ancora = [
+        f.field_name for f in fields
+        if isinstance(f.field_value, dict) and f.field_value.get("sem_ancora")
+    ]
     logger.info(
-        "ficha01_extraction: staging doc_type=%s document_id=%s process_id=%s rows=%d (dedup: %d→%d)",
-        dt, document_id, process_id, written, len(fields), written,
+        "ficha01_extraction: staging doc_type=%s document_id=%s process_id=%s rows=%d "
+        "(dedup: %d→%d, sem âncora: %d)",
+        dt, document_id, process_id, written, len(fields), written, len(sem_ancora),
     )
-    return StagingResult(doc_type=dt, rows_written=written, fields=fields)
+    return StagingResult(
+        doc_type=dt, rows_written=written, fields=fields,
+        janela=janela.resumo() if janela is not None else None,
+        sem_ancora=sem_ancora,
+    )
 
 
 # ---------------------------------------------------------------------------

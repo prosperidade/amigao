@@ -178,7 +178,9 @@ def test_extract_and_stage_persiste_linhas(db_session):
         ],
         "confidence": {"numero_car": "high"},
     }
-    with patch("app.services.ficha01_extraction._extract_structured", return_value=canned):
+    # ADR-064: `_extract_structured` devolve (parsed, janela).
+    with patch("app.services.ficha01_extraction._extract_structured",
+               return_value=(canned, None)):
         result = extract_and_stage(
             text=CAR_RECIBO_TEXT,
             doc_type="car",
@@ -206,7 +208,8 @@ def test_extract_and_stage_persiste_linhas(db_session):
 
 def test_extract_and_stage_falha_extracao_nao_grava(db_session):
     tenant = _tenant(db_session)
-    with patch("app.services.ficha01_extraction._extract_structured", return_value=None):
+    with patch("app.services.ficha01_extraction._extract_structured",
+               return_value=(None, None)):
         result = extract_and_stage(
             text="x", doc_type="car", tenant_id=tenant.id, db_session=db_session,
         )

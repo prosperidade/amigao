@@ -193,6 +193,45 @@ def test_vtn_aceito_sem_coluna_aparece_em_ignorados(db_session):
     )
 
 
+def test_linha_sem_ancora_aceita_diz_a_causa_certa(db_session):
+    """ADR-064: aceitar um valor que não existe no documento não grava nada — e
+    a consolidação diz POR QUÊ.
+
+    A linha nasce sem destino de propósito (é o gate da âncora). Sem esta
+    ramificação ela cairia no motivo genérico "aceito sem campo de destino", que
+    manda procurar mapeamento onde o problema é outro: o valor não está no texto.
+    Caso real: o `nirf_cib` `6.442.022-1` da matrícula 3.673, que é o exemplo
+    escrito no prompt e aparece em três processos de produção.
+    """
+    tenant, proc, prop, cli = _seed(db_session)
+    doc = _doc(db_session, tenant, proc, "matricula")
+    row = ExtractedFieldStaging(
+        tenant_id=tenant.id, process_id=proc.id, document_id=doc.id,
+        field_name="nirf_cib",
+        field_value={
+            "value": "6.442.022-1",
+            "sem_ancora": True,
+            "motivo": "valor sem âncora no documento — não foi encontrado no texto lido",
+        },
+        status=ExtractedFieldStatus.aceito,
+        decided_value={"value": "6.442.022-1"},
+        decided_at=datetime.now(UTC),
+        target_entity=None, target_field=None,          # nasce sem destino
+        matricula_hint="3673", source_doc_type="matricula",
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    r = consolidate_process(db_session, tenant_id=tenant.id, process_id=proc.id,
+                            user_id=None)
+
+    linha = next(i for i in r["ignorados"] if "nirf_cib" in i)
+    assert "âncora" in linha, f"motivo genérico em vez da causa real: {linha!r}"
+    # E nada pousou na base.
+    db_session.refresh(row)
+    assert row.consolidated_at is None
+
+
 def test_lote_do_caso_16_todo_ignorado_tem_motivo(db_session):
     """Reproduz o lote real que a leitura de produção de 03/08 expôs.
 

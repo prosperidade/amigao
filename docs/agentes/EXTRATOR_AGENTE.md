@@ -54,6 +54,27 @@ qualquer parte. Provado no doc 118 (escritura Romilton, 20.817 chars): área
 58,7654 / município Uirapuru / UF GO / denominação / comarca / cartório passaram
 de `None` a preenchidos.
 
+**Atualização 09/09 (ADR-064, contenção 2):** a janela de 30.000 chars ainda era
+curta. Medido no doc 547 da ELODI (82.117 chars): o NIRF do imóvel está no
+caractere **53.775** e nunca chegava ao modelo — o que entrou no lugar foi o
+Código INCRA do imóvel **confrontante**, no caractere 1.286. Hoje há DUAS janelas:
+
+- **camada de preview** (`document_extractor`, alimenta `AIJob.extracted_fields`,
+  não escreve no cadastro): segue com `EXTRACTOR_MAX_CHARS`, default 30.000;
+- **camada de staging** (`ficha01_extraction`, alimenta `ExtractedFieldStaging` e
+  daí a base): percorre o documento INTEIRO em fatias sequenciais com
+  sobreposição — `EXTRACTOR_CHUNK_CHARS` (45.000), `EXTRACTOR_CHUNK_OVERLAP_CHARS`
+  (2.000) e `EXTRACTOR_MAX_CHUNKS` (8). Documento de até 45k continua sendo uma
+  chamada só. Quando duas fatias trazem candidatos diferentes para o mesmo campo,
+  a mesclagem prefere quem passa na validação de formato do campo; o preterido
+  fica registrado.
+
+**Auditabilidade (ADR-064, contenção 4):** o `AIJob` do extrator passou a guardar
+`model_used`, `provider`, `tokens_in/out`, `cost_usd` e `raw_output` — este último
+com CADA resposta bruta rotulada por documento/camada/fatia. Antes eram todos
+nulos, porque o agente delega a chamada aos serviços e nunca passou por
+`call_llm`.
+
 ## 4. Tools que usa
 
 - **OCR pipeline** (`ocr_then_extract`) — extração de texto de PDFs.

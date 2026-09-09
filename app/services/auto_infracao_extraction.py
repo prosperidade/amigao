@@ -95,10 +95,16 @@ def parse_coordenadas(texto: Optional[str]) -> Optional[tuple[float, float]]:
     return (lat, lon)
 
 
-def extract_auto_infracao_fato(text: str) -> Optional[dict[str, Any]]:
+def extract_auto_infracao_fato(
+    text: str, *, on_llm_response=None
+) -> Optional[dict[str, Any]]:
     """Roda 1 chamada LLM com o esqueleto do auto de infração (spec da Isis).
 
     Best-effort: retorna None em qualquer falha (LLM indisponível, parse).
+
+    ``on_llm_response(response, rotulo)`` (ADR-064, contenção 4) entrega a
+    resposta do gateway a quem orquestra, para que o `AIJob` do extrator guarde
+    modelo, tokens, custo e `raw_output` desta chamada também.
     """
     if not settings.ai_configured or not (text or "").strip():
         return None
@@ -114,6 +120,12 @@ def extract_auto_infracao_fato(text: str) -> Optional[dict[str, Any]]:
     except Exception as exc:  # pragma: no cover - defensivo
         logger.warning("auto_infracao_extraction: erro inesperado: %s", exc)
         return None
+
+    if on_llm_response is not None:
+        try:
+            on_llm_response(response, "auto_infracao")
+        except Exception as exc:  # pragma: no cover - auditoria nunca derruba
+            logger.warning("auto_infracao_extraction: falha ao registrar chamada LLM: %s", exc)
 
     parsed = _parse_json(response.content)
     if not parsed:
