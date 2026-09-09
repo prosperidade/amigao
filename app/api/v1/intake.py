@@ -50,6 +50,7 @@ from app.schemas.intake import (
     IntakeReconcileRequest,
     IntakeReconcileResponse,
 )
+from app.services.identity import find_client_by_doc
 from app.services.intake_classifier import classify_demand, get_demand_rules
 
 router = APIRouter()
@@ -129,9 +130,29 @@ def create_case(
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente não encontrado.")
         else:
             nc = payload.new_client
+            # ENT-002 — o intake é a OUTRA porta de criação de cliente. Guardar
+            # só o POST /clients deixaria a duplicata entrar por aqui (a lição de
+            # cobrir todas as portas da classe, não só a que o achado citou).
+            existente = find_client_by_doc(db, current_user.tenant_id, nc.cpf_cnpj)
+            if existente is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "documento_ja_cadastrado",
+                        "message": (
+                            f"O documento {nc.cpf_cnpj} já pertence ao cadastro "
+                            f"#{existente.id} — {existente.legal_name or existente.full_name}. "
+                            "Selecione o cliente existente em vez de criar outro."
+                        ),
+                        "client_id": existente.id,
+                        "full_name": existente.full_name,
+                        "legal_name": existente.legal_name,
+                    },
+                )
             client = ClientModel(
                 tenant_id=current_user.tenant_id,
                 full_name=nc.full_name,
+                legal_name=nc.legal_name,
                 phone=nc.phone,
                 email=nc.email,
                 cpf_cnpj=nc.cpf_cnpj,

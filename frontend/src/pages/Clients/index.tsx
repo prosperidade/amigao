@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
+import { mensagemDeErro } from '@/lib/apiError';
 import { Plus, Search, Edit2, Trash2, User as UserIcon, Building2, Mail, Phone, ExternalLink, AlertTriangle } from 'lucide-react';
 
 interface CascadePreview {
@@ -17,6 +18,7 @@ interface CascadePreview {
 interface Client {
   id: number;
   full_name: string;
+  legal_name: string | null;
   email: string | null;
   phone: string | null;
   cpf_cnpj: string | null;
@@ -35,6 +37,7 @@ export default function ClientsPage() {
   // Form State
   const [formData, setFormData] = useState({
     full_name: '',
+    legal_name: '',
     email: '',
     phone: '',
     cpf_cnpj: '',
@@ -58,8 +61,7 @@ export default function ClientsPage() {
       setFormError('');
     },
     onError: (error: unknown) => {
-      const axiosErr = error as { response?: { data?: { detail?: string } } };
-      setFormError(axiosErr.response?.data?.detail || 'Não foi possível criar o cliente.');
+      setFormError(mensagemDeErro(error, 'Não foi possível criar o cliente.'));
     }
   });
 
@@ -72,8 +74,7 @@ export default function ClientsPage() {
       setFormError('');
     },
     onError: (error: unknown) => {
-      const axiosErr = error as { response?: { data?: { detail?: string } } };
-      setFormError(axiosErr.response?.data?.detail || 'Não foi possível salvar as alterações do cliente.');
+      setFormError(mensagemDeErro(error, 'Não foi possível salvar as alterações do cliente.'));
     }
   });
 
@@ -125,6 +126,7 @@ export default function ClientsPage() {
     setCurrentClient(client);
     setFormData({
       full_name: client.full_name,
+      legal_name: client.legal_name || '',
       email: client.email || '',
       phone: client.phone || '',
       cpf_cnpj: client.cpf_cnpj || '',
@@ -141,7 +143,7 @@ export default function ClientsPage() {
   };
 
   const resetForm = () => {
-    setFormData({ full_name: '', email: '', phone: '', cpf_cnpj: '', client_type: 'pf' });
+    setFormData({ full_name: '', legal_name: '', email: '', phone: '', cpf_cnpj: '', client_type: 'pf' });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -355,12 +357,29 @@ export default function ClientsPage() {
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome Completo / Razão Social</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    {formData.client_type === 'pj' ? 'Nome de tratamento' : 'Nome completo'}
+                  </label>
                   <input required
                     type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-200 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   />
                 </div>
+
+                {/* DATA-001 — razão social tem campo PRÓPRIO. Antes o rótulo era
+                    "Nome Completo / Razão Social" num campo só: a consultora
+                    digitava a razão social, ela virava `full_name`, e a base
+                    seguia avisando "razão social não preenchida". */}
+                {formData.client_type === 'pj' && (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Razão social</label>
+                    <input
+                      type="text" value={formData.legal_name} onChange={e => setFormData({...formData, legal_name: e.target.value})}
+                      placeholder="Como consta no CNPJ — é o nome que vai para o contrato"
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    />
+                  </div>
+                )}
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>

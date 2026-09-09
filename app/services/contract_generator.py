@@ -49,7 +49,10 @@ def fill_contract_template(
     # Dados do cliente
     client = db.query(Client).filter(Client.id == contract.client_id).first()
     if client:
-        raw = raw.replace("{{cliente.nome}}", client.full_name or "")
+        # DATA-001 — no instrumento a PJ é a razão social.
+        e_pj = bool(client.client_type) and client.client_type.value == "pj"
+        nome_no_contrato = (client.legal_name or client.full_name) if e_pj else client.full_name
+        raw = raw.replace("{{cliente.nome}}", nome_no_contrato or "")
         raw = raw.replace("{{cliente.cpf_cnpj}}", client.cpf_cnpj or "")
         raw = raw.replace("{{cliente.email}}", client.email or "")
         raw = raw.replace("{{cliente.telefone}}", client.phone or "")
