@@ -1,5 +1,40 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-09-09 (FIAÇÃO DA ENTRADA — `fix/fiacao-entrada`, PR aberto, NÃO MERGEAR):**
+constrói sobre o #152. Quatro dados que a extração **já produzia** e que morriam antes de
+chegar a colunas **que já existiam e estavam NULL** — as linhas "INSUFICIENTE: material
+existe, ligação falta" da Entrega 2 da confirmação de 09/09. **(1) Cadeia de titulares:**
+o JSON da matrícula trazia os quatro proprietários e `_FIELD_SPECS["matricula"]` não tinha a
+entrada — 0 linhas de staging; agora vai para `matricula.proprietarios`, em UMA linha (quatro
+disputariam a mesma coluna da mesma matrícula e três virariam reconciliação falsa), com a
+âncora composta cobrindo **8/8 folhas** (4 nomes + 4 CPFs). **(2) Averbação de RL:** a gaveta
+`averbacao_rl` existia e o prompt dizia `"averbacao_rl"/"averbacao_app"` na mesma linha, sem
+distinguir; separadas as instruções, a **AV.02 — 492,9252 ha** sai pela primeira vez (a
+confirmação registrou que *nenhuma* execução a havia capturado). **(3) Módulos fiscais:**
+`"Módulos Fiscais: 31,1547"` estava no texto do CAR, `properties.modulos_fiscais` existia, e o
+prompt nunca pediu. **(4) Área documental do CAR:** o recibo declara duas áreas no mesmo
+parágrafo e o esqueleto tinha um slot — `2180.3923` agora tem destino próprio
+(`imovel.area_documental_ha`), fechando **DATA-002 em parte**. Sem ADR, sem modelo novo, sem
+migration: é fiação.
+
+**Medido** em banco descartável próprio (`amigao_fiacao`, 55433, criado por `TEMPLATE` para não
+colidir com o gate do #152), texto real e LLM real, antes × depois: doc 546 **10 → 12** linhas,
+doc 549 **8 → 10**, doc 550 +`proprietarios`, docs 545/551 **0 → 0** (controle negativo).
+Nenhuma linha existente alterada. Tabela completa em `docs/trabalhos/fiacao_entrada.md`.
+**A frente produziu uma regressão, mediu e consertou:** a primeira versão do prompt do CAR
+instruía só os campos novos, e o modelo parou de devolver `app_declarada_ha` e `rl_declarada_ha`
+— **3/3 → 0/3** em três execuções. Com preâmbulo dizendo que os bullets só esclarecem os campos
+ambíguos, voltou a 3/3. **A lição:** instrução nova sem preâmbulo apaga campo antigo do mesmo
+esqueleto, e só um gate campo a campo enxerga isso.
+**Não mudaram, e não deviam:** tipo de observação e temporalidade (`onus` segue sem data, ato e
+cancelamento) — são as linhas AUSENTE da Entrega 2, e continuam sendo a frente seguinte.
+Dívidas novas: **#218** (área de RL do CAR entra em `rl_status`, campo de status — `Property`
+não tem par da `app_area_ha` para a RL) e **#219** (a área gráfica do CAR segue sem chegar a
+`area_grafica_ha`). Medição adicional anexada à **#215**: `codigo_certificacao` do doc 550,
+**intocado pelo diff**, piscou 3/3 → 2/3 — o não-determinismo morde campo escalar também.
+**Fronteira:** docs 544/547/548 não medidos (texto só existe em produção); o 547 é o de 82k,
+único que exercitaria duas fatias com os campos novos. Aceite pós-deploy listado no doc da frente.
+
 **Pulso 2026-09-09 (CONTENÇÃO DA ENTRADA — `fix/contencao-entrada`, ADR-064, PR aberto,
 NÃO MERGEAR):** quatro contenções antes do staging, todas nascidas de medição, não de
 suspeita (`docs/auditoria/CONFIRMACAO_ENTRADA_2026-09-09.md`). **(1) Âncora:** todo valor
