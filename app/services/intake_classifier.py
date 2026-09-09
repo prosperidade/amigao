@@ -1,8 +1,20 @@
 """
 Intake Classifier — Sprint 1
 
-Classifica a demanda de entrada usando REGRAS ESTÁTICAS (sem LLM).
-Retorna: demand_type, initial_diagnosis, documentos esperados, próximos passos.
+Classifica o TIPO DE DEMANDA de entrada usando REGRAS ESTÁTICAS (sem LLM).
+Retorna: demand_type, orientação por tipo, documentos esperados, próximos passos.
+
+**Isto NÃO é um diagnóstico** (DIAG-001, spec Isis v0.1 §6). O que sai daqui é o
+rótulo da demanda — declarado pelo consultor ou inferido de palavras-chave do
+relato — mais a orientação padrão daquele tipo. Nenhum documento foi lido, nenhum
+fato do imóvel foi verificado. Diagnóstico é o que o DiagnosticoAgent produz
+DEPOIS, sobre documentos, com fonte por afirmação (Princípio 11).
+
+Consequência prática para quem edita os textos de ``diagnosis`` abaixo: eles
+podem descrever a DEMANDA e orientar o próximo passo; não podem AFIRMAR fato do
+caso que só evidência estabeleceria. "O caso apresenta múltiplos passivos" era
+exatamente isso — o sistema afirmando passivo sem ter lido documento nenhum, e o
+texto ainda entrava no contexto dos agentes como premissa.
 
 Decisão arquitetural: MVP 1 usa regras determinísticas para ter
 previsibilidade, auditabilidade e zero custo de token.
@@ -18,12 +30,34 @@ from typing import Optional
 # Estruturas de resposta
 # ---------------------------------------------------------------------------
 
+# Confiança da CLASSIFICAÇÃO (não do caso). `declarada` não é um grau alto de
+# certeza da máquina: é a ausência de inferência — quem disse o tipo foi o
+# consultor. Chamar isso de "alta confiança" era o sistema se creditando por uma
+# escolha humana, e foi o que pintou "Confiança alta" numa tela sem documento.
+CONFIANCA_DECLARADA = "declarada"
+CONFIANCA_ALTA = "high"
+CONFIANCA_MEDIA = "medium"
+CONFIANCA_BAIXA = "low"
+
+# A classificação NÃO precisa de LLM quando o consultor declarou o tipo nem
+# quando as palavras-chave bateram com folga. Porta única para essa pergunta —
+# `llm_classifier` decide o short-circuit por aqui, e não por comparar com a
+# string "high" (que deixaria de bater ao surgir `declarada`, fazendo o sistema
+# chamar o LLM justamente no caso em que nada há para inferir).
+def dispensa_inferencia(confidence: str) -> bool:
+    """A classificação já está resolvida sem precisar de LLM?"""
+    return confidence in (CONFIANCA_DECLARADA, CONFIANCA_ALTA)
+
+
 @dataclass
 class DemandClassification:
     demand_type: str
     demand_label: str
-    confidence: str                    # "high" | "medium" | "low"
-    initial_diagnosis: str             # texto estruturado legível pelo consultor
+    confidence: str                    # "declarada" | "high" | "medium" | "low"
+    # Orientação por TIPO DE DEMANDA — não é diagnóstico do caso (DIAG-001).
+    # Nome mantido por compatibilidade com `Process.initial_diagnosis` e com o
+    # contexto já consumido pelos agentes (config congelada).
+    initial_diagnosis: str
     required_documents: list[dict]     # [{id, label, doc_type, category, required}]
     suggested_next_steps: list[str]    # ações recomendadas ao consultor
     checklist_template_demand_type: str  # chave para buscar template no BD
@@ -368,18 +402,24 @@ _DEMAND_RULES: dict[str, dict] = {
         ],
     },
     "misto": {
-        "label": "Demanda Mista / Múltiplos Passivos",
+        # DIAG-001 — o rótulo vira o TÍTULO do processo (`intake.py`:
+        # `f"{demand_label} — {client.full_name}"`), então "Múltiplos Passivos"
+        # não ficava só numa tela: batizava o caso e reaparecia em lista,
+        # sidebar, dossiê e proposta. O tipo de demanda é "mista"; quantos
+        # passivos existem é conclusão que depende de documento.
+        "label": "Demanda mista (múltiplas frentes)",
         "keywords": [],  # fallback - não é detectado por keyword, é atribuído manualmente
         "agencies": ["SEMA", "IBAMA", "INCRA"],
         "diagnosis": (
-            "O caso apresenta múltiplos passivos ou combina diferentes trilhas regulatórias. "
-            "É necessário priorizar as demandas pela urgência e dependências entre elas. "
-            "Recomenda-se diagnóstico técnico aprofundado antes de definir o caminho."
+            "A demanda envolve mais de uma frente regulatória. O número e a natureza "
+            "das pendências ainda não foram apurados — dependem da leitura dos "
+            "documentos do caso. Levantar as frentes envolvidas, verificar as "
+            "dependências entre elas e só então definir a ordem de resolução."
         ),
         "next_steps": [
-            "Listar todos os passivos identificados e classificar por urgência",
+            "Levantar as frentes regulatórias envolvidas e o que cada uma exige",
             "Identificar dependências (ex: CAR precisa estar regular antes do licenciamento)",
-            "Propor ordem de resolução por prioridade e custo",
+            "Após o diagnóstico documental, ordenar por prioridade e custo",
             "Confirmar escopo e valor com o cliente antes de iniciar",
         ],
         "docs": [
@@ -461,19 +501,20 @@ def classify_demand(
     Retorna:
         DemandClassification com demand_type, diagnóstico e documentos esperados.
     """
-    # 1. Se o consultor já informou o tipo, usar diretamente
+    # 1. Se o consultor já informou o tipo, usar diretamente. A confiança aqui é
+    # DECLARADA, não alta: o sistema não inferiu nada, só obedeceu.
     if process_type and process_type in _DEMAND_RULES:
         demand_type = process_type
-        confidence = "high"
+        confidence = CONFIANCA_DECLARADA
     else:
         # 2. Pontuar por keywords no texto
         scores = _score_demand_type(description)
         if not scores:
             demand_type = "nao_identificado"
-            confidence = "low"
+            confidence = CONFIANCA_BAIXA
         elif len(scores) == 1:
             demand_type = list(scores.keys())[0]
-            confidence = "high" if scores[demand_type] >= 2 else "medium"
+            confidence = CONFIANCA_ALTA if scores[demand_type] >= 2 else CONFIANCA_MEDIA
         else:
             # Múltiplos tipos detectados
             sorted_types = sorted(scores, key=lambda k: scores[k], reverse=True)
@@ -481,10 +522,10 @@ def classify_demand(
             second_score = scores[sorted_types[1]] if len(sorted_types) > 1 else 0
             if top_score > second_score + 1:
                 demand_type = sorted_types[0]
-                confidence = "medium"
+                confidence = CONFIANCA_MEDIA
             else:
                 demand_type = "misto"
-                confidence = "medium"
+                confidence = CONFIANCA_MEDIA
 
     rules = _DEMAND_RULES[demand_type]
     urgency_flag = _detect_urgency(description, urgency)

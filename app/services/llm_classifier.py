@@ -21,6 +21,7 @@ from app.services.intake_classifier import (
     _DEMAND_RULES,
     DemandClassification,
     classify_demand,
+    dispensa_inferencia,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,11 @@ def classify_demand_with_llm(
     static_result = classify_demand(description, process_type, urgency, source_channel)
 
     # Se ja tem alta confianca ou IA desabilitada, usar resultado das regras
-    if static_result.confidence == "high" or not settings.ai_configured:
+    # `dispensa_inferencia` e não `== "high"`: com o tipo DECLARADO pelo consultor
+    # não há o que inferir — e comparar com a string "high" faria o sistema
+    # chamar o LLM justamente nesse caso, depois que a confiança declarada
+    # deixou de se disfarçar de alta (DIAG-001).
+    if dispensa_inferencia(static_result.confidence) or not settings.ai_configured:
         return static_result, None
 
     # Passo 2 -- LLM para baixa/media confianca

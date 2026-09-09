@@ -1,6 +1,9 @@
 /**
- * DiagnosisPanel — Exibe o resultado da classificação automática da demanda
- * Sprint 1 — Intake / Diagnóstico Inicial
+ * DiagnosisPanel — Exibe o resultado da classificação automática da demanda.
+ *
+ * DIAG-001: o que este painel mostra é TIPO DE DEMANDA mais a orientação padrão
+ * daquele tipo — nenhum documento foi lido ainda. Não chamar de diagnóstico:
+ * diagnóstico é o que sai depois, sobre documentos, com fonte por afirmação.
  */
 
 interface DocumentRequirement {
@@ -22,7 +25,13 @@ interface ClassifyResult {
   relevant_agencies: string[];
 }
 
+// `declarada` NÃO é um grau de confiança da máquina: é a ausência de inferência
+// — o tipo veio do consultor. Rotulá-lo "Alta confiança" era o sistema se
+// creditando pela escolha de quem já sabia. Precisa de entrada própria aqui: o
+// fallback do lookup é `low`, então sem esta linha um tipo declarado apareceria
+// como "Baixa confiança", que é a mentira oposta.
 const CONFIDENCE_CONFIG = {
+  declarada: { label: 'Informado pelo consultor', color: 'text-sky-300', bg: 'bg-sky-500/10 border-sky-500/30' },
   high: { label: 'Alta confiança', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' },
   medium: { label: 'Confiança média', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
   low: { label: 'Baixa confiança', color: 'text-slate-400', bg: 'bg-slate-500/10 border-slate-500/30' },
@@ -80,9 +89,15 @@ export default function DiagnosisPanel({ result }: { result: ClassifyResult }) {
         </div>
       )}
 
-      {/* Diagnóstico */}
+      {/* Orientação por tipo — não é diagnóstico (DIAG-001) */}
       <div className="px-5 pt-4 pb-2">
-        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Diagnóstico inicial</h4>
+        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+          O que este tipo de demanda exige
+        </h4>
+        <p className="text-[11px] text-slate-500 mb-2">
+          Orientação padrão do tipo, antes de ler qualquer documento — o diagnóstico
+          do caso vem depois.
+        </p>
         <p className="text-sm text-slate-200 leading-relaxed">{result.initial_diagnosis}</p>
       </div>
 

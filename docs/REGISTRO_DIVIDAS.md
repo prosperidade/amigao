@@ -1447,7 +1447,40 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 213.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 215.**
+
+### Abertas pela Frente B — rótulo não é veredito (09/09, `fix/diagnostico-nao-e-rotulo`)
+
+*A frente fechou **DIAG-001**: com `process_type=misto` e zero documentos,
+nenhuma superfície afirma passivo. As duas dívidas abaixo são o que o conserto
+alcança daqui para a frente e não alcança para trás.*
+
+**213. Casos ANTIGOS continuam chamados "Demanda Mista / Múltiplos Passivos".**
+O rótulo do tipo vira o TÍTULO do processo na criação (`intake.py`:
+`f"{demand_label} — {client.full_name}"`) e fica gravado em `Process.title`.
+Trocar o rótulo corrige o batismo dos casos NOVOS; os já criados seguem com o
+nome antigo em lista, sidebar, dossiê, proposta e contrato — afirmando passivo
+que ninguém apurou, exatamente como no relatório da Isis.
+
+Não entrou porque renomear processo é ato do consultor, não efeito colateral de
+deploy: o título pode ter sido editado à mão, e reescrever em massa apagaria essa
+edição. É a mesma família da **#209** (dado legado que o conserto não alcança).
+**O que destrava:** varredura dos títulos afetados + renomeação assistida, na
+mesma tela que resolveria a #209. **Origem:** Frente B (09/09), escopo declarado.
+
+**214. `initial_diagnosis` continua com nome de diagnóstico.**
+O campo guarda a orientação por TIPO DE DEMANDA, não um diagnóstico — está
+documentado assim no modelo, no classificador e no endpoint, e as telas deixaram
+de chamá-lo de diagnóstico. O NOME, porém, continua dizendo o contrário, e ele
+viaja como chave no contexto de cinco agentes (`diagnostico`, `legislacao`,
+`redator`, `atendimento`, dossiê): o LLM lê `"initial_diagnosis"` e recebe a
+sugestão de que aquilo é conclusão.
+
+Não entrou por decisão de escopo: prompts e chains de agentes existentes estão
+congelados, e renomear a chave mexe no contexto deles. O texto em si deixou de
+afirmar, que é o que produzia o dano.
+**O que destrava:** renomear campo e chave (migration + 5 call sites) quando a
+config dos agentes descongelar. **Origem:** Frente B (09/09).
 
 ### Abertas pela Frente A — identidade PF/PJ e representante (08/09, `fix/identidade-pj-representante` · ADR-063)
 
