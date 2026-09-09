@@ -205,7 +205,7 @@ class PropostaDoc:
 class ContratoDoc:
     data_local: str
     contratada: dict               # {razao_social, cnpj, endereco}
-    contratante: dict              # {nome, qualificacao, cpf_cnpj}
+    contratante: dict              # {nome, qualificacao, cpf_cnpj, representante?}
     bloco: dict                    # {imovel, matriculas:[str], servicos:[{numero,descricao,valor,valor_formatado}], total, total_formatado, parcelas:[...]}
     banco: dict                    # {nome, agencia, conta, titular, pix}
     condicoes: dict                # {foro, prazo_execucao, vigencia, multa_percentual, rescisao_notificacao_dias, bonus_malus:{ativo,percentual}}
@@ -485,17 +485,33 @@ def build_contrato(
         "bonus_malus": {"ativo": bm_ativo, "percentual": profile.bonus_malus.percentual},
     }
 
-    qualificacao = (
-        "pessoa jurídica" if getattr(client, "client_type", None) and client.client_type.value == "pj"
-        else "pessoa física"
-    )
+    e_pj = bool(getattr(client, "client_type", None)) and client.client_type.value == "pj"
+    qualificacao = "pessoa jurídica" if e_pj else "pessoa física"
+    # DATA-001 / ENT-001 — a PJ contrata sob a RAZÃO SOCIAL (é o nome que vale no
+    # instrumento), e quem assina por ela é o representante. O contrato dizia o
+    # nome fantasia e não mencionava quem assina.
+    representante = None
+    if e_pj:
+        rep = next(
+            (r for r in (getattr(client, "representatives", None) or [])
+             if r.deleted_at is None and (r.full_name or r.cpf)),
+            None,
+        )
+        if rep is not None:
+            representante = {
+                "nome": rep.full_name or _NAO_INFORMADO,
+                "cpf": rep.cpf or _NAO_INFORMADO,
+                "papel": (rep.papel or "representante_legal").replace("_", " "),
+            }
     return ContratoDoc(
         data_local=now.strftime("%d/%m/%Y"),
         contratada={"razao_social": profile.razao_social, "cnpj": profile.cnpj, "endereco": profile.endereco},
         contratante={
-            "nome": client.full_name or _NAO_INFORMADO,
+            "nome": (client.legal_name or client.full_name) if e_pj
+                    else (client.full_name or _NAO_INFORMADO),
             "qualificacao": qualificacao,
             "cpf_cnpj": client.cpf_cnpj or _NAO_INFORMADO,
+            "representante": representante,
         },
         bloco=bloco,
         banco={
@@ -576,8 +592,13 @@ def render_contrato_text(doc: ContratoDoc) -> str:
     L.append(f"CONTRATADA: {cd['razao_social']}, inscrita no CNPJ sob o nº {cd['cnpj']}, "
              f"com sede em {cd['endereco']}, doravante denominada CONTRATADA;")
     ct = doc.contratante
+    rep = ct.get("representante")
+    por_quem = (
+        f", neste ato representada por {rep['nome']}, {rep['papel']}, CPF {rep['cpf']}"
+        if rep else ""
+    )
     L.append(f"CONTRATANTE: {ct['nome']} ({ct['qualificacao']}), inscrito(a) sob o nº "
-             f"{ct['cpf_cnpj']}, doravante denominado(a) CONTRATANTE.")
+             f"{ct['cpf_cnpj']}{por_quem}, doravante denominado(a) CONTRATANTE.")
     L.append("")
     # 1ª — Objeto
     L.append(f"CLÁUSULA {_ordinal_clausula(1)} — DO OBJETO")

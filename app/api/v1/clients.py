@@ -9,6 +9,7 @@ from app.api.deps import get_current_internal_user, get_db
 from app.models.audit_log import AuditLog
 from app.models.client import Client as ClientModel
 from app.models.client import ClientStatus
+from app.models.client_representative import ClientRepresentative as RepModel
 from app.models.macroetapa import (
     Macroetapa,
     MacroetapaChecklist,
@@ -20,7 +21,14 @@ from app.models.process import ProcessStatus
 from app.models.property import Property as PropertyModel
 from app.models.user import User
 from app.repositories import ClientRepository
-from app.schemas.client import Client, ClientCreate, ClientUpdate
+from app.schemas.client import (
+    Client,
+    ClientCreate,
+    ClientRepresentative,
+    ClientRepresentativeCreate,
+    ClientRepresentativeUpdate,
+    ClientUpdate,
+)
 from app.schemas.client_hub import (
     ClientHubAISummary,
     ClientHubChips,
@@ -28,9 +36,11 @@ from app.schemas.client_hub import (
     ClientHubKpis,
     ClientHubProperty,
     ClientHubPropertyEvent,
+    ClientHubRepresentante,
     ClientHubSummary,
     ClientHubTimelineItem,
 )
+from app.services.identity import find_client_by_doc, normalize_doc
 
 router = APIRouter()
 
@@ -54,12 +64,60 @@ def create_client(
     client_in: ClientCreate,
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
-    """Cria um novo cliente para o tenant autenticado."""
+    """Cria um novo cliente para o tenant autenticado.
+
+    ENT-002: antes de criar, procura correspondência EXATA por documento
+    normalizado. Achou → 409 com o cadastro existente no corpo, para a tela
+    oferecer reutilização em vez de fabricar um segundo histórico. A fusão dos
+    duplicados HISTÓRICOS não acontece aqui (a spec veta fusão automática);
+    isto só impede o próximo.
+    """
     repo = ClientRepository(db, current_user.tenant_id)
+    _bloqueia_documento_duplicado(db, current_user.tenant_id, client_in.cpf_cnpj)
     client = repo.create(client_in.model_dump())
     db.commit()
     db.refresh(client)
     return client
+
+
+def _bloqueia_documento_duplicado(db: Session, tenant_id: int, documento: Optional[str],
+                                  exclude_id: Optional[int] = None) -> None:
+    """409 quando o documento já pertence a outro cadastro do tenant."""
+    existente = find_client_by_doc(db, tenant_id, documento, exclude_id=exclude_id)
+    if existente is None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "documento_ja_cadastrado",
+            "message": (
+                f"O documento {documento} já pertence ao cadastro "
+                f"#{existente.id} — {existente.legal_name or existente.full_name}. "
+                "Use o cadastro existente ou atualize os dados dele."
+            ),
+            "client_id": existente.id,
+            "full_name": existente.full_name,
+            "legal_name": existente.legal_name,
+            "cpf_cnpj": existente.cpf_cnpj,
+        },
+    )
+
+
+@router.get("/lookup/documento", response_model=Optional[Client])
+def lookup_client_por_documento(
+    documento: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Cadastro do tenant com este CPF/CNPJ, ou `null` (ENT-002).
+
+    Serve à tela de cadastro: perguntar ANTES de digitar o resto é o que
+    transforma "duplicata bloqueada no fim" em "reutilização oferecida no
+    começo". Compara por dígitos — pontuação não cria pessoa nova.
+    """
+    if not normalize_doc(documento):
+        return None
+    return find_client_by_doc(db, current_user.tenant_id, documento)
 
 
 @router.get("/{client_id}", response_model=Client)
@@ -84,7 +142,14 @@ def update_client(
 ) -> Any:
     """Atualiza os dados de um cliente."""
     repo = ClientRepository(db, current_user.tenant_id)
-    client = repo.update(client_id, client_in.model_dump(exclude_unset=True), detail="Cliente não encontrado")
+    # Mesma regra na EDIÇÃO: trocar o documento de um cadastro para o de outro
+    # é criar o duplicado pela porta dos fundos (lição registrada: cobrir PATCH
+    # além de POST).
+    dados = client_in.model_dump(exclude_unset=True)
+    if "cpf_cnpj" in dados:
+        _bloqueia_documento_duplicado(db, current_user.tenant_id, dados["cpf_cnpj"],
+                                      exclude_id=client_id)
+    client = repo.update(client_id, dados, detail="Cliente não encontrado")
     db.commit()
     db.refresh(client)
     return client
@@ -286,6 +351,11 @@ def get_client_hub_summary(
         source_channel=c.source_channel,
         created_at=c.created_at,
         field_sources=c.field_sources or {},
+        representantes=[
+            ClientHubRepresentante(id=r.id, full_name=r.full_name, cpf=r.cpf, papel=r.papel)
+            for r in (c.representatives or [])
+            if r.deleted_at is None
+        ],
     )
 
     return ClientHubSummary(header=header, chips=chips, kpis=kpis, state=state)
@@ -548,3 +618,124 @@ def get_client_timeline(
         )
         for log in logs
     ]
+
+
+# ---------------------------------------------------------------------------
+# Representantes da PJ (ENT-001)
+# ---------------------------------------------------------------------------
+# Sob `/clients/{id}/representatives` e não em rota própria de topo porque é
+# exatamente isso que a entidade é: subordinada. Não existe representante sem
+# titular, e não há tela que o procure fora do cliente.
+
+
+def _client_pj_ou_404(db: Session, tenant_id: int, client_id: int) -> ClientModel:
+    """Cliente do tenant que PODE ter representante. 404 fora do tenant."""
+    client = (
+        db.query(ClientModel)
+        .filter(ClientModel.id == client_id, ClientModel.tenant_id == tenant_id,
+                ClientModel.deleted_at.is_(None))
+        .first()
+    )
+    if client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente não encontrado")
+    tipo = getattr(client.client_type, "value", client.client_type)
+    if (tipo or "").lower() != "pj":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Representante só existe em cliente pessoa jurídica. Em pessoa "
+                "física o documento pessoal é do próprio titular."
+            ),
+        )
+    return client
+
+
+def _representante_ou_404(db: Session, tenant_id: int, client_id: int, rep_id: int) -> RepModel:
+    rep = (
+        db.query(RepModel)
+        .filter(RepModel.id == rep_id, RepModel.tenant_id == tenant_id,
+                RepModel.client_id == client_id, RepModel.deleted_at.is_(None))
+        .first()
+    )
+    if rep is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Representante não encontrado")
+    return rep
+
+
+@router.get("/{client_id}/representatives", response_model=list[ClientRepresentative])
+def list_representatives(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Representantes do cliente PJ."""
+    _client_pj_ou_404(db, current_user.tenant_id, client_id)
+    return (
+        db.query(RepModel)
+        .filter(RepModel.tenant_id == current_user.tenant_id,
+                RepModel.client_id == client_id, RepModel.deleted_at.is_(None))
+        .order_by(RepModel.id.asc())
+        .all()
+    )
+
+
+@router.post("/{client_id}/representatives", response_model=ClientRepresentative,
+             status_code=status.HTTP_201_CREATED)
+def create_representative(
+    client_id: int,
+    *,
+    payload: ClientRepresentativeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Cadastra representante do cliente PJ (papel, nunca titularidade)."""
+    _client_pj_ou_404(db, current_user.tenant_id, client_id)
+    dados = payload.model_dump(exclude_unset=True)
+    rep = RepModel(
+        tenant_id=current_user.tenant_id,
+        client_id=client_id,
+        # Digitado pelo consultor: a proveniência é humana desde o nascimento.
+        field_sources={k: "human_validated" for k, v in dados.items() if v is not None},
+        **dados,
+    )
+    db.add(rep)
+    db.commit()
+    db.refresh(rep)
+    return rep
+
+
+@router.patch("/{client_id}/representatives/{rep_id}", response_model=ClientRepresentative)
+def update_representative(
+    client_id: int,
+    rep_id: int,
+    *,
+    payload: ClientRepresentativeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Corrige dados do representante."""
+    _client_pj_ou_404(db, current_user.tenant_id, client_id)
+    rep = _representante_ou_404(db, current_user.tenant_id, client_id, rep_id)
+    dados = payload.model_dump(exclude_unset=True)
+    fs = dict(rep.field_sources or {})
+    for campo, valor in dados.items():
+        setattr(rep, campo, valor)
+        fs[campo] = "human_validated"
+    rep.field_sources = fs
+    db.commit()
+    db.refresh(rep)
+    return rep
+
+
+@router.delete("/{client_id}/representatives/{rep_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_representative(
+    client_id: int,
+    rep_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> None:
+    """Remove o representante (soft delete — o vínculo já existiu)."""
+    _client_pj_ou_404(db, current_user.tenant_id, client_id)
+    rep = _representante_ou_404(db, current_user.tenant_id, client_id, rep_id)
+    rep.deleted_at = datetime.now(UTC)
+    db.commit()

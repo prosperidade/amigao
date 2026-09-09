@@ -30,6 +30,19 @@ class ClientHubHeader(BaseModel):
     created_at: Optional[datetime] = None
     # Sprint V (F2) — proveniência por campo: {campo: "raw"|"ai_extracted"|"human_validated"}.
     field_sources: dict = {}
+    # ENT-001 — bloco SEPARADO do titular. O Hub é uma das "telas que consomem a
+    # pessoa principal" do critério de aceite: se o representante não viaja
+    # aqui, a tela volta a ter só uma pessoa e a confusão retorna.
+    representantes: list["ClientHubRepresentante"] = []
+
+
+class ClientHubRepresentante(BaseModel):
+    id: int
+    full_name: Optional[str] = None
+    cpf: Optional[str] = None
+    papel: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # CAM2CH-003 — Bloco 2: Dashboard resumido

@@ -36,7 +36,24 @@ interface ClientHubHeader {
   created_at: string | null;
   // Sprint V (F2) — proveniência por campo: "raw" | "ai_extracted" | "human_validated"
   field_sources: Record<string, string>;
+  // ENT-001 — representantes da PJ. Bloco SEPARADO do titular.
+  representantes: ClientHubRepresentante[];
 }
+
+interface ClientHubRepresentante {
+  id: number;
+  full_name: string | null;
+  cpf: string | null;
+  papel: string | null;
+}
+
+const PAPEL_LABEL: Record<string, string> = {
+  representante_legal: 'Representante legal',
+  socio_administrador: 'Sócio-administrador',
+  procurador: 'Procurador',
+  inventariante: 'Inventariante',
+  outro: 'Representante',
+};
 
 // Sprint V (F2) — espelha PropertyHub: badge de origem do campo.
 const FIELD_SOURCE_BADGE: Record<string, { icon: string; label: string; cls: string }> = {
@@ -251,6 +268,14 @@ export default function ClientHub() {
                 <span className="truncate">{header.full_name}</span>
                 <FieldSourceBadge source={header.field_sources?.full_name} />
               </h1>
+              {/* DATA-001 — a razão social é o nome que vale no contrato; ficava
+                  invisível mesmo quando preenchida. */}
+              {header.client_type === 'pj' && header.legal_name && (
+                <p className="text-sm text-gray-600 dark:text-slate-300 truncate flex items-center gap-1.5">
+                  <span className="truncate">{header.legal_name}</span>
+                  <FieldSourceBadge source={header.field_sources?.legal_name} />
+                </p>
+              )}
               <p className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1.5 flex-wrap">
                 <span>ID #{header.id} · {header.client_type === 'pj' ? 'Pessoa Jurídica' : 'Pessoa Física'}</span>
                 {header.cpf_cnpj && (
@@ -298,6 +323,35 @@ export default function ClientHub() {
             </div>
           )}
         </div>
+
+        {/* ENT-001 — Representante(s). Bloco PRÓPRIO, nunca no lugar do titular:
+            o documento pessoal de quem representa comprova representação, não
+            titularidade do imóvel. Em PF não existe — o documento é do titular. */}
+        {header.client_type === 'pj' && (
+          <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">
+              Representação
+            </p>
+            {header.representantes?.length ? (
+              <ul className="space-y-1.5">
+                {header.representantes.map((r) => (
+                  <li key={r.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-200 flex-wrap">
+                    <span className="text-gray-400">👤</span>
+                    <span className="font-medium">{r.full_name || 'Nome não informado'}</span>
+                    {r.cpf && <span className="font-mono text-xs text-gray-500 dark:text-slate-400">CPF {r.cpf}</span>}
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                      {PAPEL_LABEL[r.papel ?? ''] ?? 'Representante'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                Nenhum representante cadastrado. O titular do imóvel é a própria empresa.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Chips */}
         <div className="flex flex-wrap gap-1.5">

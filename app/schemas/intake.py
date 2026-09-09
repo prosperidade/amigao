@@ -43,6 +43,9 @@ class IntakeClassifyResponse(BaseModel):
 
 class IntakeClientCreate(BaseModel):
     full_name: str
+    # DATA-001 — razão social entra pelo intake também. Sem isto, o caso da PJ
+    # nascia sem o nome que consta no contrato.
+    legal_name: Optional[str] = None
     phone: Optional[str] = None
     # Decisão Isis (2026-05-28): e-mail é OBRIGATÓRIO no contato (não opcional).
     email: str = Field(..., description="E-mail do contato — OBRIGATÓRIO (decisão Isis 2026-05-28).")
@@ -168,6 +171,7 @@ class IntakeEnrichClientFields(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     cpf_cnpj: Optional[str] = None
+    legal_name: Optional[str] = None
     client_type: Optional[str] = None
 
 
