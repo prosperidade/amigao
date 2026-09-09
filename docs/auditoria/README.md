@@ -16,7 +16,7 @@ Regra da pasta: auditoria é fotografia de um SHA. Não se edita um relatório d
 
 ## 1. Auditoria Codex — inventário e arquitetura real
 
-**SHA:** `11ab1af` · **Data:** 08/2026 · **Arquivo:** `auditoria_codex_regente.md` (raiz do repositório, **não versionado** — idêntico ao `AuditoriaCodexRegente.docx`)
+**SHA:** `11ab1af` · **Data:** 08/2026 · **Arquivo:** [AUDITORIA_CODEX_11ab1af.md](./AUDITORIA_CODEX_11ab1af.md) (idêntico ao `AuditoriaCodexRegente.docx`; versionado como fonte da triagem — sem o bruto não se confere se a triagem leu certo)
 
 Varredura ampla do repositório: inventário de linguagens, migrations, modelos, endpoints e testes, mais os blocos AUD-01 a AUD-10 sobre arquitetura, multi-tenant, contratos de falha e risco estrutural. Conclusão: a arquitetura declarada e a real batem no esqueleto, e as divergências se concentram nos contratos de borda — que foram triados no item seguinte.
 
