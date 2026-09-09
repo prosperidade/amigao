@@ -8,7 +8,11 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 91.** (#85 a #90 abertas pela remediação de 26/07,
+> **PRÓXIMO NÚMERO LIVRE: 216.** (#215 aberta pela limpeza dos cadastros de
+> teste da ELODI em produção, 09/09 — hash chain do `audit_logs` sob escrita
+> concorrente; ver faixa 200-299. O contador estava parado em 91 enquanto a
+> série já ia em 214 — corrigido aqui.)
+> (#85 a #90 abertas pela remediação de 26/07,
 > `fix/validacao-26-07`: vigia de revogação, editor de rota do consultor,
 > `SourceRef.pagina`, área gravada em coluna de status, linguagem técnica na UI
 > fora das telas da Isis, e as 4 specs da Ficha-do-chat. Ver bloco próprio.)
@@ -1534,6 +1538,43 @@ hoje o representante só nasce pela consolidação de um documento pessoal, e n�
 como criar, corrigir o papel ou remover pela interface.
 **O que destrava:** consultora cadastrar o representante sem depender de haver
 uma CNH anexada. **Origem:** Frente A (08/09), escopo do PR fechado no aceite.
+
+### Aberta pela limpeza dos cadastros de teste da ELODI (09/09, medida em produção)
+
+**215. A hash chain do `audit_logs` quebra sob escrita concorrente.**
+Percorrendo a cadeia do tenant 1 por `id`, **10 registros têm `hash_previous` que
+não aponta para o `hash_sha256` do anterior**. O verificador (`verify_chain` em
+`app/services/audit_hash.py`) classifica isso como `broken_previous_link` — o
+sinal de "registro removido ou adulterado". Nenhum deles foi adulterado.
+
+**Causa raiz:** `stamp_audit_hash()` faz *ler o último hash → calcular → inserir*
+sem lock nem serialização (`app/services/audit_hash.py:46-51`). Dois produtores
+concorrentes — API e worker Celery — leem o mesmo "último hash" e ambos encadeiam
+nele; ao percorrer por `id`, o segundo aparece como elo quebrado.
+
+**Evidência:** dois dos 10 são `agent.extrator.completed` (worker) com **delta
+negativo** de `created_at` contra o registro de `id` imediatamente anterior —
+`-00:00:14` (id 1828, 10/08) e `-00:00:10` (id 1928, 17/08). O registro de id
+maior foi criado *antes* do de id menor: assinatura de interleaving entre
+sessões, não de adulteração. Os 10 elos datam de 02/08 a 17/08. O registro da
+própria limpeza (`reset_casos_teste`, id 2113, 09/09) encadeou correto e não
+criou elo novo — a cadeia seguiu com os mesmos 10.
+
+**Fio solto na mesma tabela:** 40 registros com `hash_sha256` NULL, gravados sem
+carimbo algum e portanto invisíveis ao verificador.
+
+**Correção proposta:** `pg_advisory_xact_lock(hashtext('audit_log_chain'), tenant_id)`
+imediatamente antes da leitura do último hash, na mesma transação do INSERT — ou
+mover o carimbo para um `BEFORE INSERT` trigger com o mesmo lock. Exige teste de
+concorrência (duas sessões inserindo em paralelo); sem ele o conserto não se
+prova, porque o bug só aparece na corrida.
+
+**O que destrava:** o verificador de integridade poder servir de alarme. Hoje ele
+acusa 10 quebras que são ruído, então ninguém olha — e uma quebra real passaria
+despercebida no meio delas. Princípio 2 ("tudo é auditável") depende de a cadeia
+ser confiável, não só de existir.
+**Origem:** limpeza dos cadastros de teste da ELODI (09/09), medida em produção
+na verificação pós-DELETE.
 
 > **✅ FECHADAS na 2ª rodada (03/08, `feat/audio-conversao-e-diarizacao`):**
 > **#200** (todo `ignorados` diz o motivo; `modulos_fiscais` ganhou destino) e
