@@ -70,6 +70,13 @@ class JanelaResultado:
     truncado: bool = False
     """True quando o teto de fatias impediu de cobrir o documento inteiro."""
 
+    completa: bool = True
+    """False quando alguma fatia PLANEJADA falhou (LLM ou parse) — mesmo que
+    ``truncado`` esteja False porque uma fatia posterior fechou o total_chars."""
+
+    falhas: list[dict[str, Any]] = field(default_factory=list)
+    """Fatias que falharam: [{"indice", "inicio", "fim", "erro"}, ...]."""
+
     origem: dict[str, int] = field(default_factory=dict)
     """campo → índice da fatia que forneceu o valor vencedor."""
 
@@ -85,6 +92,9 @@ class JanelaResultado:
         }
         if self.truncado:
             out["truncado"] = True
+        if not self.completa:
+            out["completa"] = False
+            out["falhas"] = self.falhas
         return out
 
 

@@ -1,5 +1,8 @@
 # Auditoria — fonte única de requisitos documentais (2026-07-20)
 
+> **SHA:** `4261b0a` — commit sobre o qual o código foi lido (ver
+> `docs/auditoria/README.md`).
+>
 > **Fase 1 (read-only) do PR `fix/fonte-unica-requisitos-documentais`.**
 > Sintoma relatado: o sistema mostra "4 documentos pendentes" e acusa MATRÍCULA
 > ausente num caso onde a certidão de inteiro teor **foi enviada**. Mesmo sintoma

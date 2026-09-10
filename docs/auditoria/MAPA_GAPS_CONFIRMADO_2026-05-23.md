@@ -1,6 +1,7 @@
 # Mapa de gaps confirmado — Fase 0 da skill de diagnóstico
 
 **Data:** 2026-05-23
+**SHA:** `7877652` — commit sobre o qual o código foi confrontado (ver `docs/auditoria/README.md`).
 **Autor:** Claude (Fase 0, worktree `chore/auditoria-fase0`)
 **Insumo:** [`AUDITORIA_DOCUMENTAL_2026-05-23.md`](./AUDITORIA_DOCUMENTAL_2026-05-23.md) confrontada com o código real.
 **Natureza:** confirmação contra realidade. Onde a auditoria documental e o código divergem, **o código vence**.
