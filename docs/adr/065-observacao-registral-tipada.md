@@ -11,6 +11,13 @@ OCR-002 (arrendamento em `averbacao_app`)
 **Dívida aberta:** nenhuma nova. HIST-001 (temporalidade de ato) permanece aberta
 — é a frente seguinte, e depende desta.
 
+> ⚠️ **Pendência pós-merge do PR #157** (`fix/cobertura-janela`, paralelo): o
+> gate desta frente rodou antes de `JanelaResultado` ganhar `completa`/`falhas`
+> — hoje `truncado` não detecta uma falha silenciosa na ÚLTIMA fatia (docs 547
+> e 548, os únicos que fatiam nesta frente). Rebase + reconferência dos quatro
+> documentos exigindo `completa=True` em toda execução ficam pendentes até o
+> #157 mergear. Ver `docs/trabalhos/tipo_observacao.md`.
+
 ---
 
 ## Contexto

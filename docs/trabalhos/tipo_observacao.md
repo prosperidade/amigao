@@ -8,6 +8,29 @@ de observação: AUSENTE"), `docs/trabalhos/contencao_entrada.md` (#221),
 
 ---
 
+## ⚠️ Pendência declarada — gate roda ANTES do #157, precisa reconferir depois
+
+Este gate rodou contra `_extract_structured`/`JanelaResultado` como existem
+**antes** do PR #157 (`fix/cobertura-janela`, aberto em paralelo,
+`docs/services/extraction_window.py`): hoje `janela.truncado` é calculado só
+por posição de char (`cobertura_chars = fatias[-1].fim`), sem saber se a
+ÚLTIMA fatia realmente produziu resposta do LLM — uma falha silenciosa na
+última chamada não derruba `truncado=False`. Os docs **547** (2 fatias,
+82.117 chars) e **548** (2 fatias, 57.090 chars) são os únicos desta frente
+que fatiam, logo os únicos expostos a essa lacuna; 549 e 550 cabem numa fatia
+só.
+
+O #157 adiciona `completa`/`falhas` a `JanelaResultado` para fechar exatamente
+essa lacuna. **Ação pendente, após o merge do #157:** `git rebase main` nesta
+branch e reconferir os quatro documentos exigindo `completa=True` em TODAS as
+execuções — uma execução com `completa=False` não conta como leitura válida
+do documento, entra na tabela como falha, não como dado. Sem isso, a "cobertura
+completa" que este gate reporta para 547/548 é precisamente o tipo de
+afirmação que o #157 existe para não deixar passar sem prova. Instrução
+recebida em 10/09, endereçada ao agente desta frente.
+
+---
+
 ## Ambiente da medição
 
 | item | valor |
