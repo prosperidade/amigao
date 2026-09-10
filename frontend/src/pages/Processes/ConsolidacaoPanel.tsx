@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { acoesKeys } from '@/lib/acoes/hooks';
-import { labelFor, humanizeValue } from '@/lib/labels/fieldLabels';
+import { labelFor, labelForTipoObservacao, humanizeValue } from '@/lib/labels/fieldLabels';
 import { docTypeLabel } from '@/lib/labels/docLabels';
 
 /** Mensagem de erro legível a partir do AxiosError (detail do backend, senão genérica). */
@@ -44,11 +44,19 @@ interface StagingField {
     normalizado_ha?: number;
     metodo_normalizacao?: string;
     extenso_confere?: boolean;
+    // ADR-065 (Frente E) — o ato foi tipado e o tipo não tem coluna no cadastro
+    // (ou o valor é de outro objeto). Diferente de `sem_ancora`: aqui o dado é
+    // bom e a fonte existe; o que falta é destino. Aparece, nunca é forçado.
+    sem_destino?: boolean;
+    sem_destino_motivo?: string;
   } | null;
   confidence: string | null;
   target_entity: string | null;
   target_field: string | null;
   matricula_hint: string | null;
+  // ADR-065 — o que a linha É (arrendamento, hipoteca, baixa, reserva legal…).
+  // Nulo em campo de cabeçalho: só ato registral é observação.
+  tipo_observacao?: string | null;
   status: string;
   decided_value: { value?: unknown } | null;
   // Item 6 — aceite que não vai pousar na base (computado no servidor, durável).
@@ -261,7 +269,15 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
             {rows.map(f => (
               <div key={f.id} className="flex items-center gap-3 flex-wrap p-2.5 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5">
                 <div className="flex-1 min-w-[160px]">
-                  <p className="text-sm text-gray-800 dark:text-slate-200">{labelFor(f.target_field || f.field_name)}</p>
+                  {/* ADR-065: quando a linha nasceu de um ATO, o rótulo é o que
+                      o ato É — "Arrendamento", "Baixa" —, não a coluna que ele
+                      calhou de ocupar. Era exatamente essa a confusão: um
+                      arrendamento de 50 ha aparecia como "Averbação de APP". */}
+                  <p className="text-sm text-gray-800 dark:text-slate-200">
+                    {f.tipo_observacao
+                      ? labelForTipoObservacao(f.tipo_observacao)
+                      : labelFor(f.target_field || f.field_name)}
+                  </p>
                   {/* Item 14 — `source_doc_type` é chave de banco ("auto_infracao",
                       "rg_cpf"); passa pelo dicionário antes de virar tela. */}
                   <p className="text-xs text-gray-400 dark:text-slate-500">
@@ -316,6 +332,19 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                       {f.field_value.extenso_confere === true && ', confirmado pelo extenso do próprio documento'}
                       {f.field_value.extenso_confere === false && '. Atenção: o extenso do documento NÃO confere com o número — confira antes de aceitar'}
                       .
+                    </span>
+                  </span>
+                )}
+                {/* ADR-065 (Frente E): observação sem coluna no cadastro. NÃO é
+                    defeito — é o ato existindo à vista em vez de ser espremido
+                    numa gaveta alheia. Âmbar, como o "aceito e não entra",
+                    porque é a mesma família: dado bom, sem destino. */}
+                {f.field_value?.sem_destino && (
+                  <span className="basis-full order-last flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1">
+                    <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="font-semibold">Observação sem destino no cadastro:</strong>{' '}
+                      {f.field_value.sem_destino_motivo ?? 'este tipo de ato não tem coluna correspondente.'}
                     </span>
                   </span>
                 )}

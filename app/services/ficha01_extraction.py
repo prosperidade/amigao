@@ -44,6 +44,21 @@ from app.services.area_registral import (
     normalizar_area_registral,
 )
 from app.services.extraction_window import JanelaResultado, fatiar, mesclar
+from app.services.observacao_registral import (
+    MOTIVO_AREA_DE_OUTRO_OBJETO,
+    MOTIVO_GRAVAME,
+    MOTIVO_SEM_CASA,
+    MOTIVO_SUBSTITUIDA,
+    TIPOS_GRAVAME,
+    Observacao,
+    aplicar_baixas,
+    area_de_outro_objeto,
+    destino_de,
+    observacoes_de,
+    onus_vigentes,
+    rotulo_humano,
+    ultimo_por_destino,
+)
 from app.services.text_anchor import Ancora, TextoIndexado, ancorar_composto
 
 logger = logging.getLogger(__name__)
@@ -258,6 +273,10 @@ class StagingField:
     target_entity: Optional[str]
     target_field: Optional[str]
     matricula_hint: Optional[str] = None
+    # Frente E (ADR-065) — O QUE o valor é, antes de ONDE ele pousa. `None` em
+    # tudo que não vem de ato registral: campo de cabeçalho não é observação.
+    tipo_observacao: Optional[str] = None
+    atributos: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -485,7 +504,8 @@ TEXTO:
     "matricula": """Esta é uma CERTIDÃO DE MATRÍCULA / Registro de Imóveis. Extraia.
 Procure em TODO o texto (a matrícula tem várias seções: abertura, registros R-,
 averbações AV-). Retorne APENAS JSON. Campos ausentes = null.
-Instruções de completude:
+Instruções de completude — esclarecem os campos AMBÍGUOS; preencha TODOS os
+campos do JSON abaixo que constarem no texto, inclusive os não citados aqui.
 - "denominacao": o nome ATUAL do imóvel. Se a matrícula menciona nome ANTERIOR/
   histórico (ex.: "anteriormente denominada X", outra denominação na cadeia),
   inclua-o em "denominacao_anterior".
@@ -495,17 +515,36 @@ Instruções de completude:
   da matrícula/transcrição anterior, sem o "R-01/AV-" (ex.: "2.923"). Se não
   houver menção a registro anterior, null.
 - "proprietarios": cadeia de titulares (lista [{"nome","cpf"}]).
-- "onus": descreva CADA gravame (hipoteca/penhor/alienação) com TIPO, CREDOR e
-  VALOR quando constarem (ex.: "Hipoteca (R.05) - credor Banco X - R$ 1.000.000").
-- "averbacao_rl": a averbação de RESERVA LEGAL desta matrícula — o ato registral
-  que a averba ("Procede-se a averbação da Reserva Legal desta Matrícula ... com
-  a área total de X"). Copie a ÁREA averbada e a referência do ato (ex.: "AV.02",
-  matrículas em que a RL foi averbada em conjunto).
-- "averbacao_app": a averbação de ÁREA DE PRESERVAÇÃO PERMANENTE, e só ela.
-  Reserva Legal NÃO é APP — se o texto disser "Reserva Legal", o campo é
-  "averbacao_rl". Arrendamento, servidão, usufruto, hipoteca, penhora e
-  alienação não são APP nem RL: não os coloque em nenhum dos dois (hipoteca e
-  alienação vão em "onus"). Sem averbação de APP no texto, responda null.
+- "area_registrada_ha": a área do IMÓVEL, a que abre a matrícula ("com área de
+  X"). NÃO é a área de reserva legal, de APP, de arrendamento nem de parte
+  vendida — essas são áreas de ATOS e vão em "atos", com o tipo delas. Se a
+  abertura da matrícula não estiver neste trecho, responda null.
+- "atos": a lista dos ATOS desta matrícula — cada registro ("R-11") e cada
+  averbação ("AV.02") vira UM item, na ordem em que aparecem no texto. Diga o
+  que cada ato É em "tipo", usando EXATAMENTE um destes rótulos:
+  area_registrada, reserva_legal, app, georreferenciamento, compra_venda,
+  compromisso_compra_venda, arrendamento, servidao, usufruto, hipoteca,
+  alienacao_fiduciaria, penhora, baixa, aditivo. Se o ato não for nenhum
+  deles, use "nao_classificado" — nunca force um rótulo que não descreva o ato.
+  Campos de cada item:
+  · "ato": o rótulo como está no documento ("AV.02", "R-11", "R.15");
+  · "data": a data do ato, como escrita;
+  · "area_ha": a área que o ato cita, copiada literalmente, quando houver;
+  · "valor": o valor em dinheiro do ato, quando houver;
+  · "partes": as pessoas ou instituições do ato (credor, arrendatário,
+    comprador, vendedor) — copie os nomes como estão;
+  · "prazo": prazo ou vigência escritos no ato ("15 anos", "01/01/2013 a
+    01/01/2028");
+  · "ato_referenciado": quando o ato BAIXA, cancela, rescinde, quita ou adita
+    outro ato, o rótulo do ato citado ("AV.03");
+  · "descricao": em uma frase, o que o ato diz.
+  Reserva Legal é "reserva_legal", nunca "app". Arrendamento é "arrendamento",
+  nunca "app" e nunca "reserva_legal". Preço de compra e venda é
+  "compra_venda", não "hipoteca". Alienação fiduciária é
+  "alienacao_fiduciaria", não "hipoteca" — e o credor é o que estiver escrito
+  NAQUELE ato. Baixa de hipoteca, quitação de dívida e rescisão de
+  arrendamento são "baixa", e IMPORTAM: registre cada uma, com o ato que ela
+  baixa em "ato_referenciado".
 - "codigo_certificacao": código do georreferenciamento (SIGEF/INCRA), se houver,
   SEM texto de vértice grudado.
 - "nirf_cib": o NIRF/CIB DESTE imóvel na Receita Federal — 8 dígitos, no
@@ -524,12 +563,12 @@ Instruções de completude:
   "denominacao_anterior": null,
   "registro_anterior": null,
   "proprietarios": [{"nome": null, "cpf": null}],
-  "averbacao_app": null,
-  "averbacao_rl": null,
+  "atos": [{"ato": null, "tipo": null, "data": null, "area_ha": null,
+            "valor": null, "partes": [], "prazo": null,
+            "ato_referenciado": null, "descricao": null}],
   "numero_geo": null,
   "codigo_certificacao": null,
   "nirf_cib": null,
-  "onus": null,
   "confidence": {}
 }
 TEXTO:
@@ -853,6 +892,82 @@ def _normalizar_area(
     )
 
 
+def _linhas_de_observacoes(
+    observacoes: list[Observacao], indice: Optional[TextoIndexado],
+    doc_hint: Optional[str], confidence: Optional[str],
+) -> list[StagingField]:
+    """Atos tipados → linhas de staging, com o destino resolvido POR TIPO.
+
+    Uma linha por ato. O destino sai do mapa enumerado
+    (``observacao_registral.DESTINO_POR_TIPO``); quando o tipo não tem coluna, a
+    linha nasce SEM destino e com o motivo escrito — visível na Conferência,
+    nunca forçada numa gaveta alheia. É o oposto do que acontecia com a AV.10 do
+    doc 548, um arrendamento de 50 ha que virava `averbacao_app`.
+
+    Os gravames não recebem destino individual: `matricula.onus_gravames` é UMA
+    coluna de texto, e N linhas disputando a mesma coluna produziriam
+    reconciliação falsa (a primeira grava, as outras divergem). Eles entram
+    numa linha `onus` agregada, composta só dos que o documento NÃO declara
+    baixados.
+    """
+    aplicar_baixas(observacoes)
+    escolhidos = ultimo_por_destino(observacoes)
+
+    rows: list[StagingField] = []
+    for obs in observacoes:
+        fv: dict[str, Any] = {"value": obs.resumo()}
+        if indice is not None:
+            # Composto: âncora informa a cobertura, não barra (ADR-064). É assim
+            # que "credor Banco do Brasil" numa alienação do Itaú aparece como
+            # folha sem âncora, em vez de seguir como afirmação silenciosa.
+            fv["ancora"] = ancorar_composto(obs.atributos, indice)
+        destino = destino_de(obs)
+        target_entity: Optional[str] = None
+        target_field: Optional[str] = None
+        if destino is not None and escolhidos.get(destino) is obs:
+            target_entity, target_field = destino
+        elif destino is not None:
+            fv["sem_destino"] = True
+            fv["sem_destino_motivo"] = MOTIVO_SUBSTITUIDA.format(
+                ato=escolhidos[destino].ato or "outro ato desta matrícula"
+            )
+        elif obs.tipo in TIPOS_GRAVAME:
+            fv["sem_destino"] = True
+            fv["sem_destino_motivo"] = MOTIVO_GRAVAME
+        else:
+            fv["sem_destino"] = True
+            fv["sem_destino_motivo"] = MOTIVO_SEM_CASA
+        rows.append(StagingField(
+            field_name=target_field or "observacao",
+            field_value=fv,
+            confidence=confidence,
+            target_entity=target_entity,
+            target_field=target_field,
+            matricula_hint=doc_hint,
+            tipo_observacao=obs.tipo,
+            atributos=obs.atributos or None,
+        ))
+
+    vigentes = onus_vigentes(observacoes)
+    if vigentes:
+        fv_onus: dict[str, Any] = {"value": vigentes}
+        if indice is not None:
+            fv_onus["ancora"] = ancorar_composto(vigentes, indice)
+        rows.append(StagingField(
+            field_name="onus",
+            field_value=fv_onus,
+            confidence=confidence,
+            target_entity="matricula",
+            target_field="onus_gravames",
+            matricula_hint=doc_hint,
+        ))
+    logger.info(
+        "ficha01_extraction: %d observações tipadas (%d com destino, %d gravames vigentes)",
+        len(observacoes), sum(1 for r in rows if r.target_field), len(vigentes),
+    )
+    return rows
+
+
 def build_staging_fields(
     doc_type: str, parsed: dict[str, Any], *, texto: Optional[str] = None,
     titular_tipo: Optional[str] = None, janela: Optional[JanelaResultado] = None,
@@ -893,12 +1008,35 @@ def build_staging_fields(
     # anotação ("R-01", "(2 de 3)"), sem prefixo ("MATR. 2.923" → "2923").
     doc_hint = _clean_matricula_hint(raw_hint)
 
+    # ── Frente E (ADR-065) — os atos da matrícula, tipados ──────────────────
+    # Vêm ANTES do loop de campos porque duas decisões do loop dependem deles:
+    # qual destino já está ocupado por uma observação, e se a área candidata a
+    # área do imóvel é, na verdade, área de outro objeto (#221).
+    observacoes = observacoes_de(parsed.get("atos")) if doc_type == "matricula" else []
+    linhas_obs = (
+        _linhas_de_observacoes(observacoes, indice, doc_hint, _conf_for(parsed, "atos"))
+        if observacoes else []
+    )
+    destinos_ocupados = {
+        (linha.target_entity, linha.target_field) for linha in linhas_obs
+        if linha.target_entity and linha.target_field
+    }
+
     for spec in _FIELD_SPECS.get(doc_type, []):
         value = parsed.get(spec.json_key)
         # Caso #12: desembrulha envelope {value, confidence} que o LLM às vezes
         # devolve — senão o dict é persistido cru (vira "3,5 milhões de ha").
         value, embedded_conf = _unwrap_llm_value(value)
         if _is_empty(value):
+            continue
+        # Frente E — a chave ANTIGA (`averbacao_rl`, `averbacao_app`, `onus`)
+        # continua no spec para JSON legado, mas se a observação tipada já
+        # ocupou o destino ela vence: o ato sabe o que é, a gaveta não.
+        if (spec.target_entity, spec.target_field) in destinos_ocupados:
+            logger.info(
+                "ficha01_extraction: %s ignorado — destino %s.%s já preenchido por "
+                "observação tipada", spec.field_name, spec.target_entity, spec.target_field,
+            )
             continue
         # 2b — campo de código recebendo frase/título (lixo do LLM): descarta.
         # Guard de identidade (26/07): documento sem a marca do próprio tipo não
@@ -951,6 +1089,25 @@ def build_staging_fields(
         # ENT-001 — documento pessoal só sabe onde pousar depois de saber de
         # quem ele é. Fora desse caso o destino segue o spec, intocado.
         target_entity, target_field = spec.target_entity, spec.target_field
+        # Frente E (#221) — forma certa, significado errado: `185,85.60` é a
+        # área da RELOCAÇÃO DA RESERVA LEGAL (doc 547, Av.03), tem âncora, passa
+        # no formato e normaliza bem. Se o mesmo número é a área de um ato de
+        # RL/APP/arrendamento/servidão, ele não é a área do imóvel — e a linha
+        # fica visível, sem destino, em vez de gravar 185,856 ha numa matrícula
+        # de 926 ha.
+        if spec.field_name == "area_registrada_ha" and observacoes:
+            dona = area_de_outro_objeto(observacoes, value)
+            if dona is not None:
+                fv["sem_destino"] = True
+                fv["sem_destino_motivo"] = MOTIVO_AREA_DE_OUTRO_OBJETO.format(
+                    tipo=rotulo_humano(dona.tipo), ato=dona.ato or "ato sem rótulo",
+                )
+                logger.warning(
+                    "ficha01_extraction: area_registrada_ha %r é área de %s (%s) — "
+                    "linha sem destino", value, dona.tipo, dona.ato,
+                )
+                target_entity = target_field = None
+                confidence = "low"
         if doc_type in DOC_PESSOAL_TYPES:
             target_entity = rota_documento_pessoal(titular_tipo)
             if target_entity == ENTIDADE_REPRESENTANTE:
@@ -967,6 +1124,8 @@ def build_staging_fields(
             target_field=target_field,
             matricula_hint=doc_hint,
         ))
+
+    rows.extend(linhas_obs)
 
     # CAR: lista de matrículas citadas no recibo → 1 linha por item (hint = nº).
     if doc_type == "car":
@@ -1277,6 +1436,8 @@ def extract_and_stage(
             target_entity=f.target_entity,
             target_field=f.target_field,
             matricula_hint=f.matricula_hint,
+            tipo_observacao=f.tipo_observacao,
+            atributos=f.atributos,
             status=ExtractedFieldStatus.pendente,
             created_by_agent=created_by_agent,
             ai_job_id=ai_job_id,

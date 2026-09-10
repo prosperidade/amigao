@@ -24,6 +24,11 @@ class ExtractedFieldStagingOut(BaseModel):
     target_entity: Optional[str] = None
     target_field: Optional[str] = None
     matricula_hint: Optional[str] = None
+    # Frente E (ADR-065): o que a linha É (vocabulário fechado em
+    # `observacao_registral`) e os atributos que o tipo pede. Nulos em campo de
+    # cabeçalho — só ato registral é observação.
+    tipo_observacao: Optional[str] = None
+    atributos: Optional[dict[str, Any]] = None
     status: ExtractedFieldStatus
     decided_value: Optional[Any] = None
     decided_by_user_id: Optional[int] = None

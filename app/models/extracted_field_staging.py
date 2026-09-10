@@ -75,6 +75,28 @@ class ExtractedFieldStaging(Base):
     # definitivo é decisão do consultor.
     matricula_hint = Column(String, nullable=True)
 
+    # ── Frente E (ADR-065) — O QUE o valor é, antes de ONDE ele pousa ───────
+    # `field_name`/`target_field` respondem "em que coluna isto entra". Nenhum
+    # dos dois responde "isto é um arrendamento". Sem essa pergunta, todo ato
+    # que não coubesse nas três gavetas da matrícula (`averbacao_app`,
+    # `averbacao_rl`, `onus`) era espremido numa delas: a AV.10 do doc 548 (um
+    # arrendamento de 50 ha para terceiro) virou `averbacao_app`, e a área da
+    # reserva legal do doc 547 (`185,85.60`) virou área do imóvel (#221).
+    #
+    # Coluna, e não mais uma chave dentro de `field_value`: `field_value` é o
+    # envelope do VALOR (bruto + âncora + normalização, ADR-064), e o tipo é
+    # ortogonal a ele — como o destino e a confiança já são. Sendo coluna, dá
+    # para perguntar ao banco "quais observações não têm casa" sem abrir JSON.
+    # Vocabulário fechado em `app/services/observacao_registral.py`; String, não
+    # Enum, porque tipo novo não deve exigir migration — a mesma razão de
+    # `source_doc_type`.
+    tipo_observacao = Column(String(40), nullable=True, index=True)
+    # Os atributos que o TIPO pede: ato ("AV.02"), data, área, valor, partes,
+    # prazo, ato referenciado, descrição — mais `baixado_por`, escrito pelo
+    # sistema quando outra averbação declara a baixa deste ato. Data e prazo
+    # ficam como TEXTO: temporalidade consultável é a frente seguinte.
+    atributos = Column(PortableJSON, nullable=True)
+
     status = Column(
         Enum(ExtractedFieldStatus, name="extractedfieldstatus"),
         nullable=False,
