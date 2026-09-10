@@ -286,7 +286,7 @@ class TestOnusDerivadoDosAtos:
         linha = next(r for r in self._rows() if r.atributos and r.atributos.get("ato") == "R-11")
         assert linha.tipo_observacao == TIPO_COMPRA_VENDA
         onus = next(r for r in self._rows() if r.field_name == "onus")
-        assert all("657.000,00" != o.get("valor") for o in onus.field_value["value"])
+        assert all(o.get("valor") != "657.000,00" for o in onus.field_value["value"])
 
     def test_a_alienacao_fiduciaria_guarda_as_partes_daquele_ato(self):
         """`partes` (lista), não `credor` (singular) — gate mediu que o modelo
