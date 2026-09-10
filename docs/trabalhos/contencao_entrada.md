@@ -324,3 +324,190 @@ entra na dívida **#215**.
    não ganham âncora retroativa, e valores sem fonte já consolidados na base
    continuam lá. Detectável por varredura (staging com `created_by_agent='extrator'`
    e `field_value` sem chave `ancora`).
+
+
+---
+
+# GATE PÓS-DEPLOY — EXECUTADO (09/09)
+
+Fecha a condição declarada acima. **Não rodou em produção**: rodou num banco
+descartável carregado com o `extracted_text` **real** de produção, copiado com
+md5 conferido documento a documento. Produção só recebeu `SELECT`.
+
+## Como o texto saiu de produção
+
+O PostgREST do Supabase esteve em 503 (`PGRST002`) a rodada inteira, então cada
+documento veio por `SELECT` no MCP, em fatias base64 com **md5 da própria fatia
+calculado no banco**. A transcrição corrompeu 5 fatias (1 caractere cada, quatro
+delas na mesma vizinhança `registro sob o R-2x`); todas foram reparadas por
+força bruta **fechando o md5 de origem** — nenhuma foi consertada por
+semelhança. Ao final, os 7 documentos com texto batem md5 com produção:
+
+| doc | arquivo | chars | md5 confere |
+|---|---|---|---|
+| 544 | `cnh-valeria.jpg` | — | `extracted_text` NULL, ocr `failed` (replicado) |
+| 545 | RG Valéria | 849 | sim |
+| 546 | CAR Elodi 2016 | 4.286 | sim |
+| 547 | M3.181 — 926 ha | 82.117 | sim |
+| 548 | M3.313 — 725 ha | 57.090 | sim |
+| 549 | M3.673 — 212 ha | 34.815 | sim |
+| 550 | M4.387 — 316 ha | 27.109 | sim |
+| 551 | CNH-e | 444 | sim |
+
+> A medição anterior (seção "Tabela do gate", acima) usou cópias do
+> `amigao_entrada` que estavam **lossy** — doc 546 com 4.267 chars contra 4.286
+> de produção, doc 549 com 29.854 contra 34.815. Aqueles números valem como
+> estrutura, não como medida do texto real. **Esta seção substitui aquela.**
+
+## Os dois lados, por SHA
+
+| lado | SHA | o que é |
+|---|---|---|
+| ANTES | **`41e8534`** | main imediatamente antes do #152 (worktree `wt-antes-152`) |
+| DEPOIS | **`ed2c327`** | o merge do #152 — a contenção, e só ela |
+
+A main já tinha andado para **`5103fc4`** (Frente D, fiação, PR #155) quando o
+gate rodou. **O DEPOIS não rodou contra ela, de propósito** — usá-la misturaria
+duas frentes na mesma medição. A árvore usada no DEPOIS estava em `97b3973`,
+cujo `app/` é **byte a byte igual ao de `ed2c327`** (`git diff ed2c327 97b3973 --
+app/` vazio) e difere do de `5103fc4` em 53 linhas de dois arquivos.
+
+Prova independente do SHA, dentro dos próprios dados: dos quatro campos que o
+#155 ligou, **`modulos_fiscais`, `area_documental_ha` e `proprietarios` não
+aparecem em nenhuma das 4 execuções**, inclusive as do DEPOIS. O quarto,
+`averbacao_rl`, já tinha destino nos dois lados (aparece com
+`destino=matricula.averbacao_rl` no ANTES-1, doc 549), então não serve como
+marcador — o #155 refinou o campo, não o criou.
+
+Uma terceira execução contra `5103fc4` mediria contenção + fiação juntas e não
+foi feita: a fiação tem o gate dela no PR #155.
+
+Staging e `ai_jobs` zerados a cada uma das 4 execuções.
+
+## Tabela — 8 documentos, 2 execuções de cada lado
+
+| doc | documento | linhas antes (1/2) | linhas depois (1/2) | com âncora (d1/d2) | barradas no depois |
+|---|---|---|---|---|---|
+| 544 | CNH jpg (OCR failed) | 0 / 0 | 0 / 0 | 0 / 0 | — (sem texto) |
+| 545 | RG Valéria | 3 / 3 | 3 / 3 | **3 / 3** | nenhuma — controle negativo |
+| 546 | CAR Elodi | 10 / 10 | 10 / 10 | **10 / 10** | nenhuma |
+| 547 | M3.181 926 ha | 5 / 5 | 9 / 10 | **9 / 10** | nenhuma |
+| 548 | M3.313 725 ha | 9 / 9 | 11 / 11 | 11 / 10 | `averbacao_rl` (1x) |
+| 549 | M3.673 212 ha | 10 / 9 | 8 / 8 | **8 / 8** | nenhuma |
+| 550 | M4.387 316 ha | 8 / 8 | 8 / 8 | **8 / 8** | nenhuma |
+| 551 | CNH-e | 0 / 0 | 0 / 0 | 0 / 0 | nenhuma |
+
+**Controle negativo (545):** 3 linhas, 3 âncoras, zero rejeição nas duas
+execuções. A contenção não inventa recusa em documento limpo.
+
+**Única linha barrada em 4 execuções** — doc 548, `averbacao_rl`:
+
+```
+value: "Reserva Legal averbada as margens da matricula de origem"
+ancora: null · sem_ancora: true · confidence: low
+ficha01_extraction: averbacao_rl SEM ÂNCORA no documento (não entra na base)
+```
+
+É uma frase descritiva que o modelo escreveu, não um valor copiado do documento.
+Entrou como **linha visível com o motivo**, não sumiu em silêncio — que é
+exatamente o comportamento pedido pela N1.
+
+## Contenção 2 (janela) — o achado principal
+
+| doc | ANTES-1 | ANTES-2 | DEPOIS-1 | DEPOIS-2 |
+|---|---|---|---|---|
+| 547 `nirf_cib` | `050.041.396.737-1` errado | `050.041.396.737-1` errado | `2.974.457-1` @53.774 | `2.974.457-1` @53.774 |
+| 549 `nirf_cib` | `950.041.396.737-1` errado | `6.816.752-0` certo | `6.816.752-0` @10.837 | `6.816.752-0` @10.837 |
+
+Os dois valores errados **existem no documento** — são o código INCRA do
+**confrontante**, no primeiro parágrafo (char 1.286 no 547, char 1.256 no 549).
+Não é alucinação: é o código do vizinho. A âncora sozinha nunca os barraria; o
+que os elimina é a janela ler o documento inteiro e o prompt distinguir
+confrontante de SNCR. No 547 a prova é direta — a janela cobriu **82.117/82.117
+chars em 2 fatias** e o valor certo veio da **fatia 1 (43.000–82.117)**, região
+que o `EXTRACTOR_MAX_CHARS=30.000` do ANTES nunca leu:
+
+```
+ancora: {"pos": 53774, "metodo": "digitos",
+         "trecho": "...e na Receita Federal sob o nº 2.974.457-1, conforme
+                    Certidão Negativa de ITR, emitida via internet em 30/09/2013..."}
+```
+
+## Contenção 3 (número registral) — sem consolidar nada
+
+`parse_area_ha` / `_coerce` sobre os valores **já aceitos** no #23, como função
+pura:
+
+| bruto | `parse_area_ha` | `_coerce(Numeric)` |
+|---|---|---|
+| `926,36.54` | **926,3654** | 926,3654 |
+| `725,46.63` | **725,4663** | 725,4663 |
+| `212,3553` | 212,3553 | 212,3553 |
+| `2.180,8267` | 2.180,8267 | 2.180,8267 |
+| `316,4183` | 316,4183 | 316,4183 |
+| `92636.54` | 92.636,54 | 92.636,54 |
+
+As duas linhas aceitas consolidam certo **depois do deploy, sem re-extração**. A
+última linha é o motivo da ordem: uma leitura já colapsada em `92636.54`
+continua 92 mil hectares — a regra conserta na origem, não retroage. Consolidar
+**antes** do deploy é o que precisa não acontecer.
+
+Na extração, o bruto é preservado e o normalizado vem ao lado:
+
+```
+doc 547  bruto=926,36.54  norm=926.3654  metodo=notacao_ha_a_ca+extenso  extenso=True
+doc 548  bruto=725,46.63  norm=725.4663  metodo=notacao_ha_a_ca+extenso  extenso=True
+doc 549  bruto=212,3553   norm=None      (não é notação registral — intacto)
+doc 550  bruto=316,2053   norm=None      (não é notação registral — intacto)
+```
+
+## Contenção 4 (auditoria) — o que foi e o que não foi exercido
+
+Cada chamada devolveu modelo, provider, tokens e custo, por fatia:
+
+```
+doc 547  staging:matricula:chunk0[0:45000]      gpt-4o-mini  in=22.090 out=163  US$ 0,0034
+doc 547  staging:matricula:chunk1[43000:82117]  gpt-4o-mini  in=14.480 out=649  US$ 0,0026
+doc 549  staging:matricula:chunk0[0:34815]      gpt-4o-mini  in=12.466 out=572  US$ 0,0021
+```
+
+**Fronteira honesta:** este harness chama `extract_and_stage`, que não passa por
+`BaseAgent._complete_job` — logo **não gravou linhas em `ai_jobs`** (a tabela
+ficou em 0 na última execução). O que está medido aqui é o callback entregando
+metadado por chamada; a persistência em `ai_jobs.raw_output` continua coberta só
+por `tests/agents/test_extrator_auditavel.py`, não por medição ponta a ponta.
+
+## Variação entre execuções (dívida #215)
+
+| doc | antes | depois |
+|---|---|---|
+| 547 | 5 → 5 (estável) | 9 → 10 |
+| 548 | 9 → 9 (estável) | 11 → 11 (mas 11 → 10 com âncora) |
+| 549 | **10 → 9** | 8 → 8 (estável) |
+| 545, 546, 550, 551 | estáveis | estáveis |
+
+O `nirf_cib` do 549 no ANTES variou entre o confrontante e o valor certo nas duas
+execuções — o lado antigo acertava por sorte. Determinismo total segue sendo a
+**#215**, fora desta frente.
+
+## O que o gate ABRIU — dívida #221
+
+Doc 547, DEPOIS-2: `area_registrada_ha = 185,85.60` — a área da **Reserva
+Legal**, não a do imóvel. Com âncora (char 56.111), formato válido e normalização
+correta (185,856 ha). Isolando as fatias, a janela está inocente:
+
+```
+chunk0[0:45000]      --> area_registrada_ha = 926,36.54
+chunk1[43000:82117]  --> area_registrada_ha = None
+MESCLADO: 926,36.54   (janela.origem: area_registrada_ha = fatia 0)
+```
+
+Quando o modelo omite a área na fatia 0, o único candidato restante é o da fatia
+1. Nenhuma das quatro contenções barra: o valor está no texto e o formato é
+plausível. Registrada como **#221**, com o caminho de conserto (exigir
+`extenso_confere`) e **não corrigida nesta frente**.
+
+## Produção, ao final
+
+`process_id = 23`: **28 linhas `aceito`** — o mesmo número de antes do gate.
+Nada foi escrito, consolidado ou re-extraído em produção.
