@@ -325,6 +325,20 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("app_declarada_ha", "app_declarada_ha", "imovel", "app_area_ha", "ha"),
         _FieldSpec("rl_declarada_ha", "rl_declarada_ha", "imovel", "rl_status", "ha"),
         _FieldSpec("status_car", "status_car", "imovel", "car_status"),
+        # Fiação (09/09), DATA-002 parcial — o recibo do CAR declara DUAS áreas
+        # no mesmo parágrafo ("Foi detectada uma diferença entre a área ...
+        # declarada conforme documentação comprobatória [2180.3923 hectares] e a
+        # área ... identificada em representação gráfica [2.180,8267 hectares]").
+        # O esqueleto tinha UM slot: a gráfica entrava em `total_area_ha` e a
+        # documental não tinha para onde ir — a informação mais importante do
+        # parágrafo, a de que existe diferença, morria na entrada.
+        # `imovel.area_documental_ha` existe desde sempre e estava NULL.
+        _FieldSpec("area_documental_ha", "area_documental_ha", "imovel", "area_documental_ha", "ha"),
+        # Fiação (09/09) — "Módulos Fiscais: 31,1547" está no texto do recibo,
+        # `properties.modulos_fiscais` existe (#200, decide porte e as exceções do
+        # Código Florestal), e o prompt do CAR nunca pediu o campo. O RAT já
+        # pedia; o CAR, que quase todo caso tem, não.
+        _FieldSpec("modulos_fiscais", "modulos_fiscais", "imovel", "modulos_fiscais", "módulos"),
     ],
     "ccir": [
         # Item 7 (#74-restante) — número do CCIR: a consultora LOCALIZA o
@@ -364,6 +378,20 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         # comecando silenciosamente no degrau 2 (INCRA). Ficha 08 secao 4.
         _FieldSpec("nirf_cib", "nirf_cib", "matricula", "nirf_cib"),
         _FieldSpec("onus", "onus", "matricula", "onus_gravames"),
+        # Fiação (09/09) — a cadeia de titulares CHEGAVA e não pousava: o prompt
+        # já pedia `proprietarios`, o JSON do doc 549 devolvia os quatro (Nascente,
+        # Alexandre, Karina, ELODI), `Matricula.proprietarios` existia, e a falta
+        # DESTA LINHA jogava tudo fora — 0 linhas de staging. `sigef` mapeava
+        # `proprietario`; a certidão de matrícula, que é a fonte registral do
+        # titular (ADR-062), não mapeava nada.
+        #
+        # UMA linha com a lista inteira, não uma por titular: os quatro são da
+        # MESMA matrícula e disputariam a MESMA coluna. Quatro linhas fariam a
+        # primeira gravar e as outras três virarem reconciliação falsa
+        # (`field_sources` já marcado + `_values_differ`). É a diferença para
+        # `car.matriculas`, onde cada item tem `matricula_hint` PRÓPRIO e portanto
+        # linha de destino própria.
+        _FieldSpec("proprietarios", "proprietarios", "matricula", "proprietarios"),
     ],
     "itr": [
         _FieldSpec("nirf_cib", "nirf_cib", "matricula", "nirf_cib"),
@@ -419,13 +447,26 @@ TEXTO:
     "car": """Este é o RECIBO DE INSCRIÇÃO no CAR (Cadastro Ambiental Rural).
 Extraia os campos e a LISTA DE MATRÍCULAS citadas no recibo. Retorne APENAS JSON.
 Campos ausentes = null; listas vazias = [].
+Instruções de completude — esclarecem os campos AMBÍGUOS; preencha TODOS os
+campos do JSON abaixo que constarem no texto, inclusive os não citados aqui.
+- "area_declarada_ha": a área total do imóvel rural no recibo.
+- "app_declarada_ha": a área de APP (Área de Preservação Permanente) declarada.
+- "rl_declarada_ha": a área de Reserva Legal declarada.
+- "area_documental_ha": SÓ quando o recibo aponta DUAS áreas diferentes para o
+  mesmo imóvel — copie aqui a área "conforme documentação comprobatória de
+  propriedade/posse/concessão". A outra (a de "representação gráfica") continua
+  em "area_declarada_ha". Se o recibo traz uma área só, responda null aqui.
+- "modulos_fiscais": o número de módulos fiscais do imóvel, quando constar
+  (ex.: "Módulos Fiscais: 31,1547"). Não é área em hectares.
 {
   "numero_car": null,
   "area_declarada_ha": null,
+  "area_documental_ha": null,
   "municipio": null,
   "uf": null,
   "app_declarada_ha": null,
   "rl_declarada_ha": null,
+  "modulos_fiscais": null,
   "status_car": null,
   "matriculas": [{"numero": null, "data": null, "livro_folha": null, "cartorio": null}],
   "confidence": {}
@@ -456,8 +497,15 @@ Instruções de completude:
 - "proprietarios": cadeia de titulares (lista [{"nome","cpf"}]).
 - "onus": descreva CADA gravame (hipoteca/penhor/alienação) com TIPO, CREDOR e
   VALOR quando constarem (ex.: "Hipoteca (R.05) - credor Banco X - R$ 1.000.000").
-- "averbacao_rl"/"averbacao_app": área e referência da averbação (ex.: matrícula
-  de origem da RL).
+- "averbacao_rl": a averbação de RESERVA LEGAL desta matrícula — o ato registral
+  que a averba ("Procede-se a averbação da Reserva Legal desta Matrícula ... com
+  a área total de X"). Copie a ÁREA averbada e a referência do ato (ex.: "AV.02",
+  matrículas em que a RL foi averbada em conjunto).
+- "averbacao_app": a averbação de ÁREA DE PRESERVAÇÃO PERMANENTE, e só ela.
+  Reserva Legal NÃO é APP — se o texto disser "Reserva Legal", o campo é
+  "averbacao_rl". Arrendamento, servidão, usufruto, hipoteca, penhora e
+  alienação não são APP nem RL: não os coloque em nenhum dos dois (hipoteca e
+  alienação vão em "onus"). Sem averbação de APP no texto, responda null.
 - "codigo_certificacao": código do georreferenciamento (SIGEF/INCRA), se houver,
   SEM texto de vértice grudado.
 - "nirf_cib": o NIRF/CIB DESTE imóvel na Receita Federal — 8 dígitos, no
@@ -659,13 +707,13 @@ def _is_garbage_for_code(value: Any) -> bool:
 # Campos-LISTA que descrevem um conjunto (pendências, ônus): não devem virar N
 # linhas de staging — colapsam em 1 por (campo, matrícula), mesmo que re-extrações
 # produzam listas ligeiramente diferentes (2c).
-_LIST_COLLAPSE_FIELDS = {"pendencias_rat", "onus"}
+_LIST_COLLAPSE_FIELDS = {"pendencias_rat", "onus", "proprietarios"}
 
 # Campos de IDENTIDADE do imóvel: quem é a fazenda e de quem ela é. Errar aqui
 # não é ruído — renomeia o imóvel na base e contamina o diagnóstico. No caso 15 a
 # denominação do imóvel virou "Plano de Recuperação de Área Degradada (PRAD)"
 # porque um contrato foi lido com a ficha do SIGEF.
-_IDENTITY_FIELDS = {"denominacao", "proprietario", "detentor"}
+_IDENTITY_FIELDS = {"denominacao", "proprietario", "detentor", "proprietarios"}
 
 # Marcadores que provam que o documento É a fonte legítima de identidade do seu
 # tipo. Tipo fora do mapa não é checado (a ficha dele já é a própria identidade).

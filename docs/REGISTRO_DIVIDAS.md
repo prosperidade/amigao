@@ -1454,12 +1454,53 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 218.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 220.**
 > (#217 foi ocupada pela hash chain do `audit_logs` no PR #154, que renumerou
 > a entrada do PR #153 justamente por ter colidido com o #215 desta frente.
 > A faixa fica: 210-214 Frentes A/B · 215-216 contenção da entrada · 217 hash
 > chain. O merge de três pontas resolveria este contador em 217 — número já
 > tomado —, então ele é corrigido aqui, na origem, e não depois na main.)
+
+### Abertas pela Frente D — fiação da entrada (09/09, `fix/fiacao-entrada`)
+
+*A frente ligou o que a extração já produzia às colunas que já existiam e estavam
+NULL: `matricula.proprietarios` (a cadeia de titulares chegava ao JSON e era
+descartada no mapeamento), `matricula.averbacao_rl` (a gaveta existia e o prompt
+não distinguia RL de APP), `imovel.modulos_fiscais` e `imovel.area_documental_ha`
+(dado no texto, coluna no banco, ninguém pedia). Fecha **DATA-002 em parte** e a
+metade "papel de pessoa existe" da Entrega 2. As duas dívidas abaixo são o que a
+fiação NÃO alcança, porque não existe coluna para ligar.*
+
+**218. A área de RESERVA LEGAL declarada no CAR entra em campo de STATUS.**
+`_FIELD_SPECS["car"]` mapeia `rl_declarada_ha` → `imovel.`**`rl_status`** —
+`Column(String)` cujo domínio é `averbada | proposta | pendente | cancelada`. No
+doc 546 o valor é **437,7632** (ha), e é isso que vai para a coluna que a tela e
+o diagnóstico leem como estado da averbação. `Property` tem `app_area_ha`
+(Float) para a APP e **não tem par para a RL** — medido em
+`app/models/property.py:49-50`.
+
+Não entrou porque a fiação liga dado a coluna EXISTENTE, e aqui não há coluna:
+criar `rl_area_ha` é migration + backfill + decidir o que fazer com os
+`rl_status` legados que hoje guardam número em vez de estado. É modelo, não
+fiação — a linha que o enunciado desta frente traçou.
+**O que destrava:** área de RL do CAR gravável, e `rl_status` voltar a significar
+estado. **Origem:** Frente D (09/09), medido no doc 546.
+
+**219. A área GRÁFICA do CAR continua sem chegar a `area_grafica_ha`.**
+Com a #218 acima, é a outra metade do "área por finalidade". O recibo do CAR
+declara as duas áreas; a documental agora tem slot próprio (`area_documental_ha`),
+e a **gráfica** (`2.180,8267`) continua indo para `imovel.total_area_ha`, como
+sempre foi. `imovel.area_grafica_ha` existe e só é preenchida pelo **RAT**
+(`rat.area_vetorizada_ha`): num caso que tenha CAR e não tenha RAT — a maioria —
+ela fica NULL enquanto a documental está preenchida. Assimetria medida no doc 546.
+
+Não entrou porque não é ligação: pedir a mesma área duas vezes ao modelo produz
+duas linhas de staging com o mesmo valor e destinos diferentes, e o consultor
+decide duas vezes sobre o mesmo fato — a classe do **REC-001**, que esta frente
+não tem mandato para criar. Mudar o destino de `area_declarada_ha` também não
+serve: `total_area_ha` é a área que o resto do sistema lê.
+**O que destrava:** DATA-002 inteiro, com as três áreas separadas por finalidade.
+**Origem:** Frente D (09/09), medido no doc 546.
 
 ### Abertas pela Frente C — contenção da entrada (09/09, `fix/contencao-entrada` · ADR-064)
 
@@ -1493,6 +1534,13 @@ e porque um caso de regressão que compare valores exatos **vai piscar** enquant
 isso não for decidido: o que é estável hoje é a CLASSE do erro, não o valor.
 **O que destrava:** comparação de regressão por valor exato entre execuções.
 **Origem:** Frente C (09/09), fora de escopo declarado no enunciado.
+
+> *Medição adicional — Frente D (09/09), mesmo instrumento, banco `amigao_fiacao`.*
+> Doc 550 (matrícula 4.387), 3 execuções de cada lado, campo `codigo_certificacao`
+> — **intocado por aquela frente**: presente em **3/3** antes e **2/3** depois.
+> O campo pisca sozinho. É a confirmação de que a #215 morde também campos
+> ESCALARES, não só os três compostos, e a razão pela qual o gate da Frente D
+> compara **presença de campo e destino**, nunca valor exato entre execuções.
 
 **216. O classificador de documento não normaliza acento — a CNH-e da ELODI caiu em `doc_pessoal`.**
 Achado no caminho do N4, e é a razão pela qual o doc 551 nunca chegou a ter

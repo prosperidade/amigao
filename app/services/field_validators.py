@@ -65,6 +65,7 @@ _FIELD_VALIDATORS: dict[str, Callable[[str], bool]] = {
     # Áreas (ha)
     "area_registrada_ha": _is_area_ha,
     "area_declarada_ha": _is_area_ha,
+    "area_documental_ha": _is_area_ha,
     "area_ha": _is_area_ha,
     "area_georreferenciada_ha": _is_area_ha,
     "area_vetorizada_ha": _is_area_ha,
