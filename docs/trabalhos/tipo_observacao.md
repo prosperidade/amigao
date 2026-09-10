@@ -8,26 +8,37 @@ de observação: AUSENTE"), `docs/trabalhos/contencao_entrada.md` (#221),
 
 ---
 
-## ⚠️ Pendência declarada — gate roda ANTES do #157, precisa reconferir depois
+## Gate pós-#157 — `completa`/`falhas`, docs 547 e 548
 
-Este gate rodou contra `_extract_structured`/`JanelaResultado` como existem
-**antes** do PR #157 (`fix/cobertura-janela`, aberto em paralelo,
-`docs/services/extraction_window.py`): hoje `janela.truncado` é calculado só
-por posição de char (`cobertura_chars = fatias[-1].fim`), sem saber se a
-ÚLTIMA fatia realmente produziu resposta do LLM — uma falha silenciosa na
-última chamada não derruba `truncado=False`. Os docs **547** (2 fatias,
-82.117 chars) e **548** (2 fatias, 57.090 chars) são os únicos desta frente
-que fatiam, logo os únicos expostos a essa lacuna; 549 e 550 cabem numa fatia
-só.
+O PR #157 (`fix/cobertura-janela`) mergeou em 10/09 e fechou a lacuna que este
+gate rodava exposto a ela: antes, `janela.truncado` só sabia por posição de
+char se o teto de fatias cortou o documento — uma falha silenciosa na ÚLTIMA
+chamada de LLM não derrubava `truncado=False`, então "cobertura completa"
+podia ser afirmação sem prova. `JanelaResultado` ganhou `completa`/`falhas`
+para isso.
 
-O #157 adiciona `completa`/`falhas` a `JanelaResultado` para fechar exatamente
-essa lacuna. **Ação pendente, após o merge do #157:** `git rebase main` nesta
-branch e reconferir os quatro documentos exigindo `completa=True` em TODAS as
-execuções — uma execução com `completa=False` não conta como leitura válida
-do documento, entra na tabela como falha, não como dado. Sem isso, a "cobertura
-completa" que este gate reporta para 547/548 é precisamente o tipo de
-afirmação que o #157 existe para não deixar passar sem prova. Instrução
-recebida em 10/09, endereçada ao agente desta frente.
+Rebase feito (`git rebase origin/main`, sem conflito) e gate refeito nos dois
+documentos que fatiam nesta frente — 547 (2 fatias, 82.117 chars) e 548 (2
+fatias, 57.090 chars); 549 e 550 cabem numa fatia só, fora do risco que o #157
+cobre. Banco `amigao_tipo` truncado antes de rodar (nenhum staging da rodada
+anterior contaminando a contagem).
+
+| doc | execução | `completa` | `falhas` | fatias | cobertura/total |
+|---|---|---|---|---|---|
+| 547 | 1 | **True** | `[]` | 2 | 82.117/82.117 |
+| 547 | 2 | **True** | `[]` | 2 | 82.117/82.117 |
+| 548 | 1 | **True** | `[]` | 2 | 57.090/57.090 |
+| 548 | 2 | **True** | `[]` | 2 | 57.090/57.090 |
+
+**4/4 execuções completas, nenhuma falha.** As duas execuções de cada
+documento seguem produzindo `area_registrada_ha` correto (`926,36.54` e
+`725,46.63`, com destino `matricula.area_ha` intacto) e a mesma família de
+tipos (`hipoteca`, `arrendamento`, `baixa`, `alienacao_fiduciaria`,
+`compra_venda`, `georreferenciamento`) — sem regressão do rebase. O número de
+`atos_totais`/`linhas` variou entre execuções do mesmo documento (doc 547:
+15→13; doc 548: 33→33, estável) — é a variação já catalogada na dívida #215
+(determinismo do LLM), não uma falha de cobertura: nas quatro execuções
+`completa=True` e `falhas=[]`.
 
 ---
 
