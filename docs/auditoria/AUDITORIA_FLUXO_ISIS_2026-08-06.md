@@ -1,5 +1,8 @@
 # Auditoria de fluxo — validações da Isis (30/07 e 02/08)
 
+**SHA:** `50d8c7e`, mergeada no PR #145 — commit sobre o qual o código foi lido
+(ver `docs/auditoria/README.md`).
+
 **Fase 1 — READ-ONLY.** Nenhuma linha de código alterada. Worktree
 `wt-auditoria-fluxo`, branch `audit/fluxo-validacoes-isis`.
 Medição feita contra **produção** (Supabase `diquycxxkfrjhxtrcmzb`, SELECT apenas)

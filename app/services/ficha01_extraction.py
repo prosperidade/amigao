@@ -1102,6 +1102,9 @@ def _extract_structured(
         max_chunks=settings.EXTRACTOR_MAX_CHUNKS,
     )
     por_fatia: list[tuple[Any, dict[str, Any]]] = []
+    # Achado Codex 10/09 — cobertura declarada não pode assumir que a última
+    # fatia PLANEJADA foi lida; só o que passou por aqui com sucesso conta.
+    falhas: list[dict[str, Any]] = []
     for fatia in fatias:
         prompt = prompt_template.replace("{text}", text[fatia.inicio: fatia.fim])
         try:
@@ -1111,12 +1114,20 @@ def _extract_structured(
                 "ficha01_extraction: LLM falhou doc_type=%s %s: %s",
                 doc_type, fatia.rotulo, exc.message,
             )
+            falhas.append({
+                "indice": fatia.indice, "inicio": fatia.inicio, "fim": fatia.fim,
+                "erro": exc.message,
+            })
             continue
         except Exception as exc:  # pragma: no cover - defensivo
             logger.warning(
                 "ficha01_extraction: erro inesperado doc_type=%s %s: %s",
                 doc_type, fatia.rotulo, exc,
             )
+            falhas.append({
+                "indice": fatia.indice, "inicio": fatia.inicio, "fim": fatia.fim,
+                "erro": str(exc),
+            })
             continue
         if on_llm_response is not None:
             try:
@@ -1126,6 +1137,15 @@ def _extract_structured(
         parsed = _parse_json(response.content)
         if parsed:
             por_fatia.append((fatia, parsed))
+        else:
+            logger.warning(
+                "ficha01_extraction: resposta não é JSON válido doc_type=%s %s",
+                doc_type, fatia.rotulo,
+            )
+            falhas.append({
+                "indice": fatia.indice, "inicio": fatia.inicio, "fim": fatia.fim,
+                "erro": "resposta do LLM não é JSON válido",
+            })
 
     if not por_fatia:
         return None, None
@@ -1133,16 +1153,25 @@ def _extract_structured(
     janela = mesclar(por_fatia, validar=_validador_de_formato(doc_type))
     janela.fatias = fatias
     janela.total_chars = len(text)
-    janela.cobertura_chars = fatias[-1].fim if fatias else 0
+    # A última fatia PROCESSADA COM SUCESSO, não a última planejada — se ela
+    # falhar, `por_fatia` já não a inclui e a cobertura para de mentir.
+    janela.cobertura_chars = por_fatia[-1][0].fim
+    janela.falhas = falhas
+    janela.completa = not falhas
     janela.truncado = janela.cobertura_chars < janela.total_chars
+    if not janela.completa:
+        logger.warning(
+            "ficha01_extraction: %d fatia(s) falharam doc_type=%s — cobertura declarada %d/%d",
+            len(falhas), doc_type, janela.cobertura_chars, janela.total_chars,
+        )
     if janela.truncado:
         logger.warning(
             "ficha01_extraction: teto de fatias atingido doc_type=%s — lidos %d de %d chars",
             doc_type, janela.cobertura_chars, janela.total_chars,
         )
     logger.info(
-        "ficha01_extraction: janela doc_type=%s fatias=%d cobertura=%d/%d",
-        doc_type, len(fatias), janela.cobertura_chars, janela.total_chars,
+        "ficha01_extraction: janela doc_type=%s fatias=%d cobertura=%d/%d completa=%s",
+        doc_type, len(fatias), janela.cobertura_chars, janela.total_chars, janela.completa,
     )
     return janela.parsed, janela
 
