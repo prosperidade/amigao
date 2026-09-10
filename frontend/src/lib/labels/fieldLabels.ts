@@ -115,6 +115,33 @@ export const FIELD_LABELS: Record<string, string> = {
   rl_declarada_ha: 'Reserva legal (ha)',
   app_declarada_ha: 'Área de APP (ha)',
   area_declarada_ha: 'Área declarada (ha)',
+  // Frente E (ADR-065): linha nascida de um ato registral que não tem coluna
+  // no cadastro. O rótulo real vem do TIPO (ver OBSERVACAO_LABELS).
+  observacao: 'Observação do documento',
+};
+
+/**
+ * Frente E (ADR-065) — vocabulário fechado de tipos de observação registral.
+ * Espelha `app/services/observacao_registral.py`; se um tipo novo entrar lá sem
+ * entrar aqui, `labelForTipoObservacao` humaniza a chave em vez de mostrar
+ * snake_case cru.
+ */
+export const OBSERVACAO_LABELS: Record<string, string> = {
+  area_registrada: 'Área registrada',
+  reserva_legal: 'Reserva Legal',
+  app: 'APP',
+  georreferenciamento: 'Georreferenciamento',
+  compra_venda: 'Compra e venda',
+  compromisso_compra_venda: 'Compromisso de compra e venda',
+  arrendamento: 'Arrendamento',
+  servidao: 'Servidão',
+  usufruto: 'Usufruto',
+  hipoteca: 'Hipoteca',
+  alienacao_fiduciaria: 'Alienação fiduciária',
+  penhora: 'Penhora',
+  baixa: 'Baixa',
+  aditivo: 'Aditivo',
+  nao_classificado: 'Ato não classificado',
 };
 
 /**
@@ -154,6 +181,11 @@ function humanizeKey(field: string): string {
 /** Rótulo PT-BR do campo, ou fallback humanizado (nunca snake_case cru). */
 export function labelFor(field: string): string {
   return FIELD_LABELS[field] ?? humanizeKey(field);
+}
+
+/** Rótulo PT-BR do TIPO de observação registral (ADR-065). */
+export function labelForTipoObservacao(tipo: string): string {
+  return OBSERVACAO_LABELS[tipo] ?? humanizeKey(tipo);
 }
 
 /**

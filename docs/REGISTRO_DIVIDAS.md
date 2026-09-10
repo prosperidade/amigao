@@ -1554,8 +1554,9 @@ só onde `status` ∈ {pendente, consistente, divergente_*}.
 se a re-extração preservava as 28 aceitas; preserva, mas a varredura encontrou
 esta porta aberta ao lado. **Não corrigida nesta frente, por decisão de escopo.**
 
-**221. Quando a fatia certa omite a área, a área de Reserva Legal ocupa o campo
-do imóvel — e nenhuma das contenções barra.**
+**221. ✅ FECHADA em 10/09 (`feat/tipo-observacao` · ADR-065).** Quando a fatia
+certa omite a área, a área de Reserva Legal ocupa o campo do imóvel — e nenhuma
+das contenções barra.
 Medido no gate pós-deploy, doc 547 (M3.181), duas execuções do MESMO código:
 
 | execução | `area_registrada_ha` | âncora | normalizado | extenso |
@@ -1595,7 +1596,17 @@ disparar num documento em que a área não apareça na primeira fatia.
 
 **Origem:** gate pós-deploy da Frente C, 09/09 — 4 execuções (2 antes × 2 depois)
 dos 8 documentos, contra o `extracted_text` real de produção copiado com md5
-conferido. **Não corrigida nesta frente, por decisão de escopo.**
+conferido. Não corrigida naquela frente, por decisão de escopo.
+
+**Fecho (Frente E, 10/09):** a área da Reserva Legal agora é uma observação
+tipada (`reserva_legal`, ato Av.03) com destino próprio (`matricula.averbacao_rl`);
+`area_de_outro_objeto` compara a área candidata a `area_registrada_ha` contra a
+área de cada observação de objeto interno (RL/APP/arrendamento/servidão/usufruto)
+pela mesma porta única de normalização do ADR-064 — quando bate, a linha da área
+do imóvel perde o destino, com o motivo nomeando o ato verdadeiro. Testado com o
+texto real do doc 547 e o JSON exatamente na forma da falha medida acima
+(`tests/services/test_observacao_registral.py::TestAreaDeOutroObjeto`). Ver
+ADR-065 e `docs/trabalhos/tipo_observacao.md`.
 
 ### Abertas pela Frente C — contenção da entrada (09/09, `fix/contencao-entrada` · ADR-064)
 
