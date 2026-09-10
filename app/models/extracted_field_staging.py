@@ -91,10 +91,12 @@ class ExtractedFieldStaging(Base):
     # Enum, porque tipo novo não deve exigir migration — a mesma razão de
     # `source_doc_type`.
     tipo_observacao = Column(String(40), nullable=True, index=True)
-    # Os atributos que o TIPO pede: ato ("AV.02"), data, área, valor, partes,
-    # prazo, ato referenciado, descrição — mais `baixado_por`, escrito pelo
-    # sistema quando outra averbação declara a baixa deste ato. Data e prazo
-    # ficam como TEXTO: temporalidade consultável é a frente seguinte.
+    # Os atributos que o TIPO pede: ato ("AV.02"), data_ato, área, valor,
+    # partes, adquirentes/transmitentes, prazo, altera_ato, descrição — mais
+    # os DERIVADOS por regra (Frente F, ADR-066), nunca pelo LLM:
+    # `baixado_por`/`retificado_por` (quem alterou este ato, por referência
+    # escrita) e `vigencia` (vigente | baixado | retificado | expirado |
+    # indeterminado, ver `observacao_registral.derivar_vigencia`).
     atributos = Column(PortableJSON, nullable=True)
 
     status = Column(

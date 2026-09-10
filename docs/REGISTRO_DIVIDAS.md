@@ -1509,6 +1509,33 @@ serve: `total_area_ha` é a área que o resto do sistema lê.
 **O que destrava:** DATA-002 inteiro, com as três áreas separadas por finalidade.
 **Origem:** Frente D (09/09), medido no doc 546.
 
+### Frente F — temporalidade de ato (10/09, `feat/temporalidade-ato`, ADR-066)
+
+**HIST-001 fechado, parcialmente — fronteira declarada.** A Frente E (ADR-065)
+resolveu O QUE cada ato é; faltava QUANDO e SE ainda vale. Fechado nesta
+frente: `data_ato`/`altera_ato` estruturados por ato (extraídos com âncora,
+generalizando `ato_referenciado` para também cobrir `aditivo`, não só
+`baixa`), `adquirentes`/`transmitentes` em `compra_venda`, e `vigencia`
+DERIVADA por regra (nunca pelo LLM) — vigente\|baixado\|retificado\|
+expirado\|indeterminado. Medido contra o `extracted_text` real dos docs
+548/549: as três hipotecas do doc 549 (AV.03/04/05) saem `baixado` (baixadas
+por AV.09/AV.10/AV.12); a alienação fiduciária R.15 sai `vigente`; o
+arrendamento do doc 548 (AV.10) sai `vigente`/`expirado` conforme a data de
+referência passada por quem chama. Titularidade (Frente D) ganhou
+`titular_atual`/`cadeia_titularidade`, derivados dos atos `compra_venda` — não
+do campo legado `proprietarios`, que segue intocado.
+
+**Não fechado — fica para as frentes seguintes, como o ADR-065 já previa:**
+reconciliação ENTRE documentos (REC-001 — comparar RL do CAR × matrícula por
+vigência; a #218 abaixo é a metade "RL do CAR não tem coluna" desse mesmo
+problema, e continua sem coluna, sem migration nesta frente); a tela por
+decisões (CONF-001); e papel de pessoa como conceito geral (representante,
+procurador, cônjuge) além de adquirente/transmitente.
+**Dívida aberta:** nenhuma nova — ver ADR-066, seção "Fora do escopo", para a
+lista completa com o porquê de cada item não ter sido puxado para dentro.
+**Origem:** ADR-064 (N2), ADR-065 ("Fora do escopo"), CONFIRMACAO_ENTRADA_2026-09-09.md
+(HIST-001). Ver ADR-066 e `docs/trabalhos/temporalidade_ato.md`.
+
 ### Aberta pelo gate pós-deploy da Frente C (09/09, `docs/gate-frente-c`)
 
 **220. `auditor_imovel` sobrescreve o status de linhas que o consultor já ACEITOU.**

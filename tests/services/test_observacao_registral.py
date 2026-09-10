@@ -1,12 +1,18 @@
 """Frente E — a extração diz O QUE cada valor é antes de dizer ONDE ele pousa.
+Frente F (ADR-066) acrescenta QUANDO e SE ainda vale: `data_ato`/`altera_ato`
+estruturados e `vigencia` DERIVADA por regra (nunca pelo LLM).
 
 Todos os trechos abaixo são VERBATIM dos quatro documentos de matrícula da ELODI
-(docs 547–550), lidos do `extracted_text` real de produção. Nenhum exemplo
-inventado: cada asserção corresponde a um erro medido em
-`docs/auditoria/CONFIRMACAO_ENTRADA_2026-09-09.md` ou à dívida #221.
+(docs 547–550), lidos do `extracted_text` real de produção (Supabase, projeto
+"Regente Ambiental", tabela `documents`, ids 547-550 — mesmo texto medido nas
+frentes C/D/E). Nenhum exemplo inventado: cada asserção corresponde a um erro
+medido em `docs/auditoria/CONFIRMACAO_ENTRADA_2026-09-09.md`, à dívida #221 ou
+ao HIST-001.
 """
 
 from __future__ import annotations
+
+from datetime import date
 
 from app.services.ficha01_extraction import build_staging_fields
 from app.services.observacao_registral import (
@@ -17,13 +23,22 @@ from app.services.observacao_registral import (
     TIPO_HIPOTECA,
     TIPO_NAO_CLASSIFICADO,
     TIPO_RESERVA_LEGAL,
-    aplicar_baixas,
+    VIGENCIA_BAIXADO,
+    VIGENCIA_EXPIRADO,
+    VIGENCIA_INDETERMINADO,
+    VIGENCIA_RETIFICADO,
+    VIGENCIA_VIGENTE,
+    aplicar_alteracoes,
     area_de_outro_objeto,
+    cadeia_titularidade,
     chave_ato,
+    derivar_vigencia,
     destino_de,
     normalizar_tipo,
     observacoes_de,
     onus_vigentes,
+    rl_vigente,
+    titular_atual,
     ultimo_por_destino,
 )
 
@@ -110,16 +125,16 @@ class TestBaixaPorReferencia:
 
     ATOS = [
         {"ato": "AV.03", "tipo": "hipoteca", "valor": "R$ 657.000,00",
-         "partes": ["Banco do Brasil S/A Ag. Planaltina – GO"], "data": "15/04/2008"},
-        {"ato": "AV.09", "tipo": "baixa", "ato_referenciado": "AV.03",
+         "partes": ["Banco do Brasil S/A Ag. Planaltina – GO"], "data_ato": "15/04/2008"},
+        {"ato": "AV.09", "tipo": "baixa", "altera_ato": "AV.03",
          "descricao": "baixa da cédula nº 40/00690-5, constante da AV.03"},
         {"ato": "R.15", "tipo": "alienacao_fiduciaria", "valor": "R$ 9.798.869,87",
-         "partes": ["Itaú Unibanco S.A"], "data": "04/06/2025"},
+         "partes": ["Itaú Unibanco S.A"], "data_ato": "04/06/2025"},
     ]
 
     def test_a_hipoteca_baixada_e_marcada(self):
         obs = observacoes_de(self.ATOS)
-        aplicar_baixas(obs)
+        aplicar_alteracoes(obs)
         hipoteca = next(o for o in obs if o.ato == "AV.03")
         assert hipoteca.baixado_por == "AV.09"
 
@@ -128,7 +143,7 @@ class TestBaixaPorReferencia:
         AV.12 diz textualmente "ficando assim, o imóvel livre de hipoteca". O
         staging afirmava duas hipotecas do Banco do Brasil que não existiam."""
         obs = observacoes_de(self.ATOS)
-        aplicar_baixas(obs)
+        aplicar_alteracoes(obs)
         vigentes = onus_vigentes(obs)
         assert [o["tipo"] for o in vigentes] == ["Alienação fiduciária"]
         assert vigentes[0]["partes"] == ["Itaú Unibanco S.A"]
@@ -141,7 +156,7 @@ class TestBaixaPorReferencia:
              "descricao": "baixa da cédula nº 40/00690-5, constante da AV.03, acima"},
         ]
         obs = observacoes_de(atos)
-        aplicar_baixas(obs)
+        aplicar_alteracoes(obs)
         assert next(o for o in obs if o.ato == "AV.03").baixado_por == "AV.09"
 
     def test_baixa_e_observacao_de_primeira_classe(self):
@@ -271,7 +286,7 @@ class TestOnusDerivadoDosAtos:
         "atos": [
             {"ato": "AV.03", "tipo": "REGISTRO DE HIPOTECA", "valor": "R$ 657.000,00",
              "partes": ["Banco do Brasil S/A Ag. Planaltina – GO"]},
-            {"ato": "AV.09", "tipo": "BAIXA DE HIPOTECA", "ato_referenciado": "AV.03"},
+            {"ato": "AV.09", "tipo": "BAIXA DE HIPOTECA", "altera_ato": "AV.03"},
             {"ato": "R-11", "tipo": "DA COMPRA E VENDA", "valor": "R$ 657.000,00"},
             {"ato": "R.15", "tipo": "DA ALIENAÇÃO FIDUCIÁRIA",
              "valor": "R$ 9.798.869,87", "partes": ["Itaú Unibanco S.A"]},
@@ -361,3 +376,294 @@ class TestNaoRegressao:
         )
         assert all(r.tipo_observacao is None for r in rows)
         assert not any(r.field_name == "observacao" for r in rows)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Frente F (ADR-066) — temporalidade de ato: data_ato/altera_ato estruturados
+# e vigencia DERIVADA por regra. Trechos abaixo, de novo, VERBATIM do doc 549
+# (Supabase, tabela `documents`, id 549 — mesmo texto das frentes anteriores).
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestVigenciaGravames:
+    """doc 549 — as três hipotecas reais (AV.03/04/05) foram baixadas por
+    AV.09/AV.10/AV.12; a alienação fiduciária (R.15) não tem baixa no texto."""
+
+    ATOS = [
+        {"ato": "AV.03", "tipo": "hipoteca", "data_ato": "15 DE ABRIL DE 2008",
+         "valor": "R$ 657.000,00", "partes": ["Banco do Brasil S/A Ag. Planaltina – GO"],
+         "descricao": "Nos Termos da CRH nº 40/00690-5 com vencimento em "
+                       "01/12/2016, protocolada sob o nº 4993."},
+        {"ato": "AV.04", "tipo": "hipoteca", "data_ato": "03 DE ABRIL DE 2009",
+         "partes": ["Banco do Brasil S/A Ag. de Planaltina – GO"],
+         "descricao": "Nos Termos da CRPH nº 40/00956-4, com vencimento em "
+                       "01/02/2017, protocolada sob o nº 5257."},
+        {"ato": "AV.05", "tipo": "hipoteca", "data_ato": "15 DE SETEMBRO DE 2011",
+         "partes": ["Banco do Brasil S/A Ag. de Planaltina – GO"],
+         "descricao": "Nos Termos da CRPH nº 40/01511-4, com vencimento em "
+                       "01/09/2019, protocolada sob o nº 6157."},
+        {"ato": "AV.09", "tipo": "baixa", "data_ato": "16 DE MARÇO DE 2017",
+         "altera_ato": "AV.03",
+         "descricao": "Averba-se para constar a baixa da cédula Rural Pignoratícia "
+                       "e Hipotecaria nº 40/00690-5, constante da AV.03, acima"},
+        {"ato": "AV.10", "tipo": "baixa", "data_ato": "16 DE MARÇO DE 2017",
+         "altera_ato": "AV.04",
+         "descricao": "Averba-se para constar a baixa da cédula Rural Pignoratícia "
+                       "e Hipotecaria nº 40/00956-4, constante da AV.04, acima"},
+        {"ato": "AV.12", "tipo": "baixa", "data_ato": "21 DE AGOSTO DE 2019",
+         "altera_ato": "AV.05",
+         "descricao": "Averba-se para constar a baixa da cédula Rural Pignoratícia "
+                       "e Hipotecaria nº 40/01511-4, constante da AV.05 acima, "
+                       "ficando assim, o imóvel livre de hipoteca"},
+        {"ato": "R.15", "tipo": "alienacao_fiduciaria", "data_ato": "04 DE JUNHO DE 2.025",
+         "valor": "R$ 9.798.869,87", "partes": ["ITAÚ UNIBANCO S.A."]},
+    ]
+
+    def _obs(self):
+        obs = observacoes_de(self.ATOS)
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs)
+        return obs
+
+    def test_as_tres_hipotecas_ficam_baixadas(self):
+        hipotecas = [o for o in self._obs() if o.tipo == TIPO_HIPOTECA]
+        assert len(hipotecas) == 3
+        assert all(h.vigencia == VIGENCIA_BAIXADO for h in hipotecas)
+
+    def test_zero_hipotecas_vigentes(self):
+        """A pergunta consultável: quantos gravames deste tipo ainda valem?"""
+        vigentes = [o for o in self._obs() if o.tipo == TIPO_HIPOTECA and o.vigencia == VIGENCIA_VIGENTE]
+        assert vigentes == []
+
+    def test_a_alienacao_fiduciaria_sem_baixa_fica_vigente(self):
+        alienacao = next(o for o in self._obs() if o.tipo == TIPO_ALIENACAO_FIDUCIARIA)
+        assert alienacao.vigencia == VIGENCIA_VIGENTE
+
+
+class TestVigenciaArrendamento:
+    """doc 548, AV.10 — prazo com termo final; expiração compara com a data de
+    REFERÊNCIA passada por quem chama, não com `date.today()`."""
+
+    def _obs(self):
+        atos = [{
+            "ato": "AV.10", "tipo": "arrendamento", "area_ha": "50",
+            "partes": ["Patrícia Akemi Miaki Botega"],
+            "prazo": "15 anos com inicio no dia 01/01/2013 a 01/01/2028",
+        }]
+        obs = observacoes_de(atos)
+        aplicar_alteracoes(obs)
+        return obs
+
+    def test_vigente_para_data_de_referencia_dentro_do_prazo(self):
+        obs = self._obs()
+        derivar_vigencia(obs, data_referencia=date(2026, 1, 1))
+        assert obs[0].vigencia == VIGENCIA_VIGENTE
+
+    def test_expirado_para_data_de_referencia_apos_o_termo(self):
+        """Mesmo prazo, data de referência diferente — é teste de REGRA, não
+        de LLM: a extração roda uma vez, a pergunta "vale hoje" muda com o
+        tempo sem reextrair nada."""
+        obs = self._obs()
+        derivar_vigencia(obs, data_referencia=date(2029, 1, 1))
+        assert obs[0].vigencia == VIGENCIA_EXPIRADO
+
+
+class TestVigenciaIndeterminado:
+    """Silêncio nunca vira `vigente` (ADR-066) — sem data de origem e sem
+    alteração encontrada, o estado é `indeterminado`."""
+
+    def test_sem_data_e_sem_baixa_fica_indeterminado_nao_vigente(self):
+        obs = observacoes_de([
+            {"ato": "AV.07", "tipo": "servidao", "descricao": "servidão de passagem"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs)
+        assert obs[0].vigencia == VIGENCIA_INDETERMINADO
+
+    def test_tipo_sem_conceito_de_vigencia_fica_sem_o_campo(self):
+        """`compra_venda` é evento, não estado — `vigencia` continua None, não
+        um valor arbitrário."""
+        obs = observacoes_de([
+            {"ato": "R-11", "tipo": "compra_venda", "valor": "R$ 657.000,00"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs)
+        assert obs[0].vigencia is None
+
+
+class TestAditivoRetifica:
+    """`aditivo` já tinha casa no vocabulário desde a Frente E ("aditivo de
+    cédula/hipoteca", doc 547 AV.11/13/14) — o achado da Frente F é que o
+    código nunca lia a referência dele. Retificação AMENDA, não cancela: o
+    gravame retificado segue como ônus vigente."""
+
+    ATOS = [
+        {"ato": "AV.03", "tipo": "hipoteca", "data_ato": "15/04/2008",
+         "valor": "R$ 657.000,00", "partes": ["Banco do Brasil"]},
+        {"ato": "AV.11", "tipo": "aditivo", "altera_ato": "AV.03",
+         "descricao": "aditivo à cédula da AV.03, alterando o valor da dívida"},
+    ]
+
+    def test_aditivo_marca_retificado_por_nao_baixado_por(self):
+        obs = observacoes_de(self.ATOS)
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs)
+        hipoteca = next(o for o in obs if o.ato == "AV.03")
+        assert hipoteca.retificado_por == "AV.11"
+        assert hipoteca.baixado_por is None
+        assert hipoteca.vigencia == VIGENCIA_RETIFICADO
+
+    def test_gravame_retificado_continua_como_onus_vigente(self):
+        obs = observacoes_de(self.ATOS)
+        aplicar_alteracoes(obs)
+        vigentes = onus_vigentes(obs)
+        assert len(vigentes) == 1
+        assert vigentes[0]["ato"] == "AV.03"
+
+
+class TestQuitacaoDeDividaNaoBaixaACompraEVenda:
+    """Achado do GATE (LLM real, doc 549 completo): AV.14 — "para constar a
+    QUITAÇÃO da dívida mencionada no R-13 acima" — é tipada `baixa` (sinônimo
+    "quitação") e cita R-13 (`compra_venda`) em `altera_ato`. O texto está
+    certo: o PREÇO foi pago, a venda não foi desfeita. `compra_venda` não tem
+    estado de vigência (evento, não em `TIPOS_COM_VIGENCIA`) — sem a trava,
+    `resumo()` mostraria "R-13 baixado por AV.14", sugerindo a venda anulada."""
+
+    def test_quitacao_nao_marca_baixado_por_na_compra_e_venda(self):
+        atos = [
+            {"ato": "R-13", "tipo": "compra_venda", "data_ato": "10 DE DEZEMBRO DE 2019",
+             "valor": "R$ 900.000,00", "adquirentes": ["ELODI AGROPECUÁRIA"]},
+            {"ato": "AV.14", "tipo": "baixa", "altera_ato": "R-13",
+             "descricao": "para constar a QUITAÇÃO da dívida mencionada no R-13 acima"},
+        ]
+        obs = observacoes_de(atos)
+        aplicar_alteracoes(obs)
+        r13 = next(o for o in obs if o.ato == "R-13")
+        assert r13.baixado_por is None
+        assert "baixado por" not in r13.resumo()
+
+
+class TestReferenciaDeArquivamentoNaoEAlteracao:
+    """doc 549 — quase toda averbação abre com "(Averbação referente a Av.XX
+    Mat. YYYY)", a matrícula ANTERIOR do mesmo ato numa certidão diferente,
+    não uma alteração. `aplicar_alteracoes` só lê essa referência em atos
+    BAIXA/ADITIVO — uma hipoteca nunca é FONTE de alteração, então o cabeçalho
+    de arquivamento do próprio ato nunca é interpretado como tal."""
+
+    def test_hipoteca_com_cabecalho_de_arquivamento_nao_fica_baixada(self):
+        atos = [
+            {"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "492,9252",
+             "descricao": "Averbação referente a Av.09 Mat. 2007 e Av. 04 Mat. 3.669"},
+            {"ato": "AV.03", "tipo": "hipoteca", "valor": "R$ 657.000,00",
+             "descricao": "Averbação referente ao R-06 Mat. 2007 e Av. 05 Mat. 3.669"},
+        ]
+        obs = observacoes_de(atos)
+        aplicar_alteracoes(obs)
+        assert all(o.baixado_por is None and o.retificado_por is None for o in obs)
+
+
+class TestRlVigente:
+    """doc 549 — AV.02 é a averbação de Reserva Legal (492,9252ha); a RL do
+    CAR citada DENTRO do georreferenciamento (AV.01, 42,8070ha) não é RL
+    vigente da matrícula — é tipo errado, não coluna errada (mesma classe do
+    #221, agora em outro tipo)."""
+
+    def test_rl_vigente_e_a_reserva_legal_nao_o_georreferenciamento(self):
+        atos = [
+            {"ato": "AV.01", "tipo": "georreferenciamento", "area_ha": "42,8070",
+             "descricao": "Dito imóvel encontra-se cadastrado no CAR-GO sob o nº "
+                           "5200605-90AD5334772C4ADBB0BAB91AAD96DC4D, com sua área "
+                           "de reserva legal de 42,8070ha, cadastrado em conjunto "
+                           "com outras áres na Receita Federal sob o nº 6.816.752-0"},
+            {"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "492,9252",
+             "descricao": "Procede-se a averbação da Reserva Legal desta Matricula "
+                           "em conjunto com as Matriculas nº 1.224 e 1.225, com a "
+                           "área total de 492,9252ha"},
+        ]
+        obs = observacoes_de(atos)
+        rl = rl_vigente(obs)
+        assert rl is not None
+        assert rl.ato == "AV.02"
+        assert rl.atributos["area_ha"] == "492,9252"
+
+    def test_matricula_sem_averbacao_de_rl_nao_tem_rl_vigente(self):
+        obs = observacoes_de([
+            {"ato": "AV.01", "tipo": "georreferenciamento",
+             "descricao": "georreferenciamento sem menção a reserva legal"},
+        ])
+        assert rl_vigente(obs) is None
+
+
+class TestTitularidade:
+    """doc 549 — cadeia real: Nascente Agro-industrial → Alexandre Augusto
+    Clemente + Karina Santarosa Clemente (R-11, 2019) → ELODI AGROPECUÁRIA
+    (R-13, 2019). `papel_no_ato` só quando o próprio ato distingue os dois
+    lados — nunca por posição (a lição do achado `partes[0]`, ADR-065)."""
+
+    ATOS = [
+        {"ato": "R-11", "tipo": "compra_venda", "data_ato": "18 DE MARÇO DE 2019",
+         "valor": "R$ 657.000,00",
+         "adquirentes": ["ALEXANDRE AUGUSTO CLEMENTE", "KARINA SANTAROSA CLEMENTE"],
+         "transmitentes": ["Nascente Agro-industrial Ltda"]},
+        {"ato": "R-13", "tipo": "compra_venda", "data_ato": "10 DE DEZEMBRO DE 2019",
+         "valor": "R$ 900.000,00",
+         "adquirentes": ["ELODI AGROPECUÁRIA"],
+         "transmitentes": ["ALEXANDRE AUGUSTO CLEMENTE", "KARINA SANTAROSA CLEMENTE"]},
+    ]
+
+    def test_titular_atual_e_o_adquirente_do_ato_mais_recente(self):
+        atual = titular_atual(observacoes_de(self.ATOS))
+        assert atual is not None
+        assert atual["titulares"] == ["ELODI AGROPECUÁRIA"]
+        assert atual["ato"] == "R-13"
+
+    def test_cadeia_lista_os_quatro_titulares_com_o_ato_que_os_inscreveu(self):
+        cadeia = cadeia_titularidade(observacoes_de(self.ATOS))
+        nomes = {linha["nome"] for linha in cadeia}
+        assert nomes == {
+            "Nascente Agro-industrial Ltda", "ALEXANDRE AUGUSTO CLEMENTE",
+            "KARINA SANTAROSA CLEMENTE", "ELODI AGROPECUÁRIA",
+        }
+        nascente = next(linha for linha in cadeia if linha["nome"] == "Nascente Agro-industrial Ltda")
+        assert nascente["papel_no_ato"] == "transmitente"
+        assert nascente["ato"] == "R-11"
+        elodi = next(linha for linha in cadeia if linha["nome"] == "ELODI AGROPECUÁRIA")
+        assert elodi["papel_no_ato"] == "adquirente"
+        assert elodi["ato"] == "R-13"
+
+    def test_sem_compra_e_venda_com_adquirente_titular_atual_e_none(self):
+        obs = observacoes_de([{"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "492,9252"}])
+        assert titular_atual(obs) is None
+
+
+class TestAtributosTemporaisNaLinhaDeStaging:
+    """`data_ato`, `altera_ato` e `vigencia` sobrevivem inteiros até a linha
+    de staging — o mesmo caminho que `tipo_observacao`/`atributos` já
+    percorriam desde a Frente E."""
+
+    def test_data_ato_e_altera_ato_chegam_na_linha(self):
+        rows = build_staging_fields(
+            "matricula",
+            {"atos": [
+                {"ato": "AV.09", "tipo": "baixa", "data_ato": "16 DE MARÇO DE 2017",
+                 "altera_ato": "AV.03",
+                 "descricao": "baixa da cédula nº 40/00690-5, constante da AV.03, acima"},
+            ]},
+            texto=TEXTO_549,
+        )
+        linha = next(r for r in rows if r.tipo_observacao == TIPO_BAIXA)
+        assert linha.atributos["data_ato"] == "16 DE MARÇO DE 2017"
+        assert linha.atributos["altera_ato"] == "AV.03"
+
+    def test_vigencia_derivada_chega_na_linha(self):
+        rows = build_staging_fields(
+            "matricula",
+            {"atos": [
+                {"ato": "AV.03", "tipo": "hipoteca", "data_ato": "15 DE ABRIL DE 2008",
+                 "valor": "R$ 657.000,00"},
+                {"ato": "AV.09", "tipo": "baixa", "altera_ato": "AV.03",
+                 "descricao": "baixa da cédula nº 40/00690-5, constante da AV.03, acima"},
+            ]},
+            texto=TEXTO_549,
+        )
+        hipoteca = next(r for r in rows if r.atributos and r.atributos.get("ato") == "AV.03")
+        assert hipoteca.atributos["vigencia"] == VIGENCIA_BAIXADO
