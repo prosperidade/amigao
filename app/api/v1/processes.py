@@ -54,7 +54,6 @@ from app.schemas.matricula import (
     ChainProposalOut,
     MatriculaVigenteMini,
 )
-from app.schemas.reconciliation import DecisaoOut, DecisaoRequest, ReconciliationOut
 from app.schemas.process import (
     Process,
     ProcessCreate,
@@ -65,6 +64,7 @@ from app.schemas.process import (
     ProcessStatusUpdate,
     ProcessUpdate,
 )
+from app.schemas.reconciliation import DecisaoOut, DecisaoRequest, ReconciliationOut
 from app.schemas.requisito_documental import (
     DocumentoSemRequisitoOut,
     RequisitoDocumentalOut,

@@ -18,8 +18,6 @@ não re-verificados nesta rodada (registrado no ADR-067).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.document import Document, OcrStatus
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus

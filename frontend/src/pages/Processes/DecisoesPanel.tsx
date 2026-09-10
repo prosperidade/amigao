@@ -24,48 +24,11 @@ import {
 import { api } from '@/lib/api';
 import { humanizeValue } from '@/lib/labels/fieldLabels';
 import { docTypeLabel } from '@/lib/labels/docLabels';
-
-interface Evidencia {
-  staging_id: number | null;
-  documento_id: number | null;
-  documento_tipo: string | null;
-  campo: string | null;
-  valor_bruto: unknown;
-  valor_normalizado: unknown;
-  unidade: string | null;
-  vigencia: string | null;
-  status: string;
-  fonte_autoritativa: boolean;
-}
-
-interface Decisao {
-  chave: { entidade: string; identificador: string; aspecto: string };
-  chave_str: string;
-  label: string;
-  evidencias: Evidencia[];
-  concordancia: 'concordam' | 'divergem' | 'fonte_unica';
-  nivel_divergencia: 'informativo' | 'atencao' | 'alto' | 'critico' | null;
-  delta: number | null;
-  percentual: number | null;
-  valor_proposto: unknown;
-  fonte_autoritativa_doc: string | null;
-  estado: 'pendente' | 'decidida' | 'gravada';
-  staging_ids: number[];
-}
-
-export interface ReconciliationData {
-  decisoes: Decisao[];
-  sem_agrupamento: Array<{ staging_id: number; motivo: string | null }>;
-  total_staging: number;
-}
+import { decisoesQueryKey, type Decisao, type ReconciliationData } from '@/lib/reconciliation';
 
 function errDetail(e: unknown, fallback: string): string {
   const ax = e as AxiosError<{ detail?: string }>;
   return ax?.response?.data?.detail ?? ax?.message ?? fallback;
-}
-
-export function decisoesQueryKey(processId: number) {
-  return ['staging-decisions', processId];
 }
 
 const ESTADO_CLS: Record<string, string> = {

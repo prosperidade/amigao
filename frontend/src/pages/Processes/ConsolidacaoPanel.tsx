@@ -19,7 +19,8 @@ import { api } from '@/lib/api';
 import { acoesKeys } from '@/lib/acoes/hooks';
 import { labelFor, labelForTipoObservacao, humanizeValue } from '@/lib/labels/fieldLabels';
 import { docTypeLabel } from '@/lib/labels/docLabels';
-import DecisoesPanel, { decisoesQueryKey, type ReconciliationData } from './DecisoesPanel';
+import DecisoesPanel from './DecisoesPanel';
+import { decisoesQueryKey, type ReconciliationData } from '@/lib/reconciliation';
 
 /** Mensagem de erro legível a partir do AxiosError (detail do backend, senão genérica). */
 function errDetail(e: unknown, fallback: string): string {
