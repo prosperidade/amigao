@@ -51,8 +51,9 @@ from app.services.observacao_registral import (
     MOTIVO_SUBSTITUIDA,
     TIPOS_GRAVAME,
     Observacao,
-    aplicar_baixas,
+    aplicar_alteracoes,
     area_de_outro_objeto,
+    derivar_vigencia,
     destino_de,
     observacoes_de,
     onus_vigentes,
@@ -528,15 +529,26 @@ campos do JSON abaixo que constarem no texto, inclusive os não citados aqui.
   deles, use "nao_classificado" — nunca force um rótulo que não descreva o ato.
   Campos de cada item:
   · "ato": o rótulo como está no documento ("AV.02", "R-11", "R.15");
-  · "data": a data do ato, como escrita;
+  · "data_ato": a DATA DESTE ato (registro/averbação), como escrita — não a
+    data de um ato diferente que ele cite;
   · "area_ha": a área que o ato cita, copiada literalmente, quando houver;
   · "valor": o valor em dinheiro do ato, quando houver;
   · "partes": as pessoas ou instituições do ato (credor, arrendatário,
-    comprador, vendedor) — copie os nomes como estão;
+    servidão, usufruto) — copie os nomes como estão;
+  · "adquirentes" / "transmitentes": SÓ em atos "compra_venda" — quem
+    adquiriu e quem transmitiu o imóvel NESTE ato, quando o texto distingue
+    os dois lados ("foi adquirido por X ... por compra feita a Y" →
+    adquirentes=["X"], transmitentes=["Y"]). Não preencha se o texto não
+    distinguir claramente quem compra de quem vende.
   · "prazo": prazo ou vigência escritos no ato ("15 anos", "01/01/2013 a
     01/01/2028");
-  · "ato_referenciado": quando o ato BAIXA, cancela, rescinde, quita ou adita
-    outro ato, o rótulo do ato citado ("AV.03");
+  · "altera_ato": quando o ato BAIXA, cancela, rescinde, quita, adita ou
+    retifica outro ato DESTA MESMA MATRÍCULA, o rótulo do ato citado
+    ("AV.03"). CUIDADO: não confundir com a referência de arquivamento que
+    abre muitas averbações ("Averbação referente a AV.XX Mat. YYYY") — essa
+    aponta para OUTRA matrícula (a anterior, na cadeia dominial) e não é
+    alteração nenhuma; "altera_ato" é só quando o TEXTO DO ATO (não o
+    cabeçalho) diz que ele baixa/cancela/adita/retifica algo;
   · "descricao": em uma frase, o que o ato diz.
   Reserva Legal é "reserva_legal", nunca "app". Arrendamento é "arrendamento",
   nunca "app" e nunca "reserva_legal". Preço de compra e venda é
@@ -544,7 +556,7 @@ campos do JSON abaixo que constarem no texto, inclusive os não citados aqui.
   "alienacao_fiduciaria", não "hipoteca" — e o credor é o que estiver escrito
   NAQUELE ato. Baixa de hipoteca, quitação de dívida e rescisão de
   arrendamento são "baixa", e IMPORTAM: registre cada uma, com o ato que ela
-  baixa em "ato_referenciado".
+  baixa em "altera_ato".
 - "codigo_certificacao": código do georreferenciamento (SIGEF/INCRA), se houver,
   SEM texto de vértice grudado.
 - "nirf_cib": o NIRF/CIB DESTE imóvel na Receita Federal — 8 dígitos, no
@@ -563,9 +575,9 @@ campos do JSON abaixo que constarem no texto, inclusive os não citados aqui.
   "denominacao_anterior": null,
   "registro_anterior": null,
   "proprietarios": [{"nome": null, "cpf": null}],
-  "atos": [{"ato": null, "tipo": null, "data": null, "area_ha": null,
-            "valor": null, "partes": [], "prazo": null,
-            "ato_referenciado": null, "descricao": null}],
+  "atos": [{"ato": null, "tipo": null, "data_ato": null, "area_ha": null,
+            "valor": null, "partes": [], "adquirentes": [], "transmitentes": [],
+            "prazo": null, "altera_ato": null, "descricao": null}],
   "numero_geo": null,
   "codigo_certificacao": null,
   "nirf_cib": null,
@@ -909,8 +921,17 @@ def _linhas_de_observacoes(
     reconciliação falsa (a primeira grava, as outras divergem). Eles entram
     numa linha `onus` agregada, composta só dos que o documento NÃO declara
     baixados.
+
+    Frente F (ADR-066): antes de resolver destino, o grafo de alterações
+    (baixa/aditivo → `baixado_por`/`retificado_por`) e a vigência derivada
+    (`atributos["vigencia"]`) são calculados — por regra, nunca pelo LLM. Sem
+    `data_referencia` de caso disponível nesta camada, a extração usa a data
+    de hoje ("vigente hoje"); quem consultar mais tarde com a data do caso
+    pode reavaliar sem reextrair (os fatos — `data_ato`/`altera_ato` — já
+    estão salvos).
     """
-    aplicar_baixas(observacoes)
+    aplicar_alteracoes(observacoes)
+    derivar_vigencia(observacoes)
     escolhidos = ultimo_por_destino(observacoes)
 
     rows: list[StagingField] = []
