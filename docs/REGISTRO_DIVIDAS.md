@@ -8,7 +8,11 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 218.** (#217 aberta pela limpeza dos cadastros de
+> **PRÓXIMO NÚMERO LIVRE: 222.** (#218 e #219 são da Frente D — fiação, PR #155.
+> #220 e #221 são do gate pós-deploy da Frente C, 09/09, e **nasceram 218/219 e
+> foram renumeradas na origem** ao ver que a Frente D chegou primeiro na main.
+> Terceira colisão em três dias, sempre pelo mesmo motivo: contador resolve
+> conflito sequencial, não simultâneo. #217 aberta pela limpeza dos cadastros de
 > teste da ELODI em produção, 09/09 — hash chain do `audit_logs` sob escrita
 > concorrente; ver faixa 200-299. **#215 e #216 são da contenção da entrada
 > (PR #152), que ainda não estava mergeado quando o número foi tirado — a
@@ -1454,7 +1458,7 @@ Fase 4 apareceria como untracked porque `*.dump` não estava listado.
 > `REGISTRO_DIVIDAS.md` leem o "próximo número livre" ao mesmo tempo, e "próximo
 > livre" resolve conflito **sequencial**, não **simultâneo** — colidimos duas
 > vezes em dois dias (ver a nota de renumeração no topo da ADR-039). Faixa por
-> frente resolve sem coordenação. **Próximo livre nesta faixa: 220.**
+> frente resolve sem coordenação. **Próximo livre nesta faixa: 222.**
 > (#217 foi ocupada pela hash chain do `audit_logs` no PR #154, que renumerou
 > a entrada do PR #153 justamente por ter colidido com o #215 desta frente.
 > A faixa fica: 210-214 Frentes A/B · 215-216 contenção da entrada · 217 hash
@@ -1501,6 +1505,94 @@ não tem mandato para criar. Mudar o destino de `area_declarada_ha` também não
 serve: `total_area_ha` é a área que o resto do sistema lê.
 **O que destrava:** DATA-002 inteiro, com as três áreas separadas por finalidade.
 **Origem:** Frente D (09/09), medido no doc 546.
+
+### Aberta pelo gate pós-deploy da Frente C (09/09, `docs/gate-frente-c`)
+
+**220. `auditor_imovel` sobrescreve o status de linhas que o consultor já ACEITOU.**
+`inconsistency_matrix.build_matrix` empilha `status_updates` **sem olhar o status
+atual** da linha, e `auditor_imovel.py:167` aplica **sem filtrar**:
+
+```python
+# app/services/inconsistency_matrix.py — build_matrix
+for r in mat_rows:
+    status_updates.append((r, "consistente"))          # sem checar r.status
+...
+    status_updates.append((r, f"divergente_{subtipo}"))
+
+# app/agents/auditor_imovel.py:165-168
+for staging_row, novo_status in result.status_updates:
+    try:
+        staging_row.status = ExtractedFieldStatus(novo_status)   # sobrescreve aceito
+    except ValueError:
+        continue
+```
+
+Uma linha `aceito` que participe de um confronto de área volta a `consistente` ou
+`divergente_*` — **a decisão do consultor é apagada por um agente**. No processo
+23 há **28 linhas `aceito`** da Isis nessa condição.
+
+**Não dispara hoje**, e foi por isso que o gate pôde seguir: o auditor só roda na
+chain `diagnostico_completo` (`orchestrator.py:32`), despachada por
+`run_agent_chain`. A re-extração (`POST /processes/{id}/extract`) despacha
+`run_agent(agent_name="extrator")` ou `ocr_then_extract` → `_dispatch_extrator`,
+que também só chama o `extrator`; nenhum listener de evento chama o auditor.
+Varrida a classe: os outros pontos que escrevem `status` são decisão do consultor
+(`staging_consolidation`, 7 pontos) e o saneamento manual
+(`ficha01_extraction:1379`, só por `scripts/sanear_staging.py`).
+
+**Por que é grave mesmo sem disparar:** é a mesma classe do "atualizar da IA
+apagou a rota" (#144) — a IA desfazendo gesto humano. Basta alguém rodar o
+diagnóstico completo num caso com aceites para o dano acontecer, sem aviso e sem
+registro.
+**O que destrava:** filtrar `status_updates` por linha ainda não decidida (a
+regra já existe em `_is_consultor_decided`, em `ficha01_extraction`), ou aplicar
+só onde `status` ∈ {pendente, consistente, divergente_*}.
+**Origem:** pré-condição do gate pós-deploy da Frente C (09/09) — a pergunta era
+se a re-extração preservava as 28 aceitas; preserva, mas a varredura encontrou
+esta porta aberta ao lado. **Não corrigida nesta frente, por decisão de escopo.**
+
+**221. Quando a fatia certa omite a área, a área de Reserva Legal ocupa o campo
+do imóvel — e nenhuma das contenções barra.**
+Medido no gate pós-deploy, doc 547 (M3.181), duas execuções do MESMO código:
+
+| execução | `area_registrada_ha` | âncora | normalizado | extenso |
+|---|---|---|---|---|
+| DEPOIS-1 | `926,36.54` (área do imóvel, char 945) | sim | 926,3654 | **confere** |
+| DEPOIS-2 | `185,85.60` (área da **Reserva Legal**, char 56.111) | sim | 185,856 | ausente |
+
+A janela e a mesclagem estão corretas — conferido isolando as fatias:
+
+```
+--- staging:matricula:chunk0[0:45000]  --> area_registrada_ha = 926,36.54
+--- staging:matricula:chunk1[43000:82117] --> area_registrada_ha = None
+MESCLADO: 926,36.54     (janela.origem: area_registrada_ha = fatia 0)
+```
+
+O merge prefere a fatia mais antiga em empate (`_escolher_escalar`, chave
+`(fmt_score, conf_score, -idx)`). O que varia é o **modelo dentro da fatia 0**:
+quando ele não emite `area_registrada_ha`, o único candidato restante é o da
+fatia 1 — a área da RL — e ele entra. A **âncora** não barra (o valor *está* no
+texto), o **`check_format`** não barra (185,85.60 é área plausível), e a
+**notação registral** até o normaliza bem: 185,856 ha. Formato certo,
+significado errado.
+
+**Por que importa agora:** é o doc cuja linha `926,36.54` está ACEITA no #23. Uma
+re-extração pós-deploy que caia nesta execução propõe 185,8560 ha como área do
+imóvel, com selo de âncora e de área normalizada — mais convincente que o erro
+que a #215 descreve, não menos.
+
+**O que destrava (não implementado aqui):** o sinal que separa os dois já está
+gravado ao lado do valor — `extenso_confere`. A área do imóvel vem escrita por
+extenso no corpo da matrícula ("novecentos e vinte e seis hectares, trinta e seis
+ares e cinquenta e quatro centiares"); a da RL, não. Exigir extenso conferido
+para `area_registrada_ha` quando o candidato vier de fatia diferente da que traz
+o cabeçalho da matrícula fecha o caso sem tocar no prompt. É complemento da
+**#215** (determinismo), não substituto: com a #215 resolvida, esta ainda pode
+disparar num documento em que a área não apareça na primeira fatia.
+
+**Origem:** gate pós-deploy da Frente C, 09/09 — 4 execuções (2 antes × 2 depois)
+dos 8 documentos, contra o `extracted_text` real de produção copiado com md5
+conferido. **Não corrigida nesta frente, por decisão de escopo.**
 
 ### Abertas pela Frente C — contenção da entrada (09/09, `fix/contencao-entrada` · ADR-064)
 

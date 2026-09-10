@@ -1,5 +1,42 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-09-09 (GATE DA CONTENÇÃO DA ENTRADA — EXECUTADO, `docs/gate-frente-c`):**
+o gate declarado incompleto no pulso anterior foi fechado — **os 8 documentos (544–551),
+antes × depois, duas execuções de cada**. Não rodou em produção: rodou em banco descartável
+carregado com o `extracted_text` **real** de produção, copiado com **md5 conferido documento
+a documento**; produção só recebeu `SELECT`. O PostgREST esteve em 503 a rodada inteira, então
+o texto saiu por `SELECT` no MCP em fatias base64 com md5 por fatia calculado no banco — cinco
+fatias corromperam na transcrição e todas foram reparadas **fechando o hash de origem**, nunca
+por semelhança. **ANTES** = `41e8534`; **DEPOIS** = `ed2c327`, isolado de propósito, porque a
+main já andou para `5103fc4` com a Frente D e usá-la misturaria duas frentes na mesma medição.
+
+**O achado principal é a janela.** No doc 547 o lado antigo gravou `nirf_cib =
+050.041.396.737-1` nas duas execuções — o código INCRA do **confrontante**, no char 1.286. O
+lado novo gravou `2.974.457-1` nas duas, ancorado no **char 53.774**, vindo da **fatia 1
+(43.000–82.117)** de uma janela que cobriu 82.117/82.117 chars: região que o
+`EXTRACTOR_MAX_CHARS=30.000` nunca leu. Mesmo padrão no 549 (`950.041.396.737-1` →
+`6.816.752-0` @10.837). Os dois valores errados **existiam no texto** — são o código do
+vizinho, não alucinação; a âncora sozinha jamais os barraria.
+
+**Controle negativo (545):** 3 linhas, 3 âncoras, zero rejeição nas duas execuções.
+**Única linha barrada em 4 execuções:** `averbacao_rl` do 548 — uma frase descritiva que o
+modelo escreveu, que entrou como linha visível com o motivo, não sumiu em silêncio.
+**Contenção 3 sem consolidar nada:** `parse_area_ha` sobre as linhas **já aceitas** dá
+`926,36.54 → 926,3654` e `725,46.63 → 725,4663`, enquanto `92636.54` continua 92 mil hectares
+— confirma a ordem: deploy antes de qualquer "Gravar na base" no #23.
+**Fronteira honesta na contenção 4:** o harness chama `extract_and_stage`, que não passa pelo
+`BaseAgent._complete_job` — o metadado por chamada (modelo, tokens, custo) foi medido, mas
+**`ai_jobs` não foi gravado**; a persistência de `raw_output` segue coberta só por teste unitário.
+
+**O gate abriu uma dívida — #221.** Doc 547, segunda execução do lado novo:
+`area_registrada_ha = 185,85.60`, a área da **Reserva Legal**, não a do imóvel. Com âncora,
+formato válido e normalização correta. Isolando as fatias, a janela está inocente (fatia 0
+propôs `926,36.54`, fatia 1 propôs `None`, o merge escolheu a fatia 0): o que varia é o modelo
+omitir a área na fatia 0, e aí o único candidato restante é o da RL. **Formato certo,
+significado errado — nenhuma das quatro contenções barra.** O sinal que separa os dois já está
+gravado ao lado do valor (`extenso_confere`), e o conserto está descrito na dívida.
+**Produção ao final:** processo 23 com **28 linhas `aceito`**, o mesmo número de antes.
+
 **Pulso 2026-09-09 (FIAÇÃO DA ENTRADA — `fix/fiacao-entrada`, PR aberto, NÃO MERGEAR):**
 constrói sobre o #152. Quatro dados que a extração **já produzia** e que morriam antes de
 chegar a colunas **que já existiam e estavam NULL** — as linhas "INSUFICIENTE: material
