@@ -206,7 +206,20 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
     # 3) Gravames vigentes — lista agregada por matrícula (ADR-066): a
     # consultora decide "o que está gravado hoje nesta matrícula", não ato a
     # ato (`onus_gravames` já é coluna única na base pela mesma razão).
-    if entity == "matricula" and row.tipo_observacao in TIPOS_GRAVAME:
+    #
+    # SEM checar `entity == "matricula"` de propósito — medido contra a
+    # extração real (Frente I, caso #23): `observacao_registral.
+    # DESTINO_POR_TIPO` só mapeia `reserva_legal`/`app`; gravame (hipoteca,
+    # alienação fiduciária, penhora) nunca tem destino individual
+    # (`destino_de` devolve `None`), então `_linhas_de_observacoes` NUNCA
+    # marca `target_entity="matricula"` nessas linhas — fica `None`. Exigir
+    # `entity == "matricula"` aqui fazia a regra nunca casar com gravame
+    # real nenhum (só com o shape inventado da fixture desta frente antes de
+    # medir contra produção). `tipo_observacao` só existe em linhas da
+    # certidão de matrícula (única chamadora de `_linhas_de_observacoes`) —
+    # o vínculo com a matrícula certa vem do `matricula_hint`, não da
+    # entidade.
+    if row.tipo_observacao in TIPOS_GRAVAME:
         hint = _clean_matricula_hint(row.matricula_hint)
         if hint:
             return ("matricula", hint, "gravames"), None
