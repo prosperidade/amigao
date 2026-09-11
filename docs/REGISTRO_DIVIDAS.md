@@ -1573,7 +1573,14 @@ quando a rodada 2 for autorizada: (a) o OCR forçado do 551 resolve sozinho
 identidade quando não há CNH própria — depende da #224 abaixo (mesma pergunta
 de fundo: identidade derivada de observação vira staging roteável ou a
 Conferência lê direto do derivado). **Origem:** Frente I, pré-condição
-medida contra produção (11/09).
+medida contra produção (11/09). **Rodada 2 tentada (11/09), BLOQUEADA:**
+backup do 551 refeito via Supabase MCP (nada mudou desde a pré-condição);
+`force=True` não disparado — a sessão não tem JWT de usuário interno de
+produção nem credenciais de storage de produção para fazer isso por fora do
+painel, e não existe API-key/service-token alternativa no código. Falta um
+clique do André em "Reprocessar OCR" no doc 551 (processo #23) — a rota já
+embute `force=True` e encadeia o extrator sozinha. Detalhe completo em
+`docs/trabalhos/reconciliacao_decisoes.md`, seção "Rodada 2".
 
 **224. Titularidade do cliente PJ não é um dado de staging — é direto no
 `Client`, e a Conferência (Frente G/ADR-067) só agrupa staging.** Medido: a

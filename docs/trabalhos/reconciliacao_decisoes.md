@@ -162,6 +162,59 @@ de linhas de staging, contagem de `tipo_observacao`/vigência/âncora, as 28
 aceitas conferidas por id, a lista completa de `build_decisions` pós-
 re-extração, e o SHA no ar no momento da medição.)_
 
+### Rodada 2 (11/09/2026) — tentativa de OCR forçado do doc 551, BLOQUEADA
+
+Escopo autorizado: só o doc 551 (dívida #223). Passo 1 executado; passos 2-6
+não executados — bloqueio de credencial, não de dado ou de decisão.
+
+**1. Backup do doc 551** (Supabase MCP, read-only, projeto `diquycxxkfrjhxtrcmzb`):
+
+| campo | valor |
+|---|---|
+| `id` / `process_id` / `client_id` / `property_id` | 551 / 23 / 20 / 18 |
+| `original_file_name` | `CNH-e.pdf.pdf` |
+| `storage_key` | `tenant_1/process_23/993ec255-0659-4318-bb5e-f5b87b7b2844.pdf` |
+| `file_size_bytes` / `checksum_sha256` | 284319 / `35f2e7e6f5ab30c799226d88ac92ccdb518149466e4a4c5fba231bdf9ae180e2` |
+| `document_type` / `document_category` | `doc_pessoal` / `societarios` |
+| `ocr_status` / `confidence_score` | `done` / 0.95 |
+| `extraction_status` (antes) | "recebido, não processado (doc_pessoal) — revisar: OCR não extraiu texto legível deste documento (provável PDF de imagem) — reprocessar o OCR; sem texto não há o que extrair" |
+| `extracted_text` (444 chars, íntegro) | "QR-CODE\nDocumento assinado com certificado digital em conformidade com a Medida Provisória nº 2200-2/2001. Sua validade poderá ser confirmada por meio do programa Assinador Serpro. As orientações para instalar o Assinador Serpro e realizar a validação do documento digital estão disponíveis em: https://www.serpro.gov.br/assinador-digital. REPÚBLICA FEDERATIVA DO BRASIL MINISTÉRIO DOS TRANSPORTES SECRETARIA NACIONAL DE TRÂNSITO - SENATRAN" |
+| `extracted_at` / `updated_at` | 2026-09-08 00:55:33 UTC / 2026-09-11 04:01:20 UTC |
+
+Confere com o medido na pré-condição (#223) — nada mudou desde 11/09 cedo.
+
+**2. HEAD no R2 — não executado.** Esta sessão não tem as credenciais de
+storage de produção: o `.env` local aponta para MinIO dev (`localhost:9000`),
+e `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`/`MINIO_SERVER` de produção são
+`sync: false` no `render.yaml` — só existem no dashboard do Render, nunca no
+repo. Evidência indireta de que o objeto existia: o próprio `ocr_status='done'`
+de 08/09 prova que `download_bytes(storage_key)` funcionou naquela data (284319
+bytes, checksum gravado). Não foi reverificado hoje.
+
+**3-6. Disparo do `force=True`, leitura do resultado, re-extração, correção
+da `extraction_status` — não executados.** A rota que o painel usa
+(`POST /api/v1/documents/551/reprocess-ocr`, `app/api/v1/documents.py:447-514`)
+exige `Depends(get_current_internal_user)` — um JWT de usuário interno de
+produção. Esta sessão não tem login de produção (as credenciais seed do
+`CLAUDE.md` são só do banco dev; não há token de serviço/API-key alternativa
+no código — conferido em `app/api/deps.py` e afins). Sem esse token não há
+como chamar o endpoint nem, portanto, disparar `ocr_then_extract` real.
+
+**O que falta para fechar, literalmente um clique:** André abre o processo
+#23 no painel → aba de documentos → `CNH-e.pdf.pdf` (doc 551) → "Reprocessar
+OCR". A rota já embute `force=True` (não pede parâmetro) e, em sucesso,
+encadeia sozinha o extrator (`ocr_tasks.py:366-367`) — não precisa disparar os
+dois passos à mão. Alternativa equivalente: André roda, com o Bearer token da
+própria sessão do painel,
+`curl -X POST https://api.regenteambiental.com.br/api/v1/documents/551/reprocess-ocr -H "Authorization: Bearer <token>"`.
+Depois disso, os passos 4-6 (ler `extracted_text` novo, conferir staging,
+`extraction_status`) ficam prontos para rodar nesta mesma sessão ou na
+próxima — a leitura pós-fato é só `SELECT`, doutrina já usada nesta e nas
+frentes anteriores.
+
+**Dívida #223 permanece aberta** (não fechada por esta tentativa) —
+atualização em `docs/REGISTRO_DIVIDAS.md`.
+
 ---
 
 ## Ambiente da medição
