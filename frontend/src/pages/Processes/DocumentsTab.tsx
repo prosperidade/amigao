@@ -61,6 +61,19 @@ function estadoTranscricao(doc: Document): 'processando' | 'pronta' | 'falhou' {
   return 'processando';
 }
 
+/**
+ * O documento leu, mas o texto veio ilegível? (dívida #223)
+ *
+ * `ocr_status='done'` não garante texto de verdade — um PDF de imagem passa
+ * pela cascata sem erro e devolve só o boilerplate da assinatura digital. O
+ * backend já nomeia essa causa em `extraction_status`
+ * (`MOTIVO_OCR_ILEGIVEL`, `app/services/ficha01_extraction.py`); aqui só
+ * reconhecemos o mesmo texto para decidir se o botão de reler aparece.
+ */
+function ocrIlegivel(doc: Document): boolean {
+  return !!doc.extraction_status?.includes('OCR não extraiu texto legível');
+}
+
 export default function DocumentsTab({ processId }: DocumentsTabProps) {
   const queryClient = useQueryClient();
   const [textoAberto, setTextoAberto] = useState<DocumentText | null>(null);
@@ -110,6 +123,24 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
         ?? 'Não foi possível reenviar a transcrição.';
+      toast.error(msg);
+    },
+  });
+
+  // Reler o PDF (dívida #223) — mesma rota do reprocesso de áudio, mensagens
+  // próprias porque aqui o vocabulário do consultor é "ler o documento de
+  // novo", não "transcrição".
+  const reprocessarOcrMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      await api.post(`/documents/${docId}/reprocess-ocr`);
+    },
+    onSuccess: () => {
+      toast.success('OCR reenviado. Isso pode levar alguns minutos.');
+      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? 'Não foi possível reenviar o OCR.';
       toast.error(msg);
     },
   });
@@ -289,6 +320,20 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                         <span>{doc.extraction_status}</span>
                       </p>
+                    )}
+                    {/* Dívida #223 — o documento leu (ocr_status='done') mas o
+                        texto veio ilegível (PDF de imagem); sem este botão o
+                        único jeito de reler era chamar a rota na mão. */}
+                    {ocrIlegivel(doc) && (
+                      <button
+                        onClick={() => reprocessarOcrMutation.mutate(doc.id)}
+                        disabled={reprocessarOcrMutation.isPending}
+                        title="Reler o documento (novo OCR)."
+                        className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 mt-1 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${reprocessarOcrMutation.isPending ? 'animate-spin' : ''}`} />
+                        Reprocessar OCR
+                      </button>
                     )}
                     {/* O motivo da falha em TEXTO, não só no tooltip do chip. A
                         pergunta que o consultor faz é "por que não leu?", e a
