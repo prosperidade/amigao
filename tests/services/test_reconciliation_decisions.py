@@ -134,14 +134,20 @@ def _elodi(db_session):
 
     # ── Gravames da 3.673 — AV.03 (hipoteca, baixada) e R.15 (alienação
     # fiduciária Itaú, sem baixa) — decisão ÚNICA "gravames vigentes".
+    # `entidade=None`/`alvo=None`: medido contra a extração real (Frente I,
+    # caso #23) — `observacao_registral.DESTINO_POR_TIPO` não mapeia gravame
+    # nenhum, então `_linhas_de_observacoes` NUNCA marca `target_entity` para
+    # estas linhas (fica `None`); o vínculo com a matrícula é só o
+    # `matricula_hint`. `field_name="observacao"` é o fallback real
+    # (`target_field or "observacao"`) para observação sem destino.
     rows["gravame_av03"] = _linha(
-        db_session, tenant, proc, mat_3673, field_name="onus", valor="hipoteca AV.03",
-        entidade="matricula", hint="3673", tipo_obs="hipoteca",
+        db_session, tenant, proc, mat_3673, field_name="observacao", valor="hipoteca AV.03",
+        entidade=None, hint="3673", tipo_obs="hipoteca",
         atributos={"ato": "AV.03", "vigencia": "baixado"},
     )
     rows["gravame_r15"] = _linha(
-        db_session, tenant, proc, mat_3673, field_name="onus", valor="alienação R.15",
-        entidade="matricula", hint="3673", tipo_obs="alienacao_fiduciaria",
+        db_session, tenant, proc, mat_3673, field_name="observacao", valor="alienação R.15",
+        entidade=None, hint="3673", tipo_obs="alienacao_fiduciaria",
         atributos={"ato": "R.15", "vigencia": "vigente"},
     )
 
