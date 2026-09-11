@@ -105,6 +105,65 @@ explicitamente revisada).
 
 ---
 
+## FRENTE I — RE-EXTRAÇÃO DO CASO REAL (11/09/2026)
+
+Objetivo: fechar REC-001/CONF-001 ponta a ponta contra o #23 real — os dois
+gaps medidos acima (RL/gravames sem `tipo_observacao` porque o dado nunca foi
+re-extraído desde as Frentes E/F) tinham causa raiz conhecida; esta frente
+testa a hipótese.
+
+### Pré-condição (medida antes de tocar em produção)
+
+- **Escopo de documentos confirmado**: 546-551 pertencem TODOS ao
+  processo #23 (`select process_id from documents where id between 546 and
+  551` → 23 nos seis). Docs 544/545 são de Valéria (#22) — descartada uma
+  referência cruzada equivocada de um gate anterior que cobria os dois casos
+  juntos.
+- **INSERT-only confirmado por leitura de código**, não por confiança —
+  `app/services/ficha01_extraction.py:1449` (`extract_and_stage`): a única
+  mutação é `db_session.add(ExtractedFieldStaging(...))`; nenhum `.update()`/
+  `.delete()`; `status`/`decided_value`/`consolidated_at` de linha existente
+  nunca são tocados.
+- **Bug achado e fechado ANTES de re-extrair** (PR #162): a chave `gravames`
+  exigia `target_entity=="matricula"`, mas `observacao_registral.
+  DESTINO_POR_TIPO` só mapeia `reserva_legal`/`app` — gravame nunca tem
+  destino individual, então nunca carrega `target_entity="matricula"`. Sem
+  este fix, a decisão de gravames NUNCA apareceria, dado real ou não. Fixado,
+  medido, 18/18 verde, mergeado antes da re-extração.
+- **Backup** (read-only, Supabase MCP): `documents` (546-551, 6 linhas) e
+  `extracted_field_staging` (processo 23, 42 linhas) com o payload completo;
+  `audit_logs` (41 linhas, ids 2056-2109, sessão da Isis em 08/09, hash chain
+  íntegra). Arquivos locais, não commitados (dado de produção).
+
+### Escopo fechado para a rodada 1 (decisão do André, 11/09)
+
+- Re-extração de **546-550** (texto CACHEADO, uma execução — sem re-OCR, sem
+  `force=True`) disparada pelo painel (Agentes IA → campo "ID do Processo" →
+  23 → card do agente Extrator → "Rodar no processo #23"), medida por
+  `SELECT` antes/depois.
+- **Aceite**: RL como decisão (AV.02 vigente × CAR 437,7632, fonte =
+  matrícula), gravames como decisão (0 hipotecas vigentes na 3.673, R.15
+  vigente). Composição e áreas por matrícula continuam. 28 linhas aceitas
+  intactas por id.
+- **Representante e titularidade ficam FORA desta rodada** — fronteira
+  declarada, duas dívidas abertas (`docs/REGISTRO_DIVIDAS.md` #223 e #224):
+  (a) doc 551 (CNH-e) tem OCR vazio — texto cacheado é só boilerplate de
+  assinatura digital, sem nome/CPF; corrigir exige `force=True` (rodada 2,
+  autorização separada, custo/risco maiores — chamada Vision real); (b)
+  titularidade do cliente PJ não é dado de staging hoje — vem direto do
+  `Client`, e `_FIELD_SPECS["car"]` não extrai razão social/CNPJ de
+  documento nenhum; decidir com a Isis se vira campo extraído (CAR/CCIR) ou
+  se a Conferência passa a ler o cadastro direto.
+
+### Resultado — a preencher após o André disparar a extração no painel
+
+_(seção completada na próxima atualização deste documento, com antes×depois
+de linhas de staging, contagem de `tipo_observacao`/vigência/âncora, as 28
+aceitas conferidas por id, a lista completa de `build_decisions` pós-
+re-extração, e o SHA no ar no momento da medição.)_
+
+---
+
 ## Ambiente da medição
 
 | item | valor |

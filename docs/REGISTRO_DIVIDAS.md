@@ -8,7 +8,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 223.** (#222 aberta e fechada no mesmo PR —
+> **PRÓXIMO NÚMERO LIVRE: 225.** (#223 e #224 abertas pela Frente G/I —
+> reconciliação por decisões + aceite real em produção, 10-11/09, PRs #160/#162,
+> ADR-067. Ver bloco "Frente G/I" abaixo. #222 aberta e fechada no mesmo PR —
 > `fix/cobertura-janela`, 10/09, achado Codex 10/09 sobre a cobertura declarada
 > do extrator de staging. Ver tabela "Fechadas" abaixo.
 > #218 e #219 são da Frente D — fiação, PR #155.
@@ -1535,6 +1537,62 @@ procurador, cônjuge) além de adquirente/transmitente.
 lista completa com o porquê de cada item não ter sido puxado para dentro.
 **Origem:** ADR-064 (N2), ADR-065 ("Fora do escopo"), CONFIRMACAO_ENTRADA_2026-09-09.md
 (HIST-001). Ver ADR-066 e `docs/trabalhos/temporalidade_ato.md`.
+
+### Abertas pela Frente G/I — reconciliação por decisões + aceite real (10-11/09, `feat/reconciliacao-decisoes` PR #160, `fix/gravames-sem-entity-matricula` PR #162, ADR-067)
+
+REC-001/CONF-001 fechados contra fixture (PR #160) e depois contra o caso
+real #23 em produção, só leitura (`docs/trabalhos/reconciliacao_decisoes.md`).
+Um bug de chave (gravames nunca casava com dado real — #entity nunca é
+"matricula" para ato de gravame, `DESTINO_POR_TIPO` só mapeia
+reserva_legal/app) foi achado na pré-condição e fechado no mesmo giro (PR
+#162), antes de qualquer escrita em produção. A rodada 1 da re-extração real
+do #23 (docs 546-550, texto cacheado) fechou RL e gravames como decisão;
+representante e titularidade ficaram de fora, com causa raiz medida, não
+suposta — as duas dívidas abaixo.
+
+**223. Doc 551 (CNH-e do representante) tem OCR vazio — PDF com conteúdo em
+imagem, texto extraído é só boilerplate de assinatura digital.** Medido:
+`extracted_text` = 444 chars ("QR-CODE... Assinador Serpro... SENATRAN"), zero
+nome/CPF/RG. `ocr_status='done'` mas a leitura não pegou o CONTEÚDO da CNH —
+é o **N4** de `docs/auditoria/CONFIRMACAO_ENTRADA_2026-09-09.md` ("o
+documento do representante da PJ chegou vazio e ninguém foi avisado";
+`extraction_status` explica pelo motivo ERRADO — "tipo sem schema de
+staging" — quando a causa real é OCR vazio). Reextração com texto cacheado
+(rodada 1) não resolve — o texto cacheado É o problema. Precisa `force=True`
+(re-download do R2 + OCR/Vision) especificamente neste documento — rodada 2,
+só após autorização do André (custo/risco maiores: chamada Vision real,
+resultado incerto até medir). **Achado lateral relevante:** o nome, CPF, RG e
+CNH de **Joel Cenci** já estão em TEXTO LIMPO no doc 549 (R-13 e R.15,
+`adquirentes`/`transmitentes` de `compra_venda`, ADR-066) — a extração de
+matrícula não tem hoje para onde rotear essa pessoa como "representante" (é
+atributo de uma observação sobre a matrícula, não uma linha de staging
+roteada por `_FIELD_SPECS`). Duas portas possíveis para fechar, a decidir
+quando a rodada 2 for autorizada: (a) o OCR forçado do 551 resolve sozinho
+(via #149, doc pessoal→representante em caso PJ); (b) ler
+`titular_atual()`/`cadeia_titularidade()` (ADR-066) como fonte alternativa de
+identidade quando não há CNH própria — depende da #224 abaixo (mesma pergunta
+de fundo: identidade derivada de observação vira staging roteável ou a
+Conferência lê direto do derivado). **Origem:** Frente I, pré-condição
+medida contra produção (11/09).
+
+**224. Titularidade do cliente PJ não é um dado de staging — é direto no
+`Client`, e a Conferência (Frente G/ADR-067) só agrupa staging.** Medido: a
+`_FIELD_SPECS["car"]` não tem NENHUM campo mapeado para `target_entity=
+"cliente"` — a razão social/CNPJ da ELODI nunca foi (e não é, pelo desenho
+atual) extraída do CAR; está no cadastro porque alguém digitou na criação do
+caso. A decisão "titularidade" do ADR-067 pressupunha uma linha de staging
+que, para PJ, não existe. Duas saídas possíveis, nenhuma implementada:
+(a) o CAR/CCIR passam a ter um `_FieldSpec` para razão social/CNPJ do
+declarante, virando staging roteável como qualquer outro campo — mas exige
+medir se o documento realmente declara isso com identidade forte (não
+inferir de menção fraca, mesma doutrina de `classify_doc_type`); (b) a
+Conferência ganha um bloco "titularidade" que lê `Client.cpf_cnpj`/
+`full_name` DIRETO do cadastro (fora do agrupamento de staging), comparando
+contra o que a cadeia de titularidade (`observacao_registral.titular_atual`,
+ADR-066) deriva das matrículas — mais fiel ao que a spec pedia, mas é uma
+segunda fonte de decisão (cadastro × observação) que o ADR-067 não modela
+hoje. Decidir com a Isis antes de implementar qualquer lado. **Origem:**
+Frente I, pré-condição medida contra produção (11/09).
 
 ### Aberta pelo gate pós-deploy da Frente C (09/09, `docs/gate-frente-c`)
 
