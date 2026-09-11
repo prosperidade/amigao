@@ -14,6 +14,18 @@ docs 546/547/549 da ELODI, extracted_text real de produção) e no próprio
 ADR-066. Pull fresco de produção nesta sessão foi bloqueado pelo classificador
 de auto-modo (Supabase MCP `execute_sql` recusado) — não reinventados, mas
 não re-verificados nesta rodada (registrado no ADR-067).
+
+ADENDO (`fix/reconciliacao-rl-chave`, Frente I): a fixture original de RL
+usava `atributos={"area": "492,9252", ...}` — chave escrita à mão, que por
+coincidência era a MESMA chave errada que `reconciliation_decisions.py:296`
+buscava (`atributos["area"]`). O teste passava, confirmando o código; a
+produção grava `atributos["area_ha"]` (conferido, id 1645/1603 do #23 real),
+e o valor real caía no fallback de regex sobre texto narrativo, produzindo
+2492.925227012009 a partir de 492,9252 + a data do ato. Fixture escrita a
+partir do CÓDIGO confirma o código; fixture escrita a partir do DADO de
+produção encontra o bug. A partir daqui, toda fixture de reconciliação nasce
+de linha real de staging (valores colados do SELECT em produção), nunca de
+dict inventado.
 """
 
 from __future__ import annotations
@@ -89,7 +101,7 @@ def _elodi(db_session):
     mat_3181 = _doc(db_session, tenant, proc, "matricula")
     mat_3673 = _doc(db_session, tenant, proc, "matricula")
     mat_3313 = _doc(db_session, tenant, proc, "matricula")
-    mat_3009 = _doc(db_session, tenant, proc, "matricula")
+    mat_4387 = _doc(db_session, tenant, proc, "matricula")
     cnh_joel = _doc(db_session, tenant, proc, "rg_cpf")
 
     rows: dict[str, ExtractedFieldStaging] = {}
@@ -104,7 +116,7 @@ def _elodi(db_session):
         db_session, tenant, proc, mat_3181, field_name="numero_matricula",
         valor="3.181", entidade="matricula", alvo="numero_matricula", hint="3181",
     )
-    for hint, doc in (("3673", mat_3673), ("3313", mat_3313), ("3009", mat_3009)):
+    for hint, doc in (("3673", mat_3673), ("3313", mat_3313), ("4387", mat_4387)):
         rows[f"certidao_{hint}"] = _linha(
             db_session, tenant, proc, doc, field_name="numero_matricula",
             valor=hint, entidade="matricula", alvo="numero_matricula", hint=hint,
@@ -119,17 +131,79 @@ def _elodi(db_session):
         unidade="ha",
     )
 
-    # ── Reserva Legal — AV.02 da 3.673 (vigente, 492,9252ha, doc 549 real) ×
-    # RL declarada do CAR (437,7632ha, dívida #218/ADR-066) — >10%, crítico.
-    rows["rl_matricula"] = _linha(
+    # ── Reserva Legal — duas averbações REAIS, uma por matrícula (`fix/
+    # reconciliacao-rl-chave`, Frente I): AV.03 da 3.181 (185,85.60ha,
+    # notação registral, doc 547 real) e AV.02 da 3.673 (492,9252ha, doc 549
+    # real) SOMAM — não competem, são atos de matrículas diferentes. A soma
+    # (678,7812ha) × RL declarada do CAR (437,7632ha, dívida #218/ADR-066) é
+    # a decisão do IMÓVEL (`reserva_legal_total`) — >10%, crítico.
+    # `atributos` copiado literal do #23 real (id 1603/1645): a chave é
+    # `area_ha`, não `area` — é exatamente a fixture que o bug original
+    # escondia (ver ADENDO no topo do arquivo).
+    rows["rl_averbacao_3181"] = _linha(
+        db_session, tenant, proc, mat_3181, field_name="averbacao_rl",
+        valor="AV.03 · Reserva Legal · 185,85.60 ha · 21 de maio de 2004",
+        entidade="matricula", alvo="averbacao_rl", hint="3181", tipo_obs="reserva_legal",
+        atributos={
+            "ato": "AV.03", "area_ha": "185,85.60", "data_ato": "21 de maio de 2004",
+            "vigencia": "vigente",
+            "descricao": "Procede-se esta averbação para constar a RELOCAÇÃO da área "
+                          "de reserva Legal devidamente aprovada pelo Órgão Ambiental competente.",
+        },
+    )
+    rows["rl_averbacao_3673"] = _linha(
         db_session, tenant, proc, mat_3673, field_name="averbacao_rl",
-        valor={"area": "492,9252", "referencia": "AV.02"}, entidade="matricula",
-        alvo="averbacao_rl", hint="3673", tipo_obs="reserva_legal",
-        atributos={"ato": "AV.02", "area": "492,9252", "vigencia": "vigente"},
+        valor="AV.02 · Reserva Legal · 492,9252 ha · 27/01/2009",
+        entidade="matricula", alvo="averbacao_rl", hint="3673", tipo_obs="reserva_legal",
+        atributos={
+            "ato": "AV.02", "area_ha": "492,9252", "data_ato": "27/01/2009",
+            "vigencia": "vigente",
+            "descricao": "Procede-se a averbação da Reserva Legal desta Matricula em "
+                          "conjunto com as Matriculas nº 1.224 e 1.225.",
+        },
     )
     rows["rl_car"] = _linha(
         db_session, tenant, proc, car, field_name="rl_declarada_ha",
         valor="437,7632", entidade="imovel", alvo="rl_status", unidade="ha",
+    )
+
+    # ── Titularidade por matrícula — cadeia de compra e venda (Frente F,
+    # ADR-066/ADR-067 adendo). 3.313: R-11 real (id 1629) — SONIA INÊS
+    # GONDIM é TRANSMITENTE, não deve virar "proprietária" (o achado que
+    # motivou esta frente). Pessoa vem como DICT (`{"cpf":..., "nome":...}`).
+    rows["cv_3313_r11"] = _linha(
+        db_session, tenant, proc, mat_3313, field_name="observacao",
+        valor="R-11 · Compra e venda · adquirido por IZAURA DE FATIMA PEGO · de SONIA INÊS GONDIM",
+        entidade=None, hint="3313", tipo_obs="compra_venda",
+        atributos={
+            "ato": "R-11", "data_ato": "27 de janeiro de 2014",
+            "adquirentes": [{"cpf": "858.345.059-53", "nome": "IZAURA DE FATIMA PEGO"}],
+            "transmitentes": [{"cpf": "283.621.361-20", "nome": "SONIA INÊS GONDIM"}],
+        },
+    )
+    # 3.181: dois atos reais em sequência (id 1602, 1608) — pessoa vem como
+    # STRING (forma real diferente da 3.313, medida no mesmo processo #23).
+    # O titular atual é ELODI (R-09/2018), o adquirente do ato MAIS RECENTE
+    # — não ALEXANDRE (R-02/2012), a primeira evidência da lista.
+    rows["cv_3181_r02"] = _linha(
+        db_session, tenant, proc, mat_3181, field_name="observacao",
+        valor="R-02 · Compra e venda · adquirido por ALEXANDRE AUGUSTO CLEMENTE · de VERA LÚCIA BRAUN GALVÃO",
+        entidade=None, hint="3181", tipo_obs="compra_venda",
+        atributos={
+            "ato": "R-02", "data_ato": "15/10/2012",
+            "adquirentes": ["ALEXANDRE AUGUSTO CLEMENTE"],
+            "transmitentes": ["VERA LÚCIA BRAUN GALVÃO"],
+        },
+    )
+    rows["cv_3181_r09"] = _linha(
+        db_session, tenant, proc, mat_3181, field_name="observacao",
+        valor="R-09 · Compra e venda · adquirido por ELODI AGROPECUÁRIA · de ALEXANDRE AUGUSTO CLEMENTE",
+        entidade=None, hint="3181", tipo_obs="compra_venda",
+        atributos={
+            "ato": "R-09", "data_ato": "21 de agosto de 2018",
+            "adquirentes": ["ELODI AGROPECUÁRIA"],
+            "transmitentes": ["ALEXANDRE AUGUSTO CLEMENTE"],
+        },
     )
 
     # ── Gravames da 3.673 — AV.03 (hipoteca, baixada) e R.15 (alienação
@@ -211,7 +285,7 @@ class TestComposicaoREC001:
         _tenant, _proc, _prop, _cli, rows = _elodi(db_session)
         resultado = build_decisions(list(rows.values()))
         composicoes = [d for d in resultado.decisoes if d.chave[2] == "composicao"]
-        assert {d.chave[1] for d in composicoes} == {"3181", "3673", "3313", "3009"}
+        assert {d.chave[1] for d in composicoes} == {"3181", "3673", "3313", "4387"}
 
 
 class TestAreaPorMatricula:
@@ -226,20 +300,80 @@ class TestAreaPorMatricula:
         assert d.evidencias[0].fonte_autoritativa is True
 
 
-class TestReservaLegalDivergenciaCritica:
-    def test_rl_matricula_x_car_diverge_critico(self, db_session):
+class TestReservaLegalPorMatricula:
+    """`fix/reconciliacao-rl-chave`: RL de matrículas DIFERENTES não compete
+    — cada averbação é decisão própria, fonte única (mesmo desenho de
+    `area`). AV.03 da 3.181 e AV.02 da 3.673 são dois fatos, não duas
+    leituras do mesmo fato."""
+
+    def test_rl_3181_fonte_unica_valor_estruturado(self, db_session):
         _tenant, _proc, _prop, _cli, rows = _elodi(db_session)
         resultado = build_decisions(list(rows.values()))
-        d = _decisao(resultado, "reserva_legal")
+        d = _decisao(resultado, "reserva_legal", "3181")
         assert d is not None
-        valores = {round(e.valor_normalizado, 4) for e in d.evidencias}
-        assert valores == {492.9252, 437.7632}
+        assert d.concordancia == "fonte_unica"
+        # 185,85.60 é notação registral (hectares,ares.centiares) — não
+        # 2492.925227012009 nem qualquer regex sobre texto narrativo.
+        assert d.valor_proposto == 185.856
+        assert d.evidencias[0].fonte_autoritativa is True
+
+    def test_rl_3673_fonte_unica_valor_estruturado(self, db_session):
+        _tenant, _proc, _prop, _cli, rows = _elodi(db_session)
+        resultado = build_decisions(list(rows.values()))
+        d = _decisao(resultado, "reserva_legal", "3673")
+        assert d is not None
+        assert d.concordancia == "fonte_unica"
+        assert d.valor_proposto == 492.9252
+        # regressão do bug original: "492,9252 ha · 27/01/2009" regex'ado
+        # inteiro produzia 2492.925227012009.
+        assert d.valor_proposto != 2492.925227012009
+
+
+class TestReservaLegalSemCampoEstruturado:
+    """Sem `atributos["area_ha"]`, a evidência fica VISÍVEL mas não é um
+    número — nunca mais regex sobre o texto narrativo do ato (produziu
+    2492.925227012009 a partir de "492,9252 ha · 27/01/2009", Frente I,
+    caso #23)."""
+
+    def test_sem_area_ha_vira_evidencia_visivel_sem_valor_numerico(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        mat = _doc(db_session, tenant, proc, "matricula")
+        row = _linha(
+            db_session, tenant, proc, mat, field_name="averbacao_rl",
+            valor="AV.02 · Reserva Legal · 492,9252 ha · 27/01/2009",
+            entidade="matricula", alvo="averbacao_rl", hint="9001", tipo_obs="reserva_legal",
+            # atributos SEM "area_ha" — extração incompleta/malformada.
+            atributos={"ato": "AV.02", "data_ato": "27/01/2009", "vigencia": "vigente"},
+        )
+        resultado = build_decisions([row])
+        d = _decisao(resultado, "reserva_legal", "9001")
+        assert d is not None
+        assert d.evidencias[0].valor_normalizado == "sem área estruturada"
+        assert d.evidencias[0].valor_normalizado != 2492.925227012009
+        assert d.valor_proposto == "sem área estruturada"
+
+
+class TestReservaLegalTotalDoImovel:
+    """A decisão do IMÓVEL compara a SOMA das matrículas × CAR — mesmo
+    desenho de `area_total`/`_injetar_area_total`."""
+
+    def test_soma_das_matriculas_x_car_diverge_critico(self, db_session):
+        _tenant, _proc, _prop, _cli, rows = _elodi(db_session)
+        resultado = build_decisions(list(rows.values()))
+        d = _decisao(resultado, "reserva_legal_total")
+        assert d is not None
+        soma = next(e for e in d.evidencias if e.campo == "soma_matriculas")
+        car = next(e for e in d.evidencias if e.documento_tipo == "car")
+        assert soma.valor_normalizado == 678.7812  # 185,856 + 492,9252
+        assert car.valor_normalizado == 437.7632
         assert d.concordancia == "divergem"
         assert d.nivel_divergencia == "critico"
-        # fonte autoritativa é a matrícula (ADR-062), não o CAR.
-        autoritativa = next(e for e in d.evidencias if e.fonte_autoritativa)
-        assert autoritativa.valor_normalizado == 492.9252
-        assert d.valor_proposto == 492.9252
+        assert round(d.delta, 3) == 241.018
+        assert round(d.percentual, 4) == 0.3551
+
+        # a decisão por matrícula não desaparece — ela é a EVIDÊNCIA da soma.
+        assert _decisao(resultado, "reserva_legal", "3181") is not None
+        assert _decisao(resultado, "reserva_legal", "3673") is not None
 
 
 class TestGravamesVigentes:
@@ -269,6 +403,39 @@ class TestTitularidadeERepresentante:
         assert "ELODI AGROPECUARIA" in nomes
         nomes_repr = {e.valor_normalizado for e in representante.evidencias}
         assert "Joel" in nomes_repr
+
+
+class TestTitularidadeMatricula:
+    """`fix/reconciliacao-rl-chave` (Frente F ligada ao build_decisions):
+    titular ATUAL da matrícula, pela cadeia de compra e venda — nunca o
+    primeiro nome da lista. Achado original: SONIA INÊS GONDIM (transmitente
+    do R-11/2014 na 3.313, #23 real) aparecia como "proprietário" porque o
+    único lugar com o nome era o campo bruto `proprietarios` da certidão."""
+
+    def test_sonia_e_transmitente_nao_titular(self, db_session):
+        _tenant, _proc, _prop, _cli, rows = _elodi(db_session)
+        resultado = build_decisions(list(rows.values()))
+        d = _decisao(resultado, "titularidade", "3313")
+        assert d is not None
+        assert d.valor_proposto == "IZAURA DE FATIMA PEGO (ato R-11)"
+        nomes_na_evidencia = {e.valor_normalizado for e in d.evidencias}
+        assert "SONIA INÊS GONDIM (transmitente)" in nomes_na_evidencia
+        assert "SONIA" not in d.valor_proposto
+        assert rows["cv_3313_r11"].id in d.staging_ids
+        # saiu do sem_agrupamento — Frente G tratava compra_venda como campo
+        # sem chave natural.
+        assert rows["cv_3313_r11"].id not in {i["staging_id"] for i in resultado.sem_agrupamento}
+
+    def test_titular_e_o_ato_mais_recente_nao_o_primeiro(self, db_session):
+        """3.181: R-02/2012 (ALEXANDRE) depois R-09/2018 (ELODI) — pessoa em
+        formato STRING (forma real diferente da 3.313, que é DICT — os dois
+        formatos coexistem em produção)."""
+        _tenant, _proc, _prop, _cli, rows = _elodi(db_session)
+        resultado = build_decisions(list(rows.values()))
+        d = _decisao(resultado, "titularidade", "3181")
+        assert d is not None
+        assert d.valor_proposto == "ELODI AGROPECUÁRIA (ato R-09)"
+        assert len(d.evidencias) == 4  # 2 atos × (adquirente + transmitente)
 
 
 class TestCarNumeroStatus:
