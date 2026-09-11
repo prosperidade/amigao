@@ -3,7 +3,105 @@
 **Branch:** `feat/reconciliacao-decisoes` · **ADR:** 067 · **Dívidas fechadas:** REC-001, CONF-001
 **Insumo:** `docs/auditoria/SPEC_ISIS_v0.1_Conferencia_Base_Diagnostico.md` §3/§5/§6,
 `docs/auditoria/CONFIRMACAO_ENTRADA_2026-09-09.md`
-**Data da medição:** 10/09/2026
+**Data da medição:** 10/09/2026 · **Mergeada em main:** PR #160, `3391402` (10/09/2026 21:21 -03)
+
+---
+
+## ACEITE REAL EM PRODUÇÃO — caso #23, pós-deploy (10/09/2026)
+
+Autorização de merge do André: "pode mergear 160", seguida de pedido explícito
+de aceite contra o caso real (não fixture). Medido **só leitura** — nada
+consolidado, nada clicado, nenhuma escrita em produção.
+
+### Deploy confirmado
+
+- `GET https://api.regenteambiental.com.br/health` → `200 {"status":"ok",...}`.
+- **Prova comportamental de que o código novo está no ar** (Render não expõe
+  SHA no `/health`): rota nova sem auth → `401 {"detail":"Not authenticated"}`
+  (a rota EXISTE, o gate é de autenticação); rota inexistente de propósito
+  (`.../this-route-does-not-exist`) → `404 {"detail":"Not Found"}`. A
+  diferença de corpo/código entre as duas provou o deploy de `POST/GET
+  /processes/{id}/staging-decisions` sem precisar de token de produção.
+
+### Dados reais (Supabase MCP, read-only — mesma doutrina das frentes C-F: "produção só recebeu SELECT")
+
+`select count(*) from extracted_field_staging where process_id = 23` → **42**
+(confirma o número citado em toda a documentação da frente). Todas as 42
+linhas foram lidas (`SELECT`, nenhuma escrita) e alimentadas em
+`build_decisions` **localmente**, com o código de `main` pós-merge — mesma
+função pura que o endpoint em produção chama, resultado idêntico ao que a
+Conferência real mostraria.
+
+**Resultado: 11 decisões + 27 em `sem_agrupamento` — soma 15 + 27 = 42, nenhuma linha perdida.**
+
+| decisão | evidências | estado | concordância |
+|---|---|---|---|
+| `matricula:3181:composicao` — **Matrícula 3181 integra o imóvel** | CAR (`matricula_listada`, pendente) + certidão (`numero_matricula`, **aceito**) | pendente | concordam |
+| `matricula:3313:composicao` | CAR (pendente) + certidão (aceito) | pendente | concordam |
+| `matricula:3673:composicao` | CAR (pendente) + certidão (aceito) | pendente | concordam |
+| `matricula:4387:composicao` | CAR (pendente) + certidão (aceito) | pendente | concordam |
+| `matricula:3181:area` | certidão, 926,3654 ha | **decidida** | fonte_unica |
+| `matricula:3313:area` | certidão, 725,4663 ha | **decidida** | fonte_unica |
+| `matricula:3673:area` | certidão, 212,3553 ha | **decidida** | fonte_unica |
+| `matricula:4387:area` | certidão, 316,2053 ha | **decidida** | fonte_unica |
+| `imovel:23:area_total` | CAR (2.180,8267 ha) + soma calculada das 4 matrículas (2.180,3923 ha) | **decidida** | concordam (0,02%, informativo) |
+| `imovel:23:reserva_legal` | só CAR (437,7632 ha) | **decidida** | fonte_unica |
+| `imovel:23:car` | número + status | **decidida** | fonte_unica |
+
+### O caso central (REC-001) confere
+
+Matrícula 3.181: **uma decisão**, não duas linhas — exatamente o sintoma
+original (`CONFIRMACAO_ENTRADA_2026-09-09.md`) fechado contra o dado real.
+
+### O que NÃO apareceu como a Frente G descrevia — registrado, não escondido
+
+Contra o **caso real** (não a fixture), três pontos do pedido de aceite não se
+confirmaram, e a causa-raiz é a mesma nos três: **as 42 linhas do processo #23
+nunca foram re-extraídas desde as Frentes E/F (ADR-065/066)** —
+`tipo_observacao`/`atributos` estão `null` em TODAS as 42 linhas. A extração
+que está no banco é anterior ao vocabulário tipado.
+
+1. **RL não veio com divergência crítica.** A decisão `reserva_legal` tem
+   **uma evidência só** (CAR, 437,7632 ha) — `fonte_unica`, sem confronto. O
+   lado da matrícula (a RL de 42,8070 ha da 3.673, o próprio exemplo do bug
+   #221/ADR-065 "RL virou `averbacao_app`") está preso no campo antigo
+   `averbacao_app` (staging 1581), sem `tipo_observacao=reserva_legal` — a
+   regra de chave desta frente não o alcança. Confirmado em
+   `sem_agrupamento`: `staging_id=1581 field_name=averbacao_app`.
+2. **Gravames não formaram decisão nenhuma.** As três linhas `onus` (1575,
+   1584, 1592) são arrays JSON brutos (`[{"tipo":"Hipoteca",...}]`), não
+   observações tipadas — caem em `sem_agrupamento` pelo mesmo motivo.
+3. **Titularidade e representante não existem entre as 42 linhas.** Não há
+   nenhuma linha `target_entity=cliente` nem `representante` no staging do
+   processo #23 — o CNPJ/nome da ELODI e o representante Joel não estão
+   (mais, ou nunca estiveram) neste conjunto de 42. Nenhuma decisão desses
+   dois aspectos existe para o caso real.
+
+**Isto não é falha da regra de agrupamento — é a extração do #23 estar
+desatualizada em relação às Frentes E/F.** Uma re-extração dos documentos
+546-550 (fora do escopo desta frente e desta verificação, que é só leitura)
+alimentaria `tipo_observacao`/`atributos`, e as decisões de RL/gravames
+passariam a existir com a mesma mecânica já provada em fixture (ver seção
+acima). Registrado para o André decidir se/quando vale reprocessar o #23.
+
+### O estado da decisão sobrevive ao agrupamento — parcialmente confirmado
+
+7 das 11 decisões (`area`×4, `area_total`, `reserva_legal`, `car`) mostram
+`estado=decidida`, refletindo os campos que a Isis já aceitou — nenhuma
+aceitação anterior regrediu a pendente. **As 4 decisões de `composicao`
+(incluindo a 3.181) ficam `pendente`**, não porque o aceite da Isis sumiu —
+a evidência da certidão continua com `status=aceito`, visível — mas porque a
+OUTRA evidência do grupo (a confirmação do CAR, `matricula_listada`) nunca
+foi decidida individualmente na tela antiga (campo que a UI de campo-a-campo
+nunca dava destaque de decisão própria). Uma decisão só fica `decidida`
+quando TODAS as evidências que a compõem saíram de pendente — é o
+comportamento pretendido do ADR-067, não uma regressão do estado da Isis; e é
+exatamente o tipo de coisa que a Conferência por decisões torna visível pela
+primeira vez (a confirmação do CAR sobre a 3.181 nunca tinha sido
+explicitamente revisada).
+
+**Payload bruto** (as 42 linhas lidas via MCP + a saída completa de
+`build_decisions`) arquivado nesta sessão, não commitado (dado de produção).
 
 ---
 

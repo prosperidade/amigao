@@ -1,5 +1,30 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-09-10 (RECONCILIAÇÃO POR DECISÕES — ACEITE REAL PÓS-DEPLOY, PR #160
+MERGEADO, `3391402`):** merge autorizado pelo André ("pode mergear 160"). Deploy
+confirmado por prova comportamental (`/health` 200; rota nova sem auth → 401,
+rota inexistente → 404 — Render não expõe SHA). Aceite **só leitura** contra o
+caso real #23 (42 linhas, via Supabase MCP `SELECT`, mesma doutrina "produção
+só recebeu SELECT" das frentes C-F): `build_decisions` rodado localmente com o
+código de `main` pós-merge sobre os dados reais produziu **11 decisões + 27 em
+`sem_agrupamento`** — soma 42, nenhuma linha perdida. **O caso central (REC-001)
+confere**: matrícula 3.181 é UMA decisão (CAR + certidão), não duas linhas.
+**Três pontos do pedido de aceite NÃO se confirmaram contra o dado real — causa
+raiz única, registrada**: o processo #23 nunca foi re-extraído desde as Frentes
+E/F (ADR-065/066) — `tipo_observacao`/`atributos` estão `null` nas 42 linhas.
+Por isso: RL virou `fonte_unica` (só CAR, 437,7632 ha — o lado da matrícula
+está preso no campo antigo `averbacao_app`, o mesmo bug #221 do ADR-065, sem
+tipo); gravames não formaram decisão (os 3 `onus` são array JSON bruto, não
+observação tipada); titularidade/representante não existem entre as 42 linhas
+do #23. **Não é falha da regra de agrupamento** — é dado desatualizado; uma
+re-extração dos docs 546-550 destravaria as duas primeiras (fora do escopo
+desta verificação). Estado da decisão: 7/11 decisões saem `decidida` (refletem
+aceites antigos da Isis); as 4 `composicao` (incl. 3.181) ficam `pendente`
+porque a confirmação do CAR (`matricula_listada`) nunca foi decidida
+individualmente na tela antiga — o aceite da certidão continua visível dentro
+da evidência, não regrediu. Números completos:
+`docs/trabalhos/reconciliacao_decisoes.md`.
+
 **Pulso 2026-09-10 (RECONCILIAÇÃO E CONFERÊNCIA POR DECISÕES — `feat/reconciliacao-decisoes`,
 ADR-067, PR aberto, NÃO MERGEAR):** REC-001 e CONF-001 fechados. A Conferência deixa de listar
 staging por CAMPO e passa a agrupar por FATO do domínio — `app/services/
