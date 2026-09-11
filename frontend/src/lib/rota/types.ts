@@ -39,6 +39,12 @@ export interface RotaPasso {
   updated_at: string | null;
 }
 
+export interface AvisoDesatualizado {
+  tipo: 'documento_novo' | 'decisao_alterada';
+  motivo: string;
+  desde: string;
+}
+
 export interface Rota {
   id: number;
   process_id: number;
@@ -52,6 +58,11 @@ export interface Rota {
   created_at: string | null;
   updated_at: string | null;
   passos: RotaPasso[];
+  // ADR-039 — achado que dirige a rota sem passo correspondente.
+  aviso_fundamento?: string | null;
+  // REV-001/ADR-068 (Frente H) — documento novo ou decisão da Conferência
+  // alterada depois desta rota. Informativo: nunca regenera sozinho.
+  aviso_desatualizado?: AvisoDesatualizado | null;
 }
 
 export interface RotaMaterializeResponse {

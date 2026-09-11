@@ -60,6 +60,14 @@ class ChecklistStatus:
     completion_pct: float
     has_required_gaps: bool
     gaps: list[ChecklistGap]
+    # STATE-001 (Frente H) — quantos dos `received` NÃO têm documento vinculado.
+    # Não é somado a `pending`: o item continua "recebido" na tela (a
+    # consultora marcou por algum motivo), mas não conta como concluído no
+    # percentual — era exatamente o achado da triagem
+    # (`docs/auditoria/TRIAGEM_AUDITORIA_CODEX.md`: "received grava com
+    # document_id=None e entra no percentual; checklist 100% pode significar
+    # só marcação manual").
+    received_without_document: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +134,18 @@ def get_checklist_status(checklist: ProcessChecklist) -> ChecklistStatus:
     """
     items = checklist.items or []
     received = sum(1 for i in items if i.get("status") == "received")
+    received_without_document = sum(
+        1 for i in items if i.get("status") == "received" and not i.get("document_id")
+    )
     waived = sum(1 for i in items if i.get("status") == "waived")
     pending = len(items) - received - waived
     total = len(items)
-    completion_pct = round((received + waived) / total * 100, 1) if total > 0 else 0.0
+    # STATE-001: só concluído de verdade conta no percentual — "recebido" sem
+    # documento vinculado é marcação manual, não evidência. Fecha o achado
+    # da triagem sem mudar o STATUS do item (a tela continua mostrando
+    # "recebido"; só o percentual deixa de tratá-lo como concluído).
+    concluidos = received - received_without_document + waived
+    completion_pct = round(concluidos / total * 100, 1) if total > 0 else 0.0
 
     # Calcular dias pendentes desde a criação do checklist
     created_at = checklist.created_at
@@ -162,6 +178,7 @@ def get_checklist_status(checklist: ProcessChecklist) -> ChecklistStatus:
         completion_pct=completion_pct,
         has_required_gaps=has_required_gaps,
         gaps=gaps,
+        received_without_document=received_without_document,
     )
 
 

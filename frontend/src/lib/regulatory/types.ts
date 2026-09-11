@@ -140,6 +140,12 @@ export interface DiagnosisGate422Detail {
 /**
  * `RegulatoryDiagnosisOut` — só campos que a UI consome agora.
  */
+export interface RegulatoryDiagnosisAviso {
+  tipo: 'documento_novo' | 'decisao_alterada';
+  motivo: string;
+  desde: string;
+}
+
 export interface RegulatoryDiagnosis {
   id: number;
   process_id: number;
@@ -148,6 +154,10 @@ export interface RegulatoryDiagnosis {
   validated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  // REV-001/ADR-068 (Frente H) — documento novo ou decisão da Conferência
+  // alterada depois desta versão. Só na versão mais nova. Nunca regenera
+  // sozinho — o consultor decide se pede nova análise.
+  aviso_desatualizado?: RegulatoryDiagnosisAviso | null;
 }
 
 /**

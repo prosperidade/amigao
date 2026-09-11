@@ -1466,6 +1466,23 @@ def extract_and_stage(
         written += 1
     db_session.flush()
 
+    # DOC-001 (Frente H) — extração é um degrau da escada do documento;
+    # gatilho automático (sem autor humano), só quando algo de fato pousou.
+    # Tenant explícito no filtro (achado do code review): `.get()` por PK nua
+    # deixaria um `document_id` de outro tenant escrever no `audit_log`
+    # DAQUELE tenant (`registrar_transicao_se_mudou` usa `document.tenant_id`).
+    if written > 0 and document_id is not None:
+        from app.models.document import Document  # noqa: PLC0415
+        from app.services.document_lifecycle import registrar_transicao_se_mudou  # noqa: PLC0415
+
+        doc_para_sincronizar = (
+            db_session.query(Document)
+            .filter(Document.id == document_id, Document.tenant_id == tenant_id)
+            .first()
+        )
+        if doc_para_sincronizar is not None:
+            registrar_transicao_se_mudou(db_session, doc_para_sincronizar, user_id=None)
+
     sem_ancora = [
         f.field_name for f in fields
         if isinstance(f.field_value, dict) and f.field_value.get("sem_ancora")

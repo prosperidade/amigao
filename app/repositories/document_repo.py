@@ -77,10 +77,12 @@ class DocumentRepository(BaseRepository[Document]):
     def add_audit(
         self,
         *,
-        user_id: int,
+        user_id: Optional[int],
         document: Document,
         action: str,
         details: str,
+        old_value: Optional[str] = None,
+        new_value: Optional[str] = None,
     ) -> AuditLog:
         audit = AuditLog(
             tenant_id=self.tenant_id,
@@ -89,6 +91,8 @@ class DocumentRepository(BaseRepository[Document]):
             entity_id=document.id,
             action=action,
             details=details,
+            old_value=old_value,
+            new_value=new_value,
         )
         self.db.add(audit)
         self.db.flush()

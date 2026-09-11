@@ -24,7 +24,7 @@ import { useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
-import { CheckCircle2, FilePen, Loader2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FilePen, Loader2, X } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import {
@@ -170,16 +170,29 @@ export default function DiagnosisAssinatura({
 
   if (ultima?.validated_at) {
     return (
-      <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            Diagnóstico v{ultima.version} validado
+      <div className="space-y-3">
+        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+              Diagnóstico v{ultima.version} validado
+            </p>
+          </div>
+          <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+            em {new Date(ultima.validated_at).toLocaleString('pt-BR')}
           </p>
         </div>
-        <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
-          em {new Date(ultima.validated_at).toLocaleString('pt-BR')}
-        </p>
+        {/* REV-001/ADR-068 (Frente H) — documento novo ou decisão da
+            Conferência alterada depois desta versão validada. Só avisa;
+            quem decide se pede nova análise é o consultor. */}
+        {ultima.aviso_desatualizado && (
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-3 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              {`Este diagnóstico pode estar desatualizado: ${ultima.aviso_desatualizado.motivo}.`}
+            </p>
+          </div>
+        )}
       </div>
     );
   }

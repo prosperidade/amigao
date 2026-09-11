@@ -429,7 +429,42 @@ def emit_leitura_event(
     sido OCR ou transcrição. Criar um evento paralelo obrigaria a tela a saber a
     diferença sem ganhar nada.
     """
-    event_type = "document.ocr.failed" if status_label in ("failed", "skipped_budget") else "document.ocr.completed"
+    falhou = status_label in ("failed", "skipped_budget")
+
+    # DOC-001 (Frente H) — "lido" é um degrau da escada do documento. Sem
+    # tocar as ~14 chamadas deste helper (OCR e áudio, ADR-060): `doc` já
+    # está preso à sessão do chamador (`db.query(Document)...first()` na
+    # mesma função) — `object_session` recupera essa sessão sem exigir um
+    # parâmetro novo em cada call site.
+    if not falhou:
+        from sqlalchemy.orm import Session as _Session  # noqa: PLC0415
+
+        sessao = _Session.object_session(doc)
+        if sessao is not None:
+            try:
+                from app.services.document_lifecycle import (  # noqa: PLC0415
+                    registrar_transicao_se_mudou,
+                )
+
+                registrar_transicao_se_mudou(sessao, doc, user_id=None)
+                sessao.commit()
+            except Exception as exc:  # noqa: BLE001 — sinal, nunca derruba a leitura
+                logger.warning(
+                    "ocr_then_extract: falha ao sincronizar estado do documento %s: %s",
+                    doc.id, exc,
+                )
+        else:
+            # Não deveria acontecer nos call sites atuais (todos chamam com
+            # `doc` ainda preso à sessão que o carregou) — se um futuro call
+            # site passar `doc` desanexado, o silêncio seria pior do que um
+            # aviso (achado do code review: a garantia era só implícita).
+            logger.warning(
+                "ocr_then_extract: doc=%s sem sessão associada — DOC-001 não sincronizado "
+                "(chamador desanexou o objeto antes de emitir o evento de leitura)",
+                doc.id,
+            )
+
+    event_type = "document.ocr.failed" if falhou else "document.ocr.completed"
     payload: dict[str, Any] = {
         "document_id": doc.id,
         "process_id": doc.process_id,

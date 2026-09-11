@@ -44,6 +44,10 @@ class ProcessDossier:
     tasks_summary: dict[str, Any]
     previous_processes: list[dict[str, Any]]
     inconsistencies: list[Inconsistency]
+    # STATE-001 (Frente H) — a MESMA resposta que `GET /processes/{id}/progresso`
+    # devolve (`process_indicators.progresso_conferencia`). Nunca recalculada
+    # aqui; só embutida, para o dossiê não ter conta própria da Conferência.
+    conferencia_summary: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +196,11 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
         for d in documents
     ]
 
-    # Checklist
+    # Checklist — STATE-001: fonte única é `checklist_engine.get_checklist_status`
+    # (era reimplementado aqui, com o MESMO bug: "recebido" sem documento
+    # vinculado entrava no percentual — achado da triagem, corrigido lá).
+    from app.services.checklist_engine import get_checklist_status  # noqa: PLC0415
+
     checklist = (
         db.query(ProcessChecklist)
         .filter(ProcessChecklist.process_id == process_id)
@@ -200,18 +208,23 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
     )
     checklist_summary: Optional[dict[str, Any]] = None
     if checklist:
-        items = checklist.items or []
-        received = sum(1 for i in items if i.get("status") == "received")
-        waived = sum(1 for i in items if i.get("status") == "waived")
-        pending = len(items) - received - waived
+        s = get_checklist_status(checklist)
         checklist_summary = {
             "checklist_id": checklist.id,
-            "total": len(items),
-            "received": received,
-            "pending": pending,
-            "waived": waived,
-            "completion_pct": round((received + waived) / len(items) * 100, 1) if items else 0.0,
+            "total": s.total_items,
+            "received": s.received,
+            "pending": s.pending,
+            "waived": s.waived,
+            "completion_pct": s.completion_pct,
+            "received_without_document": s.received_without_document,
         }
+
+    # Conferência — STATE-001: mesma função canônica do endpoint de progresso.
+    from app.services.process_indicators import progresso_conferencia  # noqa: PLC0415
+
+    conferencia_summary = progresso_conferencia(
+        db, tenant_id=tenant_id, process_id=process_id
+    ).to_dict()
 
     # Tarefas
     tasks = (
@@ -287,6 +300,7 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
         tasks_summary=tasks_summary,
         previous_processes=previous_data,
         inconsistencies=inconsistencies,
+        conferencia_summary=conferencia_summary,
     )
 
 

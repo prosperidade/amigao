@@ -172,10 +172,14 @@ def get_rota(
     # ADR-039 — o diagnóstico andou depois da rota? Só AVISA. Regenerar sozinha
     # apagaria classificação, ordem e passos manuais por causa de um evento que
     # o consultor talvez nem tenha visto.
+    from app.services.artifact_staleness import desatualizacao_rota  # noqa: PLC0415
+
     saida = RotaOut.model_validate(rota)
     saida.aviso_fundamento = fundamento_mudou_desde_a_rota(
         db, process=process, tenant_id=current_user.tenant_id
     )
+    aviso = desatualizacao_rota(db, rota)
+    saida.aviso_desatualizado = aviso.to_dict() if aviso else None
     return saida
 
 
