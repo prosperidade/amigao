@@ -1,5 +1,29 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-09-10 (RECONCILIAÇÃO E CONFERÊNCIA POR DECISÕES — `feat/reconciliacao-decisoes`,
+ADR-067, PR aberto, NÃO MERGEAR):** REC-001 e CONF-001 fechados. A Conferência deixa de listar
+staging por CAMPO e passa a agrupar por FATO do domínio — `app/services/
+reconciliation_decisions.py:build_decisions`, pura, sem migration (a "decisão" não é entidade
+nova; é chave natural `(entidade, identificador, aspecto)` recomputada sobre o
+`ExtractedFieldStaging` já existente). Medido antes de escrever: `ProcessDecision` (log de
+governança por macroetapa) e `ProcessIssueDecision` (decisão sobre achado regulatório) não
+servem de base — outra natureza de fato (Astra, bloco B). **O caso que deu nome à frente**
+fecha: matrícula 3.181 citada pelo CAR (`matricula_listada`) e pela certidão
+(`numero_matricula`) vira **uma decisão**, não duas linhas. Concordância/divergência por REGRA
+(régua de 4 níveis já validada, `property_audit.grade_area_divergence` — nunca LLM); fonte
+autoritativa pela ADR-062. Medido também: RL da matrícula 3.673 (AV.02, 492,9252 ha, vigente) ×
+RL declarada do CAR (437,7632 ha, dívida #218) diverge **crítico** (11,19%), fonte = matrícula;
+gravames da 3.673 viram uma decisão só (0 hipotecas vigentes, R.15 vigente). **Contagem
+diferente de 8, registrada, não forçada:** a spec nomeia 8 fatos na narrativa da ELODI, mas
+"composição de matrículas (4)" já são 4 decisões — uma por matrícula, não uma agregada — então o
+total sobe. `ConsolidacaoPanel.tsx` ganhou `DecisoesPanel` (aditivo: linha sem chave natural
+continua na lista campo a campo de sempre, nunca escondida); `ConsolidacaoPanel.test.tsx` (GATE
+da "Aceito ≠ Gravado") passa sem alteração — prova que nada regrediu. **Pull fresco de produção
+via Supabase MCP foi bloqueado pelo classificador de auto-modo nesta sessão** (frentes
+anteriores usaram o mesmo MCP read-only com sucesso) — os valores usados são os já medidos e
+citados no ADR-066 e nesta spec, não reinventados, mas não re-verificados nesta rodada. Números
+completos: `docs/trabalhos/reconciliacao_decisoes.md`.
+
 **Pulso 2026-09-09 (GATE DA CONTENÇÃO DA ENTRADA — EXECUTADO, `docs/gate-frente-c`):**
 o gate declarado incompleto no pulso anterior foi fechado — **os 8 documentos (544–551),
 antes × depois, duas execuções de cada**. Não rodou em produção: rodou em banco descartável

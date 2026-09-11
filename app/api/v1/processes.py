@@ -64,6 +64,7 @@ from app.schemas.process import (
     ProcessStatusUpdate,
     ProcessUpdate,
 )
+from app.schemas.reconciliation import DecisaoOut, DecisaoRequest, ReconciliationOut
 from app.schemas.requisito_documental import (
     DocumentoSemRequisitoOut,
     RequisitoDocumentalOut,
@@ -1522,6 +1523,60 @@ def decide_staging_field(
     )
     decided = row.decided_value.get("value") if isinstance(row.decided_value, dict) else None
     return StagingDecisionResult(field_id=row.id, status=row.status, decided_value=decided)
+
+
+@router.get("/{process_id}/staging-decisions", response_model=ReconciliationOut)
+def list_process_staging_decisions(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """A Conferência por DECISÕES (Frente G, REC-001 + CONF-001, ADR-067).
+
+    Agrupa o staging do processo por fato do domínio (chave natural), não por
+    campo: a matrícula citada pelo CAR e pela certidão vira UMA decisão, não
+    dois campos a validar em separado. Linha sem regra de chave aparece em
+    ``sem_agrupamento`` — nunca escondida.
+    """
+    from app.services.reconciliation_decisions import build_decisions  # noqa: PLC0415
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+    rows = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == current_user.tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+        )
+        .order_by(ExtractedFieldStaging.id.asc())
+        .all()
+    )
+    resultado = build_decisions(rows)
+    return resultado.to_dict()
+
+
+@router.post("/{process_id}/staging-decisions/decidir", response_model=DecisaoOut)
+def decide_process_staging_decision(
+    process_id: int,
+    body: DecisaoRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> Any:
+    """Decide UMA decisão agrupada (Frente G) — aplica a `decide_field` de cada
+    linha que ela reúne. Aceite em bloco de várias decisões de uma vez (spec
+    §11) não está implementado — uma chamada, uma decisão."""
+    from app.services.staging_consolidation import decidir_decisao_agrupada  # noqa: PLC0415
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+    chave = (body.entidade, body.identificador, body.aspecto)
+    decisao = decidir_decisao_agrupada(
+        db, tenant_id=current_user.tenant_id, process_id=process_id,
+        chave=chave, acao=body.acao, user_id=current_user.id,
+    )
+    return decisao.to_dict()
 
 
 @router.get("/{process_id}/confronto-identidade")

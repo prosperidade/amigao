@@ -19,6 +19,8 @@ import { api } from '@/lib/api';
 import { acoesKeys } from '@/lib/acoes/hooks';
 import { labelFor, labelForTipoObservacao, humanizeValue } from '@/lib/labels/fieldLabels';
 import { docTypeLabel } from '@/lib/labels/docLabels';
+import DecisoesPanel from './DecisoesPanel';
+import { decisoesQueryKey, type ReconciliationData } from '@/lib/reconciliation';
 
 /** Mensagem de erro legível a partir do AxiosError (detail do backend, senão genérica). */
 function errDetail(e: unknown, fallback: string): string {
@@ -158,8 +160,24 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
     queryKey: ['matriculas-rotulos', processId],
     queryFn: () => api.get(`/processes/${processId}/matriculas-rotulos`).then(r => r.data),
   });
+  // Frente G (ADR-067) — mesma queryKey do DecisoesPanel (cache compartilhado,
+  // sem fetch duplicado). Só para saber QUAIS staging_ids já viraram decisão
+  // e tirá-los da lista campo a campo abaixo — o painel de decisões é quem
+  // renderiza esses fatos agora. Linha sem chave natural (`sem_agrupamento`)
+  // continua aqui, nunca escondida.
+  const { data: reconciliation } = useQuery<ReconciliationData>({
+    queryKey: decisoesQueryKey(processId),
+    queryFn: () => api.get(`/processes/${processId}/staging-decisions`).then(r => r.data),
+  });
+  const idsAgrupados = useMemo(
+    () => new Set(reconciliation?.decisoes?.flatMap(d => d.staging_ids) ?? []),
+    [reconciliation],
+  );
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['staging-fields', processId] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['staging-fields', processId] });
+    qc.invalidateQueries({ queryKey: decisoesQueryKey(processId) });
+  };
   // Uma decisão de campo pode mudar o confronto de identidade e a cadeia — ao
   // reabrir, os dois têm de voltar a aparecer. Invalida as três leituras juntas.
   const invalidateConferencia = () => {
@@ -230,7 +248,11 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
   const jaGravados = useMemo(() => fields.filter(f => f.gravado).length, [fields]);
   const grupos = useMemo(() => {
     const by: Record<string, StagingField[]> = {};
+    // Frente G — campo já coberto por uma decisão (DecisoesPanel) sai da
+    // lista campo a campo: é o mesmo fato, mostrado uma vez só. Linha sem
+    // chave natural (sem_agrupamento) segue aqui, do jeito que sempre foi.
     for (const f of fields) {
+      if (idsAgrupados.has(f.id)) continue;
       const k = entityLabel(f, rotulos);
       (by[k] ||= []).push(f);
     }
@@ -238,7 +260,7 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
       by[k].sort((a, b) => (a.target_field || '').localeCompare(b.target_field || ''));
     }
     return by;
-  }, [fields, rotulos]);
+  }, [fields, rotulos, idsAgrupados]);
 
   if (isLoading) {
     return <p className="text-sm text-gray-500 dark:text-slate-400 flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin" /> Carregando campos…</p>;
@@ -261,6 +283,8 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
           </button>
         )}
       </div>
+
+      <DecisoesPanel processId={processId} />
 
       {Object.entries(grupos).map(([grupo, rows]) => (
         <div key={grupo}>

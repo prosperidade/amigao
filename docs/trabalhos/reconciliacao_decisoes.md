@@ -1,0 +1,147 @@
+# Frente G — reconciliação e Conferência por decisões (medição)
+
+**Branch:** `feat/reconciliacao-decisoes` · **ADR:** 067 · **Dívidas fechadas:** REC-001, CONF-001
+**Insumo:** `docs/auditoria/SPEC_ISIS_v0.1_Conferencia_Base_Diagnostico.md` §3/§5/§6,
+`docs/auditoria/CONFIRMACAO_ENTRADA_2026-09-09.md`
+**Data da medição:** 10/09/2026
+
+---
+
+## Ambiente da medição
+
+| item | valor |
+|---|---|
+| banco | Testcontainers descartável (mesmo padrão do resto da suíte) — `build_decisions` é pura (não toca o banco); `decidir_decisao_agrupada`/`consolidate_process` escrevem via ORM na sessão de teste |
+| entrada | fixture com os valores REAIS já vetados nas Frentes E/F/fiação (`tests/services/test_observacao_registral.py`, `test_fiacao_entrada.py` — docs 546/547/549 da ELODI, extracted_text real de produção) e no próprio ADR-066 (492,9252 × 437,7632 de RL) — não reinventados |
+| LLM | nenhum. `build_decisions`/`decidir_decisao_agrupada` são deterministas (mesma doutrina de `staging_consolidation`/`inconsistency_matrix`) |
+| produção | **não acessada nesta rodada.** `mcp__Supabase__execute_sql` foi recusado pelo classificador de auto-modo desta sessão (as frentes anteriores usaram o mesmo MCP read-only com sucesso — registrado como limitação da sessão, não da abordagem) |
+
+Script: `tests/services/test_reconciliation_decisions.py` — 14 casos, fixture
+única (`_elodi`) reutilizada por todos. Duas execuções de `consolidate_process`
+(mesma convenção das frentes anteriores) em `TestDecidirDecisaoAgrupada::
+test_estado_evolui_pendente_decidida_gravada`.
+
+---
+
+## A lista completa de decisões da ELODI (fixture, 16 linhas de staging)
+
+`build_decisions` sobre a fixture produziu **10 decisões**, zero linhas em
+`sem_agrupamento` — todas as 16 linhas desta fixture foram desenhadas para
+casar com uma das 8 regras de chave do ADR-067 (a fixture é um recorte da
+ELODI real, não o dump completo de 42 linhas; o caminho `sem_agrupamento` está
+coberto por `TestRegressaoFrentesAnteriores` e `TestValeriaPF`, abaixo):
+
+| chave | label | evidências | concordância | nível | estado |
+|---|---|---|---|---|---|
+| `matricula:3181:composicao` | Matrícula 3181 integra o imóvel | CAR (`matricula_listada`) + certidão (`numero_matricula`) | concordam | — | pendente |
+| `matricula:3673:composicao` | Matrícula 3673 integra o imóvel | certidão | fonte_unica | — | pendente |
+| `matricula:3313:composicao` | Matrícula 3313 integra o imóvel | certidão | fonte_unica | — | pendente |
+| `matricula:3009:composicao` | Matrícula 3009 integra o imóvel | certidão | fonte_unica | — | pendente |
+| `matricula:3181:area` | Área — matrícula 3181 | certidão (926,3654 ha) | fonte_unica | — | pendente |
+| `imovel:*:reserva_legal` | Reserva Legal | matrícula AV.02 (492,9252 ha, **vigente**, autoritativa) × CAR (437,7632 ha) | **divergem** | **crítico** (11,19%) | pendente |
+| `matricula:3673:gravames` | Gravames vigentes — matrícula 3673 | AV.03 (baixado) + R.15 (vigente) | concordam¹ | — | pendente |
+| `cliente:*:titularidade` | Titularidade | nome "ELODI AGROPECUARIA" + CNPJ (campos distintos, 1 fonte cada) | fonte_unica | — | pendente |
+| `representante:*:identificacao` | Representante | nome "Joel" + CPF (campos distintos, 1 fonte cada) | fonte_unica | — | pendente |
+| `imovel:*:car` | CAR (número/status) | número + status (campos distintos, 1 fonte cada) | fonte_unica | — | pendente |
+
+¹ `gravames` nunca compara "valor único" — é síntese dos atos
+(`valor_proposto = "AV.03: baixado; R.15: vigente"`); concordância aqui
+significa "mais de uma evidência reunida", não "os dois atos dizem a mesma
+coisa".
+
+**Contagem diferente de 8, registrada (não forçada):** a fixture soma **10
+decisões** para 4 matrículas — "composição de matrículas (4)" já são 4
+decisões, uma por matrícula (é exatamente o REC-001: "matrícula 3.181, UMA
+decisão", não uma decisão agregada para as 4: `composicao`×4). Some `area`
+(1, só 3181 tinha área na fixture), `reserva_legal` (1), `gravames` (1),
+`titularidade` (1), `identificacao` (1) e `car` (1) = 4+1+1+1+1+1+1 = 10. A
+ELODI real (com área/gravame em TODAS as 4 matrículas, mais `area_total` do
+CAR) produziria mais — a tabela do ADR-067 já registra essa divergência de
+contagem contra o "8" da narrativa da spec. `area_total` não aparece nesta
+fixture: exige evidência do CAR (`area_declarada_ha`/`area_documental_ha`),
+que não foi incluída neste recorte — `_injetar_area_total` só monta a decisão
+quando ela existe.
+
+**Nenhuma linha perdida:** 16 linhas de staging → 10 decisões cobrindo os 16
+`staging_ids` (composicao 2+1+1+1, área 1, RL 2, gravames 2, titularidade 2,
+identificação 2, CAR 2 — soma 16) + 0 em `sem_agrupamento`.
+
+### O caso central (REC-001)
+
+Matrícula 3.181: **UMA decisão**, evidência do CAR (`matricula_listada`,
+`{"numero": "3181"}`) e da certidão (`numero_matricula`, `"3.181"`) — não duas
+linhas a validar separadamente. É o sintoma exato de
+`CONFIRMACAO_ENTRADA_2026-09-09.md`.
+
+### Reserva Legal — divergência crítica (fonte = matrícula)
+
+AV.02 (matrícula 3.673, vigente, 492,9252 ha) × RL declarada do CAR (437,7632
+ha): diferença de 55,162 ha sobre 492,9252 ha = **11,19%** → `crítico` (régua
+>10%). Fonte autoritativa marcada é a **matrícula** (ADR-062: RL averbada é
+registral), não o CAR — `valor_proposto = 492.9252`.
+
+### Gravames — matrícula 3.673
+
+AV.03 (hipoteca) → `baixado`; R.15 (alienação fiduciária, Itaú) → `vigente`.
+**Zero hipotecas vigentes**, R.15 vigente — uma decisão só, não duas linhas de
+ato.
+
+---
+
+## Valéria (#22, PF) — 3 linhas → decisões coerentes com PF
+
+`TestValeriaPF::test_tres_linhas_pf`: nome + CPF + data de nascimento (CNH).
+Resultado: **1 decisão** (`titularidade`, 2 evidências: nome + CPF) + **1**
+linha em `sem_agrupamento` (`data_nascimento` — sem chave natural nesta
+frente, visível, não some). 2 evidências + 1 sem_agrupamento = as 3 linhas,
+nenhuma perdida.
+
+---
+
+## Regressão das Frentes C-F (tabela campo × antes × depois)
+
+`TestRegressaoFrentesAnteriores::test_campos_sem_regra_de_chave_aparecem_visiveis`
+— campo que a Frente G não modela vira `sem_agrupamento`, com motivo, nunca
+escondido; nenhum comportamento das frentes anteriores muda.
+
+| campo (frente que o fechou) | antes (Frente G) | depois (Frente G) |
+|---|---|---|
+| `cartorio` (matrícula, pré-existente) | linha na Conferência campo a campo | continua igual — `sem_agrupamento`, motivo "tipo sem chave natural mapeada" |
+| `modulos_fiscais` (Frente D, fiação) | idem | idem |
+| `numero_ccir` (ADR-062 item 7, cadastral) | idem | idem |
+| `app_area_ha`/`app_declarada_ha` (Ficha 01) | idem | idem |
+
+`ConsolidacaoPanel.test.tsx` (GATE existente da Frente "Aceito ≠ Gravado",
+fixture `cartorio`/`rat_protocolo`) passa **sem alteração** — os dois campos
+da fixture não casam com nenhuma chave desta frente, prova de que a mudança é
+aditiva (ver ADR-067).
+
+---
+
+## Teste de UI (vitest)
+
+`DecisoesPanel.test.tsx` — 6 casos: agrupa CAR+certidão numa decisão só;
+evidências concordantes vêm recolhidas (CONF-001) e expandem ao clique;
+divergência vem expandida por padrão com o nível visível; **o gesto** —
+decidir grava as linhas agrupadas, e uma montagem nova do componente (mesmo
+padrão de "recarregar") lê o mesmo estado do servidor, não um flag otimista
+que evaporaria; estado `gravada` mostra "Gravado na base" (mesmo selo da
+Frente "Aceito ≠ Gravado"); sem decisões, o painel não renderiza nada (o bloco
+`sem_agrupamento` continua na tela antiga do `ConsolidacaoPanel`).
+
+`ConsolidacaoPanel.test.tsx` (3 casos) e o restante de `src/pages/Processes/`
+(68 testes, 13 arquivos) passam sem alteração.
+
+---
+
+## Backend — suíte executada
+
+`tests/services/test_reconciliation_decisions.py` (14), `tests/api/
+test_staging_decisions.py` (4), mais regressão em `test_consolidacao_integrada.py`,
+`test_matriz_perfis_identidade.py`, `test_observacao_registral.py`,
+`test_fiacao_entrada.py`, `test_contencao_entrada.py`, `test_fase4_consolidacao.py`,
+`test_matricula_staging.py`, `test_gravado_visivel.py`, `test_reabrir_e_vinculo.py`
+— 158 testes, 0 falhas. Suíte completa não rodada nesta sessão (economia de
+sessão) — os módulos tocados (`app/services/staging_consolidation.py`,
+`app/api/v1/processes.py`, novo `app/services/reconciliation_decisions.py`)
+estão cobertos; PR abre para o CI completar o resto.

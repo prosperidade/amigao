@@ -37,6 +37,7 @@ from app.services.inconsistency_matrix import (
     norm_compare,
     parse_area_ha,
 )
+from app.services.reconciliation_decisions import ChaveNatural, Decisao, localizar_decisao
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,9 @@ _DIVERGENTES = {
     ExtractedFieldStatus.divergente_transcricao,
     ExtractedFieldStatus.divergente_fundo,
 }
+
+# Frente G — decisão agrupada não repete `decide_field` numa linha já resolvida.
+_DECISAO_JA_RESOLVIDA = {ExtractedFieldStatus.aceito, ExtractedFieldStatus.rejeitado}
 
 
 # ---------------------------------------------------------------------------
@@ -1626,3 +1630,83 @@ def flag_sem_casa(
             "matrícula ou vincule o documento"
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Frente G (REC-001 + CONF-001, ADR-067) — decidir a DECISÃO agrupada
+# ---------------------------------------------------------------------------
+
+def decidir_decisao_agrupada(
+    db: Session, *, tenant_id: int, process_id: int,
+    chave: ChaveNatural, acao: str, user_id: Optional[int] = None,
+) -> Decisao:
+    """Aplica UMA decisão (Frente G) às linhas de staging que ela agrupa.
+
+    Reaproveita `decide_field` por linha — a Conferência por decisões não
+    reimplementa o gate de `divergente_transcricao`/sibling-rejection, só
+    poupa o clique repetido: a consultora decide o FATO uma vez, não campo a
+    campo. `aceitar` aplica a proposta da fonte autoritativa (ADR-062) a cada
+    evidência ainda pendente; a que já foi decidida (aceita/rejeitada antes)
+    é pulada — idempotente. `reabrir` devolve todas as linhas do grupo a
+    pendente (mesma semântica do reabrir por campo, em lote).
+    """
+    rows = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+        )
+        .order_by(ExtractedFieldStaging.id.asc())
+        .all()
+    )
+    decisao = localizar_decisao(rows, chave)
+    if decisao is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Decisão não encontrada — os campos podem ter mudado, recarregue a Conferência.",
+        )
+
+    membros = {r.id: r for r in rows if r.id in decisao.staging_ids}
+    if acao == "reabrir":
+        for staging_id in decisao.staging_ids:
+            row = membros.get(staging_id)
+            if row is not None and row.status != ExtractedFieldStatus.pendente:
+                decide_field(db, tenant_id=tenant_id, process_id=process_id,
+                             field_id=staging_id, acao="reabrir", user_id=user_id)
+    elif acao == "aceitar":
+        for evidencia in decisao.evidencias:
+            row = membros.get(evidencia.staging_id) if evidencia.staging_id else None
+            if row is None or row.status in _DECISAO_JA_RESOLVIDA:
+                continue
+            if row.status == ExtractedFieldStatus.divergente_transcricao:
+                # Só a evidência autoritativa (ADR-062) resolve a disputa —
+                # `escolher_fonte` já rejeita as irmãs do mesmo destino. A
+                # evidência não-autoritativa desta linha some da divergência
+                # quando a autoritativa for decidida; se não houver nenhuma
+                # marcada (aspecto sem fonte única), pula — exige escolha
+                # manual, mesma régua do campo a campo.
+                if evidencia.fonte_autoritativa:
+                    decide_field(db, tenant_id=tenant_id, process_id=process_id,
+                                 field_id=row.id, acao="escolher_fonte", user_id=user_id)
+                continue
+            decide_field(db, tenant_id=tenant_id, process_id=process_id,
+                         field_id=row.id, acao="aceitar", user_id=user_id)
+    else:
+        raise HTTPException(status_code=422, detail=f"Ação desconhecida para decisão agrupada: {acao}")
+
+    rows_pos = (
+        db.query(ExtractedFieldStaging)
+        .filter(
+            ExtractedFieldStaging.tenant_id == tenant_id,
+            ExtractedFieldStaging.process_id == process_id,
+        )
+        .order_by(ExtractedFieldStaging.id.asc())
+        .all()
+    )
+    atualizada = localizar_decisao(rows_pos, chave)
+    if atualizada is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Decisão sumiu depois de decidir — recarregue a Conferência.",
+        )
+    return atualizada
