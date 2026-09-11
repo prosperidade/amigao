@@ -20,7 +20,7 @@ import { acoesKeys } from '@/lib/acoes/hooks';
 import { labelFor, labelForTipoObservacao, humanizeValue } from '@/lib/labels/fieldLabels';
 import { docTypeLabel } from '@/lib/labels/docLabels';
 import DecisoesPanel from './DecisoesPanel';
-import { decisoesQueryKey, type ReconciliationData } from '@/lib/reconciliation';
+import { decisoesQueryKey, progressoConferenciaKey, type ReconciliationData } from '@/lib/reconciliation';
 
 /** Mensagem de erro legível a partir do AxiosError (detail do backend, senão genérica). */
 function errDetail(e: unknown, fallback: string): string {
@@ -73,6 +73,15 @@ interface StagingField {
   // campos. Vem de `consolidated_at` no servidor.
   gravado?: boolean;
   gravado_em?: string | null;
+}
+
+/** STATE-001 — `process_indicators.ProgressoConferencia.to_dict()`. */
+interface ProgressoConferencia {
+  process_id: number;
+  decisoes_total: number;
+  decididas: number;
+  gravadas: number;
+  pendentes: number;
 }
 
 interface ConsolidationResult {
@@ -169,6 +178,13 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
     queryKey: decisoesQueryKey(processId),
     queryFn: () => api.get(`/processes/${processId}/staging-decisions`).then(r => r.data),
   });
+  // STATE-001/ADR-068 (Frente H) — a resposta CANÔNICA de "quanto da
+  // Conferência está resolvido", a mesma que o dossiê embute. Nunca
+  // recalculada aqui a partir de `fields` — só exibida.
+  const { data: progresso } = useQuery<ProgressoConferencia>({
+    queryKey: progressoConferenciaKey(processId),
+    queryFn: () => api.get(`/processes/${processId}/progresso`).then(r => r.data.conferencia),
+  });
   const idsAgrupados = useMemo(
     () => new Set(reconciliation?.decisoes?.flatMap(d => d.staging_ids) ?? []),
     [reconciliation],
@@ -177,6 +193,7 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['staging-fields', processId] });
     qc.invalidateQueries({ queryKey: decisoesQueryKey(processId) });
+    qc.invalidateQueries({ queryKey: progressoConferenciaKey(processId) });
   };
   // Uma decisão de campo pode mudar o confronto de identidade e a cadeia — ao
   // reabrir, os dois têm de voltar a aparecer. Invalida as três leituras juntas.
@@ -283,6 +300,13 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
           </button>
         )}
       </div>
+
+      {progresso && (
+        <p className="text-xs text-gray-500 dark:text-slate-400">
+          Conferência: {progresso.decididas}/{progresso.decisoes_total} decisão(ões) decidida(s)
+          {' · '}{progresso.gravadas} gravada(s) na base{progresso.pendentes > 0 ? ` · ${progresso.pendentes} pendente(s)` : ''}.
+        </p>
+      )}
 
       <DecisoesPanel processId={processId} />
 

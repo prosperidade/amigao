@@ -109,8 +109,10 @@ def list_diagnoses(
     current_user: User = Depends(get_current_internal_user),
 ) -> list[RegulatoryDiagnosis]:
     """Lista as versões de diagnóstico regulatório de um processo, mais nova primeiro."""
+    from app.services.artifact_staleness import desatualizacao_diagnostico  # noqa: PLC0415
+
     _get_process_or_404(db, process_id, current_user.tenant_id)
-    return (
+    diagnosticos = (
         db.query(RegulatoryDiagnosis)
         .filter(
             RegulatoryDiagnosis.process_id == process_id,
@@ -119,6 +121,13 @@ def list_diagnoses(
         .order_by(RegulatoryDiagnosis.version.desc())
         .all()
     )
+    # REV-001 — só a versão mais nova pode estar desatualizada (é a única que
+    # importa pro consultor decidir "regenero ou não"); versões antigas já
+    # foram suplantadas pela existência de uma versão mais nova, não por isto.
+    if diagnosticos:
+        aviso = desatualizacao_diagnostico(db, diagnosticos[0])
+        diagnosticos[0].aviso_desatualizado = aviso.to_dict() if aviso else None
+    return diagnosticos
 
 
 @process_router.get(
@@ -132,6 +141,8 @@ def get_diagnosis_version(
     current_user: User = Depends(get_current_internal_user),
 ) -> RegulatoryDiagnosis:
     """Retorna a versão específica do diagnóstico de um processo."""
+    from app.services.artifact_staleness import desatualizacao_diagnostico  # noqa: PLC0415
+
     _get_process_or_404(db, process_id, current_user.tenant_id)
     diag = (
         db.query(RegulatoryDiagnosis)
@@ -147,6 +158,17 @@ def get_diagnosis_version(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Versão {version} de diagnóstico não encontrada para este processo",
         )
+    max_version = (
+        db.query(func.max(RegulatoryDiagnosis.version))
+        .filter(
+            RegulatoryDiagnosis.process_id == process_id,
+            RegulatoryDiagnosis.tenant_id == current_user.tenant_id,
+        )
+        .scalar()
+    )
+    if version == max_version:
+        aviso = desatualizacao_diagnostico(db, diag)
+        diag.aviso_desatualizado = aviso.to_dict() if aviso else None
     return diag
 
 

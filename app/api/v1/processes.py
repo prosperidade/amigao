@@ -1418,6 +1418,65 @@ def download_process_artifact(
 
 
 # ---------------------------------------------------------------------------
+# STATE-001 (Frente H, ADR-068) — endpoint canônico de progresso
+# ---------------------------------------------------------------------------
+
+@router.get("/{process_id}/progresso")
+def get_process_progresso(
+    process_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
+    """A resposta única para "quanto falta neste processo?" — nomeada por
+    pergunta, nunca um percentual solto (Astra bloco C: são perguntas
+    diferentes, não o mesmo número seis vezes).
+
+    ``checklist_documental``: `checklist_engine.get_checklist_status` — quantos
+    documentos entraram (mesma fonte que `/checklist` e o dossiê usam).
+    ``conferencia``: `process_indicators.progresso_conferencia` — quanto da
+    Conferência (decisões, ADR-067) está decidido/gravado (mesma fonte que o
+    dossiê usa). Nenhum dos dois é recalculado aqui — só chamados.
+    """
+    from app.models.checklist_template import ProcessChecklist  # noqa: PLC0415
+    from app.services.checklist_engine import get_checklist_status  # noqa: PLC0415
+    from app.services.process_indicators import progresso_conferencia  # noqa: PLC0415
+
+    ProcessRepository(db, current_user.tenant_id).get_or_404(
+        process_id, detail="Processo não encontrado."
+    )
+
+    checklist = (
+        db.query(ProcessChecklist)
+        .filter(
+            ProcessChecklist.process_id == process_id,
+            ProcessChecklist.tenant_id == current_user.tenant_id,
+        )
+        .first()
+    )
+    checklist_documental = None
+    if checklist is not None:
+        s = get_checklist_status(checklist)
+        checklist_documental = {
+            "total": s.total_items,
+            "received": s.received,
+            "pending": s.pending,
+            "waived": s.waived,
+            "completion_pct": s.completion_pct,
+            "received_without_document": s.received_without_document,
+        }
+
+    conferencia = progresso_conferencia(
+        db, tenant_id=current_user.tenant_id, process_id=process_id
+    ).to_dict()
+
+    return {
+        "process_id": process_id,
+        "checklist_documental": checklist_documental,
+        "conferencia": conferencia,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Staging de campos extraídos (Ficha 01, FASE 1) — leitura
 # ---------------------------------------------------------------------------
 

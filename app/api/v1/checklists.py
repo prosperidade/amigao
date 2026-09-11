@@ -80,6 +80,8 @@ def _serialize_checklist(checklist: ProcessChecklist, include_status: bool = Tru
             "waived": s.waived,
             "completion_pct": s.completion_pct,
             "has_required_gaps": s.has_required_gaps,
+            # STATE-001 — transparência sobre o que NÃO entra no percentual.
+            "received_without_document": s.received_without_document,
         }
     return data
 

@@ -101,6 +101,12 @@ def aplicar_classificacao(
     res.motivo = f"tipo ausente → gravado como {tipo_proposto}"
     db.flush()
 
+    # DOC-001 (Frente H) — classificação é um dos degraus da escada do
+    # documento; grava a transição se subiu (automático: sem autor humano).
+    from app.services.document_lifecycle import registrar_transicao_se_mudou  # noqa: PLC0415
+
+    registrar_transicao_se_mudou(db, doc, user_id=None)
+
     if revincular:
         res.item_vinculado = revincular_checklist(db, doc)
 

@@ -24,7 +24,7 @@ import {
 import { api } from '@/lib/api';
 import { humanizeValue } from '@/lib/labels/fieldLabels';
 import { docTypeLabel } from '@/lib/labels/docLabels';
-import { decisoesQueryKey, type Decisao, type ReconciliationData } from '@/lib/reconciliation';
+import { decisoesQueryKey, progressoConferenciaKey, type Decisao, type ReconciliationData } from '@/lib/reconciliation';
 
 function errDetail(e: unknown, fallback: string): string {
   const ax = e as AxiosError<{ detail?: string }>;
@@ -74,6 +74,11 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: decisoesQueryKey(processId) });
     qc.invalidateQueries({ queryKey: ['staging-fields', processId] });
+    // STATE-001/ADR-068 (Frente H, achado do code review) — decidir AQUI é o
+    // gesto que muda `progresso_conferencia`; sem isto o banner canônico do
+    // `ConsolidacaoPanel` (acima deste painel, na mesma tela) ficava com a
+    // contagem velha até um reload.
+    qc.invalidateQueries({ queryKey: progressoConferenciaKey(processId) });
   };
 
   const decidir = useMutation({

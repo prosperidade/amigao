@@ -31,6 +31,9 @@ interface ChecklistSummary {
   waived: number;
   completion_pct: number;
   has_required_gaps: boolean;
+  // STATE-001 (Frente H) — quantos de `received` NÃO têm documento vinculado
+  // (marcação manual). Não entram no `completion_pct`.
+  received_without_document: number;
 }
 
 interface Checklist {
@@ -223,6 +226,11 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
           />
         </div>
         <p className="text-xs text-gray-400 dark:text-slate-500 text-right mt-1">{summary.completion_pct}% completo</p>
+        {summary.received_without_document > 0 && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 text-right mt-0.5">
+            {summary.received_without_document} marcado(s) como recebido sem documento vinculado — não conta no percentual.
+          </p>
+        )}
       </div>
 
       {/* Itens agrupados por categoria */}

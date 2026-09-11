@@ -889,6 +889,49 @@ def consolidate_process(
         })
     db.commit()
 
+    # DOC-001 (Frente H) — "conferido" é o degrau mais alto da escada do
+    # documento (todas as linhas de staging dele já decididas). A consolidação
+    # é o único ponto que pode fazer TODAS as linhas pendentes de um documento
+    # saírem de pendente na mesma passagem — por isso sincroniza aqui, não em
+    # cada write individual (que veria estado parcial e concluiria cedo demais).
+    #
+    # Roda DEPOIS do commit que grava de verdade (linha acima) — nunca pode
+    # fazer a gravação real parecer que falhou. `try/except` largo de
+    # propósito: é bookkeeping derivado e idempotente (`registrar_transicao_
+    # se_mudou` recalcula do zero a cada chamada); uma falha aqui não pode
+    # propagar e virar "nada foi gravado" no endpoint, quando na verdade já
+    # gravou (achado do code review desta frente — o mesmo raciocínio do
+    # 30/07 que criou `registrar_falha_consolidacao`, aplicado ao contrário).
+    try:
+        from app.models.document import Document as _Document  # noqa: PLC0415
+        from app.services.document_lifecycle import registrar_transicao_se_mudou  # noqa: PLC0415
+
+        doc_ids_tocados = {
+            doc_id for (doc_id,) in db.query(ExtractedFieldStaging.document_id)
+            .filter(
+                ExtractedFieldStaging.tenant_id == tenant_id,
+                ExtractedFieldStaging.process_id == process_id,
+                ExtractedFieldStaging.document_id.isnot(None),
+            )
+            .distinct()
+            .all()
+        }
+        if doc_ids_tocados:
+            docs_tocados = (
+                db.query(_Document)
+                .filter(_Document.tenant_id == tenant_id, _Document.id.in_(doc_ids_tocados))
+                .all()
+            )
+            for doc_sync in docs_tocados:
+                registrar_transicao_se_mudou(db, doc_sync, user_id=user_id)
+            db.commit()
+    except Exception as exc:  # noqa: BLE001 — nunca derruba uma consolidação que já gravou
+        db.rollback()
+        logger.warning(
+            "consolidate_process: falha ao sincronizar estado do(s) documento(s) "
+            "(DOC-001, process_id=%s): %s", process_id, exc,
+        )
+
     return {
         "process_id": process_id,
         "campos_gravados": len(writes),

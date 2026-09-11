@@ -261,7 +261,15 @@ def get_proposal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
-    return _serialize(_get_proposal_or_404(db, proposal_id, current_user.tenant_id))
+    from app.services.artifact_staleness import desatualizacao_proposta  # noqa: PLC0415
+
+    proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
+    data = _serialize(proposal)
+    # REV-001/ADR-068 (Frente H) — só no detalhe (não na listagem: evita N
+    # queries extra por linha). Avisa, nunca regenera.
+    aviso = desatualizacao_proposta(db, proposal)
+    data["aviso_desatualizado"] = aviso.to_dict() if aviso else None
+    return data
 
 
 # ---------------------------------------------------------------------------

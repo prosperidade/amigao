@@ -99,6 +99,9 @@ class RegulatoryDiagnosisOut(BaseModel):
     validated_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
+    # REV-001 (Frente H) — computado em leitura por `artifact_staleness.
+    # desatualizacao_diagnostico`, nunca persistido (avisa, nunca regenera).
+    aviso_desatualizado: dict[str, Any] | None = None
 
 
 class RegulatoryIssueOut(BaseModel):

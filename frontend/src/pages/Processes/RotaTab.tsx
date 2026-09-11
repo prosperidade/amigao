@@ -464,6 +464,25 @@ export default function RotaTab({ processId }: RotaTabProps) {
         </div>
       )}
 
+      {/* ADR-039 — achado que passou a dirigir a rota sem passo correspondente. */}
+      {rota.aviso_fundamento && (
+        <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800 dark:text-amber-300">{rota.aviso_fundamento}</p>
+        </div>
+      )}
+
+      {/* REV-001/ADR-068 (Frente H) — documento novo ou decisão da Conferência
+          alterada depois desta rota. Nunca regenera sozinho — só avisa. */}
+      {rota.aviso_desatualizado && (
+        <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800 dark:text-amber-300">
+            {`Esta rota pode estar desatualizada: ${rota.aviso_desatualizado.motivo}.`}
+          </p>
+        </div>
+      )}
+
       {/* Lista ordenável (framer Reorder) */}
       {rota.passos.length === 0 ? (
         <div className="text-center py-8 text-sm text-gray-400 dark:text-slate-500">

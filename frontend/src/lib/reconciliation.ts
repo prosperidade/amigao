@@ -46,3 +46,16 @@ export interface ReconciliationData {
 export function decisoesQueryKey(processId: number) {
   return ['staging-decisions', processId];
 }
+
+/**
+ * STATE-001/ADR-068 (Frente H) — a MESMA chave que `ConsolidacaoPanel.tsx`
+ * usa para o banner canônico de progresso da Conferência. Compartilhada aqui
+ * para que `DecisoesPanel.tsx` (onde o consultor decide de fato) também
+ * invalide o número — sem isto, decidir por `DecisoesPanel` refresca a lista
+ * mas deixa o banner acima dela com a contagem velha: dois números sobre o
+ * mesmo fato discordando na MESMA tela, o próprio sintoma que STATE-001
+ * existe para matar (achado do code review desta frente).
+ */
+export function progressoConferenciaKey(processId: number) {
+  return ['progresso-conferencia', processId];
+}

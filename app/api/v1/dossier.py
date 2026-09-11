@@ -49,6 +49,7 @@ def _serialize_dossier(d: ProcessDossier) -> dict:
         "property": d.property,
         "documents": d.documents,
         "checklist_summary": d.checklist_summary,
+        "conferencia_summary": d.conferencia_summary,
         "tasks_summary": d.tasks_summary,
         "previous_processes": d.previous_processes,
         "inconsistencies": [

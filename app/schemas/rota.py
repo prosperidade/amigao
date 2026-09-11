@@ -80,6 +80,10 @@ class RotaOut(BaseModel):
     # ADR-039 — aviso de que o diagnóstico andou depois da rota. Informativo:
     # NUNCA regenera nem rebaixa o status sozinho (quem assina decide).
     aviso_fundamento: str | None = None
+    # REV-001/ADR-068 (Frente H) — aviso complementar: documento novo ou
+    # decisão da Conferência alterada depois desta rota (validada ou não).
+    # Mesma garantia do `aviso_fundamento`: só informa, nunca regenera.
+    aviso_desatualizado: dict[str, Any] | None = None
 
 
 class RotaMaterializeOut(BaseModel):
