@@ -40,7 +40,14 @@ from app.models.extracted_field_staging import (
     ExtractedFieldStatus,
 )
 from app.services.inconsistency_matrix import _clean_matricula_hint, norm_compare, parse_area_ha
-from app.services.observacao_registral import TIPO_RESERVA_LEGAL, TIPOS_GRAVAME
+from app.services.observacao_registral import (
+    TIPO_COMPRA_VENDA,
+    TIPO_RESERVA_LEGAL,
+    TIPOS_GRAVAME,
+    Observacao,
+    cadeia_titularidade,
+    titular_atual,
+)
 from app.services.property_audit import GRADE_INFORMATIVO, grade_area_divergence
 
 # ---------------------------------------------------------------------------
@@ -56,7 +63,7 @@ _DECIDIDOS = {ExtractedFieldStatus.aceito, ExtractedFieldStatus.rejeitado}
 # níveis. Os demais (identificador, nome, status) comparam por texto
 # normalizado: aplicar `parse_area_ha` num número de matrícula ("3.181") o
 # leria como área e produziria uma divergência percentual sem sentido.
-_ASPECTOS_NUMERICOS = frozenset({"area", "area_total", "reserva_legal"})
+_ASPECTOS_NUMERICOS = frozenset({"area", "area_total", "reserva_legal", "reserva_legal_total"})
 
 # ADR-062: cada dado tem a fonte autoritativa da sua NATUREZA — registral
 # (matrícula), ambiental (CAR), cadastral (CCIR/INCRA). `area_total` não tem
@@ -66,6 +73,7 @@ _FONTE_AUTORITATIVA_POR_ASPECTO: dict[str, Optional[str]] = {
     "composicao": "matricula",
     "area": "matricula",
     "reserva_legal": "matricula",
+    "reserva_legal_total": None,
     "gravames": "matricula",
     "titularidade": "matricula",
     "car": "car",
@@ -76,7 +84,8 @@ _FONTE_AUTORITATIVA_POR_ASPECTO: dict[str, Optional[str]] = {
 _LABEL_ASPECTO: dict[str, str] = {
     "composicao": "Matrícula {id} integra o imóvel",
     "area": "Área — matrícula {id}",
-    "reserva_legal": "Reserva Legal",
+    "reserva_legal": "Reserva Legal — matrícula {id}",
+    "reserva_legal_total": "Reserva Legal do imóvel",
     "gravames": "Gravames vigentes — matrícula {id}",
     "titularidade": "Titularidade",
     "car": "CAR (número/status)",
@@ -194,14 +203,23 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
             return ("matricula", hint, "composicao"), None
         return None, "matrícula sem número identificável (hint ausente)"
 
-    # 2) Reserva Legal — COLUNA da matrícula (ADR-062: fonte única registral),
-    # confrontada com o que o CAR declara (`rl_declarada_ha`, dívida #218).
-    # Uma decisão só por processo: a RL do imóvel é a soma do que está
-    # averbado nas matrículas, não um fato por matrícula.
+    # 2a) Reserva Legal por matrícula — COLUNA da matrícula (ADR-062: fonte
+    # única registral), mesma unidade que "area": cada averbação de RL é uma
+    # decisão própria, fonte única. RL de matrículas DIFERENTES não compete
+    # pelo mesmo fato — é averbação distinta (Frente I, caso #23: AV.03 da
+    # 3.181 e AV.02 da 3.673 são dois fatos). A soma delas vira a evidência
+    # calculada da decisão do IMÓVEL (regra 2b + `_injetar_reserva_legal_
+    # total`), o mesmo desenho de `area_total`/`_injetar_area_total`.
     if entity == "matricula" and row.tipo_observacao == TIPO_RESERVA_LEGAL:
-        return ("imovel", pid, "reserva_legal"), None
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, "reserva_legal"), None
+        return None, "reserva legal sem matrícula identificável"
+
+    # 2b) Reserva Legal do imóvel — o que o CAR DECLARA (`rl_declarada_ha`,
+    # dívida #218), confrontado com a soma das matrículas injetada depois.
     if field_name == "rl_declarada_ha":
-        return ("imovel", pid, "reserva_legal"), None
+        return ("imovel", pid, "reserva_legal_total"), None
 
     # 3) Gravames vigentes — lista agregada por matrícula (ADR-066): a
     # consultora decide "o que está gravado hoje nesta matrícula", não ato a
@@ -224,6 +242,20 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
         if hint:
             return ("matricula", hint, "gravames"), None
         return None, "gravame sem matrícula identificável"
+
+    # 3b) Titularidade da matrícula — quem é titular HOJE, pela cadeia de
+    # compra e venda (Frente F, ADR-066: `cadeia_titularidade`/`titular_
+    # atual`). Sem isto, o único lugar onde um nome aparece é o campo bruto
+    # `proprietarios` da certidão — que lista todo mundo citado em qualquer
+    # ato, sem distinguir transmitente de titular atual (medido: SONIA INÊS
+    # GONDIM, doc 548/matrícula 3313, transmitente do R-11 de 2014, listada
+    # como se fosse proprietária). `_montar_decisao_titularidade` monta a
+    # decisão a partir da cadeia real, não da primeira evidência da lista.
+    if row.tipo_observacao == TIPO_COMPRA_VENDA:
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, "titularidade"), None
+        return None, "compra e venda sem matrícula identificável"
 
     # 4) Área total do imóvel — CAR gráfica × CAR documental × soma das
     # matrículas (a soma é injetada depois, `_injetar_area_total`).
@@ -288,16 +320,26 @@ def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
     raw = _valor_bruto(row)
     unidade = row.field_value.get("unidade") if isinstance(row.field_value, dict) else None
     if aspecto in _ASPECTOS_NUMERICOS:
-        # Observação tipada (ADR-065): a área vive em `atributos["area"]`, não
-        # em `field_value["value"]` — que aqui carrega o dict bruto do ato
-        # (`{"area": "492,9252", "referencia": "AV.02"}`, mesmo shape medido
-        # em `test_fiacao_entrada.py`). Campo de cabeçalho comum (área do
-        # imóvel/CAR) não tem `atributos` — cai no `raw` normal.
-        area_atributo = (row.atributos or {}).get("area") if isinstance(row.atributos, dict) else None
-        numero = parse_area_ha(area_atributo, unidade) if area_atributo is not None else None
-        if numero is None:
+        if isinstance(row.atributos, dict) and row.atributos:
+            # Observação tipada (ADR-065): a área vive em `atributos
+            # ["area_ha"]` (chave real gravada por `observacao_registral`,
+            # conferida contra o dado de produção — id 1645, doc 549:
+            # `{"ato": "AV.02", "area_ha": "492,9252", ...}`). `raw` aqui é
+            # o TEXTO NARRATIVO do ato ("AV.02 · Reserva Legal · 492,9252 ha
+            # · 27/01/2009"), com a DATA embutida — nunca usar como fonte de
+            # número: regex sobre esse texto já produziu 2492.925227012009
+            # a partir de 492,9252 + 27/01/2009 (Frente I, caso #23,
+            # `fix/reconciliacao-rl-chave`). Sem o campo estruturado, não há
+            # valor — só a evidência, visível, fora da comparação numérica.
+            area_atributo = row.atributos.get("area_ha")
+            numero = parse_area_ha(area_atributo, unidade) if area_atributo is not None else None
+            valor_normalizado: Any = numero if numero is not None else "sem área estruturada"
+        else:
+            # Campo de cabeçalho comum (área do imóvel/CAR/matrícula): o
+            # próprio valor bruto É o dado (ex. "926,3654"), não narrativa de
+            # ato — aqui o parse de `raw` é legítimo.
             numero = parse_area_ha(raw, unidade)
-        valor_normalizado: Any = numero if numero is not None else raw
+            valor_normalizado = numero if numero is not None else raw
     else:
         valor_normalizado = raw
     vigencia = (row.atributos or {}).get("vigencia") if isinstance(row.atributos, dict) else None
@@ -412,6 +454,73 @@ def _montar_decisao(chave: ChaveNatural, membros: list[ExtractedFieldStaging]) -
     )
 
 
+def _nome_pessoa(pessoa: Any) -> str:
+    """`cadeia_titularidade`/`titular_atual` devolvem a pessoa como veio do
+    ato — medido contra produção (#23): a 3.181 e a 3.673 guardam
+    `adquirentes`/`transmitentes` como lista de STRING (só o nome), a 3.313
+    guarda lista de DICT (`{"cpf": ..., "nome": ...}`) — os dois formatos são
+    reais, nenhum é erro de extração. Sem isto, `isinstance(t, dict)` filtra
+    calado as strings e a matrícula fica sem titular proposto."""
+    if isinstance(pessoa, dict):
+        return str(pessoa.get("nome") or "")
+    if isinstance(pessoa, str):
+        return pessoa
+    return ""
+
+
+def _montar_decisao_titularidade(chave: ChaveNatural, membros: list[ExtractedFieldStaging]) -> Decisao:
+    """Titularidade da matrícula pela cadeia de compra e venda (Frente F,
+    ADR-066). Cada linha de `cadeia_titularidade` (uma por pessoa/papel/ato)
+    vira evidência; o proposto é o `titular_atual` — o adquirente do ato de
+    transferência MAIS RECENTE, nunca a primeira evidência da lista (era o
+    bug da SONIA: transmitente de 2014 exibida como proprietária porque
+    `_montar_decisao` genérico pega `evidencias[0]` quando não há fonte
+    autoritativa única a distinguir — aqui todas as evidências vêm da mesma
+    matrícula, então esse desempate nunca ajudava)."""
+    observacoes = [
+        Observacao(tipo=r.tipo_observacao or "", atributos=r.atributos or {}, ordem=r.id)
+        for r in membros
+    ]
+    por_ato = {(r.atributos or {}).get("ato"): r for r in membros}
+    linhas = cadeia_titularidade(observacoes)
+    evidencias = []
+    for linha in linhas:
+        origem = por_ato.get(linha["ato"])
+        status_val = origem.status.value if origem and origem.status else "pendente"
+        nome = _nome_pessoa(linha["nome"])
+        evidencias.append(
+            Evidencia(
+                staging_id=origem.id if origem else None,
+                documento_id=origem.document_id if origem else None,
+                documento_tipo="matricula",
+                campo=linha["ato"],
+                valor_bruto=linha["nome"],
+                valor_normalizado=f"{nome} ({linha['papel_no_ato']})",
+                unidade=None,
+                vigencia=None,
+                status=status_val,
+                fonte_autoritativa=True,
+            )
+        )
+
+    atual = titular_atual(observacoes)
+    proposto: Any = None
+    if atual:
+        nomes = ", ".join(n for n in (_nome_pessoa(t) for t in (atual.get("titulares") or [])) if n)
+        proposto = f"{nomes} (ato {atual['ato']})" if nomes else None
+
+    return Decisao(
+        chave=chave,
+        label=_label_de(chave),
+        evidencias=evidencias,
+        concordancia="concordam" if len(linhas) > 1 else "fonte_unica",
+        valor_proposto=proposto,
+        fonte_autoritativa_doc=_FONTE_AUTORITATIVA_POR_ASPECTO.get(chave[2]),
+        estado=_estado_de(membros),
+        staging_ids=[r.id for r in membros],
+    )
+
+
 def _injetar_area_total(decisoes: list[Decisao]) -> None:
     """Acrescenta a evidência CALCULADA "soma das matrículas" à decisão
     `area_total`, quando existir. Não é um valor de linha nenhuma — é a soma
@@ -462,6 +571,56 @@ def _injetar_area_total(decisoes: list[Decisao]) -> None:
             total.valor_proposto = round(soma, 4)
 
 
+def _injetar_reserva_legal_total(decisoes: list[Decisao]) -> None:
+    """Acrescenta a evidência CALCULADA "soma das matrículas" à decisão
+    `reserva_legal_total`, quando existir — mesmo desenho de
+    `_injetar_area_total`. RL averbada em matrículas DIFERENTES é averbação
+    distinta: soma-se, não compete (Frente I, caso #23 — AV.03 da 3.181 e
+    AV.02 da 3.673 são dois fatos, não duas leituras do mesmo fato; comparar
+    por min/max produzia uma "divergência" entre uma matrícula e outra, não
+    entre a matrícula e o CAR)."""
+    por_aspecto: dict[str, list[Decisao]] = {}
+    for d in decisoes:
+        por_aspecto.setdefault(d.chave[2], []).append(d)
+    totais = por_aspecto.get("reserva_legal_total")
+    parcelas = por_aspecto.get("reserva_legal")
+    if not totais or not parcelas:
+        return
+    soma = 0.0
+    contribuiu = False
+    for d in parcelas:
+        valor = d.valor_proposto if isinstance(d.valor_proposto, (int, float)) else None
+        if valor is None:
+            for e in d.evidencias:
+                if isinstance(e.valor_normalizado, (int, float)):
+                    valor = e.valor_normalizado
+                    break
+        if valor is not None:
+            soma += valor
+            contribuiu = True
+    if not contribuiu:
+        return
+    for total in totais:
+        total.evidencias.append(
+            Evidencia(
+                staging_id=None,
+                documento_id=None,
+                documento_tipo="calculado",
+                campo="soma_matriculas",
+                valor_bruto=None,
+                valor_normalizado=round(soma, 4),
+                unidade="ha",
+                vigencia=None,
+                status="calculado",
+            )
+        )
+        concordancia, nivel, delta, pct = _comparar("reserva_legal_total", total.evidencias)
+        total.concordancia, total.nivel_divergencia = concordancia, nivel
+        total.delta, total.percentual = delta, pct
+        if total.valor_proposto is None:
+            total.valor_proposto = round(soma, 4)
+
+
 # ---------------------------------------------------------------------------
 # Builder principal
 # ---------------------------------------------------------------------------
@@ -490,8 +649,14 @@ def build_decisions(rows: list[ExtractedFieldStaging]) -> ReconciliationResult:
             continue
         grupos.setdefault(chave, []).append(row)
 
-    decisoes = [_montar_decisao(chave, membros) for chave, membros in grupos.items()]
+    decisoes = [
+        _montar_decisao_titularidade(chave, membros)
+        if chave[0] == "matricula" and chave[2] == "titularidade"
+        else _montar_decisao(chave, membros)
+        for chave, membros in grupos.items()
+    ]
     _injetar_area_total(decisoes)
+    _injetar_reserva_legal_total(decisoes)
     decisoes.sort(key=lambda d: d.chave)
     return ReconciliationResult(decisoes=decisoes, sem_agrupamento=sem_agrupamento)
 
