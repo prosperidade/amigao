@@ -295,6 +295,13 @@ legível". Corrigido: `_tem_leitura` usa `ficha01_extraction.
 texto_sem_conteudo_legivel` — a **mesma** régua que produz
 `MOTIVO_OCR_ILEGIVEL`. `Document.tem_texto` idem.
 
+**`not_required` não é erro.** Shapefile, KML e afins entram assim de
+propósito (gap D1, `confirm_upload`/`ocr_tasks`): leitura textual **não se** 
+**aplica**. Chamar isso de `erro_leitura` seria alarme falso na tela; chamar
+de `lido` seria afirmar leitura que não houve. Esses documentos seguem a
+escada pelo que existe (classificação, staging) e, sem nada disso, ficam em
+`recebido`.
+
 `DocumentLifecycleStatus` ganha os estados negativos da spec:
 `processando` (job em curso), `erro_leitura` (job terminou — done/failed/
 not_required — sem texto utilizável), `desatualizado` (`expires_at`

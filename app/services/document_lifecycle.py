@@ -108,15 +108,28 @@ def _status_sem_staging(document: Document) -> Optional[DocumentLifecycleStatus]
         if validade < agora:
             return DocumentLifecycleStatus.desatualizado
 
+    # `not_required` é "leitura textual NÃO SE APLICA" — shapefile, KML e
+    # afins entram assim de propósito (gap D1, `ocr_tasks`/`confirm_upload`).
+    # Chamar isso de `erro_leitura` seria alarme falso na tela; chamar de
+    # `lido` seria afirmar uma leitura que não houve. O documento segue a
+    # escada pelo que de fato existe (classificação, staging) e, sem nada
+    # disso, fica em `recebido`.
+    leitura_dispensada = document.ocr_status == OcrStatus.not_required
+
     if not _tem_leitura(document):
         if document.ocr_status == OcrStatus.processing:
             return DocumentLifecycleStatus.processando
-        if document.ocr_status in (OcrStatus.done, OcrStatus.not_required, OcrStatus.failed):
+        if document.ocr_status in (OcrStatus.done, OcrStatus.failed):
             return DocumentLifecycleStatus.erro_leitura
-        return DocumentLifecycleStatus.recebido
+        if not leitura_dispensada:
+            return DocumentLifecycleStatus.recebido
 
     if not _tem_classificacao(document):
-        return DocumentLifecycleStatus.lido
+        return (
+            DocumentLifecycleStatus.recebido
+            if leitura_dispensada and not _tem_leitura(document)
+            else DocumentLifecycleStatus.lido
+        )
     return None
 
 

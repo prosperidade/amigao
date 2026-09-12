@@ -87,7 +87,17 @@ seção "O que a validação achou" registra. Só então docs, gate e relatório
     variável `staging_id`, o mesmo nome do parâmetro lido no fim da função —
     o fallback de lá procuraria a decisão do último membro reaberto em vez de
     devolver o 500 honesto "a decisão sumiu". Renomeado para `membro_id`.
-13. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
+13. **Geoespacial viraria "Erro de leitura".** `not_required` estava no
+    mesmo balde de `done`/`failed`: shapefile e KML, que entram sem OCR de
+    propósito (gap D1), apareceriam com selo de erro. Agora leitura
+    dispensada segue a escada pelo que existe e, sem tipo nem staging, fica
+    em `recebido`. Teste `test_leitura_dispensada_nao_e_erro_de_leitura`.
+14. **Dois uploads devolviam documento sem a projeção**: os early returns de
+    geoespacial e de áudio em `confirm_upload` retornavam `db_doc` cru, então
+    `lifecycle_status` vinha `null` só nesses dois caminhos — o contrato do
+    `DocumentResponse` promete o campo em todos. Varridos os 3 endpoints que
+    devolvem `DocumentResponse`: 5 pontos de retorno, todos com a projeção.
+15. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
 
 ## Regressão: gates de C–H
 

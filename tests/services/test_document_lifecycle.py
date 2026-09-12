@@ -328,3 +328,28 @@ def test_derive_document_statuses_em_lote_bate_com_o_unitario(db_session):
     assert lote[conferido.id] == DocumentLifecycleStatus.conferido
     assert lote[vencido.id] == DocumentLifecycleStatus.desatualizado
     assert derive_document_statuses(db_session, []) == {}
+
+
+def test_leitura_dispensada_nao_e_erro_de_leitura(db_session):
+    """Frente J: `not_required` é "leitura textual não se aplica" (shapefile/KML,
+    gap D1 — `confirm_upload` e `ocr_tasks` marcam assim de propósito). Rotular
+    isso como `erro_leitura` seria alarme falso; como `lido`, afirmação de uma
+    leitura que não houve. Segue a escada pelo que existe."""
+    tenant, proc, user = _seed(db_session)
+
+    sem_tipo = _doc(db_session, tenant, proc)
+    sem_tipo.ocr_status = OcrStatus.not_required
+    db_session.flush()
+    assert derive_document_status(db_session, sem_tipo) == DocumentLifecycleStatus.recebido
+
+    classificado = _doc(db_session, tenant, proc)
+    classificado.ocr_status = OcrStatus.not_required
+    classificado.document_type = "geoespacial"
+    db_session.flush()
+    assert derive_document_status(db_session, classificado) == DocumentLifecycleStatus.classificado
+
+    # e o mesmo pelo caminho em lote
+    from app.services.document_lifecycle import derive_document_statuses
+    lote = derive_document_statuses(db_session, [sem_tipo, classificado])
+    assert lote[sem_tipo.id] == DocumentLifecycleStatus.recebido
+    assert lote[classificado.id] == DocumentLifecycleStatus.classificado

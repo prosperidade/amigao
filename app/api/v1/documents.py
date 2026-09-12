@@ -311,7 +311,7 @@ def confirm_upload(
             "Documento #%s é geoespacial — armazenado sem OCR (gap D1) | '%s'",
             db_doc.id, body.filename,
         )
-        return db_doc
+        return _with_lifecycle(db, db_doc)
 
     # Áudio tem leitura PRÓPRIA: transcrição (dívida #103 · ADR-060). A gravação da
     # reunião é fonte primária do caso — o que o cliente contou, o que prometeu
@@ -338,7 +338,7 @@ def confirm_upload(
             "Documento #%s confirmado (áudio) | tenant=%s | '%s'",
             db_doc.id, access_context.tenant_id, body.filename,
         )
-        return db_doc
+        return _with_lifecycle(db, db_doc)
 
     # Pipeline de extração textual. PDFs passam pelo OCR cascata (pypdf → Gemini →
     # OpenAI Vision) que persiste `Document.extracted_text` antes de despachar o
