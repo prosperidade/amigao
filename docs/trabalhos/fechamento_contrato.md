@@ -101,14 +101,25 @@ seção "O que a validação achou" registra. Só então docs, gate e relatório
 
 ## Regressão: gates de C–H
 
+**Sem banco (rodado em 11/09, `python -m pytest` no venv do host — 227 testes,
+0 falhas):**
+
 | gate | módulo | resultado |
 |---|---|---|
-| C (contenção da entrada) | `tests/services/test_contencao_entrada.py` | _a preencher (suíte com banco)_ |
-| D (fiação) | `tests/services/test_fiacao_entrada.py` | _a preencher_ |
-| E/F (tipo + temporalidade) | `tests/services/test_observacao_registral.py` | **53/53** (46 existentes + 7 desta frente) — puro, rodado sem Docker |
-| G (decisões) | `tests/services/test_reconciliation_decisions.py`, `tests/api/test_staging_decisions.py` | _a preencher_ |
-| H (estado/invalidação) | `test_document_lifecycle.py`, `test_artifact_staleness.py`, `test_process_indicators.py` | _a preencher_ |
-| frontend | `DecisoesPanel.test.tsx` (10), `ConsolidacaoPanel.test.tsx` (3), tsc, eslint | **verde** |
+| C (contenção da entrada, ADR-064) | `test_contencao_entrada.py` | verde |
+| D (fiação da entrada, PR #155) | `test_fiacao_entrada.py` | verde |
+| E/F (tipo + temporalidade, ADR-065/066) | `test_observacao_registral.py` | **53/53** (46 anteriores + 7 desta frente) |
+| matriz / áreas / janela / geo | `test_inconsistency_matrix.py`, `test_parse_area_br.py`, `test_property_audit.py`, `test_extraction_window.py`, `test_geo_files.py` | verde |
+| frontend (suíte inteira) | `npm test` — 26 arquivos | **167/167** |
+| frontend | `npx tsc --noEmit`, `npx eslint --max-warnings=0 .` | verde |
+| spec do gate E2E | `npx tsc --noEmit -p tsconfig.e2e.json` | verde |
+| backend | `ruff check app/ tests/` | verde |
+
+**Com banco (Testcontainers) — _a preencher_:** `test_reconciliation_decisions.py`,
+`test_staging_decisions.py`, `test_document_lifecycle.py`,
+`test_artifact_staleness.py`, `test_process_indicators.py`,
+`test_proposal_rota_s5a.py` e a suíte completa. Docker Desktop exigia
+virtualização ligada nesta máquina em 11/09; o André reiniciou para ligá-la.
 
 ## Gate E2E — ambiente autenticado
 
