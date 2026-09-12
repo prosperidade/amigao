@@ -344,7 +344,12 @@ _FIELD_SPECS: dict[str, list[_FieldSpec]] = {
         _FieldSpec("municipio", "municipio", "imovel", "municipality"),
         _FieldSpec("uf", "uf", "imovel", "state"),
         _FieldSpec("app_declarada_ha", "app_declarada_ha", "imovel", "app_area_ha", "ha"),
-        _FieldSpec("rl_declarada_ha", "rl_declarada_ha", "imovel", "rl_status", "ha"),
+        # Frente K — a RL declarada é ÁREA (número em ha), não ESTADO. Apontava
+        # para `rl_status` e o Hub mostrava "Reserva Legal: 437,7632" onde o
+        # vocabulário é `averbada|proposta|pendente|cancelada`; a ponte
+        # matrícula→imóvel escrevia 'averbada' na MESMA coluna. Duas naturezas
+        # não cabem numa coluna: `rl_area_ha` é o destino do número.
+        _FieldSpec("rl_declarada_ha", "rl_declarada_ha", "imovel", "rl_area_ha", "ha"),
         _FieldSpec("status_car", "status_car", "imovel", "car_status"),
         # Fiação (09/09), DATA-002 parcial — o recibo do CAR declara DUAS áreas
         # no mesmo parágrafo ("Foi detectada uma diferença entre a área ...

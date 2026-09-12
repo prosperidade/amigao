@@ -47,6 +47,13 @@ class Property(Base):
 
     # Regente Cam2 CAM2IH-003/004 (Sprint H) — campos técnicos do Dashboard + Aba Informações
     rl_status = Column(String, nullable=True)           # averbada | proposta | pendente | cancelada
+    # Frente K — a ÁREA de Reserva Legal declarada (CAR, `rl_declarada_ha`) tinha
+    # de pousar em algum lugar e vinha pousando em `rl_status`: medido no gate
+    # (12/09), o Hub exibia "Reserva Legal: 437,7632" onde o vocabulário da coluna
+    # é `averbada|proposta|pendente|cancelada`. Área é número, status é estado —
+    # dois fatos, duas colunas. A ponte matrícula→imóvel continua escrevendo o
+    # STATUS ('averbada'), sem competir com o número.
+    rl_area_ha = Column(Float, nullable=True)
     app_area_ha = Column(Float, nullable=True)
     regulatory_issues = Column(PortableJSON, nullable=True, default=list)  # [{tipo, descricao, severidade}]
     area_documental_ha = Column(Float, nullable=True)

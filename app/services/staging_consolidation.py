@@ -47,7 +47,10 @@ from app.services.reconciliation_decisions import (
 logger = logging.getLogger(__name__)
 
 # Colunas de área: convertidas pela porta ÚNICA parse_area_ha (BR/US/m² + dict).
-_AREA_COLUMNS = {"area_ha", "app_area_ha", "area_grafica_ha", "area_documental_ha", "total_area_ha"}
+_AREA_COLUMNS = {"area_ha", "app_area_ha", "area_grafica_ha", "area_documental_ha", "total_area_ha",
+                 # Frente K — a RL declarada pelo CAR chega em formato BR
+                 # ("437,7632"); sem passar pela porta única viraria 4377632.0.
+                 "rl_area_ha"}
 
 _DIVERGENTES = {
     ExtractedFieldStatus.divergente_transcricao,
@@ -76,11 +79,13 @@ _REPRESENTANTE_ALIAS: dict[str, Optional[str]] = {"document": "cpf", "address": 
 # Tipos de documento que provam identidade de PESSOA FÍSICA.
 _DOC_PESSOAL_SOURCE_TYPES = {"rg_cpf"}
 
-# rl_status entra na allowlist (antes era descartado: rl_declarada_ha → imovel.rl_status
-# caía em `ignorados`, deixando o Hub com "—" em Reserva Legal). app_area_ha já estava.
+# rl_status entra na allowlist (antes era descartado, deixando o Hub com "—" em
+# Reserva Legal). Quem o preenche é a ponte matrícula→imóvel ('averbada') ou a
+# edição do consultor — a ÁREA declarada pelo CAR vai para `rl_area_ha`
+# (Frente K): estado e número são fatos diferentes. app_area_ha já estava.
 _IMOVEL_FIELDS = {"car_code", "car_status", "municipality", "state", "app_area_ha",
                   "area_grafica_ha", "area_documental_ha", "biome", "ccir", "nirf",
-                  "tipologia", "rl_status",
+                  "tipologia", "rl_status", "rl_area_ha",
                   # #200 — módulos fiscais é ATRIBUTO do imóvel, não do documento:
                   # área ÷ módulo fiscal do município. Decide porte e, com ele, as
                   # exceções do Código Florestal que a skill de diagnóstico aplica
@@ -178,6 +183,39 @@ def _json_container_of(column: Any) -> Any:
     return None
 
 
+# UF por extenso → sigla. O CAR escreve "Goiás" e `properties.state` é
+# `String(2)`: medido no gate de 12/09, esse único valor levantou
+# `StringDataRightTruncation` no flush e devolveu 500 na consolidação INTEIRA —
+# 113 linhas aceitas, zero gravadas, sem uma palavra para a consultora. Nome de
+# estado não é dado ambíguo: ou casa com a tabela do IBGE, ou não é UF.
+_UF_POR_NOME = {
+    "acre": "AC", "alagoas": "AL", "amapa": "AP", "amazonas": "AM", "bahia": "BA",
+    "ceara": "CE", "distrito federal": "DF", "espirito santo": "ES", "goias": "GO",
+    "maranhao": "MA", "mato grosso": "MT", "mato grosso do sul": "MS",
+    "minas gerais": "MG", "para": "PA", "paraiba": "PB", "parana": "PR",
+    "pernambuco": "PE", "piaui": "PI", "rio de janeiro": "RJ",
+    "rio grande do norte": "RN", "rio grande do sul": "RS", "rondonia": "RO",
+    "roraima": "RR", "santa catarina": "SC", "sao paulo": "SP", "sergipe": "SE",
+    "tocantins": "TO",
+}
+
+
+_UF_SIGLAS = frozenset(_UF_POR_NOME.values())
+
+
+def _coerce_uf(value: Any) -> Optional[str]:
+    """"Goiás" → "GO"; "go" → "GO". Fora da tabela, ``None`` (vai para ignorados).
+
+    A dobra de acento/caixa é a MESMA de `norm_compare` — a que o resto do
+    sistema já usa para dizer se dois textos são o mesmo texto.
+    """
+    bruto = str(value).strip()
+    if len(bruto) == 2 and bruto.isalpha():
+        sigla = bruto.upper()
+        return sigla if sigla in _UF_SIGLAS else None
+    return _UF_POR_NOME.get(norm_compare(bruto))
+
+
 def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = None) -> Any:
     """Coage o valor para o tipo da coluna (área PT-BR → float, data → date).
 
@@ -186,6 +224,11 @@ def _coerce(value: Any, column_type: Any, column_name: str = "", unidade: Any = 
     gravada como fato (devolve None → vai para ``ignorados``)."""
     if value is None:
         return None
+    # `state` é a UF do imóvel — a única coluna de 2 letras da consolidação. O
+    # tipo entra na condição de propósito: se um dia outra entidade ganhar um
+    # `state` que não seja UF, ela não cai nesta tradução por acidente de nome.
+    if column_name == "state" and getattr(column_type, "length", None) == 2:
+        return _coerce_uf(value)
     if column_name in _AREA_COLUMNS:
         ha = parse_area_ha(value, unidade)
         if ha is not None and not is_area_plausible(ha):
@@ -744,27 +787,12 @@ def consolidate_process(
                 mat_atualizadas += 1
         return mat
 
-    # Matrícula CITADA no CAR (`matricula_listada` — só o CAR produz este
-    # field_name, Ficha 08 §4 "Contiguidade de matrículas | CAR (fonte única)").
-    # ADR-062, item 3: CAR deixou de criar Matricula — só a certidão cria (mesmo
-    # endurecimento do guard fantasma da Sprint 4, agora sem exceção de tipo).
-    # Se a matrícula já existe (criada pela própria certidão), o aceite do CAR
-    # carimba como pousado — ele confirma o vínculo, não materializa o registro.
-    # Se NÃO existe, não é mais criação silenciosa: vira achado visível
-    # ("documento cita matrícula não cadastrada"), a materializar só via
-    # cadastro manual ou a chegada da própria certidão.
-    for hint, linhas in matricula_estabelecida.items():
+    # O carimbo destas linhas é reconstruído do zero como o das demais; o
+    # JULGAMENTO "esta matrícula existe?" fica para depois dos grupos (ver o
+    # laço no fim desta função — Frente K).
+    for linhas in matricula_estabelecida.values():
         for r in linhas:
             r.consolidated_at = None
-        if prop is not None and _ensure_matricula(hint, allow_create=False) is not None:
-            for r in linhas:
-                r.consolidated_at = agora
-        else:
-            ignorados.append(
-                f"matricula.numero_matricula: o CAR cita a matrícula {hint}, que não "
-                "está cadastrada — a certidão de matrícula é a única fonte que cria o "
-                "registro (cadastre-a manualmente ou anexe a certidão)"
-            )
 
     divergencias_devolvidas: list[dict[str, Any]] = []
 
@@ -952,6 +980,34 @@ def consolidate_process(
                 if len(_group_conflict_values([winner, r], target_field)) == 1:
                     r.consolidated_at = agora
 
+    # Matrícula CITADA no CAR (`matricula_listada` — só o CAR produz este
+    # field_name, Ficha 08 §4 "Contiguidade de matrículas | CAR (fonte única)").
+    # ADR-062, item 3: CAR deixou de criar Matricula — só a certidão cria (mesmo
+    # endurecimento do guard fantasma da Sprint 4, agora sem exceção de tipo).
+    # Se a matrícula já existe (criada pela própria certidão), o aceite do CAR
+    # carimba como pousado — ele confirma o vínculo, não materializa o registro.
+    # Se NÃO existe, não é mais criação silenciosa: vira achado visível
+    # ("documento cita matrícula não cadastrada"), a materializar só via
+    # cadastro manual ou a chegada da própria certidão.
+    #
+    # Frente K — roda DEPOIS dos grupos, e a ordem É o conserto. Antes vinha
+    # primeiro, e o gate de 12/09 colou a mentira: a certidão da 3.181 criava a
+    # matrícula na MESMA passagem, poucas linhas de código depois, e ainda assim
+    # a resposta dizia "o CAR cita a matrícula 3181, que não está cadastrada —
+    # cadastre-a manualmente". A pergunta "esta matrícula existe?" só tem
+    # resposta verdadeira quando tudo o que cria matrícula nesta consolidação
+    # já rodou.
+    for hint, linhas in matricula_estabelecida.items():
+        if prop is not None and _ensure_matricula(hint, allow_create=False) is not None:
+            for r in linhas:
+                r.consolidated_at = agora
+        else:
+            ignorados.append(
+                f"matricula.numero_matricula: o CAR cita a matrícula {hint}, que não "
+                "está cadastrada — a certidão de matrícula é a única fonte que cria o "
+                "registro (cadastre-a manualmente ou anexe a certidão)"
+            )
+
     db.flush()
 
     # ── Consolidação PARCIAL (decisão Isis, opção b) ────────────────────────
@@ -1128,6 +1184,21 @@ def _write_entity(
             f"{row.target_entity or '—'}.{col}: o valor lido não é aceitável para "
             "este campo (formato ou ordem de grandeza) — confira no documento e "
             "corrija à mão se for o caso"
+        )
+        return "recusado"
+
+    # Frente K — o valor cabe FISICAMENTE na coluna? `properties.state` é
+    # `String(2)`; a consolidação do gate morreu de `StringDataRightTruncation`
+    # no flush ("Goiás"), devolveu 500 e não gravou NENHUM dos outros campos.
+    # A pergunta é do banco, mas quem tem de respondê-la é a porta da escrita:
+    # valor grande demais é recusa de UMA linha, com motivo, nunca a queda da
+    # consolidação inteira (o mesmo princípio do radar que não cancela o voo).
+    limite = getattr(column.type, "length", None)
+    if isinstance(coerced, str) and isinstance(limite, int) and len(coerced) > limite:
+        ignorados.append(
+            f"{row.target_entity or '—'}.{col}: o valor lido tem {len(coerced)} "
+            f"caracteres e o campo aceita {limite} — confira no documento (é comum "
+            "o documento trazer o nome por extenso onde a base guarda a sigla)"
         )
         return "recusado"
 

@@ -551,6 +551,7 @@ def get_property_hub_summary(
         field_sources=prop.field_sources or {},
         # CAM2IH-003/004 (Sprint H) — campos técnicos
         rl_status=prop.rl_status,
+        rl_area_ha=prop.rl_area_ha,
         app_area_ha=prop.app_area_ha,
         regulatory_issues=prop.regulatory_issues or [],
         area_documental_ha=prop.area_documental_ha,
@@ -790,7 +791,8 @@ _TRACKED_FIELDS = {
     "registry_number", "ccir", "nirf", "car_code", "total_area_ha",
     "municipality", "state", "biome",
     # CAM2IH-003/004 (Sprint H) — campos técnicos também validáveis
-    "rl_status", "app_area_ha", "area_documental_ha", "area_grafica_ha", "tipologia",
+    "rl_status", "rl_area_ha", "app_area_ha", "area_documental_ha", "area_grafica_ha",
+    "tipologia",
     # #200 — módulos fiscais é validável como os demais: veio do RAT, a consultora
     # confirma e ele ganha selo (o porte decide exceção do Código Florestal, então
     # não pode ficar valendo como "a IA leu" para sempre).
