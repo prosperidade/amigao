@@ -1,0 +1,32 @@
+{
+ "base": {
+  "quantos documentos entraram (checklist)": "null",
+  "quanto da Conferência está resolvido (decisões)": "{\"process_id\":1,\"decisoes_total\":91,\"decididas\":7,\"gravadas\":5,\"pendentes\":84}",
+  "quantas decisões a Conferência agrupa": "20 decisões + 71 sem agrupamento = 91",
+  "quantas linhas de staging existem": "146 (staging-fields: 146)",
+  "estado de cada documento (DOC-001)": "[\"classificado\",\"classificado\",\"erro_leitura\",\"extraido\",\"extraido\",\"extraido\",\"extraido\",\"extraido\"]",
+  "estado de cada decisão": "[\"decidida\",\"decidida\",\"gravada\",\"gravada\",\"gravada\",\"gravada\",\"gravada\",\"parcialmente_gravada\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\"]",
+  "_checklist_bruto": "{\"detail\":\"Checklist não encontrado. Use POST /generate para criar.\"}",
+  "_dossier_tem_resumo": false
+ },
+ "recarregado": {
+  "quantos documentos entraram (checklist)": "null",
+  "quanto da Conferência está resolvido (decisões)": "{\"process_id\":1,\"decisoes_total\":91,\"decididas\":7,\"gravadas\":5,\"pendentes\":84}",
+  "quantas decisões a Conferência agrupa": "20 decisões + 71 sem agrupamento = 91",
+  "quantas linhas de staging existem": "146 (staging-fields: 146)",
+  "estado de cada documento (DOC-001)": "[\"classificado\",\"classificado\",\"erro_leitura\",\"extraido\",\"extraido\",\"extraido\",\"extraido\",\"extraido\"]",
+  "estado de cada decisão": "[\"decidida\",\"decidida\",\"gravada\",\"gravada\",\"gravada\",\"gravada\",\"gravada\",\"parcialmente_gravada\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\"]",
+  "_checklist_bruto": "{\"detail\":\"Checklist não encontrado. Use POST /generate para criar.\"}",
+  "_dossier_tem_resumo": false
+ },
+ "nova_sessao": {
+  "quantos documentos entraram (checklist)": "null",
+  "quanto da Conferência está resolvido (decisões)": "{\"process_id\":1,\"decisoes_total\":91,\"decididas\":7,\"gravadas\":5,\"pendentes\":84}",
+  "quantas decisões a Conferência agrupa": "20 decisões + 71 sem agrupamento = 91",
+  "quantas linhas de staging existem": "146 (staging-fields: 146)",
+  "estado de cada documento (DOC-001)": "[\"classificado\",\"classificado\",\"erro_leitura\",\"extraido\",\"extraido\",\"extraido\",\"extraido\",\"extraido\"]",
+  "estado de cada decisão": "[\"decidida\",\"decidida\",\"gravada\",\"gravada\",\"gravada\",\"gravada\",\"gravada\",\"parcialmente_gravada\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\",\"pendente\"]",
+  "_checklist_bruto": "{\"detail\":\"Checklist não encontrado. Use POST /generate para criar.\"}",
+  "_dossier_tem_resumo": false
+ }
+}

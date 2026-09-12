@@ -712,3 +712,55 @@ class TestFrenteJEscolherFonteSemDestino:
         for v in vizinhas:
             db_session.refresh(v)
             assert v.status == ExtractedFieldStatus.pendente, f"{v.atributos} foi rejeitada em massa"
+
+
+class TestFrenteJAceitarCobreTodosOsMembros:
+    """Achado do gate E2E (12/09): `aceitar` percorria as EVIDÊNCIAS, e nem
+    todo membro da decisão vira evidência. A decisão de titularidade monta a
+    lista a partir da CADEIA (`cadeia_titularidade`), então um ato de
+    `compra_venda` que não nomeia adquirente/transmitente entra no grupo e não
+    aparece na lista — medido no caso real: matrícula 3.181 com 3 membros para
+    2 evidências. A linha órfã nunca era aceita e a decisão ficava presa em
+    "pendente": a consultora clicava em Aceitar e a tela não mudava."""
+
+    def test_aceitar_decide_membro_que_nao_virou_evidencia(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        # Ato COM os dois lados nomeados → vira evidência na cadeia.
+        com_partes = _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="R-13 · Compra e venda · 10/12/2019", entidade=None, alvo=None,
+            hint="3673", tipo_obs="compra_venda",
+            atributos={"ato": "R-13", "data_ato": "10/12/2019",
+                       "adquirentes": ["ELODI AGROPECUÁRIA"],
+                       "transmitentes": ["ALEXANDRE AUGUSTO CLEMENTE"]},
+        )
+        # Ato do MESMO fato, sem partes distinguidas → membro sem evidência.
+        orfa = _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="R-09 · Compra e venda · 03/05/2016", entidade=None, alvo=None,
+            hint="3673", tipo_obs="compra_venda",
+            atributos={"ato": "R-09", "data_ato": "03/05/2016"},
+        )
+
+        rows = db_session.query(ExtractedFieldStaging).filter(
+            ExtractedFieldStaging.process_id == proc.id).all()
+        decisao = _decisao(build_decisions(rows), "titularidade", "3673")
+        assert decisao is not None
+        ids_evidencia = {e.staging_id for e in decisao.evidencias if e.staging_id is not None}
+        assert orfa.id in decisao.staging_ids and orfa.id not in ids_evidencia, (
+            "a fixture precisa ter um membro fora da lista de evidências"
+        )
+
+        decidir_decisao_agrupada(
+            db_session, tenant_id=tenant.id, process_id=proc.id,
+            chave=("matricula", "3673", "titularidade"), acao="aceitar", user_id=None,
+        )
+        db_session.expire_all()
+        for linha in (com_partes, orfa):
+            db_session.refresh(linha)
+            assert linha.status == ExtractedFieldStatus.aceito, linha.atributos
+
+        rows_pos = db_session.query(ExtractedFieldStaging).filter(
+            ExtractedFieldStaging.process_id == proc.id).all()
+        assert _decisao(build_decisions(rows_pos), "titularidade", "3673").estado == "decidida"

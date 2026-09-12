@@ -97,7 +97,15 @@ seção "O que a validação achou" registra. Só então docs, gate e relatório
     `lifecycle_status` vinha `null` só nesses dois caminhos — o contrato do
     `DocumentResponse` promete o campo em todos. Varridos os 3 endpoints que
     devolvem `DocumentResponse`: 5 pontos de retorno, todos com a projeção.
-15. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
+15. **O botão "Aceitar" não fechava a decisão de titularidade** (achado da
+    camada UI do gate). `decidir_decisao_agrupada` percorria as EVIDÊNCIAS, e
+    nem todo membro vira evidência: a titularidade monta a lista pela CADEIA,
+    então um ato de compra e venda sem adquirente/transmitente nomeado entra
+    no grupo e não aparece. Medido no caso real: 3.181 com 3 membros para 2
+    evidências, 3.673 com 4 para 2. A linha órfã nunca era aceita e a decisão
+    ficava presa em "pendente" — a consultora clicava e a tela não mudava.
+    Nenhuma suíte unitária tinha pego: só clicando, com dado real.
+16. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
 
 ## Item 5 — para onde cada tipo decidido leva a linha
 
@@ -154,6 +162,7 @@ Resumo dos três percursos:
 | 1 — fluxo da consultora | 6 documentos reais → extração real (194 s, LLM real) → **115 linhas = 20 decisões (51 linhas) + 64 sem agrupamento** → 3 decisões, uma com edição de tipo → escolher fonte numa divergência crítica sem fonte autoritativa (**13 irmãos intactos**) → consolidar → F5 → logout/login: **diff vazio nas seis telas** |
 | 2 — invalidação | documento novo ⇒ diagnóstico e proposta desatualizados com razão e data; **reextração com texto cacheado** (161,8 s, `ocr_rodou_de_novo=false`, 31 linhas novas) ⇒ diagnóstico validado vira "nova evidência"; aceite da proposta ⇒ **422 com a razão**, proposta segue `sent` |
 | 3 — itens 4/6/7 | RL baixada não é promovida nem grava a coluna (vence o ato anterior válido); CNH-e `done` mas **`erro_leitura`**, KML `not_required` mas **`classificado`**; sucessão/formal de partilha levam `titular_atual` ao herdeiro (sem o item 7, apontaria o falecido) |
+| **UI (Playwright, 5/5)** | o gesto: cartões na tela, "Aceitar proposta", **"Editar tipo"**, "Gravar na base", F5 e logout/login com os **seis números idênticos**, banner + botão bloqueado na proposta, upload pela tela com selo "Erro de leitura" |
 
 Não provado, com a razão dita por inteiro (retrocesso automático de etapa,
 "declarado inexistente", `checklist_documental` do processo do gate, e um

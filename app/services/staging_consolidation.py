@@ -1847,10 +1847,22 @@ def decidir_decisao_agrupada(
                 decide_field(db, tenant_id=tenant_id, process_id=process_id,
                              field_id=membro_id, acao="reabrir", user_id=user_id)
     elif acao == "aceitar":
-        for evidencia in decisao.evidencias:
-            row = membros.get(evidencia.staging_id) if evidencia.staging_id else None
+        # Percorre os MEMBROS, não as evidências. A evidência é a APRESENTAÇÃO
+        # do fato; o membro é a linha que precisa de decisão — e nem todo
+        # membro vira evidência. Medido no gate E2E (12/09): a decisão de
+        # titularidade monta suas evidências a partir da CADEIA
+        # (`_montar_decisao_titularidade`), então uma linha de `compra_venda`
+        # cujo ato não nomeia adquirente/transmitente entra no grupo e não
+        # aparece na lista — a matrícula 3.181 tinha 3 membros para 2
+        # evidências, a 3.673 tinha 4 para 2. Iterando evidências, essas
+        # linhas nunca eram aceitas e a decisão ficava presa em "pendente"
+        # para sempre: a consultora clicava em Aceitar e a tela não mudava.
+        por_staging = {e.staging_id: e for e in decisao.evidencias if e.staging_id is not None}
+        for membro_id in decisao.staging_ids:
+            row = membros.get(membro_id)
             if row is None or row.status in _DECISAO_JA_RESOLVIDA:
                 continue
+            evidencia = por_staging.get(membro_id)
             if row.status == ExtractedFieldStatus.divergente_transcricao:
                 # Só a evidência autoritativa (ADR-062) resolve a disputa —
                 # `escolher_fonte` já rejeita as irmãs do mesmo destino. A
@@ -1858,7 +1870,10 @@ def decidir_decisao_agrupada(
                 # quando a autoritativa for decidida; se não houver nenhuma
                 # marcada (aspecto sem fonte única), pula — exige escolha
                 # manual, mesma régua do campo a campo.
-                if evidencia.fonte_autoritativa:
+                # Membro sem evidência na lista não pode ser tratado como
+                # autoritativo por omissão: sem evidência, não há o que
+                # sustente a escolha — fica para o gesto manual.
+                if evidencia is not None and evidencia.fonte_autoritativa:
                     decide_field(db, tenant_id=tenant_id, process_id=process_id,
                                  field_id=row.id, acao="escolher_fonte", user_id=user_id)
                 continue

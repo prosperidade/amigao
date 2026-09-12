@@ -1,0 +1,6 @@
+{
+ "status": 422,
+ "json": {
+  "detail": "Proposta desatualizada: documento \"CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf\" entrou no processo depois desta versão. Aceitar agora fecharia contrato sobre escopo vencido. Recuse esta proposta e gere a nova versão (Recusar → Nova versão), ou reveja o processo antes."
+ }
+}

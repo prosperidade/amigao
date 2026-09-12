@@ -123,8 +123,13 @@ test.describe.serial('Frente J — o gesto humano na Conferência', () => {
     }).not.toBe('pendente');
 
     // (b) EDITAR TIPO numa decisão com evidência tipada (CONF-002, item 5)
+    // OUTRA decisão, não a que acabou de ser aceita em (a): editar tipo só
+    // é oferecido em decisão PENDENTE, e a de (a) já não é mais.
     const tipada = antes.decisoes.find(d => d.estado === 'pendente' && d.chave.aspecto === 'gravames'
-      && d.evidencias.some(e => e.tipo_observacao))!;
+      && d.evidencias.some(e => e.tipo_observacao)
+      && !(d.chave.entidade === pend.chave.entidade && d.chave.identificador === pend.chave.identificador
+           && d.chave.aspecto === pend.chave.aspecto))!;
+    expect(tipada, 'nenhuma decisão de gravames pendente com evidência tipada').toBeTruthy();
     const cardTipo = page.getByTestId(`decisao-${tipada.chave.entidade}-${tipada.chave.identificador}-${tipada.chave.aspecto}`);
     await cardTipo.getByRole('button', { name: tipada.label, exact: true }).click(); // expande
     const ev = tipada.evidencias.find(e => e.tipo_observacao)!;

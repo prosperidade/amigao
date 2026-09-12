@@ -223,6 +223,56 @@ apontado seria o falecido.
 
 ---
 
+## CAMADA UI — o gesto humano (Playwright, 5/5)
+
+A camada acima mede payloads. Esta clica: `frontend/e2e/frente-j.spec.ts`,
+Chromium, contra o Vite real e a API real. **5 de 5 passaram (4,4 min).**
+Prints em `prints/`.
+
+| teste | o que o clique provou |
+|---|---|
+| 1. a Conferência mostra as decisões | cada decisão tem cartão com o seu rótulo na tela; **20 decisões + 71 sem agrupamento = 91** (o processo já tinha as 31 linhas da reextração do passo 11) |
+| 2. decidir e gravar | "Aceitar proposta" fecha a decisão · **"Editar tipo"** troca o tipo da evidência escolhida e o `tipo_sugerido` original fica na linha · "Gravar na base" carimba |
+| 3. F5 e logout/login | os seis números **idênticos** nos três instantes (`base == recarregado == nova_sessao`, comparação de objeto) |
+| 4. proposta desatualizada | banner na tela, **botão "Aceitar" desabilitado**, e a chamada forçada volta **422** com a razão; proposta segue `sent` |
+| 5. upload pela tela | documento entra pelo input real; o CNH-e (444 chars de boilerplate) aparece com o selo **"Erro de leitura"** na aba Documentos |
+
+### Os seis números medidos PELA UI, nos três instantes
+
+| pergunta | base | após F5 | sessão nova |
+|---|---|---|---|
+| quantos documentos entraram (checklist) | `null` (processo sem checklist — fronteira declarada) | idem | idem |
+| quanto da Conferência está resolvido | 7 decididas · 5 gravadas · 84 pendentes de 91 | idem | idem |
+| quantas decisões a Conferência agrupa | 20 + 71 = 91 | idem | idem |
+| quantas linhas de staging existem | 146 (`staging-fields`: 146) | idem | idem |
+| estado de cada documento (DOC-001) | 5 `extraido` · 2 `classificado` · 1 `erro_leitura` | idem | idem |
+| estado de cada decisão | 5 `gravada` · 1 `parcialmente_gravada` · 2 `decidida` · 12 `pendente` | idem | idem |
+
+### O que a camada UI achou (e que a de payload não tinha achado)
+
+**O botão "Aceitar" não fechava a decisão de titularidade.**
+`decidir_decisao_agrupada` percorria as **evidências**, e nem todo membro da
+decisão vira evidência: a titularidade monta a lista a partir da CADEIA
+(`cadeia_titularidade`), então um ato de `compra_venda` que não nomeia
+adquirente/transmitente entra no grupo e **não aparece** na lista. Medido no
+caso real:
+
+```
+matricula:3181:titularidade  membros=[22, 27, 117]  evidências=[22, 117]  órfã=27
+matricula:3673:titularidade  membros=[95, 97, 143, 144]  evidências=[143, 144]  órfãs=[95, 97]
+```
+
+A linha órfã nunca era aceita e a decisão ficava **presa em "pendente" para
+sempre** — a consultora clicava e a tela não mudava. Corrigido (o laço
+percorre os membros; a evidência só informa se é autoritativa) + teste
+`TestFrenteJAceitarCobreTodosOsMembros`. Depois do conserto:
+`estado: decidida | membros: [22, 27, 117]`.
+
+Este é o achado que justifica a exigência do Codex: nenhuma suíte unitária,
+nenhuma medição de payload e nenhum gate anterior tinha pego — porque
+nenhum tinha **clicado no botão** com dado real onde a lista de evidências
+não cobre o grupo.
+
 ## O que NÃO foi provado (e por quê)
 
 1. **REV-001, "o caso muda para etapa 3"** — retrocesso automático de etapa
