@@ -107,9 +107,14 @@ class Evidencia:
     valor_normalizado: Any
     unidade: Optional[str]
     vigencia: Optional[str]
-    tipo_observacao: Optional[str]
     status: str
     fonte_autoritativa: bool = False
+    # Frente J (item 5): o tipo DECIDIDO da observação (ADR-065), para a tela
+    # oferecer a reclassificação sem abrir o JSON. Opcional com default: a
+    # evidência sintética (soma calculada) e a de titularidade não têm tipo
+    # próprio — um campo obrigatório aqui derrubava `GET /staging-decisions`
+    # inteiro no #23 (medido: TypeError em `_montar_decisao_titularidade`).
+    tipo_observacao: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -505,6 +510,7 @@ def _montar_decisao_titularidade(chave: ChaveNatural, membros: list[ExtractedFie
                 vigencia=None,
                 status=status_val,
                 fonte_autoritativa=True,
+                tipo_observacao=origem.tipo_observacao if origem else None,
             )
         )
 

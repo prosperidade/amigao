@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Gate E2E (Playwright) — Frente J
+e2e-results/
+e2e-report/

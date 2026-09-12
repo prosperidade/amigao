@@ -928,10 +928,16 @@ def _linhas_de_observacoes(
 
     Frente F (ADR-066): antes de resolver destino, o grafo de alterações
     (baixa/aditivo → `baixado_por`/`retificado_por`) e a vigência derivada
-    (`atributos["vigencia"]`) são calculados — por regra, nunca pelo LLM. Sem
-    A orquestração passa `data_referencia` do processo (abertura; com criação
-    como fallback). Sem referência explícita, prazo não é comparado com o
-    relógio da máquina: fica derivável depois a partir dos fatos persistidos.
+    (`atributos["vigencia"]`) são calculados — por regra, nunca pelo LLM.
+
+    Frente J (item 7): a orquestração (`extract_and_stage`) passa a
+    `data_referencia` do PROCESSO (`opened_at`, com `created_at` como
+    fallback — `data_referencia_do_processo`), nunca `date.today()`. Sem
+    referência explícita, um prazo com termo final fica `indeterminado`
+    (não é comparado com o relógio da máquina); os fatos (`data_ato`,
+    `prazo`, `altera_ato`) ficam persistidos e quem consultar depois com a
+    data do caso rederiva sem reextrair. Item 4: `ultimo_por_destino` já não
+    promove ato `baixado` à coluna (a RL baixada não grava `averbacao_rl`).
     """
     aplicar_alteracoes(observacoes)
     derivar_vigencia(observacoes, data_referencia=data_referencia)

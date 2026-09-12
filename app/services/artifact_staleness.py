@@ -15,9 +15,10 @@ de `document_id`/decisão considerados na geração). Descartado depois de medir
 que **os carimbos que já existem bastam**: todo artefato versionado desta
 frente (`RegulatoryDiagnosis`, `Rota`, `Proposal`) já tem `created_at` e um
 carimbo de validação humana (`validated_at`/`accepted_at`). Comparar
-`Document.created_at`/`extracted_at` e `ExtractedFieldStaging.updated_at` do
-MESMO processo contra esse carimbo produz o aviso "documento novo" / "decisão
-alterada" sem tabela nova, sem coluna nova, sem lista de IDs para manter
+`Document.created_at`/`extracted_at` e `ExtractedFieldStaging.created_at`/
+`updated_at` do MESMO processo contra esse carimbo produz o aviso "documento
+novo" / "nova evidência" / "decisão alterada" sem tabela nova, sem coluna
+nova, sem lista de IDs para manter
 sincronizada — a mesma filosofia de projeção pura do STATE-001 (`process_
 indicators.py`) e do DOC-001 (`document_lifecycle.py`).
 
@@ -122,16 +123,24 @@ def _decisao_alterada_apos(
 ) -> Optional[AvisoDesatualizado]:
     """Linha nova OU decisão alterada depois do corte.
 
-    ``created_at`` é indispensável no caminho de reextração com texto cacheado:
-    o documento já existia e ``Document.extracted_at`` não muda, mas novas
-    linhas de staging nascem depois do artefato. ``updated_at`` continua
-    cobrindo decisão, reabertura e consolidação posteriores.
+    Frente J (item 1, reauditoria Codex 11/09): a versão da Frente H olhava
+    só ``updated_at`` e deixava passar o caminho literal do #23 — reextração
+    com texto CACHEADO. O documento já existia, ``Document.extracted_at`` não
+    muda (o OCR não roda de novo), mas novas linhas de staging NASCEM depois
+    do artefato, com ``updated_at IS NULL`` (linha nunca atualizada). Só
+    ``created_at`` enxerga isso. ``updated_at`` continua cobrindo decisão,
+    reabertura e consolidação posteriores.
+
+    O marco é o MAIS ANTIGO entre todas as linhas candidatas (mesma regra de
+    `_documento_novo_apos`) — calculado em Python, não por ``ORDER BY``: uma
+    linha antiga com ``updated_at`` recente ordenaria antes de uma linha nova
+    com ``created_at`` mais cedo, e o "desde" apontaria o evento errado.
     """
     from sqlalchemy import or_  # noqa: PLC0415
 
     from app.models.extracted_field_staging import ExtractedFieldStaging  # noqa: PLC0415
 
-    row = (
+    candidatas = (
         db.query(ExtractedFieldStaging)
         .filter(
             ExtractedFieldStaging.tenant_id == tenant_id,
@@ -141,17 +150,19 @@ def _decisao_alterada_apos(
                 ExtractedFieldStaging.updated_at > cutoff,
             ),
         )
-        .order_by(
-            ExtractedFieldStaging.created_at.asc().nullslast(),
-            ExtractedFieldStaging.updated_at.asc().nullslast(),
-        )
-        .first()
+        .all()
     )
-    if row is None:
+    if not candidatas:
         return None
+    marcados = []
+    for r in candidatas:
+        marcos = [m for m in (r.created_at, r.updated_at) if m is not None and m > cutoff]
+        if marcos:
+            marcados.append((min(marcos), r))
+    if not marcados:
+        return None
+    desde, row = min(marcados, key=lambda par: par[0])
     campo = row.target_field or row.field_name or "campo"
-    marcos = [m for m in (row.created_at, row.updated_at) if m is not None and m > cutoff]
-    desde = min(marcos)
     nova = row.created_at is not None and row.created_at > cutoff
     return AvisoDesatualizado(
         tipo="decisao_alterada",

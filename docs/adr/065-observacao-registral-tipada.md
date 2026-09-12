@@ -223,3 +223,57 @@ baixa por referência, destino por tipo e desempate por ordem, arrendamento fora
 de APP, área de outro objeto (#221), ônus derivado dos atos (não hipoteca do
 Banco do Brasil), reserva legal pelo ato, e dois controles de não-regressão
 (matrícula sem atos, documento que não é matrícula).
+
+
+---
+
+## Adendo — Frente J (11/09/2026): o tipo é DECIDÍVEL, não só sugerido (CONF-002)
+
+**Insumo:** `docs/auditoria/REAUDITORIA_CODEX_11-09.md`, item 5.
+**Branch:** `fix/fechamento-contrato-spec`.
+
+O ADR acima entregou o vocabulário fechado e a normalização (`normalizar_tipo`),
+mas o tipo que o modelo sugere era **terminal**: nenhuma ação da Conferência
+o corrigia. O padrão medido no próprio Contexto ("o modelo acerta o valor e
+erra o tipo") só tinha saída pela reextração — e a reextração não é
+determinística (`CONFIRMACAO_ENTRADA_2026-09-09.md`).
+
+**Decisão (aditiva).**
+
+- `StagingDecisionRequest.acao` ganha `reclassificar` com `tipo_observacao`
+  obrigatório. `decide_field` normaliza pelo MESMO vocabulário deste ADR
+  (rótulo humano ou slug), grava `tipo_observacao` decidido, preserva o
+  original em `atributos["tipo_sugerido"]` (só na primeira reclassificação —
+  `setdefault`), rerroteia o destino por `DESTINO_POR_TIPO` (RL/APP ganham
+  coluna; gravame/evento perdem, com `sem_destino_motivo` escrito), marca
+  `field_value["tipo_decidido"]`, zera `consolidated_at` (o "Gravado" da
+  rodada anterior deixa de valer) e audita `staging_tipo_reclassificado`.
+  Rótulo fora do vocabulário é **422 com o rótulo no detalhe** — não vira
+  `nao_classificado` calado; o escape só entra quando pedido por escrito.
+- `DecisaoRequest.acao` (cartão agrupado, ADR-067) ganha `escolher_fonte`,
+  `editar` e `reclassificar`, com `staging_id` obrigatório (a evidência
+  alvo). Quando a reclassificação muda a chave natural (ex.: `app` sem chave
+  → `hipoteca` em `gravames`), o endpoint devolve a decisão que passou a
+  conter a linha, não 404.
+- A reconciliação (`_chave_de`, `_evidencia_de`) consome `tipo_observacao`
+  **decidido** — é a mesma coluna; `tipo_sugerido` fica só como memória.
+  `Evidencia.tipo_observacao` é exposto para a tela oferecer o gesto sem
+  abrir o JSON.
+- Tela (`DecisoesPanel`): divergência pendente → "Escolher esta fonte" por
+  evidência e "Editar valor"; **qualquer** decisão pendente com evidência
+  tipada → "Editar tipo". Corrigir tipo não depende de divergência: uma
+  decisão de gravames "concorda" por definição e ainda assim pode ter um
+  ato com o tipo errado.
+
+**Vocabulário ampliado (item 7 da reauditoria):** `sucessao`, `inventario`,
+`adjudicacao`, `formal_partilha` — atos que transferem domínio *causa
+mortis*. Entram em `TIPOS_TRANSFERENCIA_TITULARIDADE` (com `compra_venda`)
+e no prompt de matrícula (`adquirentes`/`transmitentes` valem para os
+cinco). Sem isto o caso de 3.000 ha (espólio) da Isis não tinha titular.
+
+**Testes:** `tests/api/test_staging_decisions.py` (reclassificar pela
+decisão, 422 para rótulo desconhecido, `escolher_fonte` exige `staging_id`),
+`tests/services/test_reconciliation_decisions.py` (`tipo_sugerido`
+preservado + reconciliação consome o decidido; regressão do `TypeError` na
+titularidade), `DecisoesPanel.test.tsx` (tipo editável em decisão
+concordante, ausente sem evidência tipada).

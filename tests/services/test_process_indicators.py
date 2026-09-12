@@ -126,6 +126,33 @@ def test_progresso_conferencia_decidida_e_gravada(db_session):
     assert resultado.pendentes == 0
 
 
+def test_progresso_conferencia_parcialmente_gravada_conta_como_pendente(db_session):
+    """Frente J (item 2): evidência antiga gravada + evidência nova pendente na
+    MESMA decisão (o #23 reextraído) — a decisão é `parcialmente_gravada`, e
+    o indicador NÃO a conta nem como decidida nem como gravada: ainda há
+    trabalho ali, e "gravada" só quando todas as linhas tiverem carimbo."""
+    from datetime import UTC, datetime
+
+    tenant, proc, prop, cli = _seed(db_session)
+    car = _doc(db_session, tenant, proc, "car")
+    certidao = _doc(db_session, tenant, proc, "matricula")
+
+    antiga = _linha(db_session, tenant, proc, certidao, field_name="numero_matricula",
+                    valor="3.181", entidade="matricula", alvo="numero_matricula", hint="3181",
+                    status=ExtractedFieldStatus.aceito)
+    antiga.consolidated_at = datetime.now(UTC)
+    _linha(db_session, tenant, proc, car, field_name="matricula_listada",
+           valor={"numero": "3181"}, entidade="matricula", hint="3181")
+    db_session.flush()
+
+    resultado = progresso_conferencia(db_session, tenant_id=tenant.id, process_id=proc.id)
+
+    assert resultado.decisoes_total == 1
+    assert resultado.decididas == 0
+    assert resultado.gravadas == 0
+    assert resultado.pendentes == 1
+
+
 def test_progresso_conferencia_processo_sem_staging(db_session):
     tenant, proc, prop, cli = _seed(db_session)
     resultado = progresso_conferencia(db_session, tenant_id=tenant.id, process_id=proc.id)

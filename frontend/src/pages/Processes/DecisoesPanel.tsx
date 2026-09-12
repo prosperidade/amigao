@@ -73,6 +73,7 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
   // é ali que a consultora precisa olhar primeiro.
   const [expandido, setExpandido] = useState(decisao.concordancia !== 'concordam');
   const primeira = decisao.evidencias.find(e => e.staging_id != null);
+  const temTipo = decisao.evidencias.some(e => e.staging_id != null && !!e.tipo_observacao);
   const [stagingId, setStagingId] = useState<number | null>(primeira?.staging_id ?? null);
   const [valorEditado, setValorEditado] = useState(
     typeof primeira?.valor_bruto === 'string' || typeof primeira?.valor_bruto === 'number'
@@ -160,7 +161,15 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
               )}
             </div>
           ))}
-          {decisao.concordancia === 'divergem' && decisao.estado === 'pendente' && primeira && (
+          {/* Frente J (item 5, CONF-002): dois gestos que o cartão não tinha.
+              (a) divergência → escolher a fonte ou editar o VALOR de uma
+              evidência (antes só "aceitar", que aplica a fonte autoritativa,
+              ou "reabrir"); (b) qualquer decisão pendente com evidência
+              TIPADA (ADR-065) → corrigir o TIPO que o modelo sugeriu — o
+              padrão medido no #23 é "valor certo, tipo errado", e isso não
+              depende de haver divergência. O original fica em
+              `atributos.tipo_sugerido`; a reconciliação consome o decidido. */}
+          {decisao.estado === 'pendente' && primeira && (decisao.concordancia === 'divergem' || temTipo) && (
             <div className="mt-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-2 space-y-2">
               <label className="block text-xs text-gray-600 dark:text-slate-300">
                 Evidência a editar
@@ -186,6 +195,7 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
                   ))}
                 </select>
               </label>
+              {decisao.concordancia === 'divergem' && (
               <div className="flex gap-1.5 flex-wrap">
                 <input
                   aria-label="Valor decidido"
@@ -201,6 +211,8 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
                   <Pencil className="w-3 h-3" /> Editar valor
                 </button>
               </div>
+              )}
+              {temTipo && (
               <div className="flex gap-1.5 flex-wrap">
                 <select
                   aria-label="Tipo de observação decidido"
@@ -221,6 +233,7 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
                   <Pencil className="w-3 h-3" /> Editar tipo
                 </button>
               </div>
+              )}
             </div>
           )}
         </div>

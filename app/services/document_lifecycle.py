@@ -15,11 +15,18 @@ de→para) é gravada no `AuditLog` já existente (`entity_type="document"`,
 mesma tabela que `DocumentRepository.add_audit` já usa para "uploaded") — nunca
 uma tabela de histórico própria.
 
-Os 5 estados (recebido/lido/classificado/extraído/conferido) formam uma escada:
-cada um implica o anterior. `derive_document_status` devolve o degrau mais alto
-alcançado; nunca um estado "pulado por engano" — se a extração rodou sem OCR
-concluído (não deveria acontecer, mas o sinal não mente), o documento aparece
-como "extraído" mesmo assim, porque de fato tem staging.
+Os 5 estados positivos (recebido/lido/classificado/extraído/conferido) formam
+uma escada: cada um implica o anterior. `derive_document_status` devolve o
+degrau mais alto alcançado; nunca um estado "pulado por engano" — se a extração
+rodou sem OCR concluído (não deveria acontecer, mas o sinal não mente), o
+documento aparece como "extraído" mesmo assim, porque de fato tem staging.
+
+Frente J (item 6, reauditoria Codex 11/09) acrescentou os estados NEGATIVOS da
+spec (DOC-001) ao mesmo vocabulário — `processando`, `erro_leitura`,
+`desatualizado`, `substituido` (deriváveis de uma linha de `Document`) e
+`nao_apresentado`/`dispensado` (estados do requisito no checklist, nunca
+derivados aqui) — e trocou a régua de "lido": texto LEGÍVEL
+(`ficha01_extraction.texto_sem_conteudo_legivel`), não `ocr_status=done`.
 """
 
 from __future__ import annotations
@@ -73,17 +80,23 @@ def _tem_classificacao(doc: Document) -> bool:
     return bool(tipo) and tipo.lower() != "outro"
 
 
-def derive_document_status(
-    db: Session, document: Document
-) -> DocumentLifecycleStatus:
-    """Deriva o estado atual — leitura pura, nunca escreve.
+def _status_sem_staging(document: Document) -> Optional[DocumentLifecycleStatus]:
+    """Os degraus que se decidem só com o próprio documento (sem consultar o
+    staging). ``None`` quando é preciso olhar o staging para decidir entre
+    classificado / extraído / conferido.
 
-    Não recebe `tenant_id` à parte: o `document` já carrega o seu, e ler o
-    staging por `document_id` (com filtro de tenant) evita depender de o
-    caller ter passado o tenant certo.
+    Frente J (item 6): `lido` exige TEXTO LEGÍVEL — a mesma régua
+    (`texto_sem_conteudo_legivel`) que faz o pipeline escrever
+    `MOTIVO_OCR_ILEGIVEL` em `extraction_status`. `ocr_status=done` é conclusão
+    técnica do job, não prova de conteúdo: o doc 551 do #23 (CNH-e, 444 chars
+    de boilerplate de assinatura digital) estava `done` e aparecia "lido".
+    Estados negativos da spec (DOC-001): `erro_leitura` (job terminou sem
+    texto utilizável), `processando` (job em curso), `desatualizado`
+    (validade vencida), `substituido` (removido/trocado por versão nova).
+    `nao_apresentado`/`dispensado` são estados do REQUISITO (checklist), não
+    de uma linha de `Document` — estão no vocabulário para a tela do
+    checklist falar a mesma língua, nunca derivados aqui.
     """
-    from app.models.extracted_field_staging import ExtractedFieldStaging  # noqa: PLC0415
-
     if document.deleted_at is not None:
         return DocumentLifecycleStatus.substituido
 
@@ -104,6 +117,31 @@ def derive_document_status(
 
     if not _tem_classificacao(document):
         return DocumentLifecycleStatus.lido
+    return None
+
+
+def _status_pelo_staging(statuses: list) -> DocumentLifecycleStatus:
+    if not statuses:
+        return DocumentLifecycleStatus.classificado
+    if all((s.value if hasattr(s, "value") else s) in _STAGING_DECIDIDOS for s in statuses):
+        return DocumentLifecycleStatus.conferido
+    return DocumentLifecycleStatus.extraido
+
+
+def derive_document_status(
+    db: Session, document: Document
+) -> DocumentLifecycleStatus:
+    """Deriva o estado atual — leitura pura, nunca escreve.
+
+    Não recebe `tenant_id` à parte: o `document` já carrega o seu, e ler o
+    staging por `document_id` (com filtro de tenant) evita depender de o
+    caller ter passado o tenant certo.
+    """
+    from app.models.extracted_field_staging import ExtractedFieldStaging  # noqa: PLC0415
+
+    direto = _status_sem_staging(document)
+    if direto is not None:
+        return direto
 
     staging = (
         db.query(ExtractedFieldStaging.status)
@@ -113,13 +151,49 @@ def derive_document_status(
         )
         .all()
     )
-    if not staging:
-        return DocumentLifecycleStatus.classificado
+    return _status_pelo_staging([s for (s,) in staging])
 
-    if all((s.value if hasattr(s, "value") else s) in _STAGING_DECIDIDOS for (s,) in staging):
-        return DocumentLifecycleStatus.conferido
 
-    return DocumentLifecycleStatus.extraido
+def derive_document_statuses(
+    db: Session, documents: list[Document]
+) -> dict[int, DocumentLifecycleStatus]:
+    """Mesma projeção de `derive_document_status`, para uma LISTA — uma query
+    de staging para todos os documentos, não uma por documento (a listagem
+    `GET /documents` sem filtro de processo devolve o tenant inteiro; N
+    queries ali é o N+1 clássico). Resultado idêntico ao caminho unitário:
+    o teste de equivalência está em `tests/services/test_document_lifecycle.py`.
+    """
+    from app.models.extracted_field_staging import ExtractedFieldStaging  # noqa: PLC0415
+
+    resultado: dict[int, DocumentLifecycleStatus] = {}
+    pendentes: list[Document] = []
+    for doc in documents:
+        direto = _status_sem_staging(doc)
+        if direto is not None:
+            resultado[doc.id] = direto
+        else:
+            pendentes.append(doc)
+    if not pendentes:
+        return resultado
+
+    por_tenant: dict[int, list[int]] = {}
+    for doc in pendentes:
+        por_tenant.setdefault(doc.tenant_id, []).append(doc.id)
+    statuses_por_doc: dict[int, list] = {doc.id: [] for doc in pendentes}
+    for tenant_id, ids in por_tenant.items():
+        linhas = (
+            db.query(ExtractedFieldStaging.document_id, ExtractedFieldStaging.status)
+            .filter(
+                ExtractedFieldStaging.tenant_id == tenant_id,
+                ExtractedFieldStaging.document_id.in_(ids),
+            )
+            .all()
+        )
+        for document_id, status in linhas:
+            statuses_por_doc.setdefault(document_id, []).append(status)
+    for doc in pendentes:
+        resultado[doc.id] = _status_pelo_staging(statuses_por_doc.get(doc.id, []))
+    return resultado
 
 
 def _ultimo_status_conhecido(db: Session, document: Document) -> Optional[str]:

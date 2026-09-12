@@ -635,3 +635,39 @@ class TestDecidirDecisaoAgrupada:
         assert len(decisoes) == 1
         assert decisoes[0].chave.aspecto == "gravames"
         assert decisoes[0].evidencias[0].tipo_observacao == "hipoteca"
+
+
+class TestFrenteJEvidenciaTipada:
+    """Frente J — regressão do TypeError medido no #23 real: `Evidencia` ganhou
+    `tipo_observacao` e a decisão de TITULARIDADE (construída fora de
+    `_evidencia_de`) derrubava `build_decisions` inteiro. Aqui a linha é uma
+    `compra_venda` como as do #23 (R-13 da 3.673)."""
+
+    def test_titularidade_nao_quebra_e_carrega_o_tipo(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="R-13 · Compra e venda · 10/12/2019", entidade=None, alvo=None,
+            hint="3673", tipo_obs="compra_venda",
+            atributos={"ato": "R-13", "data_ato": "10/12/2019",
+                       "adquirentes": ["ELODI AGROPECUÁRIA"],
+                       "transmitentes": ["ALEXANDRE AUGUSTO CLEMENTE"]},
+        )
+        rows = db_session.query(ExtractedFieldStaging).filter(
+            ExtractedFieldStaging.process_id == proc.id
+        ).all()
+        resultado = build_decisions(rows)
+        titularidade = _decisao(resultado, "titularidade", "3673")
+        assert titularidade is not None
+        assert {e.tipo_observacao for e in titularidade.evidencias} == {"compra_venda"}
+        assert all("tipo_observacao" in e.to_dict() for e in titularidade.evidencias)
+        assert "ELODI AGROPECUÁRIA" in str(titularidade.valor_proposto)
+
+    def test_evidencia_sintetica_de_soma_tem_tipo_none(self, db_session):
+        tenant, proc, _prop, _cli, rows = _elodi(db_session)
+        resultado = build_decisions(list(rows.values()))
+        for decisao in resultado.decisoes:
+            for e in decisao.evidencias:
+                if e.staging_id is None:
+                    assert e.tipo_observacao is None

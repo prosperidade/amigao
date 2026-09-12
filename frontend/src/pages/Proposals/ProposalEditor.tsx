@@ -5,11 +5,21 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import {
   ArrowLeft, Zap, Plus, Trash2, Send, CheckCircle2, XCircle,
   FileText, Loader2, AlertCircle,
 } from 'lucide-react';
+
+// Frente J (item 3): o backend RECUSA o aceite de proposta desatualizada com
+// 422 e a razão. Sem isto o clique falhava em silêncio (mutation sem onError)
+// — "o backend já gritava, faltava alto-falante" (lição do caso 15).
+function detalheDoErro(e: unknown, fallback: string): string {
+  const d = (e as AxiosError<{ detail?: unknown }>)?.response?.data?.detail;
+  return typeof d === 'string' ? d : fallback;
+}
 
 interface ScopeItem {
   description: string;
@@ -172,17 +182,28 @@ export default function ProposalEditor() {
   const sendMutation = useMutation({
     mutationFn: () => api.post(`/proposals/${id}/send`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+    onError: (e) => toast.error(detalheDoErro(e, 'Falha ao enviar a proposta.')),
   });
 
   const acceptMutation = useMutation({
     mutationFn: () => api.post(`/proposals/${id}/accept`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+    // 422 "Proposta desatualizada: <motivo>" é bloqueio honesto, não bug —
+    // mostrar a razão é o que permite ao consultor gerar a versão nova.
+    onError: (e) => toast.error(detalheDoErro(e, 'Falha ao aceitar a proposta.')),
   });
 
   const rejectMutation = useMutation({
     mutationFn: () => api.post(`/proposals/${id}/reject`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+    onError: (e) => toast.error(detalheDoErro(e, 'Falha ao recusar a proposta.')),
   });
+
+  // REV-001 (ADR-068) + Frente J: o corpo de GET /proposals/{id} traz
+  // `aviso_desatualizado` quando documento/decisão do processo mudou depois
+  // da proposta. A tela mostra ANTES do clique; o backend recusa no clique.
+  const avisoDesatualizado: { motivo: string; desde?: string } | null =
+    proposal?.aviso_desatualizado ?? null;
 
   const [contractError, setContractError] = useState('');
 
@@ -277,10 +298,20 @@ export default function ProposalEditor() {
           </div>
         )}
         {proposal && proposal.status === 'sent' && (
-          <div className="flex gap-2">
+          <div className="flex flex-col items-end gap-1">
+            {avisoDesatualizado && (
+              <p
+                role="status"
+                className="max-w-md text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-2.5 py-1.5"
+              >
+                {`Proposta desatualizada: ${avisoDesatualizado.motivo}. O aceite está bloqueado — gere e valide uma nova versão.`}
+              </p>
+            )}
+            <div className="flex gap-2">
             <button
               onClick={() => acceptMutation.mutate()}
-              disabled={acceptMutation.isPending}
+              disabled={acceptMutation.isPending || !!avisoDesatualizado}
+              title={avisoDesatualizado ? `Bloqueado: ${avisoDesatualizado.motivo}` : undefined}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-medium transition-all disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4" /> Aceitar
@@ -292,6 +323,7 @@ export default function ProposalEditor() {
             >
               <XCircle className="w-4 h-4" /> Recusar
             </button>
+            </div>
           </div>
         )}
         {proposal && proposal.status === 'accepted' && (

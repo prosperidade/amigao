@@ -363,9 +363,21 @@ def decide_field(
                 status_code=422,
                 detail="'tipo_observacao' é obrigatório na ação 'reclassificar'.",
             )
+        # Frente J (item 5, CONF-002): o consultor corrige O QUE o ato é —
+        # o vocabulário é o mesmo fechado do ADR-065 (`normalizar_tipo`
+        # aceita rótulo humano ou slug). Rótulo desconhecido vira
+        # `nao_classificado` só quando foi PEDIDO explicitamente; "xyz" não
+        # pode entrar calado como "não classificado".
         novo_tipo = normalizar_tipo(tipo_observacao)
-        if novo_tipo not in TIPOS or novo_tipo == "nao_classificado" and tipo_observacao != novo_tipo:
-            raise HTTPException(status_code=422, detail="Tipo de observação desconhecido.")
+        # "não classificado"/"nao_classificado" pedidos por escrito são o
+        # escape legítimo; "xyz" cai no mesmo slug por NÃO ter casa — e aí é
+        # erro do pedido, não classificação.
+        pediu_escape = "classificad" in str(tipo_observacao).lower()
+        if novo_tipo not in TIPOS or (novo_tipo == "nao_classificado" and not pediu_escape):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Tipo de observação desconhecido: {tipo_observacao!r}.",
+            )
         anterior = row.tipo_observacao
         atributos = dict(row.atributos or {})
         atributos.setdefault("tipo_sugerido", anterior)

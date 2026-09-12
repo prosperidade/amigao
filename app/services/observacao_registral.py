@@ -529,12 +529,20 @@ def ultimo_por_destino(observacoes: list[Observacao]) -> dict[tuple[str, str], O
     vigência derivada por regra (:func:`derivar_vigencia`) — as duas concordam
     na prática (o ato mais recente tende a ser o vigente), mas são mecanismos
     diferentes: este resolve "quem grava a coluna", aquele resolve "isto ainda
-    vale". :func:`rl_vigente` reaproveita este, não duplica.
+    vale". :func:`rl_vigente` responde a OUTRA pergunta (o que vale hoje).
+
+    Frente J (item 4): um ato que o próprio documento declara BAIXADO nunca
+    leva a coluna — `derivar_vigencia` roda antes (em `_linhas_de_
+    observacoes`), então `vigencia == baixado` já está resolvida aqui. Sem
+    isto, uma RL baixada por averbação posterior ainda seria a "última do
+    documento" e gravaria `averbacao_rl` como se valesse. Retificado NÃO é
+    excluído desta disputa: o ato retificado continua existindo (aditivo
+    amenda, não cancela — ADR-066), e é ele quem tem a coluna.
     """
     escolha: dict[tuple[str, str], Observacao] = {}
     for obs in observacoes:
         destino = destino_de(obs)
-        if destino is None:
+        if destino is None or obs.vigencia == VIGENCIA_BAIXADO:
             continue
         atual = escolha.get(destino)
         if atual is None or obs.ordem >= atual.ordem:
@@ -603,12 +611,21 @@ def derivar_vigencia(
         if obs.retificado_por:
             obs.atributos["vigencia"] = VIGENCIA_RETIFICADO
             continue
-        if obs.tipo in _TIPOS_COM_TERMO and ref is not None:
+        if obs.tipo in _TIPOS_COM_TERMO:
             termo_final = _ultima_data(obs.atributos.get("prazo"))
             if termo_final is not None:
-                obs.atributos["vigencia"] = (
-                    VIGENCIA_EXPIRADO if termo_final < ref else VIGENCIA_VIGENTE
-                )
+                # Frente J (item 7): sem data de referência do CASO não há
+                # como afirmar "vigente" nem "expirado" para um prazo com
+                # termo — cair no passo 3 ("tem data_ato ⇒ vigente") seria
+                # afirmar vigência que o relógio nenhum sustentou. O fato
+                # (`prazo`) fica salvo; quem consultar com a data do caso
+                # rederiva. `indeterminado` é a resposta honesta, não `vigente`.
+                if ref is None:
+                    obs.atributos["vigencia"] = VIGENCIA_INDETERMINADO
+                else:
+                    obs.atributos["vigencia"] = (
+                        VIGENCIA_EXPIRADO if termo_final < ref else VIGENCIA_VIGENTE
+                    )
                 continue
         if obs.atributos.get("data_ato"):
             obs.atributos["vigencia"] = VIGENCIA_VIGENTE
@@ -617,12 +634,19 @@ def derivar_vigencia(
 
 
 def rl_vigente(observacoes: list[Observacao]) -> Optional[Observacao]:
-    """A averbação de Reserva Legal vigente da matrícula.
+    """A averbação de Reserva Legal que VALE na data de referência.
 
-    Reaproveita :func:`ultimo_por_destino` — RL é uma COLUNA
-    (`matricula.averbacao_rl`), então "vigente" e "quem grava a coluna" são a
-    mesma pergunta para este tipo (ao contrário dos gravames, que são lista).
-    None quando a matrícula não tem RL averbada nos atos.
+    Frente J (item 4) — respeita `vigencia` (ADR-066), não só a ordem no
+    papel: RL `baixado`/`retificado`/`expirado` não é promovida. Entre as que
+    restam, a de maior `ordem` (a mais recente que o documento afirma). None
+    quando não há RL averbada OU quando todas foram baixadas — o "ato anterior
+    válido" só volta se ele mesmo não tiver sido baixado (ex.: AV.02 baixa a
+    AV.01, AV.03 baixa a AV.02 ⇒ nenhuma; AV.03 baixa só a AV.02 ⇒ AV.01).
+
+    Fronteira: `retificado` aqui significa "há aditivo posterior que a
+    amenda"; o ato amendado continua sendo o que grava a coluna
+    (:func:`ultimo_por_destino`), mas não é afirmado como a RL "vigente" sem
+    olhar o aditivo — quem lê decide.
     """
     candidatas = [
         obs for obs in observacoes

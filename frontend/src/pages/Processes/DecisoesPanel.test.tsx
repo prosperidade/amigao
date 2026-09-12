@@ -103,7 +103,10 @@ describe('DecisoesPanel — a Conferência por decisões (REC-001 + CONF-001)', 
     })];
     render(withQuery(<DecisoesPanel processId={23} />));
 
-    await screen.findByText('Reserva Legal');
+    // Frente J: o cartão divergente agora traz o select de tipos (CONF-002), e
+    // "Reserva Legal" também é uma <option> — o título é o que está no
+    // botão de expandir, não a opção do select.
+    expect(await screen.findByRole('button', { name: /Reserva Legal/ })).toBeInTheDocument();
     expect(screen.getByText(/Divergência/)).toBeInTheDocument();
     expect(screen.getByText('numero_matricula')).toBeInTheDocument(); // já expandida
   });
@@ -168,6 +171,43 @@ describe('DecisoesPanel — a Conferência por decisões (REC-001 + CONF-001)', 
       }),
     ));
     expect(screen.getAllByRole('button', { name: 'Escolher esta fonte' })).toHaveLength(2);
+  });
+
+  it('decisão CONCORDANTE com evidência tipada oferece "Editar tipo", não "Editar valor" (CONF-002)', async () => {
+    const user = userEvent.setup();
+    // gravames: os atos concordam por definição, mas o TIPO de um deles pode
+    // estar errado (o padrão do #23: valor certo, tipo errado).
+    decisoes = [decisaoComposicao({
+      chave: { entidade: 'matricula', identificador: '3673', aspecto: 'gravames' },
+      label: 'Gravames vigentes — matrícula 3673', concordancia: 'concordam',
+    })];
+    vi.mocked(api.post).mockResolvedValue({ data: decisoes[0] });
+    render(withQuery(<DecisoesPanel processId={23} />));
+
+    await user.click(await screen.findByRole('button', { name: /Gravames vigentes/ })); // expande
+    expect(screen.queryByRole('button', { name: 'Editar valor' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Escolher esta fonte' })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Tipo de observação decidido'), 'alienacao_fiduciaria');
+    await user.click(screen.getByRole('button', { name: 'Editar tipo' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/processes/23/staging-decisions/decidir',
+      expect.objectContaining({
+        aspecto: 'gravames', acao: 'reclassificar', staging_id: 1, tipo_observacao: 'alienacao_fiduciaria',
+      }),
+    ));
+  });
+
+  it('decisão sem evidência tipada e concordante não mostra o bloco de edição', async () => {
+    const user = userEvent.setup();
+    const base = decisaoComposicao({ concordancia: 'concordam' });
+    base.evidencias = base.evidencias.map((e: Record<string, unknown>) => ({ ...e, tipo_observacao: null }));
+    decisoes = [base];
+    render(withQuery(<DecisoesPanel processId={23} />));
+
+    await user.click(await screen.findByRole('button', { name: /Matrícula 3181/ }));
+    expect(screen.queryByLabelText('Tipo de observação decidido')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Editar valor' })).not.toBeInTheDocument();
   });
 
   it('sem decisões, o painel não renderiza nada (sem_agrupamento continua na tela antiga)', async () => {

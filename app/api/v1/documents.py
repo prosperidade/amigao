@@ -83,11 +83,24 @@ def _get_storage_service() -> StorageService:
 
 
 def _with_lifecycle(db: Session, document: Document) -> Document:
-    """Anexa a projeção DOC-001 usada pelo `DocumentResponse`; não persiste."""
+    """Anexa a projeção DOC-001 (ADR-068 + Frente J item 6) usada pelo
+    `DocumentResponse`; não persiste — é atributo transiente da instância."""
     from app.services.document_lifecycle import derive_document_status  # noqa: PLC0415
 
-    document.lifecycle_status = derive_document_status(db, document)
+    document.lifecycle_status = derive_document_status(db, document).value
     return document
+
+
+def _with_lifecycle_many(db: Session, documents: list[Document]) -> list[Document]:
+    """Mesma projeção para a listagem — UMA query de staging para a lista
+    inteira (`derive_document_statuses`), não uma por documento."""
+    from app.services.document_lifecycle import derive_document_statuses  # noqa: PLC0415
+
+    por_id = derive_document_statuses(db, documents)
+    for doc in documents:
+        status = por_id.get(doc.id)
+        doc.lifecycle_status = status.value if status is not None else None
+    return documents
 
 
 @router.get("/categories")
@@ -137,7 +150,7 @@ def list_documents(
     if access_context.is_client_portal:
         docs = [d for d in docs if not getattr(d, "is_internal", False)]
 
-    return [_with_lifecycle(db, doc) for doc in docs]
+    return _with_lifecycle_many(db, docs)
 
 
 @router.post("/upload-url", response_model=DocumentUploadUrlResponse)

@@ -141,3 +141,31 @@ já medidos e citados nesta própria spec/ADR-066 (492,9252 × 437,7632; 926,365
 3.181; 3.673; R.15) — não inventados, mas não re-verificados nesta rodada.
 Tabela campo × antes × depois (regressão das Frentes C-F) e a lista completa
 de decisões da ELODI/Valéria: `docs/trabalhos/reconciliacao_decisoes.md`.
+
+
+---
+
+## Adendo — Frente J (11/09/2026): "gravada" só quando TODOS os membros gravaram
+
+**Insumo:** `docs/auditoria/REAUDITORIA_CODEX_11-09.md`, item 2.
+**Branch:** `fix/fechamento-contrato-spec`.
+
+A seção "Estado da decisão, gravação" dizia que "gravada" era "a mesma
+leitura de `consolidated_at` que a tela já mostra por campo, só agregada por
+grupo". A agregação era `any(...)`: bastava UMA evidência gravada para a
+decisão inteira aparecer "Gravado na base". Medido no #23 reextraído
+(11/09): as 4 decisões `composicao` têm a certidão aceita em 08/09 e a linha
+nova do CAR pendente — com uma consolidação no meio, apareceriam como
+gravadas, escondendo exatamente a evidência nova.
+
+**Decisão (aditiva).** `Decisao.estado` ganha `parcialmente_gravada`:
+`gravada` exige `all(consolidated_at)`; `any` sem `all` é
+`parcialmente_gravada`; `decidida`/`pendente` como antes. A tela mostra o
+estado com selo âmbar próprio ("Parcialmente gravada"), nunca o selo verde.
+`process_indicators.progresso_conferencia` (ADR-068) **não** conta
+`parcialmente_gravada` como decidida nem como gravada — ainda há trabalho
+ali, e é isso que o estado existe para dizer.
+
+**Testes:** `tests/services/test_reconciliation_decisions.py::TestDecidirDecisaoAgrupada::test_estado_misto_e_parcialmente_gravada`,
+`tests/services/test_process_indicators.py::test_progresso_conferencia_parcialmente_gravada_conta_como_pendente`,
+`DecisoesPanel.test.tsx` ("estado misto aparece como parcialmente gravada").

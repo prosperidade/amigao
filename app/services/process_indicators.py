@@ -41,6 +41,12 @@ from sqlalchemy.orm import Session
 from app.models.extracted_field_staging import ExtractedFieldStaging
 from app.services.reconciliation_decisions import build_decisions
 
+# Frente J (item 2): `parcialmente_gravada` NÃO entra aqui de propósito — é
+# uma decisão com evidência nova ainda pendente ao lado de linha já gravada
+# (o caso do #23 reextraído: certidão aceita e gravada em 08/09, linha nova do
+# CAR pendente em 11/09). Contar como decidida esconderia exatamente o que o
+# estado existe para mostrar; conta como PENDENTE até a nova evidência ser
+# decidida, e como gravada só quando TODAS as linhas tiverem `consolidated_at`.
 _DECISAO_DECIDIDA = {"decidida", "gravada"}
 # Mesmo conjunto que `reconciliation_decisions._DECIDIDOS` — uma linha
 # `sem_agrupamento` usa o status bruto do staging, não o `estado` agregado

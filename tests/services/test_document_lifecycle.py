@@ -265,3 +265,66 @@ def test_registrar_transicao_idempotente_quando_nada_mudou(db_session):
     assert primeiro == DocumentLifecycleStatus.lido
     assert segundo is None
     assert len(historico_transicoes(db_session, doc)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Frente J (item 6) — projeção em lote = projeção unitária, uma query só
+# ---------------------------------------------------------------------------
+
+
+def test_derive_document_statuses_em_lote_bate_com_o_unitario(db_session):
+    """`GET /documents` (listagem) usa `derive_document_statuses` — uma query
+    de staging para a lista inteira. O resultado tem de ser IDÊNTICO ao
+    unitário em todos os degraus, inclusive nos negativos."""
+    from app.services.document_lifecycle import derive_document_statuses
+
+    tenant, proc, user = _seed(db_session)
+    texto = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+
+    recebido = _doc(db_session, tenant, proc)                      # sem leitura
+    erro = _doc(db_session, tenant, proc)                          # done sem texto legível
+    erro.ocr_status = OcrStatus.done
+    erro.extracted_text = "Documento digital assinado."
+    lido = _doc(db_session, tenant, proc)
+    lido.ocr_status = OcrStatus.done
+    lido.extracted_text = texto
+    classificado = _doc(db_session, tenant, proc)
+    classificado.extracted_text = texto
+    classificado.document_type = "matricula"
+    extraido = _doc(db_session, tenant, proc)
+    extraido.extracted_text = texto
+    extraido.document_type = "matricula"
+    conferido = _doc(db_session, tenant, proc)
+    conferido.extracted_text = texto
+    conferido.document_type = "car"
+    vencido = _doc(db_session, tenant, proc)
+    vencido.expires_at = datetime.now(UTC) - timedelta(days=1)
+    db_session.flush()
+    db_session.add_all([
+        ExtractedFieldStaging(
+            tenant_id=tenant.id, process_id=proc.id, document_id=extraido.id,
+            field_name="numero_matricula", field_value={"value": "3.181"},
+            status=ExtractedFieldStatus.pendente, target_entity="matricula",
+            target_field="numero_matricula",
+        ),
+        ExtractedFieldStaging(
+            tenant_id=tenant.id, process_id=proc.id, document_id=conferido.id,
+            field_name="numero_car", field_value={"value": "GO-1"},
+            status=ExtractedFieldStatus.aceito, target_entity="imovel",
+            target_field="numero_car",
+        ),
+    ])
+    db_session.flush()
+
+    docs = [recebido, erro, lido, classificado, extraido, conferido, vencido]
+    lote = derive_document_statuses(db_session, docs)
+
+    assert lote == {d.id: derive_document_status(db_session, d) for d in docs}
+    assert lote[recebido.id] == DocumentLifecycleStatus.recebido
+    assert lote[erro.id] == DocumentLifecycleStatus.erro_leitura
+    assert lote[lido.id] == DocumentLifecycleStatus.lido
+    assert lote[classificado.id] == DocumentLifecycleStatus.classificado
+    assert lote[extraido.id] == DocumentLifecycleStatus.extraido
+    assert lote[conferido.id] == DocumentLifecycleStatus.conferido
+    assert lote[vencido.id] == DocumentLifecycleStatus.desatualizado
+    assert derive_document_statuses(db_session, []) == {}

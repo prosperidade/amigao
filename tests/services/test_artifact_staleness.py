@@ -296,3 +296,39 @@ def test_proposta_sem_aceite_usa_criacao_como_corte(db_session):
 
     aviso = desatualizacao_proposta(db_session, proposal)
     assert aviso is not None
+
+
+def test_desde_e_o_marco_mais_antigo_entre_linha_nova_e_decisao_alterada(db_session):
+    """Frente J (item 1): o "desde" aponta o PRIMEIRO evento que invalidou —
+    uma linha antiga com `updated_at` recente não pode esconder uma linha
+    nova cujo `created_at` veio antes (ordenação por coluna fazia isso)."""
+    tenant, proc = _seed(db_session)
+    agora = datetime.now(UTC)
+    doc = _doc(db_session, tenant, proc, created_at=agora - timedelta(days=3))
+    diag = RegulatoryDiagnosis(
+        tenant_id=tenant.id, process_id=proc.id, content={}, version=1, validated_at=agora,
+    )
+    db_session.add(diag)
+    db_session.flush()
+
+    antiga = ExtractedFieldStaging(
+        tenant_id=tenant.id, process_id=proc.id, document_id=doc.id,
+        field_name="cartorio", field_value={"value": "1º RI"},
+        status=ExtractedFieldStatus.aceito, target_entity="matricula",
+        target_field="cartorio", created_at=agora - timedelta(days=3),
+        updated_at=agora + timedelta(hours=2),
+    )
+    nova = ExtractedFieldStaging(
+        tenant_id=tenant.id, process_id=proc.id, document_id=doc.id,
+        field_name="numero_matricula", field_value={"value": "3.181"},
+        status=ExtractedFieldStatus.pendente, target_entity="matricula",
+        target_field="numero_matricula", created_at=agora + timedelta(minutes=5),
+    )
+    db_session.add_all([antiga, nova])
+    db_session.flush()
+
+    aviso = desatualizacao_diagnostico(db_session, diag)
+    assert aviso is not None
+    assert aviso.tipo == "decisao_alterada"
+    assert aviso.desde == nova.created_at
+    assert "nova evidência" in aviso.motivo and "numero_matricula" in aviso.motivo
