@@ -1,24 +1,20 @@
 /**
- * Gate E2E da Frente J — o gesto humano, na UI real, contra a API real.
+ * Gate E2E da Frente J — o GESTO HUMANO, na UI real, contra a API real.
  *
- * Pré-condição (fora deste arquivo): `tests/e2e/frente_j/setup_db.py` rodou
- * (banco descartável + seed), a API e o worker estão de pé apontando para
- * ele, o Vite está servindo o painel, e as variáveis abaixo estão no ambiente:
+ * A camada de payloads (`tests/e2e/frente_j/gate_api.py` + `gate_complemento.py`)
+ * já atravessa o percurso inteiro. O que SÓ a tela prova é o que está aqui:
+ * que os controles existem onde a consultora procura, que o clique faz o que
+ * diz, e que o estado sobrevive a F5 e a logout/login com os MESMOS números.
  *
+ * Trabalha sobre o processo que o gate da API já populou (6 documentos da
+ * ELODI, texto real de produção, extração real) — repetir a extração aqui
+ * custaria minutos e não provaria nada a mais.
+ *
+ * Pré-condição: a pilha do gate de pé e as variáveis:
  *   E2E_SEED_JSON   caminho do JSON impresso por setup_db.py
- *   E2E_PDFS_DIR    pasta com os 6 PDFs (texto real dos docs 546-551)
  *   E2E_API_URL     ex. http://127.0.0.1:8000
- *   E2E_PRINTS_DIR  onde salvar os prints (colados no relatório)
- *
- * O que este spec prova (a parte que só a UI prova — o `gate_api.py` cobre a
- * mesma sequência por payload):
- *   1. login → processo → aba Documentos → upload dos 6 PDFs pelo input real;
- *   2. extração termina → aba Conferência mostra decisões;
- *   3. decidir 3 na tela (uma com "Editar tipo"), "Gravar na base";
- *   4. recarregar (F5) → mesmas decisões/estados; logout/login → idem;
- *   5. proposta desatualizada: banner na tela, botão "Aceitar" bloqueado e,
- *      forçando o clique via API, o 422 vira toast com a razão.
- * Prints de cada uma das seis abas, antes e depois, em E2E_PRINTS_DIR.
+ *   E2E_PDFS_DIR    pasta com os PDFs (para o upload pela tela)
+ *   E2E_PRINTS_DIR  onde salvar os prints colados no relatório
  */
 import { expect, test, type Page } from '@playwright/test';
 import fs from 'node:fs';
@@ -27,19 +23,11 @@ import path from 'node:path';
 const seed = JSON.parse(fs.readFileSync(process.env.E2E_SEED_JSON!, 'utf-8')) as {
   email: string; password: string; process_id: number; client_id: number; property_id: number;
 };
-const PDFS = process.env.E2E_PDFS_DIR!;
 const API = (process.env.E2E_API_URL ?? 'http://127.0.0.1:8000') + '/api/v1';
 const PRINTS = process.env.E2E_PRINTS_DIR ?? path.join('e2e-results', 'prints');
+const PDFS = process.env.E2E_PDFS_DIR ?? '';
 fs.mkdirSync(PRINTS, { recursive: true });
 
-const DOCS: Array<[string, string]> = [
-  ['CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf', 'car'],
-  ["B1 - M3.181 - FAZ. R. Olhos d'agua - Elodi 2013 926ha.pdf", 'matricula'],
-  ['B2 - M3.313 - FAZ. NH 2 - Elodi 2014 725ha.pdf', 'matricula'],
-  ['B3 - M3.673 - FAZ Posse G4 - Elodi 2016 212ha.pdf', 'matricula'],
-  ['B4 - M4.387 - FAZ Posse G3 - Elodi 2020 316ha.pdf', 'matricula'],
-  ['CNH-e.pdf.pdf', 'doc_pessoal'],
-];
 const TABS = ['Visão geral', 'Documentos', 'Conferência', 'Dados', 'Ações', 'Saídas'];
 
 async function login(page: Page) {
@@ -55,25 +43,15 @@ async function logout(page: Page) {
   await page.waitForURL(/\/login/);
 }
 
-async function abrirAba(page: Page, aba: string) {
-  await page.getByRole('button', { name: aba, exact: true }).first().click();
-}
-
 async function print(page: Page, nome: string) {
   await page.screenshot({ path: path.join(PRINTS, `${nome}.png`), fullPage: true });
 }
 
-async function token(page: Page): Promise<string> {
-  // O painel guarda a sessão no zustand/persist (`auth-storage`).
-  const raw = await page.evaluate(() => localStorage.getItem('auth-storage'));
-  const parsed = raw ? JSON.parse(raw) : null;
-  return parsed?.state?.token ?? '';
-}
-
 async function api<T>(page: Page, method: 'GET' | 'POST' | 'PATCH', p: string, body?: unknown): Promise<{ status: number; json: T }> {
-  const t = await token(page);
+  const raw = await page.evaluate(() => localStorage.getItem('auth-storage'));
+  const token = raw ? (JSON.parse(raw)?.state?.token ?? '') : '';
   const r = await page.request.fetch(API + p, {
-    method, data: body, headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    method, data: body, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   });
   let json: unknown = null;
   try { json = await r.json(); } catch { json = null; }
@@ -83,158 +61,172 @@ async function api<T>(page: Page, method: 'GET' | 'POST' | 'PATCH', p: string, b
 interface Decisao {
   chave: { entidade: string; identificador: string; aspecto: string };
   label: string; estado: string; concordancia: string;
-  evidencias: Array<{ staging_id: number | null; tipo_observacao: string | null; campo: string | null }>;
+  evidencias: Array<{ staging_id: number | null; tipo_observacao: string | null }>;
 }
 interface Reconciliacao { decisoes: Decisao[]; sem_agrupamento: unknown[]; total_staging: number }
 
-function resumo(rec: Reconciliacao) {
+/** Os SEIS números, cada um rotulado com a pergunta que responde. */
+async function seisNumeros(page: Page) {
+  const pid = seed.process_id;
+  const rec = (await api<Reconciliacao>(page, 'GET', `/processes/${pid}/staging-decisions`)).json;
+  const prog = (await api<{ checklist_documental: unknown; conferencia: Record<string, number> }>(
+    page, 'GET', `/processes/${pid}/progresso`)).json;
+  const checklist = (await api<{ completion_pct?: number; total?: number }>(page, 'GET', `/processes/${pid}/checklist`)).json;
+  const dossier = (await api<{ checklist_summary?: unknown }>(page, 'GET', `/processes/${pid}/dossier`)).json;
+  const docs = (await api<Array<{ id: number; lifecycle_status: string }>>(page, 'GET', `/documents/?process_id=${pid}`)).json;
+  const staging = (await api<unknown[]>(page, 'GET', `/processes/${pid}/staging-fields`)).json;
   return {
-    total_staging: rec.total_staging,
-    sem_agrupamento: rec.sem_agrupamento.length,
-    decisoes: rec.decisoes.map(d => `${d.chave.entidade}:${d.chave.identificador}:${d.chave.aspecto}=${d.estado}`).sort(),
+    'quantos documentos entraram (checklist)': JSON.stringify(prog.checklist_documental),
+    'quanto da Conferência está resolvido (decisões)': JSON.stringify(prog.conferencia),
+    'quantas decisões a Conferência agrupa': `${rec.decisoes.length} decisões + ${rec.sem_agrupamento.length} sem agrupamento = ${rec.decisoes.length + rec.sem_agrupamento.length}`,
+    'quantas linhas de staging existem': `${rec.total_staging} (staging-fields: ${staging.length})`,
+    'estado de cada documento (DOC-001)': JSON.stringify(docs.map(d => d.lifecycle_status).sort()),
+    'estado de cada decisão': JSON.stringify(rec.decisoes.map(d => d.estado).sort()),
+    _checklist_bruto: JSON.stringify(checklist).slice(0, 200),
+    _dossier_tem_resumo: dossier?.checklist_summary != null,
   };
 }
 
-test.describe.serial('Frente J — tela → decisão → consolidação → recarga → nova sessão', () => {
-  test('1. login, upload dos 6 docs pela UI, extração real', async ({ page }) => {
-    await login(page);
-    await page.goto(`/processes/${seed.process_id}?tab=documents`);
-    await expect(page.getByRole('button', { name: 'Documentos', exact: true }).first()).toBeVisible();
-
-    for (const [arquivo, tipo] of DOCS) {
-      await page.locator('select').first().selectOption(tipo);
-      await page.locator('input[type="file"]').first().setInputFiles(path.join(PDFS, arquivo));
-      await expect(page.getByText(arquivo, { exact: false }).first()).toBeVisible({ timeout: 60_000 });
-    }
-    await print(page, '01_documentos_enviados');
-
-    // A extração é real (worker + LLM). Espera até nenhum doc estar em
-    // pending/processing e os 5 legíveis terem staging.
-    await expect.poll(async () => {
-      const docs = (await api<Array<{ id: number; ocr_status: string; tem_texto: boolean }>>(page, 'GET', `/documents/?process_id=${seed.process_id}`)).json;
-      const staging = (await api<Array<{ document_id: number }>>(page, 'GET', `/processes/${seed.process_id}/staging-fields`)).json;
-      const com = new Set(staging.map(s => s.document_id));
-      const pendentes = docs.filter(d => ['pending', 'processing'].includes(d.ocr_status) || (d.tem_texto && !com.has(d.id)));
-      return pendentes.length;
-    }, { timeout: 25 * 60 * 1000, intervals: [10_000] }).toBe(0);
-
-    await page.reload();
-    await print(page, '02_documentos_extraidos');
-  });
-
-  test('2. Conferência mostra decisões; decidir 3 (uma com edição de tipo); gravar', async ({ page }) => {
+test.describe.serial('Frente J — o gesto humano na Conferência', () => {
+  test('1. a Conferência mostra as decisões na tela', async ({ page }) => {
     await login(page);
     await page.goto(`/processes/${seed.process_id}?tab=alertas`);
-    await expect(page.getByRole('button', { name: /Gravar na base/ })).toBeVisible();
-    const antes = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
-    fs.writeFileSync(path.join(PRINTS, 'conferencia_antes.json'), JSON.stringify(resumo(antes), null, 1));
-    expect(antes.decisoes.length).toBeGreaterThan(0);
-    await print(page, '03_conferencia_antes');
+    await expect(page.getByRole('button', { name: /Gravar na base/ })).toBeVisible({ timeout: 60_000 });
 
-    // (1) aceitar a composição de uma matrícula (REC-001 literal)
-    const comp = antes.decisoes.find(d => d.chave.aspecto === 'composicao' && d.estado === 'pendente')!;
-    const cardComp = page.locator('div', { has: page.getByRole('button', { name: comp.label }) }).last();
-    await cardComp.getByRole('button', { name: /^Aceitar/ }).first().click();
-    await expect(page.getByText('Decidida — aguardando gravação').first()).toBeVisible();
-
-    // (2) EDIÇÃO DE TIPO numa decisão de gravames (CONF-002)
-    const grav = antes.decisoes.find(d => d.chave.aspecto === 'gravames' && d.estado === 'pendente' && d.evidencias.some(e => e.tipo_observacao))!;
-    const cardGrav = page.locator('div', { has: page.getByRole('button', { name: grav.label }) }).last();
-    await cardGrav.getByRole('button', { name: grav.label }).click(); // expande
-    const ev = grav.evidencias.find(e => e.tipo_observacao)!;
-    const novoTipo = ev.tipo_observacao === 'alienacao_fiduciaria' ? 'hipoteca' : 'alienacao_fiduciaria';
-    await cardGrav.getByLabel('Evidência a editar').selectOption(String(ev.staging_id));
-    await cardGrav.getByLabel('Tipo de observação decidido').selectOption(novoTipo);
-    await cardGrav.getByRole('button', { name: 'Editar tipo' }).click();
-    await expect.poll(async () => {
-      const r = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
-      const d = r.decisoes.find(x => x.chave.identificador === grav.chave.identificador && x.chave.aspecto === 'gravames');
-      return d?.evidencias.find(e => e.staging_id === ev.staging_id)?.tipo_observacao;
-    }).toBe(novoTipo);
-    await cardGrav.getByRole('button', { name: /^Aceitar/ }).first().click();
-
-    // (3) uma terceira decisão (área/CAR/RL)
-    const outra = antes.decisoes.find(d => ['area', 'car', 'reserva_legal'].includes(d.chave.aspecto) && d.estado === 'pendente')!;
-    const cardOutra = page.locator('div', { has: page.getByRole('button', { name: outra.label }) }).last();
-    await cardOutra.getByRole('button', { name: /^Aceitar/ }).first().click();
-    await print(page, '04_conferencia_decididas');
-
-    await page.getByRole('button', { name: /Gravar na base/ }).click();
-    await expect(page.getByText('Gravado na base').first()).toBeVisible({ timeout: 60_000 });
-    await print(page, '05_conferencia_gravada');
-    const depois = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
-    fs.writeFileSync(path.join(PRINTS, 'conferencia_depois.json'), JSON.stringify(resumo(depois), null, 1));
-    expect(depois.decisoes.filter(d => d.estado === 'gravada').length).toBeGreaterThanOrEqual(3);
+    const rec = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
+    expect(rec.decisoes.length).toBeGreaterThan(0);
+    // cada decisão tem um cartão com o seu rótulo na tela
+    for (const d of rec.decisoes.slice(0, 5)) {
+      await expect(page.getByRole('button', { name: d.label, exact: true }).first()).toBeVisible();
+    }
+    fs.writeFileSync(path.join(PRINTS, 'ui_conferencia.json'), JSON.stringify({
+      decisoes: rec.decisoes.length, sem_agrupamento: rec.sem_agrupamento.length,
+      total_staging: rec.total_staging,
+      soma: `${rec.decisoes.length} + ${rec.sem_agrupamento.length} = ${rec.decisoes.length + rec.sem_agrupamento.length}`,
+    }, null, 1));
+    await print(page, 'ui_01_conferencia');
   });
 
-  test('3. recarregar e sessão nova mostram os mesmos números nas seis telas', async ({ page }) => {
+  test('2. decidir pela tela: aceitar e EDITAR TIPO, depois gravar na base', async ({ page }) => {
     await login(page);
-    await page.goto(`/processes/${seed.process_id}`);
-    const base = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
-    const progresso = (await api<unknown>(page, 'GET', `/processes/${seed.process_id}/progresso`)).json;
-    for (const aba of TABS) { await abrirAba(page, aba); await print(page, `06_${aba}`); }
+    await page.goto(`/processes/${seed.process_id}?tab=alertas`);
+    await expect(page.getByRole('button', { name: /Gravar na base/ })).toBeVisible({ timeout: 60_000 });
+    const antes = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
+
+    // (a) aceitar uma decisão pendente pelo cartão
+    const pend = antes.decisoes.find(d => d.estado === 'pendente')!;
+    const cardPend = page.getByTestId(`decisao-${pend.chave.entidade}-${pend.chave.identificador}-${pend.chave.aspecto}`);
+    await cardPend.getByRole('button', { name: /Aceitar proposta/ }).first().click();
+    await expect.poll(async () => {
+      const r = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
+      return r.decisoes.find(d => d.label === pend.label)?.estado;
+    }).not.toBe('pendente');
+
+    // (b) EDITAR TIPO numa decisão com evidência tipada (CONF-002, item 5)
+    const tipada = antes.decisoes.find(d => d.estado === 'pendente' && d.chave.aspecto === 'gravames'
+      && d.evidencias.some(e => e.tipo_observacao))!;
+    const cardTipo = page.getByTestId(`decisao-${tipada.chave.entidade}-${tipada.chave.identificador}-${tipada.chave.aspecto}`);
+    await cardTipo.getByRole('button', { name: tipada.label, exact: true }).click(); // expande
+    const ev = tipada.evidencias.find(e => e.tipo_observacao)!;
+    const novoTipo = ev.tipo_observacao === 'alienacao_fiduciaria' ? 'hipoteca' : 'alienacao_fiduciaria';
+    await cardTipo.getByLabel('Evidência a editar').selectOption(String(ev.staging_id));
+    await cardTipo.getByLabel('Tipo de observação decidido').selectOption(novoTipo);
+    await print(page, 'ui_02_editar_tipo_antes');
+    await cardTipo.getByRole('button', { name: 'Editar tipo' }).click();
+    await expect.poll(async () => {
+      const r = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
+      const d = r.decisoes.find(x => x.label === tipada.label);
+      return d?.evidencias.find(e => e.staging_id === ev.staging_id)?.tipo_observacao;
+    }).toBe(novoTipo);
+    // o tipo ORIGINAL fica preservado na linha
+    const linha = (await api<Array<{ id: number; atributos: Record<string, unknown> | null }>>(
+      page, 'GET', `/processes/${seed.process_id}/staging-fields`)).json
+      .find(s => s.id === ev.staging_id)!;
+    expect(linha.atributos?.tipo_sugerido).toBe(ev.tipo_observacao);
+    await print(page, 'ui_03_editar_tipo_depois');
+
+    // (c) gravar na base
+    await page.getByRole('button', { name: /Gravar na base/ }).click();
+    await expect.poll(async () => {
+      const r = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
+      return r.decisoes.filter(d => d.estado === 'gravada' || d.estado === 'parcialmente_gravada').length;
+    }, { timeout: 120_000 }).toBeGreaterThan(0);
+    await print(page, 'ui_04_gravado');
+  });
+
+  test('3. F5 e logout/login mantêm decisões, estados e os seis números', async ({ page }) => {
+    await login(page);
+    await page.goto(`/processes/${seed.process_id}?tab=alertas`);
+    await expect(page.getByRole('button', { name: /Gravar na base/ })).toBeVisible({ timeout: 60_000 });
+    const base = await seisNumeros(page);
+    for (const aba of TABS) {
+      await page.getByRole('button', { name: aba, exact: true }).first().click();
+      await print(page, `ui_05_aba_${aba.replace(/\s/g, '_')}`);
+    }
 
     await page.reload();
-    const recarregado = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
-    expect(resumo(recarregado)).toEqual(resumo(base));
-    expect((await api<unknown>(page, 'GET', `/processes/${seed.process_id}/progresso`)).json).toEqual(progresso);
-    for (const aba of TABS) { await abrirAba(page, aba); await print(page, `07_recarregado_${aba}`); }
+    await expect(page.getByRole('button', { name: 'Conferência', exact: true }).first()).toBeVisible();
+    const recarregado = await seisNumeros(page);
+    expect(recarregado).toEqual(base);
+    await print(page, 'ui_06_recarregado');
 
     await logout(page);
     await login(page);
-    await page.goto(`/processes/${seed.process_id}`);
-    const novaSessao = (await api<Reconciliacao>(page, 'GET', `/processes/${seed.process_id}/staging-decisions`)).json;
-    expect(resumo(novaSessao)).toEqual(resumo(base));
-    expect((await api<unknown>(page, 'GET', `/processes/${seed.process_id}/progresso`)).json).toEqual(progresso);
-    for (const aba of TABS) { await abrirAba(page, aba); await print(page, `08_sessao_nova_${aba}`); }
-    fs.writeFileSync(path.join(PRINTS, 'seis_telas_comparacao.json'), JSON.stringify({
-      base: resumo(base), recarregado: resumo(recarregado), nova_sessao: resumo(novaSessao), progresso,
-    }, null, 1));
+    await page.goto(`/processes/${seed.process_id}?tab=alertas`);
+    await expect(page.getByRole('button', { name: /Gravar na base/ })).toBeVisible({ timeout: 60_000 });
+    const novaSessao = await seisNumeros(page);
+    expect(novaSessao).toEqual(base);
+    for (const aba of TABS) {
+      await page.getByRole('button', { name: aba, exact: true }).first().click();
+      await print(page, `ui_07_sessao_nova_${aba.replace(/\s/g, '_')}`);
+    }
+    fs.writeFileSync(path.join(PRINTS, 'ui_seis_numeros.json'),
+      JSON.stringify({ base, recarregado, nova_sessao: novaSessao }, null, 1));
   });
 
-  test('4. documento novo → proposta desatualizada: banner, botão bloqueado, 422 com razão', async ({ page }) => {
+  test('4. proposta desatualizada: banner na tela e botão Aceitar bloqueado', async ({ page }) => {
     await login(page);
-    // diagnóstico validado + proposta enviada (o chão que o doc novo invalida)
-    const diag = await api<{ version: number }>(page, 'POST', `/processes/${seed.process_id}/diagnoses`, {
-      content: { content: 'Diagnóstico preliminar — gate E2E Frente J (UI).', sources: [{ type: 'legislation', ref: 'gate-e2e' }],
-                 hipoteses: ['CAR pendente'], lacunas: [], riscos: [], checklist_documental: ['Matrícula'] },
-    });
-    expect(diag.status).toBe(201);
-    expect((await api(page, 'PATCH', `/processes/${seed.process_id}/diagnoses/${diag.json.version}/validate`)).status).toBe(200);
-    const prop = await api<{ id: number }>(page, 'POST', '/proposals/', {
-      client_id: seed.client_id, process_id: seed.process_id, title: 'Proposta — gate E2E (UI)',
-      scope_items: [{ description: 'Retificação do CAR', unit: 'un', qty: 1, unit_price: 1000, total: 1000 }],
-      total_value: 1000, validity_days: 30,
-    });
-    expect(prop.status).toBe(201);
-    expect((await api(page, 'POST', `/proposals/${prop.json.id}/send`)).status).toBe(200);
+    const props = (await api<Array<{ id: number; status: string }>>(page, 'GET', `/proposals/?process_id=${seed.process_id}`)).json;
+    const enviada = props.find(p => p.status === 'sent');
+    test.skip(!enviada, 'nenhuma proposta enviada no processo (o gate da API cria uma)');
 
-    await page.goto(`/proposals/${prop.json.id}`);
-    await expect(page.getByRole('button', { name: /Aceitar/ })).toBeEnabled();
-    await print(page, '09_proposta_enviada_sem_aviso');
-
-    // documento novo pela UI
-    await page.goto(`/processes/${seed.process_id}?tab=documents`);
-    await page.locator('select').first().selectOption('car');
-    await page.locator('input[type="file"]').first().setInputFiles(path.join(PDFS, DOCS[0][0]));
-    await expect(page.getByText(DOCS[0][0], { exact: false }).nth(1)).toBeVisible({ timeout: 60_000 });
-
-    // diagnóstico e proposta avisam
-    await page.goto(`/processes/${seed.process_id}?tab=diagnosis`);
-    await expect(page.getByText(/pode estar desatualizado/)).toBeVisible();
-    await print(page, '10_diagnostico_desatualizado');
-    await page.goto(`/proposals/${prop.json.id}`);
-    await expect(page.getByText(/Proposta desatualizada/)).toBeVisible();
+    await page.goto(`/proposals/${enviada!.id}`);
+    await expect(page.getByText(/Proposta desatualizada/)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('button', { name: /Aceitar/ })).toBeDisabled();
-    await print(page, '11_proposta_desatualizada_bloqueada');
+    await print(page, 'ui_08_proposta_bloqueada');
 
-    // forçando pela API (o que um clique sem o guard faria): 422 com a razão
-    const rec = await api<{ detail: string }>(page, 'POST', `/proposals/${prop.json.id}/accept`);
+    // e pela API o bloqueio é real, não só visual
+    const rec = await api<{ detail: string }>(page, 'POST', `/proposals/${enviada!.id}/accept`);
     expect(rec.status).toBe(422);
     expect(rec.json.detail).toContain('desatualizada');
-    fs.writeFileSync(path.join(PRINTS, 'aceite_recusado.json'), JSON.stringify(rec, null, 1));
-    const final = await api<{ status: string; aviso_desatualizado: unknown }>(page, 'GET', `/proposals/${prop.json.id}`);
-    expect(final.json.status).toBe('sent');
-    expect(final.json.aviso_desatualizado).toBeTruthy();
+    fs.writeFileSync(path.join(PRINTS, 'ui_aceite_recusado.json'), JSON.stringify(rec, null, 1));
+    const final = (await api<{ status: string }>(page, 'GET', `/proposals/${enviada!.id}`)).json;
+    expect(final.status).toBe('sent');
+  });
+
+  test('5. upload pela tela: o documento entra e mostra o estado (DOC-001)', async ({ page }) => {
+    test.skip(!PDFS, 'E2E_PDFS_DIR não informado');
+    await login(page);
+    await page.goto(`/processes/${seed.process_id}?tab=documents`);
+    const arquivo = 'CNH-e.pdf.pdf';
+    const antes = (await api<unknown[]>(page, 'GET', `/documents/?process_id=${seed.process_id}`)).json.length;
+
+    await page.locator('select').first().selectOption('doc_pessoal');
+    await page.locator('input[type="file"]').first().setInputFiles(path.join(PDFS, arquivo));
+    await expect.poll(async () =>
+      (await api<unknown[]>(page, 'GET', `/documents/?process_id=${seed.process_id}`)).json.length,
+    { timeout: 60_000 }).toBe(antes + 1);
+
+    // o CNH-e tem 444 chars de boilerplate de assinatura digital: a projeção
+    // NÃO pode dizer "lido" (item 6).
+    await expect.poll(async () => {
+      const docs = (await api<Array<{ id: number; original_file_name: string; ocr_status: string; lifecycle_status: string }>>(
+        page, 'GET', `/documents/?process_id=${seed.process_id}`)).json;
+      const novo = docs.filter(d => d.original_file_name === arquivo).pop();
+      return novo?.ocr_status === 'done' ? novo?.lifecycle_status : 'aguardando';
+    }, { timeout: 180_000 }).toBe('erro_leitura');
+    await page.reload();
+    await expect(page.getByText('Erro de leitura').first()).toBeVisible({ timeout: 30_000 });
+    await print(page, 'ui_09_documento_erro_leitura');
   });
 });

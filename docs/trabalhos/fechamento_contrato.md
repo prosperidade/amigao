@@ -120,36 +120,44 @@ quando pedido por escrito.
 
 ## Regressão: gates de C–H
 
-**Sem banco (rodado em 11/09, `python -m pytest` no venv do host — 227 testes,
-0 falhas):**
+Rodado em 12/09/2026, na máquina do André, com Docker de pé (a virtualização
+foi ligada no reboot).
 
-| gate | módulo | resultado |
+| gate | como | resultado |
 |---|---|---|
-| C (contenção da entrada, ADR-064) | `test_contencao_entrada.py` | verde |
-| D (fiação da entrada, PR #155) | `test_fiacao_entrada.py` | verde |
-| E/F (tipo + temporalidade, ADR-065/066) | `test_observacao_registral.py` | **53/53** (46 anteriores + 7 desta frente) |
-| matriz / áreas / janela / geo | `test_inconsistency_matrix.py`, `test_parse_area_br.py`, `test_property_audit.py`, `test_extraction_window.py`, `test_geo_files.py` | verde |
-| frontend (suíte inteira) | `npm test` — 26 arquivos | **167/167** |
-| frontend | `npx tsc --noEmit`, `npx eslint --max-warnings=0 .` | verde |
-| spec do gate E2E | `npx tsc --noEmit -p tsconfig.e2e.json` | verde |
+| **suíte completa do backend** | `pytest tests/` com Testcontainers (Postgres + PostGIS + pgvector) | **1975 passed, 0 failed** (16m42s) |
+| C — contenção da entrada (ADR-064) | `test_contencao_entrada.py` | verde (dentro da suíte) |
+| D — fiação da entrada (PR #155) | `test_fiacao_entrada.py` | verde |
+| E/F — tipo + temporalidade (ADR-065/066) | `test_observacao_registral.py` | verde — 53 casos (46 anteriores + 7 desta frente) |
+| G — decisões (ADR-067) | `test_reconciliation_decisions.py`, `test_staging_decisions.py` | verde |
+| H — estado e invalidação (ADR-068) | `test_document_lifecycle.py`, `test_artifact_staleness.py`, `test_process_indicators.py` | verde |
+| frontend | `npm test` (26 arquivos) | **167 passed** |
+| frontend | `npm run build` (`tsc -b` + vite) — **o gate real do CI** | verde |
+| spec do gate E2E | `tsc --noEmit -p tsconfig.e2e.json` | verde |
 | backend | `ruff check app/ tests/` | verde |
 
-**Com banco (Testcontainers) — _a preencher_:** `test_reconciliation_decisions.py`,
-`test_staging_decisions.py`, `test_document_lifecycle.py`,
-`test_artifact_staleness.py`, `test_process_indicators.py`,
-`test_proposal_rota_s5a.py` e a suíte completa. Docker Desktop exigia
-virtualização ligada nesta máquina em 11/09; o André reiniciou para ligá-la.
+> **Armadilha registrada:** `npx tsc --noEmit` no `tsconfig.json` da raiz do
+> frontend **não checa nada** — é um solution file (só `references`, sem
+> `include`). O typecheck que vale é `npm run build` (`tsc -b`). Foi assim que
+> um erro de tipo no teste novo passou local e quebrou o CI.
 
 ## Gate E2E — ambiente autenticado
 
-Harness em `tests/e2e/frente_j/` (README com os passos) e
-`frontend/e2e/frente-j.spec.ts`. Execução e resultado (prints + payloads):
-**seção a preencher na execução** — ver "Execução do gate", abaixo.
+**Executado em 12/09/2026.** Relatório completo, com a spec da Isis colada ao
+lado de cada resultado, os payloads e os prints:
+[`fechamento_contrato/GATE_E2E.md`](./fechamento_contrato/GATE_E2E.md).
 
-### Execução do gate
+Resumo dos três percursos:
 
-_(preenchido quando a pilha subir — Docker Desktop exigia virtualização
-ligada nesta máquina em 11/09.)_
+| percurso | o que provou |
+|---|---|
+| 1 — fluxo da consultora | 6 documentos reais → extração real (194 s, LLM real) → **115 linhas = 20 decisões (51 linhas) + 64 sem agrupamento** → 3 decisões, uma com edição de tipo → escolher fonte numa divergência crítica sem fonte autoritativa (**13 irmãos intactos**) → consolidar → F5 → logout/login: **diff vazio nas seis telas** |
+| 2 — invalidação | documento novo ⇒ diagnóstico e proposta desatualizados com razão e data; **reextração com texto cacheado** (161,8 s, `ocr_rodou_de_novo=false`, 31 linhas novas) ⇒ diagnóstico validado vira "nova evidência"; aceite da proposta ⇒ **422 com a razão**, proposta segue `sent` |
+| 3 — itens 4/6/7 | RL baixada não é promovida nem grava a coluna (vence o ato anterior válido); CNH-e `done` mas **`erro_leitura`**, KML `not_required` mas **`classificado`**; sucessão/formal de partilha levam `titular_atual` ao herdeiro (sem o item 7, apontaria o falecido) |
+
+Não provado, com a razão dita por inteiro (retrocesso automático de etapa,
+"declarado inexistente", `checklist_documental` do processo do gate, e um
+achado lateral no `/auth/me`): seção final do `GATE_E2E.md`.
 
 ## Relatório de reconciliação do #23 — completo
 

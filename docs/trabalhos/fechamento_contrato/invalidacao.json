@@ -1,0 +1,41 @@
+{
+ "documento_novo": {
+  "id": 7,
+  "process_id": 1,
+  "tenant_id": 1,
+  "filename": "CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf",
+  "original_file_name": "CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf",
+  "content_type": "application/pdf",
+  "storage_key": "tenant_1/process_1/78897409-fef8-4743-a979-bcb83241ccf0.pdf",
+  "file_size_bytes": 37503,
+  "document_type": "car",
+  "document_category": "ambientais",
+  "ocr_status": "pending",
+  "ocr_error": null,
+  "tem_texto": false,
+  "is_internal": false,
+  "extraction_status": null,
+  "review_required": false,
+  "lifecycle_status": "recebido",
+  "created_at": "2026-09-12T03:28:25.972353Z",
+  "updated_at": null
+ },
+ "aviso_diagnostico": {
+  "tipo": "documento_novo",
+  "motivo": "documento \"CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf\" entrou no processo depois desta versão",
+  "desde": "2026-09-12T03:28:25.972353Z"
+ },
+ "aviso_rota": "sem rota no processo",
+ "aviso_proposta": {
+  "tipo": "documento_novo",
+  "motivo": "documento \"CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf\" entrou no processo depois desta versão",
+  "desde": "2026-09-12T03:28:25.972353Z"
+ },
+ "aceite": {
+  "status": 422,
+  "detail": {
+   "detail": "Proposta desatualizada: documento \"CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf\" entrou no processo depois desta versão. Aceitar agora fecharia contrato sobre escopo vencido. Recuse esta proposta e gere a nova versão (Recusar → Nova versão), ou reveja o processo antes."
+  }
+ },
+ "status_proposta_depois": "sent"
+}

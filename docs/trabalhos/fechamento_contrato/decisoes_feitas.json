@@ -1,0 +1,54 @@
+[
+ {
+  "decisao": {
+   "entidade": "matricula",
+   "identificador": "3181",
+   "aspecto": "composicao"
+  },
+  "acao": "aceitar",
+  "estado_depois": "decidida"
+ },
+ {
+  "decisao": {
+   "entidade": "imovel",
+   "identificador": "1",
+   "aspecto": "car"
+  },
+  "acao": "aceitar",
+  "estado_depois": "decidida"
+ },
+ {
+  "decisao": {
+   "entidade": "matricula",
+   "identificador": "3181",
+   "aspecto": "gravames"
+  },
+  "acao": "reclassificar",
+  "staging_id": 25,
+  "tipo_sugerido": "hipoteca",
+  "tipo_decidido": "alienacao_fiduciaria",
+  "evidencia_depois": {
+   "staging_id": 25,
+   "documento_id": 2,
+   "documento_tipo": "matricula",
+   "campo": "R-06",
+   "valor_bruto": "R-06 · Alienação fiduciária · R$ 349.806,04 · 15/03/2021 · 11/05/2016 · baixado por AV.08",
+   "valor_normalizado": "baixado",
+   "unidade": null,
+   "vigencia": "baixado",
+   "tipo_observacao": "alienacao_fiduciaria",
+   "status": "pendente",
+   "fonte_autoritativa": true
+  },
+  "estado_depois": "pendente"
+ },
+ {
+  "decisao": {
+   "entidade": "matricula",
+   "identificador": "3181",
+   "aspecto": "gravames"
+  },
+  "acao": "aceitar",
+  "estado_depois": "decidida"
+ }
+]

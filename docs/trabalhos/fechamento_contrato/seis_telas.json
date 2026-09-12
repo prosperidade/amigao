@@ -1,0 +1,231 @@
+{
+ "apos_extracao": {
+  "decisoes": 20,
+  "linhas_cobertas_por_decisao": 51,
+  "sem_agrupamento": 64,
+  "soma": 115,
+  "total_staging": 115,
+  "estados_das_decisoes": {
+   "pendente": 20
+  },
+  "progresso_conferencia": {
+   "process_id": 1,
+   "decisoes_total": 84,
+   "decididas": 0,
+   "gravadas": 0,
+   "pendentes": 84
+  },
+  "checklist_documental": null,
+  "documentos": {
+   "CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf": "extraido",
+   "B1 - M3.181 - FAZ. R. Olhos d'agua - Elodi 2013 926ha.pdf": "extraido",
+   "B2 - M3.313 - FAZ. NH 2 - Elodi 2014 725ha.pdf": "extraido",
+   "B3 - M3.673 - FAZ Posse G4 - Elodi 2016 212ha.pdf": "extraido",
+   "B4 - M4.387 - FAZ Posse G3 - Elodi 2020 316ha.pdf": "extraido",
+   "CNH-e.pdf.pdf": "erro_leitura"
+  },
+  "status_http_por_tela": {
+   "visao_geral": {
+    "/processes/1": 200,
+    "/processes/1/diagnoses": 200,
+    "/properties/1/issues": 200,
+    "/properties/1/diagnosis-notes": 200,
+    "/processes/1/rota": 200
+   },
+   "documentos": {
+    "/documents/?process_id=1": 200
+   },
+   "conferencia": {
+    "/processes/1/staging-decisions": 200,
+    "/processes/1/staging-fields": 200,
+    "/processes/1/progresso": 200,
+    "/processes/1/requisitos": 200,
+    "/processes/1/confronto-identidade": 200,
+    "/processes/1/matriculas-vigentes": 200
+   },
+   "dados": {
+    "/processes/1/dossier": 200
+   },
+   "acoes": {
+    "/processes/1/acoes": 200
+   },
+   "saidas": {
+    "/processes/1/artifacts": 200
+   }
+  }
+ },
+ "apos_consolidar": {
+  "decisoes": 20,
+  "linhas_cobertas_por_decisao": 51,
+  "sem_agrupamento": 64,
+  "soma": 115,
+  "total_staging": 115,
+  "estados_das_decisoes": {
+   "pendente": 17,
+   "gravada": 1,
+   "parcialmente_gravada": 1,
+   "decidida": 1
+  },
+  "progresso_conferencia": {
+   "process_id": 1,
+   "decisoes_total": 84,
+   "decididas": 2,
+   "gravadas": 1,
+   "pendentes": 82
+  },
+  "checklist_documental": null,
+  "documentos": {
+   "CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf": "extraido",
+   "B1 - M3.181 - FAZ. R. Olhos d'agua - Elodi 2013 926ha.pdf": "extraido",
+   "B2 - M3.313 - FAZ. NH 2 - Elodi 2014 725ha.pdf": "extraido",
+   "B3 - M3.673 - FAZ Posse G4 - Elodi 2016 212ha.pdf": "extraido",
+   "B4 - M4.387 - FAZ Posse G3 - Elodi 2020 316ha.pdf": "extraido",
+   "CNH-e.pdf.pdf": "erro_leitura"
+  },
+  "status_http_por_tela": {
+   "visao_geral": {
+    "/processes/1": 200,
+    "/processes/1/diagnoses": 200,
+    "/properties/1/issues": 200,
+    "/properties/1/diagnosis-notes": 200,
+    "/processes/1/rota": 200
+   },
+   "documentos": {
+    "/documents/?process_id=1": 200
+   },
+   "conferencia": {
+    "/processes/1/staging-decisions": 200,
+    "/processes/1/staging-fields": 200,
+    "/processes/1/progresso": 200,
+    "/processes/1/requisitos": 200,
+    "/processes/1/confronto-identidade": 200,
+    "/processes/1/matriculas-vigentes": 200
+   },
+   "dados": {
+    "/processes/1/dossier": 200
+   },
+   "acoes": {
+    "/processes/1/acoes": 200
+   },
+   "saidas": {
+    "/processes/1/artifacts": 200
+   }
+  }
+ },
+ "recarregar": {
+  "decisoes": 20,
+  "linhas_cobertas_por_decisao": 51,
+  "sem_agrupamento": 64,
+  "soma": 115,
+  "total_staging": 115,
+  "estados_das_decisoes": {
+   "pendente": 17,
+   "gravada": 1,
+   "parcialmente_gravada": 1,
+   "decidida": 1
+  },
+  "progresso_conferencia": {
+   "process_id": 1,
+   "decisoes_total": 84,
+   "decididas": 2,
+   "gravadas": 1,
+   "pendentes": 82
+  },
+  "checklist_documental": null,
+  "documentos": {
+   "CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf": "extraido",
+   "B1 - M3.181 - FAZ. R. Olhos d'agua - Elodi 2013 926ha.pdf": "extraido",
+   "B2 - M3.313 - FAZ. NH 2 - Elodi 2014 725ha.pdf": "extraido",
+   "B3 - M3.673 - FAZ Posse G4 - Elodi 2016 212ha.pdf": "extraido",
+   "B4 - M4.387 - FAZ Posse G3 - Elodi 2020 316ha.pdf": "extraido",
+   "CNH-e.pdf.pdf": "erro_leitura"
+  },
+  "status_http_por_tela": {
+   "visao_geral": {
+    "/processes/1": 200,
+    "/processes/1/diagnoses": 200,
+    "/properties/1/issues": 200,
+    "/properties/1/diagnosis-notes": 200,
+    "/processes/1/rota": 200
+   },
+   "documentos": {
+    "/documents/?process_id=1": 200
+   },
+   "conferencia": {
+    "/processes/1/staging-decisions": 200,
+    "/processes/1/staging-fields": 200,
+    "/processes/1/progresso": 200,
+    "/processes/1/requisitos": 200,
+    "/processes/1/confronto-identidade": 200,
+    "/processes/1/matriculas-vigentes": 200
+   },
+   "dados": {
+    "/processes/1/dossier": 200
+   },
+   "acoes": {
+    "/processes/1/acoes": 200
+   },
+   "saidas": {
+    "/processes/1/artifacts": 200
+   }
+  }
+ },
+ "sessao_nova": {
+  "decisoes": 20,
+  "linhas_cobertas_por_decisao": 51,
+  "sem_agrupamento": 64,
+  "soma": 115,
+  "total_staging": 115,
+  "estados_das_decisoes": {
+   "pendente": 17,
+   "gravada": 1,
+   "parcialmente_gravada": 1,
+   "decidida": 1
+  },
+  "progresso_conferencia": {
+   "process_id": 1,
+   "decisoes_total": 84,
+   "decididas": 2,
+   "gravadas": 1,
+   "pendentes": 82
+  },
+  "checklist_documental": null,
+  "documentos": {
+   "CAR FAZ B1 B2 B3 E BA - ELODI 2016.pdf": "extraido",
+   "B1 - M3.181 - FAZ. R. Olhos d'agua - Elodi 2013 926ha.pdf": "extraido",
+   "B2 - M3.313 - FAZ. NH 2 - Elodi 2014 725ha.pdf": "extraido",
+   "B3 - M3.673 - FAZ Posse G4 - Elodi 2016 212ha.pdf": "extraido",
+   "B4 - M4.387 - FAZ Posse G3 - Elodi 2020 316ha.pdf": "extraido",
+   "CNH-e.pdf.pdf": "erro_leitura"
+  },
+  "status_http_por_tela": {
+   "visao_geral": {
+    "/processes/1": 200,
+    "/processes/1/diagnoses": 200,
+    "/properties/1/issues": 200,
+    "/properties/1/diagnosis-notes": 200,
+    "/processes/1/rota": 200
+   },
+   "documentos": {
+    "/documents/?process_id=1": 200
+   },
+   "conferencia": {
+    "/processes/1/staging-decisions": 200,
+    "/processes/1/staging-fields": 200,
+    "/processes/1/progresso": 200,
+    "/processes/1/requisitos": 200,
+    "/processes/1/confronto-identidade": 200,
+    "/processes/1/matriculas-vigentes": 200
+   },
+   "dados": {
+    "/processes/1/dossier": 200
+   },
+   "acoes": {
+    "/processes/1/acoes": 200
+   },
+   "saidas": {
+    "/processes/1/artifacts": 200
+   }
+  }
+ }
+}

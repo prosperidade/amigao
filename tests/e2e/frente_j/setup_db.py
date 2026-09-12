@@ -28,7 +28,7 @@ USER = os.environ.get("E2E_PG_USER", "postgres")
 PASSWORD = os.environ.get("E2E_PG_PASSWORD", "")
 DB_NAME = os.environ.get("E2E_DB_NAME", "amigao_e2e_frente_j")
 
-E2E_EMAIL = os.environ.get("E2E_EMAIL", "e2e.frentej@regente.local")
+E2E_EMAIL = os.environ.get("E2E_EMAIL", "e2e.frentej@example.com")
 E2E_PASSWORD = os.environ.get("E2E_PASSWORD", "E2e-FrenteJ-2026!")
 
 assert DB_NAME.startswith("amigao_e2e"), f"banco alvo inválido para o gate: {DB_NAME!r}"
@@ -112,7 +112,7 @@ def main() -> None:
         db.add(user)
         db.flush()
         cli = Client(
-            tenant_id=tenant.id, full_name="ELODI AGROPECUÁRIA", email="elodi.e2e@regente.local",
+            tenant_id=tenant.id, full_name="ELODI AGROPECUÁRIA", email="elodi.e2e@example.com",
             client_type=ClientType.pj, status=ClientStatus.active, cpf_cnpj="29.091.958/0001-17",
         )
         db.add(cli)

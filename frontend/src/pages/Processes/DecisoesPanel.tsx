@@ -109,7 +109,13 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
   });
 
   return (
-    <div className="rounded-lg border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-3 space-y-2">
+    <div
+      // A chave natural (ADR-067) identifica o cartão para o gate E2E — sem
+      // isto o teste precisa adivinhar qual `div` é o cartão, e adivinhar em
+      // teste de UI é como o gate deixa de valer.
+      data-testid={`decisao-${decisao.chave.entidade}-${decisao.chave.identificador}-${decisao.chave.aspecto}`}
+      className="rounded-lg border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-3 space-y-2"
+    >
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <button
           onClick={() => setExpandido(v => !v)}
