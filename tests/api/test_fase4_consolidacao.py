@@ -237,8 +237,14 @@ def test_rl_bridge_matricula_para_imovel(client: TestClient, db_session):
 
 
 def test_rl_status_nivel_imovel_grava_via_allowlist(client: TestClient, db_session):
-    """rl_status passou a estar na allowlist do imóvel: o RL de nível-imóvel
-    (rl_declarada_ha→imovel.rl_status) grava (antes caía em `ignorados`)."""
+    """rl_status está na allowlist do imóvel: um ESTADO de RL de nível-imóvel
+    grava (antes caía em `ignorados`).
+
+    Frente K — quem já não chega aqui é a ÁREA declarada pelo CAR
+    (`rl_declarada_ha`): ela agora tem coluna própria (`rl_area_ha`), porque
+    "437,7632" não é `averbada|proposta|pendente|cancelada`. Esta linha usa
+    "proposta", que é estado — o caso legítimo desta coluna.
+    """
     tenant, proc, cli, prop = _setup_min(db_session, "f4rlimovel@example.com")
     C = ExtractedFieldStatus
     db_session.add(_st(tenant.id, proc.id, "car", "rl_declarada_ha", "proposta", C.aceito,
