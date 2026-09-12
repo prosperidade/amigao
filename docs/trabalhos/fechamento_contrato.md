@@ -133,7 +133,7 @@ foi ligada no reboot).
 
 | gate | como | resultado |
 |---|---|---|
-| **suíte completa do backend** | `pytest tests/` com Testcontainers (Postgres + PostGIS + pgvector) | **1975 passed, 0 failed** (16m42s) |
+| **suíte completa do backend** | `pytest tests/` com Testcontainers (Postgres + PostGIS + pgvector) | **1976 passed, 0 failed** (19m30s) — e o mesmo job verde no CI do PR (10m44s) |
 | C — contenção da entrada (ADR-064) | `test_contencao_entrada.py` | verde (dentro da suíte) |
 | D — fiação da entrada (PR #155) | `test_fiacao_entrada.py` | verde |
 | E/F — tipo + temporalidade (ADR-065/066) | `test_observacao_registral.py` | verde — 53 casos (46 anteriores + 7 desta frente) |

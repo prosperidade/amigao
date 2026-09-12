@@ -273,6 +273,17 @@ nenhuma medição de payload e nenhum gate anterior tinha pego — porque
 nenhum tinha **clicado no botão** com dado real onde a lista de evidências
 não cobre o grupo.
 
+## Fecho
+
+Os três percursos completos, mais a camada de UI. Depois dos consertos que
+o próprio gate revelou: **suíte do backend 1976 passed** (local, 19m30s; e o
+mesmo job verde no CI do PR), **frontend 167 passed**, `npm run build` verde,
+`ruff` verde, **Playwright 5/5**.
+
+O que nenhuma rodada anterior tinha feito passou a existir: a sequência
+inteira, no ambiente autenticado, com dado real — e ela achou três bugs que
+seis frentes de teste unitário não tinham achado.
+
 ## O que NÃO foi provado (e por quê)
 
 1. **REV-001, "o caso muda para etapa 3"** — retrocesso automático de etapa
