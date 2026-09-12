@@ -68,7 +68,14 @@ seção "O que a validação achou" registra. Só então docs, gate e relatório
    (lição do caso 15). Toast + banner + botão bloqueado.
 9. **vitest quebrado** pelo select de tipos (`findByText('Reserva Legal')`
    estrito colidia com a `<option>`). Corrigido no teste.
-10. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
+10. **A mensagem do bloqueio apontava porta trancada.** O 422 do item 3 dizia
+    "Gere e valide uma nova versão", mas `POST /nova-versao` (S5-A) exige
+    proposta **recusada ou expirada** — de `sent` não sai. O consultor leria a
+    instrução e bateria noutro 422. Corrigido para nomear o movimento real
+    (**Recusar → Nova versão**), na doutrina do ADR-039 (bloqueio de fluxo diz
+    o próximo passo que existe). O teste percorre o caminho inteiro:
+    422 → `reject` 200 → `nova-versao` 201 (rascunho).
+11. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
 
 ## Regressão: gates de C–H
 
