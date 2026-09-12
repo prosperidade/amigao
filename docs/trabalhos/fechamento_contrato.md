@@ -1,0 +1,105 @@
+# Frente J — fechamento de contrato (os 7 do Codex + o gate E2E)
+
+**Branch:** `fix/fechamento-contrato-spec` · **Worktree:** `wt-fechamento-contrato`
+**Insumo:** `docs/auditoria/REAUDITORIA_CODEX_11-09.md` (passo zero)
+**ADRs:** adendos em 065, 066, 067, 068 — nenhuma ADR nova
+**Dívidas:** nenhuma nova numerada (cada item é contrato já declarado fechado
+pela metade); faixa 200-299, próximo livre continua **#225**
+**Data:** 11/09/2026
+
+> Nenhuma feature nova. Cada item é um contrato da spec que existia pela
+> metade. Ao fim, o #23 atravessa tela → decisão → consolidação → recarga →
+> nova sessão como UM gate, no ambiente autenticado.
+
+---
+
+## Como esta frente foi conduzida
+
+O Codex implementou os 7 itens (backend + frontend) e parou **antes de
+validar** ("vou validar primeiro a sintaxe e os testes focados, antes de
+documentar qualquer fechamento"). A retomada começou por aí: commit de
+checkpoint do que ele deixou (`df67c2b`, "sem validação"), depois ruff, tsc,
+eslint, vitest, pytest — e a revisão crítica do código, que achou o que a
+seção "O que a validação achou" registra. Só então docs, gate e relatório.
+
+## Item a item
+
+| # | contrato | o que existia pela metade | o que fecha | onde |
+|---|---|---|---|---|
+| 1 | REV-001 — invalidação enxerga reextração cacheada | `_decisao_alterada_apos` só olhava `updated_at` (NULL em linha nova) | `created_at OR updated_at > cutoff`; marco mais antigo calculado em Python; motivo "nova evidência" | `artifact_staleness.py`; ADR-068 adendo §1 |
+| 2 | CONF-001/STATE-001 — "gravada" honesta | `any(consolidated_at)` ⇒ gravada | `all` ⇒ `gravada`; misto ⇒ `parcialmente_gravada` (selo âmbar); indicador não conta como decidida | `reconciliation_decisions._estado_de`, `process_indicators`, `DecisoesPanel`; ADR-067 adendo |
+| 3 | REV-001 — aceite de proposta desatualizada | aviso no GET, aceite passava | `POST /accept` recusa **422 com a razão**; proposta continua `sent`; tela mostra banner, bloqueia o botão, 422 vira toast | `proposals.py`, `ProposalEditor.tsx`; ADR-068 adendo §2 (corrige "aviso") |
+| 4 | HIST-001 — `rl_vigente` respeita vigência | última RL do papel, mesmo baixada | exclui baixado/retificado/expirado; `ultimo_por_destino` não promove ato baixado à coluna | `observacao_registral.py`; ADR-066 adendo |
+| 5 | CONF-002 — tipo editável na decisão | tipo do modelo era terminal; cartão só aceitar/reabrir | `reclassificar` (por campo e pela decisão), `tipo_sugerido` preservado, reconciliação consome o decidido; `escolher_fonte`/`editar` no cartão; UI: "Editar tipo" em qualquer pendente tipada, "Editar valor"/"Escolher esta fonte" em divergência | `staging_consolidation.decide_field`, `decidir_decisao_agrupada`, schemas, `DecisoesPanel`; ADR-065 adendo |
+| 6 | DOC-001 — "lido" = legível; estados negativos; projeção na API | `done` ⇒ lido (doc 551 "lido" com 444 chars de boilerplate) | `texto_sem_conteudo_legivel` (mesma régua da `extraction_status`); `processando`/`erro_leitura`/`desatualizado`/`substituido`/`nao_apresentado`/`dispensado`; `DocumentResponse.lifecycle_status` (lote, 1 query); selo na aba Documentos | `document_lifecycle.py`, `documents.py`, `DocumentsTab`; ADR-068 adendo §3 |
+| 7 | ENT/HIST — sucessão; data do caso | só `compra_venda` transferia; `date.today()` | `sucessao`/`inventario`/`adjudicacao`/`formal_partilha` no vocabulário, prompt e cadeia; `data_referencia_do_processo` (`opened_at`→`created_at`); termo sem referência ⇒ `indeterminado` | `observacao_registral.py`, `ficha01_extraction.py`; ADR-065/066 adendos |
+
+## O que a validação achou no código do Codex (e corrigiu)
+
+1. **`Evidencia.tipo_observacao` obrigatório derrubava a Conferência inteira.**
+   Campo posicional sem default antes de `status`; `_montar_decisao_titularidade`
+   (e a evidência sintética de soma) construíam `Evidencia(...)` sem ele →
+   `TypeError`. Medido rodando `build_decisions` sobre as 116 linhas reais do
+   #23: `GET /processes/23/staging-decisions` **quebraria em produção** no
+   primeiro deploy. Corrigido (opcional com default, preenchido na
+   titularidade) + teste de regressão `TestFrenteJEvidenciaTipada`.
+2. **`desde` errado na invalidação.** `ORDER BY created_at, updated_at` +
+   `.first()` escolhia uma linha antiga com `updated_at` recente antes de uma
+   nova com `created_at` mais cedo. Marco agora é o mínimo entre todas as
+   candidatas (Python). Teste `test_desde_e_o_marco_mais_antigo_...`.
+3. **`derivar_vigencia` sem data de referência afirmava "vigente"** para
+   arrendamento com termo final (caía no passo 3, "tem `data_ato`"). Agora
+   `indeterminado`; gravame com data continua `vigente`. Testes em
+   `TestFrenteJVigenciaEDestino`.
+4. **RL baixada ainda gravava a coluna.** `rl_vigente` foi corrigido pelo
+   Codex, mas `ultimo_por_destino` (quem grava `averbacao_rl`) continuava
+   promovendo a última do papel. Agora ignora `baixado`.
+5. **N+1 na listagem de documentos.** `_with_lifecycle` por documento =
+   uma query de staging por linha em `GET /documents` (que sem filtro devolve
+   o tenant inteiro). `derive_document_statuses` em lote, uma query; teste
+   de equivalência lote ≡ unitário.
+6. **Reclassificar com rótulo desconhecido virava `nao_classificado` calado**
+   pela precedência `A or B and C`. Agora 422 nomeando o rótulo; escape só
+   quando pedido por escrito.
+7. **Tela: "Editar tipo" só em divergência.** Corrigir tipo não depende de
+   divergência (gravames "concordam" por definição). Reestruturado: tipo em
+   qualquer pendente tipada; valor/fonte em divergência.
+8. **`ProposalEditor` sem `onError`**: o 422 do item 3 morreria em silêncio
+   (lição do caso 15). Toast + banner + botão bloqueado.
+9. **vitest quebrado** pelo select de tipos (`findByText('Reserva Legal')`
+   estrito colidia com a `<option>`). Corrigido no teste.
+10. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
+
+## Regressão: gates de C–H
+
+| gate | módulo | resultado |
+|---|---|---|
+| C (contenção da entrada) | `tests/services/test_contencao_entrada.py` | _a preencher (suíte com banco)_ |
+| D (fiação) | `tests/services/test_fiacao_entrada.py` | _a preencher_ |
+| E/F (tipo + temporalidade) | `tests/services/test_observacao_registral.py` | **53/53** (46 existentes + 7 desta frente) — puro, rodado sem Docker |
+| G (decisões) | `tests/services/test_reconciliation_decisions.py`, `tests/api/test_staging_decisions.py` | _a preencher_ |
+| H (estado/invalidação) | `test_document_lifecycle.py`, `test_artifact_staleness.py`, `test_process_indicators.py` | _a preencher_ |
+| frontend | `DecisoesPanel.test.tsx` (10), `ConsolidacaoPanel.test.tsx` (3), tsc, eslint | **verde** |
+
+## Gate E2E — ambiente autenticado
+
+Harness em `tests/e2e/frente_j/` (README com os passos) e
+`frontend/e2e/frente-j.spec.ts`. Execução e resultado (prints + payloads):
+**seção a preencher na execução** — ver "Execução do gate", abaixo.
+
+### Execução do gate
+
+_(preenchido quando a pilha subir — Docker Desktop exigia virtualização
+ligada nesta máquina em 11/09.)_
+
+## Relatório de reconciliação do #23 — completo
+
+Versionado em `docs/trabalhos/reconciliacao_decisoes.md`, seção
+"Resultado — medido em 11/09/2026": as **116 linhas** listadas por id, as
+**21 decisões** com todas as evidências, e as **66 sem agrupamento** com
+motivo. Medido só leitura (Supabase MCP) + `build_decisions` local com o
+código desta branch. Achados registrados ali: RL e gravames viraram decisão
+como a Frente I previa; RL do imóvel diverge **crítico** (CAR 437,7632 ×
+matrículas); titularidade da 3.313 saiu "IZAURA DE FATIMA PEGO (R-11)" porque
+o R-20 não veio com os dois lados — não-determinação da entrada, a decidir
+na tela (agora editável).
