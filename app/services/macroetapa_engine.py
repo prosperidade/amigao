@@ -454,18 +454,34 @@ def ensure_macroetapa_checklists(
     não inicializava) — `can_advance` travava em False para sempre. Chamado nos
     caminhos de LEITURA da macroetapa (status/gate); se faltar checklist, cria os
     7 (lazy, self-healing). Retorna True se criou algo (o caller deve commitar).
+
+    Frente K — o self-healing recusava exatamente o caso que mais precisava
+    dele. Processo com `macroetapa` NULA (nasce assim fora do intake) saía por
+    este `return False`, e então: `can_advance` = False com o blocker "Etapa
+    não iniciada (sem checklist)", nenhum botão de avanço na tela — porque não
+    há próxima etapa a partir do nada — e **nenhum gesto na interface que
+    inicie a etapa**. Beco sem saída: a tela dizia o que falta e não oferecia
+    como resolver. Medido no gate de navegador de 12/09.
+
+    Começar pela `entrada_demanda` não inventa estado: é o mesmo default que
+    `POST /processes/{id}/macroetapa/initialize` já aplica, e é a primeira
+    etapa do fluxo por definição.
     """
+    iniciou_etapa = False
     if not process.macroetapa:
-        return False
+        process.macroetapa = Macroetapa.entrada_demanda.value
+        iniciou_etapa = True
     existing = (
         db.query(MacroetapaChecklist.id)
         .filter(MacroetapaChecklist.process_id == process.id)
         .first()
     )
     if existing:
-        return False
+        # O retorno é "o caller precisa commitar?" — e precisa, se a etapa
+        # acabou de nascer, mesmo sem checklist novo a criar.
+        return iniciou_etapa
     created = initialize_macroetapa_checklists(db, process, tenant_id)
-    return bool(created)
+    return bool(created) or iniciou_etapa
 
 
 # ---------------------------------------------------------------------------
