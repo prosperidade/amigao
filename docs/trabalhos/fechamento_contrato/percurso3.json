@@ -1,0 +1,84 @@
+{
+ "13_rl_baixada": {
+  "vigencias": {
+   "Av.02": "vigente",
+   "Av.03": "baixado"
+  },
+  "av03_baixada": true,
+  "rl_vigente_ato": "Av.02",
+  "rl_vigente_area": "150,0000",
+  "quem_grava_averbacao_rl": "Av.02",
+  "texto_doc547_tem_reserva_legal": true
+ },
+ "14_estado_documento": {
+  "cnh": {
+   "id": 6,
+   "arquivo": "CNH-e.pdf.pdf",
+   "chars": null,
+   "ocr_status": "done",
+   "tem_texto": false,
+   "lifecycle_status": "erro_leitura",
+   "extraction_status": "recebido, não processado (doc_pessoal) — revisar: OCR não extraiu texto legível deste documento (provável PDF de imagem) — reprocessar o OCR; sem texto não há o que extrair"
+  },
+  "kml": {
+   "id": 8,
+   "arquivo": "Perimetro-ELODI.kml",
+   "ocr_status": "not_required",
+   "tem_texto": false,
+   "lifecycle_status": "classificado"
+  }
+ },
+ "15_sucessao": {
+  "fixture_declarada": "derivada da forma dos atos do doc 549 (sem ato causa mortis real nos 6 docs)",
+  "tipos_reconhecidos": [
+   "compra_venda",
+   "sucessao",
+   "formal_partilha"
+  ],
+  "cadeia": [
+   {
+    "ato": "R-11",
+    "papel": "adquirente",
+    "nome": "ALEXANDRE AUGUSTO CLEMENTE"
+   },
+   {
+    "ato": "R-11",
+    "papel": "transmitente",
+    "nome": "NASCENTE AGRO-INDUSTRIAL LTDA"
+   },
+   {
+    "ato": "R-18",
+    "papel": "adquirente",
+    "nome": "ESPÓLIO DE ALEXANDRE AUGUSTO CLEMENTE"
+   },
+   {
+    "ato": "R-18",
+    "papel": "transmitente",
+    "nome": "ALEXANDRE AUGUSTO CLEMENTE"
+   },
+   {
+    "ato": "R-21",
+    "papel": "adquirente",
+    "nome": "KARINA SANTAROSA CLEMENTE"
+   },
+   {
+    "ato": "R-21",
+    "papel": "transmitente",
+    "nome": "ESPÓLIO DE ALEXANDRE AUGUSTO CLEMENTE"
+   }
+  ],
+  "titular_atual": {
+   "titulares": [
+    "KARINA SANTAROSA CLEMENTE"
+   ],
+   "ato": "R-21",
+   "data_ato": "19/02/2026"
+  },
+  "sem_sucessao_titular_seria": {
+   "ato": "R-11",
+   "titulares": [
+    "ALEXANDRE AUGUSTO CLEMENTE"
+   ]
+  }
+ }
+}

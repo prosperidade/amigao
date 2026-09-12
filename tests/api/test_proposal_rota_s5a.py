@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
+from app.models.document import Document, OcrStatus
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
 from app.models.proposal import Proposal, ProposalStatus
@@ -147,6 +148,44 @@ def test_transicoes_validas_draft_send_accept(client: TestClient, db_session):
     acc = client.post(f"/api/v1/proposals/{pid}/accept", headers=h)
     assert acc.status_code == 200
     assert acc.json()["status"] == "accepted"
+
+
+def test_aceite_recusa_proposta_desatualizada_com_razao(client: TestClient, db_session):
+    tenant, cli, _prop, proc = _setup(db_session, "tr.stale@ex.com")
+    db_session.commit()
+    h = _login(client, "tr.stale@ex.com")
+    pid = _criar(client, h, cli.id, proc.id)
+    assert client.post(f"/api/v1/proposals/{pid}/send", headers=h).status_code == 200
+
+    proposta = db_session.query(Proposal).filter(Proposal.id == pid).one()
+    doc = Document(
+        tenant_id=tenant.id, process_id=proc.id, client_id=cli.id,
+        original_file_name="matricula-nova.pdf", filename="matricula-nova.pdf",
+        content_type="application/pdf", storage_key=f"stale/{tenant.id}/{proc.id}",
+        ocr_status=OcrStatus.done,
+        created_at=proposta.created_at + timedelta(minutes=1),
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    resposta = client.post(f"/api/v1/proposals/{pid}/accept", headers=h)
+    assert resposta.status_code == 422
+    detalhe = resposta.json()["detail"]
+    assert "desatualizada" in detalhe.lower()
+    assert "matricula-nova.pdf" in detalhe
+    # O bloqueio nomeia o movimento REAL (ADR-039: bloqueio de fluxo diz o
+    # próximo passo). "Gere uma nova versão" sozinho apontaria porta trancada:
+    # `nova-versao` exige recusada/expirada — de `sent` não sai.
+    assert "recuse" in detalhe.lower()
+    db_session.refresh(proposta)
+    assert proposta.status == ProposalStatus.sent
+
+    # E o caminho que a mensagem indica funciona de fato: recusar → nova versão.
+    rec = client.post(f"/api/v1/proposals/{pid}/reject", headers=h, json={"reason": "escopo desatualizado"})
+    assert rec.status_code == 200, rec.text
+    nova = client.post(f"/api/v1/proposals/{pid}/nova-versao", headers=h)
+    assert nova.status_code == 201, nova.text
+    assert nova.json()["status"] == "draft"
 
 
 def test_aceitar_rascunho_bloqueado(client: TestClient, db_session):

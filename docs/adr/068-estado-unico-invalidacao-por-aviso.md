@@ -233,3 +233,87 @@ proveniência) se mostrar barulhenta demais na prática.
 **STATE-001 forçando os seis números a um só valor.** Descartada — mediria a
 coisa errada e escondera decisões de UX válidas (macroetapa mede atividade,
 não documento). O correto é nomear cada pergunta, não fundir as respostas.
+
+
+---
+
+## Adendo — Frente J (11/09/2026): três correções ao que este ADR declarou fechado
+
+**Insumo:** `docs/auditoria/REAUDITORIA_CODEX_11-09.md`, itens 1, 3 e 6.
+**Branch:** `fix/fechamento-contrato-spec`. Este adendo **corrige** o texto
+acima em três pontos; o texto original permanece como registro do que foi
+decidido em 10/09 e por quê.
+
+### 1. REV-001 — `ExtractedFieldStaging.created_at` entra na invalidação (item 1)
+
+A "revisão pós-review" acima afirma: *"staging recém-inserido e ainda
+pendente não soa alarme por si só — a chegada em si já é coberta pelo
+documento de origem"*. **Falso para reextração com texto cacheado** — o
+caminho literal do #23 (Frente I): o documento já existia,
+`Document.extracted_at` não muda (o OCR não roda), e as linhas novas nascem
+com `updated_at IS NULL`. Diagnóstico validado em 08/09 continuava sem aviso
+depois de 74 evidências novas em 11/09.
+
+Corrigido em `_decisao_alterada_apos`: `created_at > cutoff OR updated_at >
+cutoff`; o marco é o **mais antigo** entre todas as linhas candidatas
+(calculado em Python, não por `ORDER BY` — uma linha antiga com `updated_at`
+recente ordenava antes de uma nova com `created_at` mais cedo). Motivo novo:
+"nova evidência da Conferência sobre X entrou depois desta versão".
+
+### 2. REV-001 — proposta desatualizada é BLOQUEIO no aceite, não só aviso (item 3)
+
+A seção 3 acima entrega o aviso em `GET /proposals/{id}` e diz "nenhum
+escreve status, nenhum regenera". Correto para diagnóstico e rota (avisar,
+nunca destruir trabalho humano). **Incompleto para o aceite da proposta**: a
+spec exige bloqueio, porque aceitar é o ato que gera contrato (S5-B) — um
+contrato assinado sobre escopo que o processo já invalidou não é "aviso
+informativo", é dano. `POST /proposals/{id}/accept` agora consulta
+`desatualizacao_proposta` ANTES da máquina de estados e recusa com **422 e
+a razão** ("Proposta desatualizada: <motivo>. Gere e valide uma nova
+versão."). A proposta continua `sent`.
+
+**A mensagem nomeia o movimento real** (ADR-039: bloqueio de FLUXO diz o
+próximo passo, não só o impedimento). "Gere uma nova versão" sozinho
+apontaria uma porta trancada: a máquina estrita do S5-A só deixa
+`nova-versao` nascer de proposta **recusada ou expirada** — de `sent` não
+sai. O caminho real é **Recusar → Nova versão**, e é isso que o 422 diz. A
+tela (`ProposalEditor`) mostra o aviso antes do clique, desabilita "Aceitar"
+e, se o 422 vier mesmo assim, o detalhe vira toast (a mutation não tinha
+`onError` — o backend gritava e faltava alto-falante, lição do caso 15).
+
+Fronteira que **não** muda: diagnóstico e rota continuam só avisando —
+regenerar ou bloquear ali destruiria classificação/decisões humanas por um
+evento que o consultor talvez nem tenha visto (ADR-039).
+
+### 3. DOC-001 — "lido" exige texto LEGÍVEL; estados negativos; projeção na API (item 6)
+
+`lido = texto extraído ou ocr_status ∈ {done, not_required}` era duas
+respostas para a mesma pergunta: o doc 551 do #23 (CNH-e, `done`, 444 chars
+de boilerplate de assinatura digital) aparecia "lido" enquanto a
+`extraction_status` do mesmo documento dizia "OCR não extraiu texto
+legível". Corrigido: `_tem_leitura` usa `ficha01_extraction.
+texto_sem_conteudo_legivel` — a **mesma** régua que produz
+`MOTIVO_OCR_ILEGIVEL`. `Document.tem_texto` idem.
+
+**`not_required` não é erro.** Shapefile, KML e afins entram assim de
+propósito (gap D1, `confirm_upload`/`ocr_tasks`): leitura textual **não se** 
+**aplica**. Chamar isso de `erro_leitura` seria alarme falso na tela; chamar
+de `lido` seria afirmar leitura que não houve. Esses documentos seguem a
+escada pelo que existe (classificação, staging) e, sem nada disso, ficam em
+`recebido`.
+
+`DocumentLifecycleStatus` ganha os estados negativos da spec:
+`processando` (job em curso), `erro_leitura` (job terminou — done/failed/
+not_required — sem texto utilizável), `desatualizado` (`expires_at`
+vencido), `substituido` (`deleted_at`), e `nao_apresentado`/`dispensado`
+(estados do REQUISITO no checklist — no vocabulário para a tela falar a
+mesma língua; nunca derivados de uma linha de `Document`). A projeção chega
+à API em `DocumentResponse.lifecycle_status` (lista via
+`derive_document_statuses`, uma query de staging para a lista inteira —
+não uma por documento) e à tela (`DocumentsTab`, selo por documento).
+
+**Testes:** `tests/services/test_artifact_staleness.py` (reextração cacheada
+desatualiza; `desde` é o marco mais antigo), `tests/api/test_proposal_rota_s5a.py`
+(aceite recusado com razão, proposta continua `sent`),
+`tests/services/test_document_lifecycle.py` (done sem texto legível ⇒
+erro_leitura; processando/desatualizado/substituido; lote ≡ unitário).

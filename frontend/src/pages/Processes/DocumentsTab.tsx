@@ -74,6 +74,13 @@ function ocrIlegivel(doc: Document): boolean {
   return !!doc.extraction_status?.includes('OCR não extraiu texto legível');
 }
 
+const LIFECYCLE_LABELS: Record<string, string> = {
+  nao_apresentado: 'Não apresentado', recebido: 'Recebido', processando: 'Processando',
+  lido: 'Lido', classificado: 'Classificado', extraido: 'Extraído', conferido: 'Conferido',
+  erro_leitura: 'Erro de leitura', dispensado: 'Dispensado', substituido: 'Substituído',
+  desatualizado: 'Desatualizado',
+};
+
 export default function DocumentsTab({ processId }: DocumentsTabProps) {
   const queryClient = useQueryClient();
   const [textoAberto, setTextoAberto] = useState<DocumentText | null>(null);
@@ -267,6 +274,11 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                       {extractedDocIds.has(doc.id) && (
                         <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
                           <Sparkles className="w-3 h-3" /> Campos extraidos
+                        </span>
+                      )}
+                      {doc.lifecycle_status && (
+                        <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-gray-50 dark:bg-white/10 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/15">
+                          {LIFECYCLE_LABELS[doc.lifecycle_status] ?? doc.lifecycle_status}
                         </span>
                       )}
                       {/* Dívida #103 — o áudio agora é ouvido de verdade. A tela

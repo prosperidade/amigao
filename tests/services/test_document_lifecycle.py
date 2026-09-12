@@ -7,6 +7,8 @@ conferido de um documento, com autor em cada transição (`None` = automático).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.document import Document, OcrStatus
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
@@ -21,6 +23,17 @@ from app.services.document_lifecycle import (
     historico_transicoes,
     registrar_transicao_se_mudou,
 )
+
+# Trecho VERBATIM do doc 546 da ELODI (recibo do CAR, produção). Curto de
+# propósito E legível pela régua do pipeline: `texto_sem_conteudo_legivel`
+# (a mesma que produz `MOTIVO_OCR_ILEGIVEL`) exige 600+ chars OU um sinal de
+# dado forte — 6+ dígitos seguidos, CPF ou CNPJ. Texto curto inventado ("texto
+# do documento") é ILEGÍVEL por essa régua, e desde a Frente J (item 6) o
+# estado do documento usa exatamente ela: um documento assim é `erro_leitura`,
+# não `lido`. Documento registral real sempre traz número longo (registro no
+# CAR, CNPJ, código de certificação), então a fixture passou a trazer também.
+TEXTO_LEGIVEL = "Registro no CAR: GO-5200605-82E5.AE14.076B.4637.9900.9C9D.EC86.D700"
+
 
 _SEQ = {"n": 0}
 
@@ -75,11 +88,47 @@ def test_derive_status_recebido_sem_leitura(db_session):
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.recebido
 
 
+def test_ocr_done_sem_texto_legivel_e_erro_de_leitura(db_session):
+    tenant, proc, user = _seed(db_session)
+    doc = _doc(db_session, tenant, proc)
+    doc.ocr_status = OcrStatus.done
+    doc.extracted_text = "Documento digital assinado."
+    db_session.flush()
+
+    assert doc.tem_texto is False
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.erro_leitura
+
+
+def test_processando_e_desatualizado_sao_estados_distintos(db_session):
+    tenant, proc, user = _seed(db_session)
+    doc = _doc(db_session, tenant, proc)
+    doc.ocr_status = OcrStatus.processing
+    db_session.flush()
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.processando
+
+    doc.expires_at = datetime.now(UTC) - timedelta(days=1)
+    db_session.flush()
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.desatualizado
+
+
+def test_documento_removido_tem_projecao_substituido(db_session):
+    tenant, proc, user = _seed(db_session)
+    doc = _doc(db_session, tenant, proc)
+    doc.deleted_at = datetime.now(UTC)
+    db_session.flush()
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.substituido
+
+
+def test_vocabulario_inclui_estados_negativos_sem_documento():
+    assert DocumentLifecycleStatus.nao_apresentado.value == "nao_apresentado"
+    assert DocumentLifecycleStatus.dispensado.value == "dispensado"
+
+
 def test_derive_status_lido_com_ocr_done(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "texto do documento"
+    doc.extracted_text = TEXTO_LEGIVEL
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.lido
 
@@ -87,7 +136,7 @@ def test_derive_status_lido_com_ocr_done(db_session):
 def test_derive_status_classificado(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.classificado
@@ -100,7 +149,7 @@ def test_derive_status_outro_nao_conta_como_classificado(db_session):
     não específico)."""
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "outro"
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.lido
@@ -109,7 +158,7 @@ def test_derive_status_outro_nao_conta_como_classificado(db_session):
 def test_derive_status_extraido(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -124,7 +173,7 @@ def test_derive_status_extraido(db_session):
 def test_derive_status_conferido_quando_toda_linha_decidida(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -144,7 +193,7 @@ def test_derive_status_conferido_quando_toda_linha_decidida(db_session):
 def test_derive_status_extraido_quando_ha_linha_pendente(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -174,7 +223,7 @@ def test_registrar_transicao_grava_sequencia_completa_com_autor(db_session):
 
     # → lido (automático — pipeline OCR).
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "texto do documento"
+    doc.extracted_text = TEXTO_LEGIVEL
     db_session.flush()
     novo = registrar_transicao_se_mudou(db_session, doc, user_id=None)
     assert novo == DocumentLifecycleStatus.lido
@@ -218,7 +267,7 @@ def test_registrar_transicao_idempotente_quando_nada_mudou(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "texto"
+    doc.extracted_text = TEXTO_LEGIVEL
     db_session.flush()
 
     primeiro = registrar_transicao_se_mudou(db_session, doc, user_id=None)
@@ -227,3 +276,91 @@ def test_registrar_transicao_idempotente_quando_nada_mudou(db_session):
     assert primeiro == DocumentLifecycleStatus.lido
     assert segundo is None
     assert len(historico_transicoes(db_session, doc)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Frente J (item 6) — projeção em lote = projeção unitária, uma query só
+# ---------------------------------------------------------------------------
+
+
+def test_derive_document_statuses_em_lote_bate_com_o_unitario(db_session):
+    """`GET /documents` (listagem) usa `derive_document_statuses` — uma query
+    de staging para a lista inteira. O resultado tem de ser IDÊNTICO ao
+    unitário em todos os degraus, inclusive nos negativos."""
+    from app.services.document_lifecycle import derive_document_statuses
+
+    tenant, proc, user = _seed(db_session)
+    texto = TEXTO_LEGIVEL
+
+    recebido = _doc(db_session, tenant, proc)                      # sem leitura
+    erro = _doc(db_session, tenant, proc)                          # done sem texto legível
+    erro.ocr_status = OcrStatus.done
+    erro.extracted_text = "Documento digital assinado."
+    lido = _doc(db_session, tenant, proc)
+    lido.ocr_status = OcrStatus.done
+    lido.extracted_text = texto
+    classificado = _doc(db_session, tenant, proc)
+    classificado.extracted_text = texto
+    classificado.document_type = "matricula"
+    extraido = _doc(db_session, tenant, proc)
+    extraido.extracted_text = texto
+    extraido.document_type = "matricula"
+    conferido = _doc(db_session, tenant, proc)
+    conferido.extracted_text = texto
+    conferido.document_type = "car"
+    vencido = _doc(db_session, tenant, proc)
+    vencido.expires_at = datetime.now(UTC) - timedelta(days=1)
+    db_session.flush()
+    db_session.add_all([
+        ExtractedFieldStaging(
+            tenant_id=tenant.id, process_id=proc.id, document_id=extraido.id,
+            field_name="numero_matricula", field_value={"value": "3.181"},
+            status=ExtractedFieldStatus.pendente, target_entity="matricula",
+            target_field="numero_matricula",
+        ),
+        ExtractedFieldStaging(
+            tenant_id=tenant.id, process_id=proc.id, document_id=conferido.id,
+            field_name="numero_car", field_value={"value": "GO-1"},
+            status=ExtractedFieldStatus.aceito, target_entity="imovel",
+            target_field="numero_car",
+        ),
+    ])
+    db_session.flush()
+
+    docs = [recebido, erro, lido, classificado, extraido, conferido, vencido]
+    lote = derive_document_statuses(db_session, docs)
+
+    assert lote == {d.id: derive_document_status(db_session, d) for d in docs}
+    assert lote[recebido.id] == DocumentLifecycleStatus.recebido
+    assert lote[erro.id] == DocumentLifecycleStatus.erro_leitura
+    assert lote[lido.id] == DocumentLifecycleStatus.lido
+    assert lote[classificado.id] == DocumentLifecycleStatus.classificado
+    assert lote[extraido.id] == DocumentLifecycleStatus.extraido
+    assert lote[conferido.id] == DocumentLifecycleStatus.conferido
+    assert lote[vencido.id] == DocumentLifecycleStatus.desatualizado
+    assert derive_document_statuses(db_session, []) == {}
+
+
+def test_leitura_dispensada_nao_e_erro_de_leitura(db_session):
+    """Frente J: `not_required` é "leitura textual não se aplica" (shapefile/KML,
+    gap D1 — `confirm_upload` e `ocr_tasks` marcam assim de propósito). Rotular
+    isso como `erro_leitura` seria alarme falso; como `lido`, afirmação de uma
+    leitura que não houve. Segue a escada pelo que existe."""
+    tenant, proc, user = _seed(db_session)
+
+    sem_tipo = _doc(db_session, tenant, proc)
+    sem_tipo.ocr_status = OcrStatus.not_required
+    db_session.flush()
+    assert derive_document_status(db_session, sem_tipo) == DocumentLifecycleStatus.recebido
+
+    classificado = _doc(db_session, tenant, proc)
+    classificado.ocr_status = OcrStatus.not_required
+    classificado.document_type = "geoespacial"
+    db_session.flush()
+    assert derive_document_status(db_session, classificado) == DocumentLifecycleStatus.classificado
+
+    # e o mesmo pelo caminho em lote
+    from app.services.document_lifecycle import derive_document_statuses
+    lote = derive_document_statuses(db_session, [sem_tipo, classificado])
+    assert lote[sem_tipo.id] == DocumentLifecycleStatus.recebido
+    assert lote[classificado.id] == DocumentLifecycleStatus.classificado

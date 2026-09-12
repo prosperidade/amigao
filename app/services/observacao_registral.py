@@ -72,6 +72,10 @@ TIPO_RESERVA_LEGAL = "reserva_legal"
 TIPO_APP = "app"
 TIPO_GEORREFERENCIAMENTO = "georreferenciamento"
 TIPO_COMPRA_VENDA = "compra_venda"
+TIPO_SUCESSAO = "sucessao"
+TIPO_INVENTARIO = "inventario"
+TIPO_ADJUDICACAO = "adjudicacao"
+TIPO_FORMAL_PARTILHA = "formal_partilha"
 TIPO_COMPROMISSO = "compromisso_compra_venda"
 TIPO_ARRENDAMENTO = "arrendamento"
 TIPO_SERVIDAO = "servidao"
@@ -90,6 +94,10 @@ VOCABULARIO: dict[str, str] = {
     TIPO_APP: "gaveta existente no schema; sem ocorrência nos 4 documentos",
     TIPO_GEORREFERENCIAMENTO: "doc 547 AV-01 · doc 548 AV.01 · doc 549 AV.01",
     TIPO_COMPRA_VENDA: "doc 549 R-11 e R-13 · doc 548 R-11 e R-20 · doc 550 R-01",
+    TIPO_SUCESSAO: "transferência de titularidade causa mortis",
+    TIPO_INVENTARIO: "inventário com atribuição expressa de titularidade",
+    TIPO_ADJUDICACAO: "adjudicação registral do imóvel",
+    TIPO_FORMAL_PARTILHA: "formal de partilha registrado",
     TIPO_COMPROMISSO: "doc 549 AV.06 · doc 548 AV.09 (compromissado com)",
     TIPO_ARRENDAMENTO: "doc 548 AV.10 (50 ha, 15 anos) · doc 547 Av.04 e AV.05",
     TIPO_SERVIDAO: "doc 549 AV.07 (servidão de passagem)",
@@ -103,6 +111,14 @@ VOCABULARIO: dict[str, str] = {
 }
 
 TIPOS = frozenset(VOCABULARIO)
+
+TIPOS_TRANSFERENCIA_TITULARIDADE = frozenset({
+    TIPO_COMPRA_VENDA,
+    TIPO_SUCESSAO,
+    TIPO_INVENTARIO,
+    TIPO_ADJUDICACAO,
+    TIPO_FORMAL_PARTILHA,
+})
 
 # Gravames: compõem a linha agregada `onus` (coluna `matricula.onus_gravames`,
 # que é UMA coluna de texto — daí a agregação, e não uma linha com destino por
@@ -187,6 +203,12 @@ _SINONIMOS: dict[str, str] = {
     "compra venda": TIPO_COMPRA_VENDA,
     "venda e compra": TIPO_COMPRA_VENDA,
     "transmissao": TIPO_COMPRA_VENDA,
+    "sucessao": TIPO_SUCESSAO,
+    "sucessao causa mortis": TIPO_SUCESSAO,
+    "inventario": TIPO_INVENTARIO,
+    "adjudicacao": TIPO_ADJUDICACAO,
+    "formal de partilha": TIPO_FORMAL_PARTILHA,
+    "partilha": TIPO_FORMAL_PARTILHA,
     "compromisso de compra e venda": TIPO_COMPROMISSO,
     "compromisso de venda e compra": TIPO_COMPROMISSO,
     "promessa de compra e venda": TIPO_COMPROMISSO,
@@ -283,8 +305,8 @@ def _atos_citados(texto: Any) -> list[str]:
 # Frente F (ADR-066): `data` → `data_ato` e `ato_referenciado` → `altera_ato`
 # (mesmo papel, nome que combina com o par extraído-vs-derivado: `vigencia` é
 # quem responde "e daí?" a partir de `data_ato`/`altera_ato`). `adquirentes`/
-# `transmitentes` são novos — só fazem sentido em `compra_venda`, o único tipo
-# que TRANSFERE titularidade registral (ver :func:`titular_atual`).
+# `transmitentes` distinguem os lados de todo ato de transferência de
+# titularidade (compra/venda, sucessão, inventário, adjudicação e partilha).
 ATRIBUTOS_DO_ATO = (
     "ato", "data_ato", "area_ha", "valor", "partes", "adquirentes",
     "transmitentes", "prazo", "altera_ato", "descricao",
@@ -366,6 +388,10 @@ _ROTULOS = {
     TIPO_APP: "APP",
     TIPO_GEORREFERENCIAMENTO: "Georreferenciamento",
     TIPO_COMPRA_VENDA: "Compra e venda",
+    TIPO_SUCESSAO: "Sucessão",
+    TIPO_INVENTARIO: "Inventário",
+    TIPO_ADJUDICACAO: "Adjudicação",
+    TIPO_FORMAL_PARTILHA: "Formal de partilha",
     TIPO_COMPROMISSO: "Compromisso de compra e venda",
     TIPO_ARRENDAMENTO: "Arrendamento",
     TIPO_SERVIDAO: "Servidão",
@@ -503,12 +529,20 @@ def ultimo_por_destino(observacoes: list[Observacao]) -> dict[tuple[str, str], O
     vigência derivada por regra (:func:`derivar_vigencia`) — as duas concordam
     na prática (o ato mais recente tende a ser o vigente), mas são mecanismos
     diferentes: este resolve "quem grava a coluna", aquele resolve "isto ainda
-    vale". :func:`rl_vigente` reaproveita este, não duplica.
+    vale". :func:`rl_vigente` responde a OUTRA pergunta (o que vale hoje).
+
+    Frente J (item 4): um ato que o próprio documento declara BAIXADO nunca
+    leva a coluna — `derivar_vigencia` roda antes (em `_linhas_de_
+    observacoes`), então `vigencia == baixado` já está resolvida aqui. Sem
+    isto, uma RL baixada por averbação posterior ainda seria a "última do
+    documento" e gravaria `averbacao_rl` como se valesse. Retificado NÃO é
+    excluído desta disputa: o ato retificado continua existindo (aditivo
+    amenda, não cancela — ADR-066), e é ele quem tem a coluna.
     """
     escolha: dict[tuple[str, str], Observacao] = {}
     for obs in observacoes:
         destino = destino_de(obs)
-        if destino is None:
+        if destino is None or obs.vigencia == VIGENCIA_BAIXADO:
             continue
         atual = escolha.get(destino)
         if atual is None or obs.ordem >= atual.ordem:
@@ -567,7 +601,7 @@ def derivar_vigencia(
     `baixa`, `aditivo` etc. são eventos, não estados; `vigencia` neles não
     responderia pergunta nenhuma.
     """
-    ref = data_referencia or date.today()
+    ref = data_referencia
     for obs in observacoes:
         if obs.tipo not in TIPOS_COM_VIGENCIA:
             continue
@@ -580,9 +614,18 @@ def derivar_vigencia(
         if obs.tipo in _TIPOS_COM_TERMO:
             termo_final = _ultima_data(obs.atributos.get("prazo"))
             if termo_final is not None:
-                obs.atributos["vigencia"] = (
-                    VIGENCIA_EXPIRADO if termo_final < ref else VIGENCIA_VIGENTE
-                )
+                # Frente J (item 7): sem data de referência do CASO não há
+                # como afirmar "vigente" nem "expirado" para um prazo com
+                # termo — cair no passo 3 ("tem data_ato ⇒ vigente") seria
+                # afirmar vigência que o relógio nenhum sustentou. O fato
+                # (`prazo`) fica salvo; quem consultar com a data do caso
+                # rederiva. `indeterminado` é a resposta honesta, não `vigente`.
+                if ref is None:
+                    obs.atributos["vigencia"] = VIGENCIA_INDETERMINADO
+                else:
+                    obs.atributos["vigencia"] = (
+                        VIGENCIA_EXPIRADO if termo_final < ref else VIGENCIA_VIGENTE
+                    )
                 continue
         if obs.atributos.get("data_ato"):
             obs.atributos["vigencia"] = VIGENCIA_VIGENTE
@@ -591,19 +634,32 @@ def derivar_vigencia(
 
 
 def rl_vigente(observacoes: list[Observacao]) -> Optional[Observacao]:
-    """A averbação de Reserva Legal vigente da matrícula.
+    """A averbação de Reserva Legal que VALE na data de referência.
 
-    Reaproveita :func:`ultimo_por_destino` — RL é uma COLUNA
-    (`matricula.averbacao_rl`), então "vigente" e "quem grava a coluna" são a
-    mesma pergunta para este tipo (ao contrário dos gravames, que são lista).
-    None quando a matrícula não tem RL averbada nos atos.
+    Frente J (item 4) — respeita `vigencia` (ADR-066), não só a ordem no
+    papel: RL `baixado`/`retificado`/`expirado` não é promovida. Entre as que
+    restam, a de maior `ordem` (a mais recente que o documento afirma). None
+    quando não há RL averbada OU quando todas foram baixadas — o "ato anterior
+    válido" só volta se ele mesmo não tiver sido baixado (ex.: AV.02 baixa a
+    AV.01, AV.03 baixa a AV.02 ⇒ nenhuma; AV.03 baixa só a AV.02 ⇒ AV.01).
+
+    Fronteira: `retificado` aqui significa "há aditivo posterior que a
+    amenda"; o ato amendado continua sendo o que grava a coluna
+    (:func:`ultimo_por_destino`), mas não é afirmado como a RL "vigente" sem
+    olhar o aditivo — quem lê decide.
     """
-    return ultimo_por_destino(observacoes).get(("matricula", "averbacao_rl"))
+    candidatas = [
+        obs for obs in observacoes
+        if obs.tipo == TIPO_RESERVA_LEGAL
+        and obs.vigencia not in (VIGENCIA_BAIXADO, VIGENCIA_RETIFICADO, VIGENCIA_EXPIRADO)
+    ]
+    if not candidatas:
+        return None
+    return max(candidatas, key=lambda obs: obs.ordem)
 
 
 def cadeia_titularidade(observacoes: list[Observacao]) -> list[dict[str, Any]]:
-    """Uma linha por (pessoa, papel, ato) — só a partir de `compra_venda`, o
-    único tipo que TRANSFERE titularidade registral nesta matrícula.
+    """Uma linha por (pessoa, papel, ato) para os tipos de transferência.
 
     `papel_no_ato` (adquirente/transmitente) só existe quando o próprio ato o
     distingue — nunca por posição na lista. É a mesma lição do achado
@@ -614,7 +670,7 @@ def cadeia_titularidade(observacoes: list[Observacao]) -> list[dict[str, Any]]:
     """
     linhas: list[dict[str, Any]] = []
     for obs in observacoes:
-        if obs.tipo != TIPO_COMPRA_VENDA:
+        if obs.tipo not in TIPOS_TRANSFERENCIA_TITULARIDADE:
             continue
         for papel, chave_papel in (("adquirente", "adquirentes"), ("transmitente", "transmitentes")):
             for nome in obs.atributos.get(chave_papel) or []:
@@ -628,7 +684,7 @@ def cadeia_titularidade(observacoes: list[Observacao]) -> list[dict[str, Any]]:
 
 
 def titular_atual(observacoes: list[Observacao]) -> Optional[dict[str, Any]]:
-    """O titular do ato de transferência (`compra_venda`) mais recente.
+    """O titular do ato de transferência de domínio mais recente.
 
     "Sem ato posterior que o transfira" (ADR-066) é automático para o ÚLTIMO
     ato: por definição não há nenhum depois dele nesta matrícula. Os
@@ -636,13 +692,13 @@ def titular_atual(observacoes: list[Observacao]) -> Optional[dict[str, Any]]:
     como titulares passados (e, no caso comum, como transmitentes do ato
     seguinte — mas isso não é verificado aqui: cada ato fala por si).
 
-    None quando nenhum ato de compra e venda desta matrícula nomeia
+    None quando nenhum ato de transferência desta matrícula nomeia
     adquirente — a matrícula pode não ter tido transferência registrada, ou o
     texto não distinguiu os dois lados.
     """
     transferencias = [
         o for o in observacoes
-        if o.tipo == TIPO_COMPRA_VENDA and o.atributos.get("adquirentes")
+        if o.tipo in TIPOS_TRANSFERENCIA_TITULARIDADE and o.atributos.get("adquirentes")
     ]
     if not transferencias:
         return None

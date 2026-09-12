@@ -18,6 +18,7 @@ export interface Evidencia {
   valor_normalizado: unknown;
   unidade: string | null;
   vigencia: string | null;
+  tipo_observacao: string | null;
   status: string;
   fonte_autoritativa: boolean;
 }
@@ -33,7 +34,7 @@ export interface Decisao {
   percentual: number | null;
   valor_proposto: unknown;
   fonte_autoritativa_doc: string | null;
-  estado: 'pendente' | 'decidida' | 'gravada';
+  estado: 'pendente' | 'decidida' | 'parcialmente_gravada' | 'gravada';
   staging_ids: number[];
 }
 

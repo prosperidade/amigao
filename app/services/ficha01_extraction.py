@@ -36,6 +36,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Optional
 
 from app.core.config import settings
@@ -524,6 +525,7 @@ campos do JSON abaixo que constarem no texto, inclusive os não citados aqui.
   averbação ("AV.02") vira UM item, na ordem em que aparecem no texto. Diga o
   que cada ato É em "tipo", usando EXATAMENTE um destes rótulos:
   area_registrada, reserva_legal, app, georreferenciamento, compra_venda,
+  sucessao, inventario, adjudicacao, formal_partilha,
   compromisso_compra_venda, arrendamento, servidao, usufruto, hipoteca,
   alienacao_fiduciaria, penhora, baixa, aditivo. Se o ato não for nenhum
   deles, use "nao_classificado" — nunca force um rótulo que não descreva o ato.
@@ -535,8 +537,9 @@ campos do JSON abaixo que constarem no texto, inclusive os não citados aqui.
   · "valor": o valor em dinheiro do ato, quando houver;
   · "partes": as pessoas ou instituições do ato (credor, arrendatário,
     servidão, usufruto) — copie os nomes como estão;
-  · "adquirentes" / "transmitentes": SÓ em atos "compra_venda" — quem
-    adquiriu e quem transmitiu o imóvel NESTE ato, quando o texto distingue
+  · "adquirentes" / "transmitentes": em atos que TRANSFEREM titularidade
+    (compra_venda, sucessao, inventario, adjudicacao, formal_partilha) — quem
+    recebeu e quem transmitiu o imóvel NESTE ato, quando o texto distingue
     os dois lados ("foi adquirido por X ... por compra feita a Y" →
     adquirentes=["X"], transmitentes=["Y"]). Não preencha se o texto não
     distinguir claramente quem compra de quem vende.
@@ -907,6 +910,7 @@ def _normalizar_area(
 def _linhas_de_observacoes(
     observacoes: list[Observacao], indice: Optional[TextoIndexado],
     doc_hint: Optional[str], confidence: Optional[str],
+    data_referencia: Optional[date] = None,
 ) -> list[StagingField]:
     """Atos tipados → linhas de staging, com o destino resolvido POR TIPO.
 
@@ -924,14 +928,19 @@ def _linhas_de_observacoes(
 
     Frente F (ADR-066): antes de resolver destino, o grafo de alterações
     (baixa/aditivo → `baixado_por`/`retificado_por`) e a vigência derivada
-    (`atributos["vigencia"]`) são calculados — por regra, nunca pelo LLM. Sem
-    `data_referencia` de caso disponível nesta camada, a extração usa a data
-    de hoje ("vigente hoje"); quem consultar mais tarde com a data do caso
-    pode reavaliar sem reextrair (os fatos — `data_ato`/`altera_ato` — já
-    estão salvos).
+    (`atributos["vigencia"]`) são calculados — por regra, nunca pelo LLM.
+
+    Frente J (item 7): a orquestração (`extract_and_stage`) passa a
+    `data_referencia` do PROCESSO (`opened_at`, com `created_at` como
+    fallback — `data_referencia_do_processo`), nunca `date.today()`. Sem
+    referência explícita, um prazo com termo final fica `indeterminado`
+    (não é comparado com o relógio da máquina); os fatos (`data_ato`,
+    `prazo`, `altera_ato`) ficam persistidos e quem consultar depois com a
+    data do caso rederiva sem reextrair. Item 4: `ultimo_por_destino` já não
+    promove ato `baixado` à coluna (a RL baixada não grava `averbacao_rl`).
     """
     aplicar_alteracoes(observacoes)
-    derivar_vigencia(observacoes)
+    derivar_vigencia(observacoes, data_referencia=data_referencia)
     escolhidos = ultimo_por_destino(observacoes)
 
     rows: list[StagingField] = []
@@ -992,6 +1001,7 @@ def _linhas_de_observacoes(
 def build_staging_fields(
     doc_type: str, parsed: dict[str, Any], *, texto: Optional[str] = None,
     titular_tipo: Optional[str] = None, janela: Optional[JanelaResultado] = None,
+    data_referencia: Optional[date] = None,
 ) -> list[StagingField]:
     """Mapeia o JSON extraído → linhas de staging (sem persistir).
 
@@ -1035,7 +1045,9 @@ def build_staging_fields(
     # área do imóvel é, na verdade, área de outro objeto (#221).
     observacoes = observacoes_de(parsed.get("atos")) if doc_type == "matricula" else []
     linhas_obs = (
-        _linhas_de_observacoes(observacoes, indice, doc_hint, _conf_for(parsed, "atos"))
+        _linhas_de_observacoes(
+            observacoes, indice, doc_hint, _conf_for(parsed, "atos"), data_referencia
+        )
         if observacoes else []
     )
     destinos_ocupados = {
@@ -1381,6 +1393,25 @@ def titular_tipo_do_processo(db_session, tenant_id: int,
     return getattr(tipo, "value", tipo)
 
 
+def data_referencia_do_processo(
+    db_session, tenant_id: int, process_id: Optional[int]
+) -> Optional[date]:
+    """Data estável do caso para regras temporais; nunca depende do relógio atual."""
+    if process_id is None:
+        return None
+    from app.models.process import Process  # noqa: PLC0415
+
+    processo = (
+        db_session.query(Process)
+        .filter(Process.id == process_id, Process.tenant_id == tenant_id)
+        .first()
+    )
+    if processo is None:
+        return None
+    marco = processo.opened_at or processo.created_at
+    return marco.date() if marco is not None else None
+
+
 def extract_and_stage(
     *,
     text: str,
@@ -1419,6 +1450,7 @@ def extract_and_stage(
         dt, parsed, texto=text,
         titular_tipo=titular_tipo_do_processo(db_session, tenant_id, process_id),
         janela=janela,
+        data_referencia=data_referencia_do_processo(db_session, tenant_id, process_id),
     )
 
     # 4c — dedup na persistência: não recriar linha já existente (mesma fonte +

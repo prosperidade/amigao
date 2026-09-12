@@ -1,0 +1,126 @@
+{
+ "gerado_em": "2026-09-12T03:31:39.537101+00:00",
+ "passo_5_escolher_fonte": {
+  "a_divergencia_sem_fonte_autoritativa": {
+   "chave": {
+    "entidade": "imovel",
+    "identificador": "1",
+    "aspecto": "reserva_legal_total"
+   },
+   "nivel": "critico",
+   "percentual": 0.11190744559215077,
+   "evidencias": [
+    {
+     "staging_id": 6,
+     "documento_tipo": "car",
+     "campo": "rl_status",
+     "valor_normalizado": 437.7632,
+     "fonte_autoritativa": false
+    },
+    {
+     "staging_id": null,
+     "documento_tipo": "calculado",
+     "campo": "soma_matriculas",
+     "valor_normalizado": 492.9252,
+     "fonte_autoritativa": false
+    }
+   ],
+   "escolhida": 6,
+   "estado_depois": "decidida",
+   "status_da_escolhida": "aceito"
+  },
+  "b_gravame_sem_destino": {
+   "chave": {
+    "entidade": "matricula",
+    "identificador": "3313",
+    "aspecto": "gravames"
+   },
+   "escolhida": 46,
+   "irmaos_da_mesma_matricula": [
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70
+   ],
+   "status_dos_irmaos_depois": {
+    "47": "pendente",
+    "48": "pendente",
+    "49": "pendente",
+    "50": "pendente",
+    "51": "pendente",
+    "52": "pendente",
+    "64": "pendente",
+    "65": "pendente",
+    "66": "pendente",
+    "67": "pendente",
+    "68": "pendente",
+    "69": "pendente",
+    "70": "pendente"
+   },
+   "irmaos_rejeitados": []
+  },
+  "rejeitados_no_processo_inteiro": []
+ },
+ "passo_11_reextracao_cacheada": {
+  "diagnostico_versao": 2,
+  "validado_em": "2026-09-12T03:31:41.162981Z",
+  "aviso_antes_da_reextracao": null,
+  "segundos_reextracao": 161.8,
+  "agente": {
+   "status": null,
+   "fields_count": 24,
+   "documentos": []
+  },
+  "staging_antes": 115,
+  "staging_depois": 146,
+  "linhas_novas": 31,
+  "ids_novos": [
+   116,
+   117,
+   118,
+   119,
+   120,
+   121,
+   122,
+   123,
+   124,
+   125,
+   126,
+   127,
+   128,
+   129,
+   130,
+   131,
+   132,
+   133,
+   134,
+   135,
+   136,
+   137,
+   138,
+   139,
+   140,
+   141,
+   142,
+   143,
+   144,
+   145,
+   146
+  ],
+  "ocr_rodou_de_novo": false,
+  "aviso_depois_da_reextracao": {
+   "tipo": "decisao_alterada",
+   "motivo": "nova evidência da Conferência sobre \"observacao\" entrou depois desta versão",
+   "desde": "2026-09-12T03:31:41.396825Z"
+  }
+ }
+}

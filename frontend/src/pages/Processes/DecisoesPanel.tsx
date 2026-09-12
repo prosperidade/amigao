@@ -19,10 +19,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import {
-  CheckCircle2, ChevronDown, ChevronRight, Database, Loader2, RotateCcw, Scale,
+  CheckCircle2, ChevronDown, ChevronRight, Database, Loader2, Pencil, RotateCcw, Scale,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { humanizeValue } from '@/lib/labels/fieldLabels';
+import { humanizeValue, OBSERVACAO_LABELS } from '@/lib/labels/fieldLabels';
 import { docTypeLabel } from '@/lib/labels/docLabels';
 import { decisoesQueryKey, progressoConferenciaKey, type Decisao, type ReconciliationData } from '@/lib/reconciliation';
 
@@ -34,10 +34,12 @@ function errDetail(e: unknown, fallback: string): string {
 const ESTADO_CLS: Record<string, string> = {
   pendente: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-white/10 dark:text-slate-300 dark:border-white/10',
   decidida: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/30',
+  parcialmente_gravada: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30',
   gravada: 'bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40',
 };
 const ESTADO_LABEL: Record<string, string> = {
-  pendente: 'Pendente', decidida: 'Decidida — aguardando gravação', gravada: 'Gravado na base',
+  pendente: 'Pendente', decidida: 'Decidida — aguardando gravação',
+  parcialmente_gravada: 'Parcialmente gravada', gravada: 'Gravado na base',
 };
 
 const NIVEL_CLS: Record<string, string> = {
@@ -70,6 +72,14 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
   // recolhidas, mas acessíveis"); divergência ou fonte única já abrem, porque
   // é ali que a consultora precisa olhar primeiro.
   const [expandido, setExpandido] = useState(decisao.concordancia !== 'concordam');
+  const primeira = decisao.evidencias.find(e => e.staging_id != null);
+  const temTipo = decisao.evidencias.some(e => e.staging_id != null && !!e.tipo_observacao);
+  const [stagingId, setStagingId] = useState<number | null>(primeira?.staging_id ?? null);
+  const [valorEditado, setValorEditado] = useState(
+    typeof primeira?.valor_bruto === 'string' || typeof primeira?.valor_bruto === 'number'
+      ? String(primeira.valor_bruto) : '',
+  );
+  const [tipoEditado, setTipoEditado] = useState(primeira?.tipo_observacao ?? '');
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: decisoesQueryKey(processId) });
@@ -82,19 +92,30 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
   };
 
   const decidir = useMutation({
-    mutationFn: (acao: 'aceitar' | 'reabrir') =>
+    mutationFn: (payload: {
+      acao: 'aceitar' | 'reabrir' | 'escolher_fonte' | 'editar' | 'reclassificar';
+      staging_id?: number | null;
+      valor?: unknown;
+      tipo_observacao?: string;
+    }) =>
       api.post(`/processes/${processId}/staging-decisions/decidir`, {
         entidade: decisao.chave.entidade,
         identificador: decisao.chave.identificador,
         aspecto: decisao.chave.aspecto,
-        acao,
+        ...payload,
       }).then(r => r.data),
     onSuccess: invalidate,
     onError: (e) => toast.error(errDetail(e, 'Falha ao decidir.')),
   });
 
   return (
-    <div className="rounded-lg border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-3 space-y-2">
+    <div
+      // A chave natural (ADR-067) identifica o cartão para o gate E2E — sem
+      // isto o teste precisa adivinhar qual `div` é o cartão, e adivinhar em
+      // teste de UI é como o gate deixa de valer.
+      data-testid={`decisao-${decisao.chave.entidade}-${decisao.chave.identificador}-${decisao.chave.aspecto}`}
+      className="rounded-lg border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-3 space-y-2"
+    >
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <button
           onClick={() => setExpandido(v => !v)}
@@ -135,15 +156,99 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
                   <Scale className="w-3 h-3" /> fonte autoritativa
                 </span>
               )}
+              {decisao.concordancia === 'divergem' && decisao.estado === 'pendente' && e.staging_id != null && (
+                <button
+                  onClick={() => decidir.mutate({ acao: 'escolher_fonte', staging_id: e.staging_id })}
+                  disabled={decidir.isPending}
+                  className="text-purple-700 dark:text-purple-300 underline disabled:opacity-40"
+                >
+                  Escolher esta fonte
+                </button>
+              )}
             </div>
           ))}
+          {/* Frente J (item 5, CONF-002): dois gestos que o cartão não tinha.
+              (a) divergência → escolher a fonte ou editar o VALOR de uma
+              evidência (antes só "aceitar", que aplica a fonte autoritativa,
+              ou "reabrir"); (b) qualquer decisão pendente com evidência
+              TIPADA (ADR-065) → corrigir o TIPO que o modelo sugeriu — o
+              padrão medido no #23 é "valor certo, tipo errado", e isso não
+              depende de haver divergência. O original fica em
+              `atributos.tipo_sugerido`; a reconciliação consome o decidido. */}
+          {decisao.estado === 'pendente' && primeira && (decisao.concordancia === 'divergem' || temTipo) && (
+            <div className="mt-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 p-2 space-y-2">
+              <label className="block text-xs text-gray-600 dark:text-slate-300">
+                Evidência a editar
+                <select
+                  aria-label="Evidência a editar"
+                  value={stagingId ?? ''}
+                  onChange={(event) => {
+                    const id = Number(event.target.value);
+                    const escolhida = decisao.evidencias.find(e => e.staging_id === id);
+                    setStagingId(id);
+                    setValorEditado(
+                      typeof escolhida?.valor_bruto === 'string' || typeof escolhida?.valor_bruto === 'number'
+                        ? String(escolhida.valor_bruto) : '',
+                    );
+                    setTipoEditado(escolhida?.tipo_observacao ?? '');
+                  }}
+                  className="mt-1 w-full rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 px-2 py-1"
+                >
+                  {decisao.evidencias.filter(e => e.staging_id != null).map(e => (
+                    <option key={e.staging_id!} value={e.staging_id!}>
+                      {docTypeLabel(e.documento_tipo)} — {e.campo ?? `linha ${e.staging_id}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {decisao.concordancia === 'divergem' && (
+              <div className="flex gap-1.5 flex-wrap">
+                <input
+                  aria-label="Valor decidido"
+                  value={valorEditado}
+                  onChange={event => setValorEditado(event.target.value)}
+                  className="min-w-48 flex-1 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 px-2 py-1 text-xs"
+                />
+                <button
+                  onClick={() => decidir.mutate({ acao: 'editar', staging_id: stagingId, valor: valorEditado })}
+                  disabled={decidir.isPending || stagingId == null || valorEditado.trim() === ''}
+                  className="flex items-center gap-1 rounded border border-gray-200 dark:border-white/10 px-2 py-1 text-xs disabled:opacity-40"
+                >
+                  <Pencil className="w-3 h-3" /> Editar valor
+                </button>
+              </div>
+              )}
+              {temTipo && (
+              <div className="flex gap-1.5 flex-wrap">
+                <select
+                  aria-label="Tipo de observação decidido"
+                  value={tipoEditado}
+                  onChange={event => setTipoEditado(event.target.value)}
+                  className="min-w-48 flex-1 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 px-2 py-1 text-xs"
+                >
+                  <option value="">Escolher tipo de observação</option>
+                  {Object.entries(OBSERVACAO_LABELS).filter(([tipo]) => tipo !== 'nao_classificado').map(([tipo, label]) => (
+                    <option key={tipo} value={tipo}>{label}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => decidir.mutate({ acao: 'reclassificar', staging_id: stagingId, tipo_observacao: tipoEditado })}
+                  disabled={decidir.isPending || stagingId == null || !tipoEditado}
+                  className="flex items-center gap-1 rounded border border-gray-200 dark:border-white/10 px-2 py-1 text-xs disabled:opacity-40"
+                >
+                  <Pencil className="w-3 h-3" /> Editar tipo
+                </button>
+              </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       <div className="flex items-center gap-1.5 pt-1">
         {decisao.estado === 'pendente' ? (
           <button
-            onClick={() => decidir.mutate('aceitar')}
+            onClick={() => decidir.mutate({ acao: 'aceitar' })}
             disabled={decidir.isPending}
             className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white"
           >
@@ -152,7 +257,7 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
           </button>
         ) : (
           <button
-            onClick={() => decidir.mutate('reabrir')}
+            onClick={() => decidir.mutate({ acao: 'reabrir' })}
             disabled={decidir.isPending}
             title="Reabrir esta decisão (volta a pendente)"
             className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/10 disabled:opacity-40"

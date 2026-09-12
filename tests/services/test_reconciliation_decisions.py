@@ -30,14 +30,21 @@ dict inventado.
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
+
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.document import Document, OcrStatus
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
 from app.models.tenant import Tenant
+from app.services.ficha01_extraction import data_referencia_do_processo
 from app.services.reconciliation_decisions import build_decisions
-from app.services.staging_consolidation import consolidate_process, decidir_decisao_agrupada
+from app.services.staging_consolidation import (
+    consolidate_process,
+    decide_field,
+    decidir_decisao_agrupada,
+)
 
 _SEQ = {"n": 0}
 
@@ -255,6 +262,14 @@ def _elodi(db_session):
     )
 
     return tenant, proc, prop, cli, rows
+
+
+def test_data_de_abertura_do_caso_alimenta_a_vigencia(db_session):
+    tenant, proc, _prop, _cli = _seed(db_session)
+    proc.opened_at = datetime(2024, 5, 20, 12, 0, tzinfo=UTC)
+    db_session.flush()
+
+    assert data_referencia_do_processo(db_session, tenant.id, proc.id) == date(2024, 5, 20)
 
 
 def _decisao(resultado, aspecto, identificador=None):
@@ -572,6 +587,19 @@ class TestDecidirDecisaoAgrupada:
         gravado = build_decisions(rows_pos2)
         assert _decisao(gravado, "composicao", "3181").estado == "gravada"
 
+    def test_estado_misto_e_parcialmente_gravada(self, db_session):
+        tenant, proc, _prop, _cli, rows = _elodi(db_session)
+        decidir_decisao_agrupada(
+            db_session, tenant_id=tenant.id, process_id=proc.id,
+            chave=("matricula", "3181", "composicao"), acao="aceitar", user_id=None,
+        )
+        rows["certidao_3181"].consolidated_at = rows["certidao_3181"].decided_at
+        rows["car_lista_3181"].consolidated_at = None
+        db_session.flush()
+
+        atual = build_decisions(list(rows.values()))
+        assert _decisao(atual, "composicao", "3181").estado == "parcialmente_gravada"
+
     def test_reabrir_devolve_a_decisao_a_pendente(self, db_session):
         tenant, proc, _prop, _cli, rows = _elodi(db_session)
         decidir_decisao_agrupada(
@@ -583,3 +611,156 @@ class TestDecidirDecisaoAgrupada:
             chave=("matricula", "3181", "composicao"), acao="reabrir", user_id=None,
         )
         assert decidida.estado == "pendente"
+
+    def test_editar_tipo_preserva_sugestao_e_reconciliacao_consumo_decidido(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        row = _linha(
+            db_session, tenant, proc, doc, field_name="averbacao_app",
+            valor="AV.03 — garantia hipotecária", entidade="matricula",
+            alvo="averbacao_app", hint="3181", tipo_obs="app",
+            atributos={"ato": "AV.03", "data_ato": "15/04/2008"},
+        )
+
+        decide_field(
+            db_session, tenant_id=tenant.id, process_id=proc.id, field_id=row.id,
+            acao="reclassificar", tipo_observacao="hipoteca", user_id=None,
+        )
+        db_session.refresh(row)
+
+        assert row.tipo_observacao == "hipoteca"
+        assert row.atributos["tipo_sugerido"] == "app"
+        # O texto que a tela MOSTRA acompanha a decisão: sem isto o cartão
+        # exibiria "AV.03 · APP · …" ao lado do tipo decidido "Hipoteca".
+        assert "Hipoteca" in row.field_value["value"]
+        assert row.field_value["value_sugerido"] == "AV.03 — garantia hipotecária"
+        assert row.target_entity is None and row.target_field is None
+        decisoes = build_decisions([row]).decisoes
+        assert len(decisoes) == 1
+        # `Decisao.chave` é a tupla (entidade, identificador, aspecto) — só o
+        # `to_dict()` da API a nomeia em campos.
+        assert decisoes[0].chave == ("matricula", "3181", "gravames")
+        assert decisoes[0].evidencias[0].tipo_observacao == "hipoteca"
+
+
+class TestFrenteJEvidenciaTipada:
+    """Frente J — regressão do TypeError medido no #23 real: `Evidencia` ganhou
+    `tipo_observacao` e a decisão de TITULARIDADE (construída fora de
+    `_evidencia_de`) derrubava `build_decisions` inteiro. Aqui a linha é uma
+    `compra_venda` como as do #23 (R-13 da 3.673)."""
+
+    def test_titularidade_nao_quebra_e_carrega_o_tipo(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="R-13 · Compra e venda · 10/12/2019", entidade=None, alvo=None,
+            hint="3673", tipo_obs="compra_venda",
+            atributos={"ato": "R-13", "data_ato": "10/12/2019",
+                       "adquirentes": ["ELODI AGROPECUÁRIA"],
+                       "transmitentes": ["ALEXANDRE AUGUSTO CLEMENTE"]},
+        )
+        rows = db_session.query(ExtractedFieldStaging).filter(
+            ExtractedFieldStaging.process_id == proc.id
+        ).all()
+        resultado = build_decisions(rows)
+        titularidade = _decisao(resultado, "titularidade", "3673")
+        assert titularidade is not None
+        assert {e.tipo_observacao for e in titularidade.evidencias} == {"compra_venda"}
+        assert all("tipo_observacao" in e.to_dict() for e in titularidade.evidencias)
+        assert "ELODI AGROPECUÁRIA" in str(titularidade.valor_proposto)
+
+    def test_evidencia_sintetica_de_soma_tem_tipo_none(self, db_session):
+        tenant, proc, _prop, _cli, rows = _elodi(db_session)
+        resultado = build_decisions(list(rows.values()))
+        for decisao in resultado.decisoes:
+            for e in decisao.evidencias:
+                if e.staging_id is None:
+                    assert e.tipo_observacao is None
+
+
+class TestFrenteJEscolherFonteSemDestino:
+    """Frente J expôs `escolher_fonte` na decisão agrupada (item 5). Uma
+    evidência SEM destino (gravame/baixa/aditivo — ADR-065) não disputa coluna
+    com ninguém: `_reject_siblings` não pode varrer `target_field IS NULL` e
+    derrubar todas as outras observações da mesma matrícula."""
+
+    def test_escolher_fonte_em_gravame_nao_rejeita_as_outras_observacoes(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        escolhida = _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="AV.03 · Hipoteca · 15/04/2008", entidade=None, alvo=None,
+            hint="3673", tipo_obs="hipoteca", atributos={"ato": "AV.03", "vigencia": "vigente"},
+        )
+        vizinhas = [
+            _linha(db_session, tenant, proc, doc, field_name="observacao",
+                   valor="AV.09 · Baixa · 16/03/2017", entidade=None, alvo=None,
+                   hint="3673", tipo_obs="baixa", atributos={"ato": "AV.09"}),
+            _linha(db_session, tenant, proc, doc, field_name="observacao",
+                   valor="AV.10 · Arrendamento · 50 ha", entidade=None, alvo=None,
+                   hint="3673", tipo_obs="arrendamento", atributos={"ato": "AV.10"}),
+        ]
+
+        decide_field(
+            db_session, tenant_id=tenant.id, process_id=proc.id,
+            field_id=escolhida.id, acao="escolher_fonte", user_id=None,
+        )
+
+        db_session.refresh(escolhida)
+        assert escolhida.status == ExtractedFieldStatus.aceito
+        for v in vizinhas:
+            db_session.refresh(v)
+            assert v.status == ExtractedFieldStatus.pendente, f"{v.atributos} foi rejeitada em massa"
+
+
+class TestFrenteJAceitarCobreTodosOsMembros:
+    """Achado do gate E2E (12/09): `aceitar` percorria as EVIDÊNCIAS, e nem
+    todo membro da decisão vira evidência. A decisão de titularidade monta a
+    lista a partir da CADEIA (`cadeia_titularidade`), então um ato de
+    `compra_venda` que não nomeia adquirente/transmitente entra no grupo e não
+    aparece na lista — medido no caso real: matrícula 3.181 com 3 membros para
+    2 evidências. A linha órfã nunca era aceita e a decisão ficava presa em
+    "pendente": a consultora clicava em Aceitar e a tela não mudava."""
+
+    def test_aceitar_decide_membro_que_nao_virou_evidencia(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        # Ato COM os dois lados nomeados → vira evidência na cadeia.
+        com_partes = _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="R-13 · Compra e venda · 10/12/2019", entidade=None, alvo=None,
+            hint="3673", tipo_obs="compra_venda",
+            atributos={"ato": "R-13", "data_ato": "10/12/2019",
+                       "adquirentes": ["ELODI AGROPECUÁRIA"],
+                       "transmitentes": ["ALEXANDRE AUGUSTO CLEMENTE"]},
+        )
+        # Ato do MESMO fato, sem partes distinguidas → membro sem evidência.
+        orfa = _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="R-09 · Compra e venda · 03/05/2016", entidade=None, alvo=None,
+            hint="3673", tipo_obs="compra_venda",
+            atributos={"ato": "R-09", "data_ato": "03/05/2016"},
+        )
+
+        rows = db_session.query(ExtractedFieldStaging).filter(
+            ExtractedFieldStaging.process_id == proc.id).all()
+        decisao = _decisao(build_decisions(rows), "titularidade", "3673")
+        assert decisao is not None
+        ids_evidencia = {e.staging_id for e in decisao.evidencias if e.staging_id is not None}
+        assert orfa.id in decisao.staging_ids and orfa.id not in ids_evidencia, (
+            "a fixture precisa ter um membro fora da lista de evidências"
+        )
+
+        decidir_decisao_agrupada(
+            db_session, tenant_id=tenant.id, process_id=proc.id,
+            chave=("matricula", "3673", "titularidade"), acao="aceitar", user_id=None,
+        )
+        db_session.expire_all()
+        for linha in (com_partes, orfa):
+            db_session.refresh(linha)
+            assert linha.status == ExtractedFieldStatus.aceito, linha.atributos
+
+        rows_pos = db_session.query(ExtractedFieldStaging).filter(
+            ExtractedFieldStaging.process_id == proc.id).all()
+        assert _decisao(build_decisions(rows_pos), "titularidade", "3673").estado == "decidida"

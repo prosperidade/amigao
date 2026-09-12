@@ -51,6 +51,8 @@ export interface Document {
   // Fase 1 (N1, item 3) — nota de processamento ("recebido, não processado
   // (tipo) — revisar: <motivo>"). Null quando o staging cadastral gravou OK.
   extraction_status?: string | null;
+  // Projeção canônica DOC-001 (ADR-068), distinta do estado técnico do OCR.
+  lifecycle_status?: string | null;
   // Estado da LEITURA do documento — OCR de PDF ou transcrição de áudio
   // (ADR-060). 'pending' | 'processing' | 'done' | 'failed' | 'not_required'.
   ocr_status?: string | null;

@@ -1,0 +1,30 @@
+{
+ "process_id": 1,
+ "campos_gravados": 1,
+ "matriculas_criadas": 1,
+ "matriculas_atualizadas": 0,
+ "cliente_atualizado": false,
+ "imovel_atualizado": true,
+ "area_total_matriculas": 0.0,
+ "area_total_nota": null,
+ "acoes_criadas": 0,
+ "matriculas_desativadas": [],
+ "matriculas_reativadas": [],
+ "writes": [
+  {
+   "entity": "imovel",
+   "entity_id": 1,
+   "field": "car_code",
+   "anterior": null,
+   "novo": "GO-5200605-82E5.AE14.076B.4637.9900.9C9D.EC86.D700",
+   "fonte": "car",
+   "staging_id": 1
+  }
+ ],
+ "ignorados": [
+  "matricula.numero_matricula: o CAR cita a matrícula 3181, que não está cadastrada — a certidão de matrícula é a única fonte que cria o registro (cadastre-a manualmente ou anexe a certidão)",
+  "—.—: aceito sem campo de destino — nada a gravar"
+ ],
+ "reconciliacoes": [],
+ "divergencias_devolvidas": []
+}

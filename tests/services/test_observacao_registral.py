@@ -23,6 +23,7 @@ from app.services.observacao_registral import (
     TIPO_HIPOTECA,
     TIPO_NAO_CLASSIFICADO,
     TIPO_RESERVA_LEGAL,
+    TIPO_SUCESSAO,
     VIGENCIA_BAIXADO,
     VIGENCIA_EXPIRADO,
     VIGENCIA_INDETERMINADO,
@@ -592,6 +593,20 @@ class TestRlVigente:
         ])
         assert rl_vigente(obs) is None
 
+    def test_rl_baixada_nao_e_promovida_e_anterior_valida_prevalece(self):
+        obs = observacoes_de([
+            {"ato": "AV.01", "tipo": "reserva_legal", "area_ha": "80,0", "data_ato": "01/01/2000"},
+            {"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "90,0", "data_ato": "01/01/2010"},
+            {"ato": "AV.03", "tipo": "baixa", "altera_ato": "AV.02", "data_ato": "01/01/2020"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs, data_referencia=date(2021, 1, 1))
+
+        rl = rl_vigente(obs)
+        assert rl is not None
+        assert rl.ato == "AV.01"
+        assert next(o for o in obs if o.ato == "AV.02").vigencia == VIGENCIA_BAIXADO
+
 
 class TestTitularidade:
     """doc 549 — cadeia real: Nascente Agro-industrial → Alexandre Augusto
@@ -634,6 +649,17 @@ class TestTitularidade:
         obs = observacoes_de([{"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "492,9252"}])
         assert titular_atual(obs) is None
 
+    def test_sucessao_transfere_titularidade_para_o_espolio(self):
+        obs = observacoes_de([
+            {"ato": "R-20", "tipo": TIPO_SUCESSAO, "data_ato": "10/04/2024",
+             "adquirentes": ["ESPÓLIO DE MARIA DA SILVA"],
+             "transmitentes": ["MARIA DA SILVA"]},
+        ])
+        atual = titular_atual(obs)
+        assert atual is not None
+        assert atual["titulares"] == ["ESPÓLIO DE MARIA DA SILVA"]
+        assert atual["ato"] == "R-20"
+
 
 class TestAtributosTemporaisNaLinhaDeStaging:
     """`data_ato`, `altera_ato` e `vigencia` sobrevivem inteiros até a linha
@@ -667,3 +693,95 @@ class TestAtributosTemporaisNaLinhaDeStaging:
         )
         hipoteca = next(r for r in rows if r.atributos and r.atributos.get("ato") == "AV.03")
         assert hipoteca.atributos["vigencia"] == VIGENCIA_BAIXADO
+
+
+class TestFrenteJVigenciaEDestino:
+    """Frente J (reauditoria Codex 11/09) — itens 4 e 7 fechados por regra."""
+
+    def test_rl_baixada_nao_grava_a_coluna_averbacao_rl(self):
+        """Item 4: `ultimo_por_destino` (quem grava a coluna) já não promove
+        ato BAIXADO — sem isto a RL baixada continuava sendo "a última do
+        documento" e gravaria `matricula.averbacao_rl` como se valesse."""
+        obs = observacoes_de([
+            {"ato": "AV.01", "tipo": "reserva_legal", "area_ha": "80,0", "data_ato": "01/01/2000"},
+            {"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "90,0", "data_ato": "01/01/2010"},
+            {"ato": "AV.03", "tipo": "baixa", "altera_ato": "AV.02", "data_ato": "01/01/2020"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs, data_referencia=date(2021, 1, 1))
+
+        escolhido = ultimo_por_destino(obs).get(("matricula", "averbacao_rl"))
+        assert escolhido is not None and escolhido.ato == "AV.01"
+        assert rl_vigente(obs) is escolhido
+
+    def test_todas_as_rl_baixadas_nao_ha_vigente_nem_coluna(self):
+        obs = observacoes_de([
+            {"ato": "AV.01", "tipo": "reserva_legal", "area_ha": "80,0", "data_ato": "01/01/2000"},
+            {"ato": "AV.02", "tipo": "baixa", "altera_ato": "AV.01", "data_ato": "01/01/2020"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs, data_referencia=date(2021, 1, 1))
+        assert rl_vigente(obs) is None
+        assert ("matricula", "averbacao_rl") not in ultimo_por_destino(obs)
+
+    def test_rl_retificada_nao_e_promovida_a_vigente_mas_mantem_a_coluna(self):
+        """Retificado (aditivo) AMENDA, não cancela (ADR-066): o ato continua
+        gravando a coluna, mas `rl_vigente` não o afirma sem olhar o aditivo."""
+        obs = observacoes_de([
+            {"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "492,9252", "data_ato": "27/01/2009"},
+            {"ato": "AV.05", "tipo": "aditivo", "altera_ato": "AV.02", "data_ato": "10/03/2015"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs, data_referencia=date(2021, 1, 1))
+        assert next(o for o in obs if o.ato == "AV.02").vigencia == VIGENCIA_RETIFICADO
+        assert rl_vigente(obs) is None
+        assert ultimo_por_destino(obs)[("matricula", "averbacao_rl")].ato == "AV.02"
+
+    def test_prazo_com_termo_sem_data_de_referencia_e_indeterminado(self):
+        """Item 7: sem data do CASO, um prazo com termo final não vira
+        `vigente` pelo passo "tem data_ato" — silêncio não é vigência."""
+        obs = observacoes_de([
+            {"ato": "AV.10", "tipo": "arrendamento", "data_ato": "20/03/2013",
+             "prazo": "15 anos com inicio no dia 01/01/2013 a 01/01/2028"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs, data_referencia=None)
+        assert obs[0].vigencia == VIGENCIA_INDETERMINADO
+
+        derivar_vigencia(obs, data_referencia=date(2026, 9, 11))
+        assert obs[0].vigencia == VIGENCIA_VIGENTE
+        derivar_vigencia(obs, data_referencia=date(2030, 1, 1))
+        assert obs[0].vigencia == VIGENCIA_EXPIRADO
+
+    def test_gravame_com_data_sem_referencia_continua_vigente(self):
+        """Gravame não tem termo (ADR-066 passo 2 só vale para arrendamento/
+        usufruto): a ausência de data de referência não o rebaixa."""
+        obs = observacoes_de([
+            {"ato": "R.15", "tipo": "alienacao_fiduciaria", "data_ato": "20/12/2019",
+             "partes": ["ITAÚ UNIBANCO S.A."]},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs, data_referencia=None)
+        assert obs[0].vigencia == VIGENCIA_VIGENTE
+
+    def test_vocabulario_de_sucessao_normaliza_rotulos_humanos(self):
+        assert normalizar_tipo("Sucessão") == TIPO_SUCESSAO
+        assert normalizar_tipo("inventário") == "inventario"
+        assert normalizar_tipo("Formal de Partilha") == "formal_partilha"
+        assert normalizar_tipo("adjudicação") == "adjudicacao"
+
+    def test_espolio_transmite_a_herdeiro_na_cadeia(self):
+        """O caso de 3.000 ha da Isis: espólio → formal de partilha → herdeiro.
+        Sem o vocabulário, `titular_atual` devolvia None (só `compra_venda`)."""
+        obs = observacoes_de([
+            {"ato": "R-05", "tipo": "compra_venda", "data_ato": "10/04/1998",
+             "adquirentes": ["JOSÉ DA SILVA"], "transmitentes": ["ANTÔNIO PEREIRA"]},
+            {"ato": "R-09", "tipo": "sucessao", "data_ato": "02/02/2020",
+             "adquirentes": ["ESPÓLIO DE JOSÉ DA SILVA"], "transmitentes": ["JOSÉ DA SILVA"]},
+            {"ato": "R-12", "tipo": "formal_partilha", "data_ato": "15/07/2023",
+             "adquirentes": ["MARIA DA SILVA"], "transmitentes": ["ESPÓLIO DE JOSÉ DA SILVA"]},
+        ])
+        cadeia = cadeia_titularidade(obs)
+        assert [linha["ato"] for linha in cadeia if linha["papel_no_ato"] == "adquirente"] == ["R-05", "R-09", "R-12"]
+        atual = titular_atual(obs)
+        assert atual is not None and atual["titulares"] == ["MARIA DA SILVA"] and atual["ato"] == "R-12"

@@ -1578,7 +1578,8 @@ def decide_staging_field(
     )
     row = decide_field(
         db, tenant_id=current_user.tenant_id, process_id=process_id, field_id=field_id,
-        acao=body.acao, valor=body.valor, fonte=body.fonte, user_id=current_user.id,
+        acao=body.acao, valor=body.valor, fonte=body.fonte,
+        tipo_observacao=body.tipo_observacao, user_id=current_user.id,
     )
     decided = row.decided_value.get("value") if isinstance(row.decided_value, dict) else None
     return StagingDecisionResult(field_id=row.id, status=row.status, decided_value=decided)
@@ -1615,7 +1616,7 @@ def list_process_staging_decisions(
     return resultado.to_dict()
 
 
-@router.post("/{process_id}/staging-decisions/decidir", response_model=DecisaoOut)
+@router.post("/{process_id}/staging-decisions/decidir", response_model=Optional[DecisaoOut])
 def decide_process_staging_decision(
     process_id: int,
     body: DecisaoRequest,
@@ -1633,9 +1634,15 @@ def decide_process_staging_decision(
     chave = (body.entidade, body.identificador, body.aspecto)
     decisao = decidir_decisao_agrupada(
         db, tenant_id=current_user.tenant_id, process_id=process_id,
-        chave=chave, acao=body.acao, user_id=current_user.id,
+        chave=chave, acao=body.acao, staging_id=body.staging_id,
+        valor=body.valor, tipo_observacao=body.tipo_observacao,
+        user_id=current_user.id,
     )
-    return decisao.to_dict()
+    # `None` quando a reclassificação tirou a linha de toda decisão (ex.: RL
+    # que virou `arrendamento`, que a Frente G não agrupa): a escrita foi
+    # feita, a linha está em `sem_agrupamento`, e a tela recarrega para
+    # mostrá-la lá. Devolver erro seria mentira — nada falhou.
+    return decisao.to_dict() if decisao is not None else None
 
 
 @router.get("/{process_id}/confronto-identidade")

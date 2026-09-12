@@ -99,7 +99,9 @@ class Document(Base):
 
         Exposto no `DocumentResponse` para a tela saber se vale abrir o texto sem
         precisar carregá-lo na listagem inteira."""
-        return bool((self.extracted_text or "").strip())
+        from app.services.ficha01_extraction import texto_sem_conteudo_legivel
+
+        return not texto_sem_conteudo_legivel(self.extracted_text)
 
     tenant = relationship("Tenant")
     process = relationship("Process")

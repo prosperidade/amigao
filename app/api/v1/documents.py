@@ -82,6 +82,27 @@ def _get_storage_service() -> StorageService:
     return get_storage_service()
 
 
+def _with_lifecycle(db: Session, document: Document) -> Document:
+    """Anexa a projeção DOC-001 (ADR-068 + Frente J item 6) usada pelo
+    `DocumentResponse`; não persiste — é atributo transiente da instância."""
+    from app.services.document_lifecycle import derive_document_status  # noqa: PLC0415
+
+    document.lifecycle_status = derive_document_status(db, document).value
+    return document
+
+
+def _with_lifecycle_many(db: Session, documents: list[Document]) -> list[Document]:
+    """Mesma projeção para a listagem — UMA query de staging para a lista
+    inteira (`derive_document_statuses`), não uma por documento."""
+    from app.services.document_lifecycle import derive_document_statuses  # noqa: PLC0415
+
+    por_id = derive_document_statuses(db, documents)
+    for doc in documents:
+        status = por_id.get(doc.id)
+        doc.lifecycle_status = status.value if status is not None else None
+    return documents
+
+
 @router.get("/categories")
 def list_document_categories(
     current_user: User = Depends(get_current_internal_user),
@@ -129,7 +150,7 @@ def list_documents(
     if access_context.is_client_portal:
         docs = [d for d in docs if not getattr(d, "is_internal", False)]
 
-    return docs
+    return _with_lifecycle_many(db, docs)
 
 
 @router.post("/upload-url", response_model=DocumentUploadUrlResponse)
@@ -290,7 +311,7 @@ def confirm_upload(
             "Documento #%s é geoespacial — armazenado sem OCR (gap D1) | '%s'",
             db_doc.id, body.filename,
         )
-        return db_doc
+        return _with_lifecycle(db, db_doc)
 
     # Áudio tem leitura PRÓPRIA: transcrição (dívida #103 · ADR-060). A gravação da
     # reunião é fonte primária do caso — o que o cliente contou, o que prometeu
@@ -317,7 +338,7 @@ def confirm_upload(
             "Documento #%s confirmado (áudio) | tenant=%s | '%s'",
             db_doc.id, access_context.tenant_id, body.filename,
         )
-        return db_doc
+        return _with_lifecycle(db, db_doc)
 
     # Pipeline de extração textual. PDFs passam pelo OCR cascata (pypdf → Gemini →
     # OpenAI Vision) que persiste `Document.extracted_text` antes de despachar o
@@ -354,7 +375,7 @@ def confirm_upload(
 
     record_document_upload("client_portal" if access_context.is_client_portal else "internal", "success")
     logger.info(f"Documento #{db_doc.id} confirmado | tenant={access_context.tenant_id} | '{body.filename}'")
-    return db_doc
+    return _with_lifecycle(db, db_doc)
 
 
 @router.get("/{document_id}/download-url")
@@ -441,7 +462,7 @@ def update_document(
         db.commit()
         db.refresh(doc)
 
-    return doc
+    return _with_lifecycle(db, doc)
 
 
 @router.post("/{document_id}/reprocess-ocr")

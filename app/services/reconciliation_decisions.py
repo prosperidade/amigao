@@ -14,7 +14,8 @@ identificador, aspecto)``. Ex.: ``("matricula", "3181", "composicao")``,
 evidências por fonte, concordância/divergência calculada por REGRA (a régua de
 4 níveis da skill do auditor, `grade_area_divergence` — nunca LLM), fonte
 autoritativa pela ADR-062 (matrícula manda no registral, CAR no ambiental,
-CCIR/ITR no cadastral) e estado (pendente/decidida/gravada, reaproveitando
+CCIR/ITR no cadastral) e estado (pendente/decidida/parcialmente gravada/gravada,
+reaproveitando
 `ExtractedFieldStaging.status`/`consolidated_at` — nenhuma coluna nova).
 
 A decisão em si não é uma entidade persistida (ADR-067 mediu `ProcessDecision`
@@ -41,9 +42,9 @@ from app.models.extracted_field_staging import (
 )
 from app.services.inconsistency_matrix import _clean_matricula_hint, norm_compare, parse_area_ha
 from app.services.observacao_registral import (
-    TIPO_COMPRA_VENDA,
     TIPO_RESERVA_LEGAL,
     TIPOS_GRAVAME,
+    TIPOS_TRANSFERENCIA_TITULARIDADE,
     Observacao,
     cadeia_titularidade,
     titular_atual,
@@ -108,6 +109,12 @@ class Evidencia:
     vigencia: Optional[str]
     status: str
     fonte_autoritativa: bool = False
+    # Frente J (item 5): o tipo DECIDIDO da observação (ADR-065), para a tela
+    # oferecer a reclassificação sem abrir o JSON. Opcional com default: a
+    # evidência sintética (soma calculada) e a de titularidade não têm tipo
+    # próprio — um campo obrigatório aqui derrubava `GET /staging-decisions`
+    # inteiro no #23 (medido: TypeError em `_montar_decisao_titularidade`).
+    tipo_observacao: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -119,6 +126,7 @@ class Evidencia:
             "valor_normalizado": self.valor_normalizado,
             "unidade": self.unidade,
             "vigencia": self.vigencia,
+            "tipo_observacao": self.tipo_observacao,
             "status": self.status,
             "fonte_autoritativa": self.fonte_autoritativa,
         }
@@ -251,7 +259,7 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
     # GONDIM, doc 548/matrícula 3313, transmitente do R-11 de 2014, listada
     # como se fosse proprietária). `_montar_decisao_titularidade` monta a
     # decisão a partir da cadeia real, não da primeira evidência da lista.
-    if row.tipo_observacao == TIPO_COMPRA_VENDA:
+    if row.tipo_observacao in TIPOS_TRANSFERENCIA_TITULARIDADE:
         hint = _clean_matricula_hint(row.matricula_hint)
         if hint:
             return ("matricula", hint, "titularidade"), None
@@ -358,6 +366,7 @@ def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
         valor_normalizado=valor_normalizado,
         unidade=unidade,
         vigencia=vigencia,
+        tipo_observacao=row.tipo_observacao,
         status=row.status.value if row.status else "pendente",
     )
 
@@ -404,10 +413,11 @@ def _comparar(aspecto: str, evidencias: list[Evidencia]) -> tuple[str, Optional[
 
 
 def _estado_de(membros: list[ExtractedFieldStaging]) -> str:
-    """pendente | decidida | gravada — reaproveita status/consolidated_at, sem
-    coluna nova (mesma lógica de "Aceito" ≠ "Gravado" já validada na tela)."""
-    if any(r.consolidated_at is not None for r in membros):
+    """Estado agregado sem esconder evidência nova ainda não consolidada."""
+    if membros and all(r.consolidated_at is not None for r in membros):
         return "gravada"
+    if any(r.consolidated_at is not None for r in membros):
+        return "parcialmente_gravada"
     if all(r.status in _DECIDIDOS for r in membros):
         return "decidida"
     return "pendente"
@@ -500,6 +510,7 @@ def _montar_decisao_titularidade(chave: ChaveNatural, membros: list[ExtractedFie
                 vigencia=None,
                 status=status_val,
                 fonte_autoritativa=True,
+                tipo_observacao=origem.tipo_observacao if origem else None,
             )
         )
 

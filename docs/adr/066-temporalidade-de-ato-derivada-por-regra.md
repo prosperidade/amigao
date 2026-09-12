@@ -249,3 +249,45 @@ Números completos: `docs/trabalhos/temporalidade_ato.md`.
 — mais o rename das chaves antigas (`data`→`data_ato`,
 `ato_referenciado`→`altera_ato`, `aplicar_baixas`→`aplicar_alteracoes`) nas
 classes da Frente E, que continuam verdes.
+
+
+---
+
+## Adendo — Frente J (11/09/2026): a vigência derivada é CONSULTADA, e a data é do caso
+
+**Insumo:** `docs/auditoria/REAUDITORIA_CODEX_11-09.md`, itens 4 e 7.
+**Branch:** `fix/fechamento-contrato-spec`.
+
+Dois pontos deste ADR ficaram pela metade, ambos nas seções "`rl_vigente`
+reaproveita `ultimo_por_destino`" e "`data_referencia` é parâmetro":
+
+1. **`rl_vigente` não olhava `vigencia`.** "Vigente" era a última RL do
+   papel, mesmo baixada por averbação posterior — a regra derivada existia e
+   não era consultada. Corrigido: `rl_vigente` exclui `baixado`/`retificado`/
+   `expirado` e devolve a mais recente entre as que restam (ou `None`).
+   `ultimo_por_destino` (quem grava a coluna) deixa de promover ato
+   `baixado` — a RL baixada não grava `matricula.averbacao_rl`. Retificado
+   **continua** gravando a coluna (aditivo amenda, não cancela — a regra do
+   passo 1 acima), mas não é afirmado como "vigente" sem olhar o aditivo.
+   Fronteira declarada: as duas funções agora respondem perguntas
+   diferentes ("quem grava" × "o que vale"), e o docstring de cada uma diz
+   qual.
+2. **`date.today()` como default.** "Não existe data de referência do caso"
+   não era verdade: `Process.opened_at` existe (com `created_at` como
+   fallback). `ficha01_extraction.data_referencia_do_processo` a lê e
+   `extract_and_stage` a passa a `derivar_vigencia`. Sem referência
+   explícita, prazo com termo final fica `indeterminado` — nunca `vigente`
+   pelo passo 3 ("tem `data_ato`"), que só vale para ato sem termo (gravame
+   com data continua `vigente`). Os fatos ficam salvos; quem consultar com
+   outra data rederiva sem reextrair.
+
+**Titularidade** (mesma frente, adendo do ADR-065): `cadeia_titularidade`/
+`titular_atual` leem `TIPOS_TRANSFERENCIA_TITULARIDADE`, não só
+`compra_venda`.
+
+**Testes:** `tests/services/test_observacao_registral.py::TestFrenteJVigenciaEDestino`
+(RL baixada não grava a coluna e não é vigente; todas baixadas ⇒ nenhuma;
+retificada mantém a coluna sem ser promovida; termo sem data de referência ⇒
+indeterminado, com data ⇒ vigente/expirado; gravame com data sem referência
+continua vigente; espólio → formal de partilha → herdeiro na cadeia) e
+`test_reconciliation_decisions.py::test_data_de_abertura_do_caso_alimenta_a_vigencia`.

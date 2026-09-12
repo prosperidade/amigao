@@ -37,7 +37,12 @@ from app.services.inconsistency_matrix import (
     norm_compare,
     parse_area_ha,
 )
-from app.services.reconciliation_decisions import ChaveNatural, Decisao, localizar_decisao
+from app.services.reconciliation_decisions import (
+    ChaveNatural,
+    Decisao,
+    build_decisions,
+    localizar_decisao,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -289,10 +294,35 @@ def _group_conflict_values(rows: list[ExtractedFieldStaging], target_field: str)
     return list(seen.values())
 
 
-def _values_differ(old: Any, new: Any) -> bool:
-    """True se old≠new além de tolerância (float: ~0,01%; idempotência protegida)."""
+# Colunas cujo valor é um IDENTIFICADOR REGISTRAL: "3.181" e "3181" são o
+# MESMO número, escrito de dois jeitos (a memória do projeto já nomeia a
+# classe: dedupe por identificador normalizado, nunca por string crua).
+_COLUNAS_IDENTIFICADOR_REGISTRAL = frozenset({"numero_matricula"})
+
+
+def _values_differ(old: Any, new: Any, col: Optional[str] = None) -> bool:
+    """True se old≠new além de tolerância (float: ~0,01%; idempotência protegida).
+
+    Frente J, achado do gate: sem o ramo de identificador registral abaixo, a
+    consolidação divergia de SI MESMA em todo caso com certidão. `_ensure_
+    matricula` cria a ficha com o hint já normalizado (`3181`) e marca
+    `field_sources["numero_matricula"] = "human_validated"`; a linha da
+    certidão afirma `3.181`, como o documento escreve. Comparadas como string
+    crua, as duas "divergem" — a linha vira reconciliação falsa ("anterior
+    3181, novo 3.181"), nunca recebe `consolidated_at`, e a decisão de
+    composição (ADR-067) fica presa em `parcialmente_gravada` para sempre.
+    O bug é anterior a esta frente; ficava escondido porque `_estado_de`
+    usava `any(consolidated_at)` e a linha do CAR, carimbada por outro ramo,
+    pintava a decisão inteira de verde.
+    """
     if old is None or new is None:
         return old is not new
+    if col in _COLUNAS_IDENTIFICADOR_REGISTRAL:
+        a, b = _clean_matricula_hint(old), _clean_matricula_hint(new)
+        # Só decide pela via normalizada quando AMBOS têm número extraível;
+        # senão cai na comparação comum (não inventa igualdade por ausência).
+        if a is not None and b is not None:
+            return a != b
     if isinstance(old, float) and isinstance(new, (int, float)):
         base = max(abs(old), abs(new), 1e-9)
         return abs(old - float(new)) / base > 1e-4
@@ -305,7 +335,8 @@ def _values_differ(old: Any, new: Any) -> bool:
 
 def decide_field(
     db: Session, *, tenant_id: int, process_id: int, field_id: int,
-    acao: str, valor: Any = None, fonte: Optional[str] = None, user_id: Optional[int] = None,
+    acao: str, valor: Any = None, fonte: Optional[str] = None,
+    tipo_observacao: Optional[str] = None, user_id: Optional[int] = None,
 ) -> ExtractedFieldStaging:
     row = (
         db.query(ExtractedFieldStaging)
@@ -340,6 +371,84 @@ def decide_field(
             "field_id": row.id, "target_entity": row.target_entity,
             "target_field": row.target_field, "matricula_hint": row.matricula_hint,
             "decisao_anterior": anterior,
+        })
+        db.commit()
+        return row
+    if acao == "reclassificar":
+        from app.services.observacao_registral import (  # noqa: PLC0415
+            TIPOS,
+            TIPOS_GRAVAME,
+            Observacao,
+            destino_de,
+            normalizar_tipo,
+        )
+
+        if not tipo_observacao:
+            raise HTTPException(
+                status_code=422,
+                detail="'tipo_observacao' é obrigatório na ação 'reclassificar'.",
+            )
+        # Frente J (item 5, CONF-002): o consultor corrige O QUE o ato é —
+        # o vocabulário é o mesmo fechado do ADR-065 (`normalizar_tipo`
+        # aceita rótulo humano ou slug). Rótulo desconhecido vira
+        # `nao_classificado` só quando foi PEDIDO explicitamente; "xyz" não
+        # pode entrar calado como "não classificado".
+        novo_tipo = normalizar_tipo(tipo_observacao)
+        # "não classificado"/"nao_classificado" pedidos por escrito são o
+        # escape legítimo; "xyz" cai no mesmo slug por NÃO ter casa — e aí é
+        # erro do pedido, não classificação.
+        pediu_escape = "classificad" in str(tipo_observacao).lower()
+        if novo_tipo not in TIPOS or (novo_tipo == "nao_classificado" and not pediu_escape):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Tipo de observação desconhecido: {tipo_observacao!r}.",
+            )
+        anterior = row.tipo_observacao
+        atributos = dict(row.atributos or {})
+        atributos.setdefault("tipo_sugerido", anterior)
+        row.tipo_observacao = novo_tipo
+        row.atributos = atributos
+        destino = destino_de(Observacao(tipo=novo_tipo, atributos=atributos, ordem=row.id))
+        if destino is not None:
+            row.target_entity, row.target_field = destino
+            row.field_name = row.target_field
+        else:
+            row.target_entity = None
+            row.target_field = None
+            row.field_name = "observacao"
+        field_value = dict(row.field_value or {}) if isinstance(row.field_value, dict) else {"value": row.field_value}
+        field_value["tipo_decidido"] = novo_tipo
+        # O texto que a consultora LÊ no cartão é `Observacao.resumo()`, e ele
+        # embute o rótulo do tipo ("AV.03 · APP · 15/04/2008"). Sem regerar,
+        # a linha reclassificada para hipoteca continuaria exibindo "APP" ao
+        # lado do tipo decidido "Hipoteca" — a tela contradizendo a decisão
+        # que a consultora acabou de tomar. Regerado só quando a linha JÁ era
+        # observação tipada (veio de `_linhas_de_observacoes`); o texto
+        # anterior fica em `value_sugerido`, junto de `tipo_sugerido`.
+        if anterior:
+            field_value["value_sugerido"] = field_value.get("value")
+            field_value["value"] = Observacao(
+                tipo=novo_tipo, atributos=atributos, ordem=row.id
+            ).resumo()
+        if destino is None:
+            field_value["sem_destino"] = True
+            field_value["sem_destino_motivo"] = (
+                "gravame — entra na reconciliação pela matrícula"
+                if novo_tipo in TIPOS_GRAVAME
+                else "observação sem coluna correspondente no cadastro"
+            )
+        else:
+            field_value.pop("sem_destino", None)
+            field_value.pop("sem_destino_motivo", None)
+        row.field_value = field_value
+        row.consolidated_at = None
+        db.flush()
+        _audit(db, tenant_id, process_id, user_id, "staging_tipo_reclassificado", {
+            "field_id": row.id,
+            "tipo_sugerido": anterior,
+            "tipo_decidido": novo_tipo,
+            "target_entity": row.target_entity,
+            "target_field": row.target_field,
         })
         db.commit()
         return row
@@ -429,7 +538,21 @@ def decide_field(
 
 
 def _reject_siblings(db: Session, tenant_id: int, process_id: int, row: ExtractedFieldStaging) -> list[int]:
-    """Rejeita campos irmãos (mesmo destino) de outras fontes — 'escolher a fonte'."""
+    """Rejeita campos irmãos (mesmo destino) de outras fontes — 'escolher a fonte'.
+
+    Frente J: linha SEM destino não tem irmão nenhum a rejeitar. A disputa que
+    esta função resolve é pela COLUNA (duas fontes declarando `numero_matricula`
+    da mesma matrícula); observação sem destino (gravame, baixa, aditivo,
+    arrendamento — ADR-065) não disputa coluna com ninguém. Sem esta guarda,
+    `escolher_fonte` sobre uma evidência de gravame casaria
+    `target_entity IS NULL AND target_field IS NULL` e rejeitaria **todas** as
+    outras observações sem destino da mesma matrícula de uma vez — as baixas,
+    os aditivos, o arrendamento. A Frente J tornou esse caminho alcançável ao
+    expor `escolher_fonte` na decisão agrupada (item 5), então a guarda entra
+    junto com ele.
+    """
+    if row.target_field is None:
+        return []
     q = (
         db.query(ExtractedFieldStaging)
         .filter(
@@ -1026,7 +1149,7 @@ def _write_entity(
     fs_prev = dict(getattr(obj, "field_sources", None) or {})
     ja_consolidado = fs_prev.get(col) in ("human_validated", "pendente_oficializacao")
 
-    if ja_consolidado and _values_differ(old, coerced):
+    if ja_consolidado and _values_differ(old, coerced, col):
         # Doc novo diverge de campo já gravado → NUNCA sobrescreve sozinho (Ficha 05).
         reconciliacoes.append({
             "entity": row.target_entity, "entity_id": getattr(obj, "id", None),
@@ -1035,7 +1158,7 @@ def _write_entity(
         })
         return "recusado"
 
-    if not _values_differ(old, coerced):
+    if not _values_differ(old, coerced, col):
         # Idempotência: mesmo valor → reafirma proveniência mas não conta como write.
         # NÃO é recusa: o valor desta linha está na base. Consolidar duas vezes
         # não pode apagar da tela o "Gravado" da primeira.
@@ -1681,8 +1804,10 @@ def flag_sem_casa(
 
 def decidir_decisao_agrupada(
     db: Session, *, tenant_id: int, process_id: int,
-    chave: ChaveNatural, acao: str, user_id: Optional[int] = None,
-) -> Decisao:
+    chave: ChaveNatural, acao: str, staging_id: Optional[int] = None,
+    valor: Any = None, tipo_observacao: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> Optional[Decisao]:
     """Aplica UMA decisão (Frente G) às linhas de staging que ela agrupa.
 
     Reaproveita `decide_field` por linha — a Conferência por decisões não
@@ -1711,16 +1836,33 @@ def decidir_decisao_agrupada(
 
     membros = {r.id: r for r in rows if r.id in decisao.staging_ids}
     if acao == "reabrir":
-        for staging_id in decisao.staging_ids:
-            row = membros.get(staging_id)
+        # `membro_id`, não `staging_id`: o parâmetro `staging_id` (a evidência
+        # escolhida em escolher_fonte/editar/reclassificar) é lido de novo no
+        # fim da função, e um loop que o sobrescrevesse faria o fallback de lá
+        # procurar a decisão do ÚLTIMO membro reaberto — devolvendo decisão
+        # errada em vez do 500 honesto "a decisão sumiu".
+        for membro_id in decisao.staging_ids:
+            row = membros.get(membro_id)
             if row is not None and row.status != ExtractedFieldStatus.pendente:
                 decide_field(db, tenant_id=tenant_id, process_id=process_id,
-                             field_id=staging_id, acao="reabrir", user_id=user_id)
+                             field_id=membro_id, acao="reabrir", user_id=user_id)
     elif acao == "aceitar":
-        for evidencia in decisao.evidencias:
-            row = membros.get(evidencia.staging_id) if evidencia.staging_id else None
+        # Percorre os MEMBROS, não as evidências. A evidência é a APRESENTAÇÃO
+        # do fato; o membro é a linha que precisa de decisão — e nem todo
+        # membro vira evidência. Medido no gate E2E (12/09): a decisão de
+        # titularidade monta suas evidências a partir da CADEIA
+        # (`_montar_decisao_titularidade`), então uma linha de `compra_venda`
+        # cujo ato não nomeia adquirente/transmitente entra no grupo e não
+        # aparece na lista — a matrícula 3.181 tinha 3 membros para 2
+        # evidências, a 3.673 tinha 4 para 2. Iterando evidências, essas
+        # linhas nunca eram aceitas e a decisão ficava presa em "pendente"
+        # para sempre: a consultora clicava em Aceitar e a tela não mudava.
+        por_staging = {e.staging_id: e for e in decisao.evidencias if e.staging_id is not None}
+        for membro_id in decisao.staging_ids:
+            row = membros.get(membro_id)
             if row is None or row.status in _DECISAO_JA_RESOLVIDA:
                 continue
+            evidencia = por_staging.get(membro_id)
             if row.status == ExtractedFieldStatus.divergente_transcricao:
                 # Só a evidência autoritativa (ADR-062) resolve a disputa —
                 # `escolher_fonte` já rejeita as irmãs do mesmo destino. A
@@ -1728,12 +1870,26 @@ def decidir_decisao_agrupada(
                 # quando a autoritativa for decidida; se não houver nenhuma
                 # marcada (aspecto sem fonte única), pula — exige escolha
                 # manual, mesma régua do campo a campo.
-                if evidencia.fonte_autoritativa:
+                # Membro sem evidência na lista não pode ser tratado como
+                # autoritativo por omissão: sem evidência, não há o que
+                # sustente a escolha — fica para o gesto manual.
+                if evidencia is not None and evidencia.fonte_autoritativa:
                     decide_field(db, tenant_id=tenant_id, process_id=process_id,
                                  field_id=row.id, acao="escolher_fonte", user_id=user_id)
                 continue
             decide_field(db, tenant_id=tenant_id, process_id=process_id,
                          field_id=row.id, acao="aceitar", user_id=user_id)
+    elif acao in ("escolher_fonte", "editar", "reclassificar"):
+        if staging_id is None or staging_id not in membros:
+            raise HTTPException(
+                status_code=422,
+                detail="Selecione uma evidência desta decisão.",
+            )
+        decide_field(
+            db, tenant_id=tenant_id, process_id=process_id, field_id=staging_id,
+            acao=acao, valor=valor, tipo_observacao=tipo_observacao,
+            user_id=user_id,
+        )
     else:
         raise HTTPException(status_code=422, detail=f"Ação desconhecida para decisão agrupada: {acao}")
 
@@ -1747,7 +1903,24 @@ def decidir_decisao_agrupada(
         .all()
     )
     atualizada = localizar_decisao(rows_pos, chave)
+    if atualizada is None and staging_id is not None:
+        # A reclassificação pode MUDAR a chave natural da linha (o tipo é que
+        # decide o aspecto — ADR-065/067): "app" sem chave vira "hipoteca" em
+        # `gravames`. Quando a chave pedida deixa de existir, a resposta útil
+        # é a decisão que a linha passou a integrar, não um erro.
+        atualizada = next(
+            (d for d in build_decisions(rows_pos).decisoes if staging_id in d.staging_ids),
+            None,
+        )
     if atualizada is None:
+        if staging_id is not None:
+            # A escrita FOI feita e a linha simplesmente não integra mais
+            # nenhuma decisão (ex.: RL reclassificada para `arrendamento`,
+            # que a Frente G não agrupa — passa a aparecer em
+            # `sem_agrupamento`). Erro aqui seria mentira: nada falhou. A tela
+            # recarrega a Conferência e a encontra lá. `None` é a resposta
+            # honesta — o painel invalida a query e não lê este corpo.
+            return None
         raise HTTPException(
             status_code=500,
             detail="Decisão sumiu depois de decidir — recarregue a Conferência.",
