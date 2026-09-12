@@ -277,7 +277,10 @@ export default function DocumentsTab({ processId }: DocumentsTabProps) {
                         </span>
                       )}
                       {doc.lifecycle_status && (
-                        <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-gray-50 dark:bg-white/10 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/15">
+                        <span
+                          data-testid="doc-lifecycle"
+                          className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-gray-50 dark:bg-white/10 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/15"
+                        >
                           {LIFECYCLE_LABELS[doc.lifecycle_status] ?? doc.lifecycle_status}
                         </span>
                       )}

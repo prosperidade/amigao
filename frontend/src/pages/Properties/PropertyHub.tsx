@@ -53,6 +53,7 @@ interface PropertyHubHeader {
   field_sources: Record<string, string>;
   // CAM2IH-003/004 (Sprint H) — campos técnicos
   rl_status: string | null;
+  rl_area_ha: number | null;
   app_area_ha: number | null;
   regulatory_issues: Array<{ tipo?: string; descricao?: string; severidade?: string }>;
   area_documental_ha: number | null;
@@ -685,6 +686,15 @@ function InfoTab({ header, kpis, onValidate, onDeclareContiguidade, declaringCon
             value={header.rl_status}
             source={src.rl_status}
             onValidate={onValidate ? () => onValidate(['rl_status']) : undefined}
+          />
+          {/* Frente K — a ÁREA de RL tem campo próprio. Antes o número declarado
+              pelo CAR pousava em `rl_status` e esta mesma caixa mostrava
+              "Reserva Legal: 437,7632" no lugar de averbada/proposta/pendente. */}
+          <InfoField
+            label="Área de Reserva Legal"
+            value={header.rl_area_ha != null ? `${header.rl_area_ha} ha` : null}
+            source={src.rl_area_ha}
+            onValidate={onValidate ? () => onValidate(['rl_area_ha']) : undefined}
           />
           <InfoField
             label="Área APP"

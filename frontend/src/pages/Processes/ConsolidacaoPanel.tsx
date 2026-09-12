@@ -302,7 +302,7 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
       </div>
 
       {progresso && (
-        <p className="text-xs text-gray-500 dark:text-slate-400">
+        <p data-testid="conferencia-progresso" className="text-xs text-gray-500 dark:text-slate-400">
           Conferência: {progresso.decididas}/{progresso.decisoes_total} decisão(ões) decidida(s)
           {' · '}{progresso.gravadas} gravada(s) na base{progresso.pendentes > 0 ? ` · ${progresso.pendentes} pendente(s)` : ''}.
         </p>
@@ -525,9 +525,15 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
           card pra ficar sempre à vista, não enterrada no fim do scroll. */}
       <div className="sticky bottom-0 z-10 -mx-5 -mb-5 px-5 py-3 rounded-b-xl border-t border-gray-200 dark:border-white/10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur flex items-center justify-between gap-3 flex-wrap">
         <div className="text-xs text-gray-500 dark:text-slate-400 min-w-0">
-          {`${consolidaveis} campo(s) serão gravados`}
-          {jaGravados > 0 && ` · ${jaGravados} já na base`}
-          {pendentesObrig > 0 && ` · ${pendentesObrig} divergência(s) virarão ações a resolver`}.
+          {/* Frente K — o TOTAL de linhas lidas passa a estar na tela. O gate de
+              navegador exige ler os seis números do DOM, e este era o único que
+              só existia no serviço: a tela mostrava quantas iam gravar e quantas
+              já estavam, nunca de quantas se estava falando. */}
+          <span data-testid="conferencia-rodape">
+            {`De ${fields.length} linha(s) lida(s): ${consolidaveis} campo(s) serão gravados`}
+            {jaGravados > 0 && ` · ${jaGravados} já na base`}
+            {pendentesObrig > 0 && ` · ${pendentesObrig} divergência(s) virarão ações a resolver`}.
+          </span>
           {/* A REGRA, escrita (26/07): a pergunta "por que aceitei e não gravou?"
               é respondida ANTES do clique, na própria tela — não depois, no
               suporte. Espelha exatamente o que a consolidação faz. */}
