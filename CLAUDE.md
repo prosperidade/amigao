@@ -15,7 +15,9 @@ Você está autorizado a executar SEM pedir confirmação:
 - Ler código, banco (read-only), logs, git history
 - Escrever/editar código, migrations, skills, testes na sua branch
 - Rodar migrations (`alembic upgrade`) EXCLUSIVAMENTE no banco de
-  desenvolvimento deste projeto: `amigao_db` em `127.0.0.1:55432`.
+  desenvolvimento deste projeto: `amigao_db` na porta que o `.env` deste
+  repositório define em `HOST_DB_PORT` (hoje `127.0.0.1:15432`; o default do
+  compose é `55432`).
   Antes de qualquer migration, imprimir host/porta/banco/usuário
   efetivos e conferir. Alvo diferente ⇒ PARAR e reportar, nunca
   aplicar. Migration em banco errado não se desfaz com git.
@@ -76,7 +78,7 @@ Para o "porquê" completo: `docs/manifesto/01-VISAO_PRODUTO.md`.
 docker compose up --build -d
 ```
 
-> **Porta do Postgres no host:** o serviço `db` expõe `55432` no host (não 5433 — conflitava com outros projetos do dev). Dentro do compose, `api`/`worker` conectam via service name `db:5432`. Se rodar `alembic`/`seed.py` do venv host, o `.env` deve apontar `POSTGRES_SERVER=127.0.0.1` e `POSTGRES_PORT=55432`. Override com `HOST_DB_PORT=XXXX` no `.env`.
+> **Porta do Postgres no host:** o serviço `db` publica `${HOST_DB_PORT:-55432}`. O `.env` deste repositório define `HOST_DB_PORT=15432`, então **na prática o dev roda em `127.0.0.1:15432`** — confira o `.env` antes de apontar `alembic`/`seed.py` do venv host, e não confie no default. Dentro do compose, `api`/`worker` conectam via service name `db:5432`.
 >
 > **Sintoma "could not translate host name 'db'"** dentro do container API significa que o serviço `db` não está up — `docker compose up -d db`. Não é problema de rede; o `db` está no mesmo network e tem `depends_on` correto.
 
@@ -99,12 +101,19 @@ cd frontend && npm run dev
 # Backend (requer PostgreSQL rodando)
 pytest tests/ -q
 
-# Frontend typecheck
-cd frontend && npx tsc --noEmit
-
-# Frontend build
+# Frontend — o gate real é o build (`tsc -b`), não o tsc solto:
+# `npx tsc --noEmit` na raiz usa o solution file e sai 0 sem checar nada.
 cd frontend && npm run build
+
+# Frontend testes (Node 22.11)
+cd frontend && NODE_OPTIONS=--experimental-require-module npx vitest run
 ```
+
+> **`vitest` sem `--experimental-require-module` mente de verde.** No Node
+> 22.11 o `require()` de ES Module ainda não é suportado, e a cadeia
+> jsdom → `@asamuzakjp/css-color` → `@csstools/css-calc` derruba **14 workers
+> na largada**: o resumo sai "12 passed" com os 14 arquivos que não rodaram
+> escondidos em "Errors". Com a flag: 26 arquivos, 167 testes.
 
 > `client-portal/` e `mobile/` não rodam em CI no estado congelado. Buildá-los pode falhar — não tente subir esses serviços sem checar o ADR-009.
 

@@ -99,6 +99,41 @@ def main() -> None:
                 [{**r, "documentos_cruzados_default": json.dumps(r["documentos_cruzados_default"])} for r in rows],
             )
 
+    # Templates de checklist documental — em produção vêm da migration
+    # `a1b2c3d4e5f6_sprint1_intake` (INSERT no upgrade), que `create_all` não
+    # roda. Sem eles, "Gerar Checklist" na tela produz um checklist VAZIO
+    # ("0 de 0 documentos recebidos") e o gate mede uma tela que não é a de
+    # produção. Só o `car` — é a demanda do caso da ELODI; a fonte de verdade
+    # continua sendo a migration.
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO checklist_templates
+                  (demand_type, name, description, items, is_active)
+                VALUES ('car', 'Checklist CAR',
+                        'Documentos necessários para regularização do CAR',
+                        CAST(:items AS json), true)
+                """
+            ),
+            {"items": json.dumps([
+                {"id": "car_numero", "label": "Número do CAR", "doc_type": "car",
+                 "category": "ambiental", "required": True},
+                {"id": "matricula", "label": "Matrícula do Imóvel", "doc_type": "matricula",
+                 "category": "fundiario", "required": True},
+                {"id": "ccir", "label": "CCIR", "doc_type": "ccir",
+                 "category": "fundiario", "required": True},
+                {"id": "documento_proprietario", "label": "Documento do Proprietário (RG/CPF)",
+                 "doc_type": "doc_pessoal", "category": "pessoal", "required": True},
+                {"id": "caf", "label": "CAF (Cadastro Agricultor Familiar)", "doc_type": "caf",
+                 "category": "fundiario", "required": False},
+                {"id": "mapa_imovel", "label": "Mapa/Shapefile do Imóvel", "doc_type": "mapa",
+                 "category": "geoespacial", "required": False},
+                {"id": "laudo_anterior", "label": "Laudo Ambiental Anterior", "doc_type": "laudo",
+                 "category": "ambiental", "required": False},
+            ])},
+        )
+
     Session = sessionmaker(bind=engine)
     db = Session()
     try:

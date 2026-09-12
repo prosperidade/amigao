@@ -1,0 +1,48 @@
+{
+ "checklist_criado_pela_tela": "0 de 7 documentos recebidos",
+ "apos_extracao": {
+  "quantos documentos entraram (checklist)": "3 de 7 documentos recebidos",
+  "quanto da Conferência está resolvido": "Conferência: 0/76 decisão(ões) decidida(s) · 0 gravada(s) na base · 76 pendente(s).",
+  "quantas decisões a Conferência agrupa": "DECISÕES (20)",
+  "quantas linhas de staging existem": "De 113 linha(s) lida(s): 0 campo(s) serão gravados.",
+  "estado de cada documento (DOC-001)": "Classificado · Classificado · Classificado · Erro de leitura · Extraído · Extraído",
+  "estado de cada decisão": "Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente · Pendente"
+ },
+ "reclassificacao": {
+  "evidencia": "27",
+  "tipo_antes": "hipoteca",
+  "tipo_decidido": "alienacao_fiduciaria"
+ },
+ "rodape_antes_de_gravar": "De 113 linha(s) lida(s): 57 campo(s) serão gravados.",
+ "rodape_depois_de_gravar": "De 113 linha(s) lida(s): 57 campo(s) serão gravados · 24 já na base.",
+ "seis_numeros": {
+  "base": {
+   "quantos documentos entraram (checklist)": "3 de 7 documentos recebidos",
+   "quanto da Conferência está resolvido": "Conferência: 19/76 decisão(ões) decidida(s) · 19 gravada(s) na base · 57 pendente(s).",
+   "quantas decisões a Conferência agrupa": "DECISÕES (20)",
+   "quantas linhas de staging existem": "De 113 linha(s) lida(s): 57 campo(s) serão gravados · 24 já na base.",
+   "estado de cada documento (DOC-001)": "Erro de leitura · Extraído · Extraído · Extraído · Extraído · Extraído",
+   "estado de cada decisão": "Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Parcialmente gravada"
+  },
+  "recarregado": {
+   "quantos documentos entraram (checklist)": "3 de 7 documentos recebidos",
+   "quanto da Conferência está resolvido": "Conferência: 19/76 decisão(ões) decidida(s) · 19 gravada(s) na base · 57 pendente(s).",
+   "quantas decisões a Conferência agrupa": "DECISÕES (20)",
+   "quantas linhas de staging existem": "De 113 linha(s) lida(s): 57 campo(s) serão gravados · 24 já na base.",
+   "estado de cada documento (DOC-001)": "Erro de leitura · Extraído · Extraído · Extraído · Extraído · Extraído",
+   "estado de cada decisão": "Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Parcialmente gravada"
+  },
+  "sessao_nova": {
+   "quantos documentos entraram (checklist)": "3 de 7 documentos recebidos",
+   "quanto da Conferência está resolvido": "Conferência: 19/76 decisão(ões) decidida(s) · 19 gravada(s) na base · 57 pendente(s).",
+   "quantas decisões a Conferência agrupa": "DECISÕES (20)",
+   "quantas linhas de staging existem": "De 113 linha(s) lida(s): 57 campo(s) serão gravados · 24 já na base.",
+   "estado de cada documento (DOC-001)": "Erro de leitura · Extraído · Extraído · Extraído · Extraído · Extraído",
+   "estado de cada decisão": "Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Gravado na base · Parcialmente gravada"
+  }
+ },
+ "etapa_apos_percurso": "entrada_demanda",
+ "travas_na_tela": "TRAVAS PARA AVANÇAR",
+ "etapa_alcancada_pela_tela": "entrada_demanda",
+ "rota_alcancavel_pela_tela": false
+}

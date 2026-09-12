@@ -29,6 +29,9 @@ class PropertyHubHeader(BaseModel):
 
     # CAM2IH-003/004 (Sprint H) — campos técnicos expostos na Aba Informações
     rl_status: Optional[str] = None                 # averbada | proposta | pendente | cancelada
+    # Frente K — a ÁREA de RL declarada (CAR). Antes ia para `rl_status` e o Hub
+    # exibia "Reserva Legal: 437,7632" onde a coluna é um estado.
+    rl_area_ha: Optional[float] = None
     app_area_ha: Optional[float] = None
     regulatory_issues: list = []                    # [{tipo, descricao, severidade}]
     area_documental_ha: Optional[float] = None

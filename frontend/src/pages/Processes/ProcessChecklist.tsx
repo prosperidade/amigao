@@ -196,7 +196,7 @@ export default function ProcessChecklist({ processId }: ProcessChecklistProps) {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Checklist Documental</h3>
-            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
+            <p data-testid="checklist-resumo" className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
               {summary.received} de {summary.total} documentos recebidos
               {summary.waived > 0 && ` · ${summary.waived} dispensado(s)`}
             </p>

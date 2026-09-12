@@ -229,6 +229,32 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
     if field_name == "rl_declarada_ha":
         return ("imovel", pid, "reserva_legal_total"), None
 
+    # 3-pre) A LINHA QUE GRAVA entra na decisão que fala do mesmo fato.
+    #
+    # Frente K, medido no gate de 12/09 e conferido contra o staging real de
+    # produção (caso #23): as 4 decisões de `gravames` reuniam 24 linhas e
+    # NENHUMA delas tinha destino — gravame não tem coluna individual
+    # (ADR-065/066). Quem escreve `matricula.onus_gravames` é a linha AGREGADA
+    # (`field_name="onus"`, montada por `_linhas_de_observacoes`), e ela caía em
+    # `sem_agrupamento`. Resultado: a consultora aceitava "Gravames vigentes —
+    # matrícula 3.181", a decisão virava "decidida", e a coluna continuava vazia
+    # — só um segundo clique, numa linha solta que ninguém liga ao mesmo fato,
+    # gravava. Idem `proprietarios` × decisão de titularidade (4 + 4 linhas).
+    #
+    # A decisão é o FATO; a linha agregada é a forma do fato na base. Separá-las
+    # é cobrar dois gestos por uma decisão só — e fazer o primeiro mentir.
+    if entity == "matricula" and target_field == "onus_gravames":
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, "gravames"), None
+        return None, "ônus sem matrícula identificável"
+
+    if entity == "matricula" and target_field == "proprietarios":
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, "titularidade"), None
+        return None, "proprietários sem matrícula identificável"
+
     # 3) Gravames vigentes — lista agregada por matrícula (ADR-066): a
     # consultora decide "o que está gravado hoje nesta matrícula", não ato a
     # ato (`onus_gravames` já é coluna única na base pela mesma razão).
@@ -324,6 +350,26 @@ def _valor_bruto(row: ExtractedFieldStaging) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _resumo_onus(raw: Any) -> str:
+    """A linha agregada de ônus em uma frase legível.
+
+    ``onus_vigentes`` devolve ``[{tipo, partes, valor, ato, data_ato}, ...]``.
+    Despejar o dict na tela seria vocabulário de log; o que a consultora precisa
+    ler é quantos gravames sobreviveram e quais atos são.
+    """
+    if not isinstance(raw, list) or not raw:
+        return "nenhum gravame vigente"
+    partes = []
+    for item in raw:
+        if not isinstance(item, dict):
+            partes.append(str(item))
+            continue
+        rotulo = item.get("tipo") or "gravame"
+        ato = item.get("ato")
+        partes.append(f"{rotulo} ({ato})" if ato else str(rotulo))
+    return f"{len(partes)} vigente(s): " + ", ".join(partes)
+
+
 def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
     raw = _valor_bruto(row)
     unidade = row.field_value.get("unidade") if isinstance(row.field_value, dict) else None
@@ -353,10 +399,17 @@ def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
     vigencia = (row.atributos or {}).get("vigencia") if isinstance(row.atributos, dict) else None
     campo = row.target_field or row.field_name
     if aspecto == "gravames":
-        # A pergunta de gravame não é "qual valor", é "este ato está vigente"
-        # — o rótulo é o próprio ato (AV.03, R.15), não a coluna de destino.
-        campo = (row.atributos or {}).get("ato") or campo
-        valor_normalizado = vigencia or "indeterminado"
+        if row.target_field == "onus_gravames":
+            # A linha agregada (Frente K) não é mais um ato: é a SÍNTESE que
+            # pousa na coluna. Mostrá-la como ato daria "onus_gravames:
+            # indeterminado" — rótulo de log e vigência que ela não tem.
+            campo = "ônus vigentes (o que vai para a base)"
+            valor_normalizado = _resumo_onus(raw)
+        else:
+            # A pergunta de gravame não é "qual valor", é "este ato está
+            # vigente" — o rótulo é o próprio ato (AV.03, R.15), não a coluna.
+            campo = (row.atributos or {}).get("ato") or campo
+            valor_normalizado = vigencia or "indeterminado"
     return Evidencia(
         staging_id=row.id,
         documento_id=row.document_id,
@@ -412,13 +465,53 @@ def _comparar(aspecto: str, evidencias: list[Evidencia]) -> tuple[str, Optional[
     return ("concordam" if concordam else "divergem"), None, None, None
 
 
+def _sem_destino_declarado(row: ExtractedFieldStaging) -> bool:
+    """A extração declarou que esta linha não tem coluna onde pousar?
+
+    É o mesmo sinal que a Conferência já mostra ("Observação sem destino no
+    cadastro") e que `_linhas_de_observacoes` grava por tipo de ato — não uma
+    heurística nova.
+    """
+    fv = row.field_value
+    return bool(isinstance(fv, dict) and fv.get("sem_destino"))
+
+
 def _estado_de(membros: list[ExtractedFieldStaging]) -> str:
-    """Estado agregado sem esconder evidência nova ainda não consolidada."""
-    if membros and all(r.consolidated_at is not None for r in membros):
+    """Estado agregado sem esconder evidência nova ainda não consolidada.
+
+    "Gravada" pergunta pelos membros que PODEM pousar — os que a extração não
+    marcou como `sem_destino` —, não por todos. Frente K, medido no gate de 12/09: com a
+    linha agregada de ônus dentro da decisão, as 4 decisões de gravames e as 4
+    de titularidade gravavam de verdade e mesmo assim ficavam
+    "parcialmente gravada" PARA SEMPRE — porque as 27 observações de ato que as
+    acompanham nunca recebem carimbo (por projeto: gravame não tem coluna
+    individual, ADR-065; a evidência sustenta o fato, quem leva o valor é a
+    linha agregada). A consultora veria trabalho pendente onde não há.
+
+    Sem portador nenhum, "gravada" seria mentira ao contrário — a decisão não
+    escreveu nada: cai em "decidida", que é o que ela é.
+
+    O `all(... _DECIDIDOS ...)` continua exigido: evidência NOVA que chegou
+    depois (re-extração) volta a decisão para "parcialmente gravada" em vez de
+    ficar escondida atrás de um selo de gravada — o motivo pelo qual esta
+    função nunca olhou só para o carimbo.
+
+    A régua de "portador" é `sem_destino` — a declaração que a própria extração
+    grava na linha —, não a ausência de `target_field`. A diferença tem nome:
+    `matricula_listada` (o CAR citando a matrícula) não tem `target_field` e
+    MESMO ASSIM recebe carimbo, porque o que ela leva à base é a confirmação do
+    vínculo. Tratá-la como não-portadora esconderia atrás de "gravada" uma
+    citação do CAR que ainda não pousou — que é exatamente o estado misto que
+    `test_estado_misto_e_parcialmente_gravada` guarda.
+    """
+    portadores = [r for r in membros if not _sem_destino_declarado(r)]
+    if (portadores
+            and all(r.consolidated_at is not None for r in portadores)
+            and all(r.status in _DECIDIDOS for r in membros)):
         return "gravada"
     if any(r.consolidated_at is not None for r in membros):
         return "parcialmente_gravada"
-    if all(r.status in _DECIDIDOS for r in membros):
+    if membros and all(r.status in _DECIDIDOS for r in membros):
         return "decidida"
     return "pendente"
 
@@ -511,6 +604,31 @@ def _montar_decisao_titularidade(chave: ChaveNatural, membros: list[ExtractedFie
                 status=status_val,
                 fonte_autoritativa=True,
                 tipo_observacao=origem.tipo_observacao if origem else None,
+            )
+        )
+
+    # Frente K — a linha `proprietarios` agora é membro desta decisão (é ela que
+    # escreve a coluna). Membro que grava e não aparece seria escrita silenciosa:
+    # a consultora aceitaria "Titularidade" e um valor que ela nunca viu entraria
+    # na base. Entra como evidência do que o DOCUMENTO lista — distinta da cadeia
+    # derivada, e explicitamente NÃO autoritativa (é a lista bruta de todo mundo
+    # citado em qualquer ato; foi ela que exibiu a SONIA como proprietária).
+    for r in membros:
+        if r.target_field != "proprietarios":
+            continue
+        evidencias.append(
+            Evidencia(
+                staging_id=r.id,
+                documento_id=r.document_id,
+                documento_tipo=(r.source_doc_type or None),
+                campo="proprietários (como o documento lista)",
+                valor_bruto=_valor_bruto(r),
+                valor_normalizado=_valor_bruto(r),
+                unidade=None,
+                vigencia=None,
+                status=r.status.value if r.status else "pendente",
+                fonte_autoritativa=False,
+                tipo_observacao=r.tipo_observacao,
             )
         )
 

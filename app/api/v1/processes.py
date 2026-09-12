@@ -1832,12 +1832,23 @@ def consolidate_process_endpoint(
         registrar_falha_consolidacao,
     )
 
-    ProcessRepository(db, current_user.tenant_id).get_or_404(
+    # Frente K — a identidade sai do ORM ANTES do try, e o socorro só vê inteiros.
+    # Medido no gate (12/09): a consolidação quebrou por `DataError` no flush, o
+    # `except` chamou `registrar_falha_consolidacao(... current_user.tenant_id ...)`
+    # e ESSE acesso a atributo disparou um lazy-load numa sessão já envenenada →
+    # `PendingRollbackError`. O socorro morria antes de socorrer: nenhuma linha de
+    # auditoria, e a consultora recebia "Internal Server Error" em vez da frase que
+    # este bloco existe para dar. Rede de segurança não pode depender do que
+    # acabou de cair.
+    tenant_id = current_user.tenant_id
+    user_id = current_user.id
+
+    ProcessRepository(db, tenant_id).get_or_404(
         process_id, detail="Processo não encontrado."
     )
     try:
         result = consolidate_process(
-            db, tenant_id=current_user.tenant_id, process_id=process_id, user_id=current_user.id
+            db, tenant_id=tenant_id, process_id=process_id, user_id=user_id
         )
     except HTTPException:
         raise
@@ -1849,8 +1860,8 @@ def consolidate_process_endpoint(
         # que diz ao consultor o que aconteceu e o que fazer.
         logger.exception("consolidar: falhou para process_id=%s", process_id)
         registrar_falha_consolidacao(
-            db, tenant_id=current_user.tenant_id, process_id=process_id,
-            user_id=current_user.id, exc=exc,
+            db, tenant_id=tenant_id, process_id=process_id,
+            user_id=user_id, exc=exc,
         )
         raise HTTPException(
             status_code=500,

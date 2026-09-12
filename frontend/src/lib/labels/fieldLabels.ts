@@ -95,6 +95,7 @@ export const FIELD_LABELS: Record<string, string> = {
   area_grafica_ha: 'Área gráfica (ha)',
   app_area_ha: 'Área de APP (ha)',
   rl_status: 'Reserva legal',
+  rl_area_ha: 'Área de Reserva Legal',
   rat_protocolo: 'Protocolo do RAT',
   rat_data_emissao: 'Data de emissão do RAT',
   modulos_fiscais: 'Módulos fiscais',

@@ -50,6 +50,34 @@ E2E_SEED_JSON=/tmp/e2e_seed_ui.json E2E_PDFS_DIR=<pasta> E2E_API_URL=http://127.
 E2E_PRINTS_DIR=../docs/trabalhos/fechamento_contrato/prints npx playwright test
 ```
 
+## Gate de navegador único (Frente K)
+
+`frontend/e2e/frente-k.spec.ts` é UM teste, UMA sessão, e **não** trabalha
+sobre estado pré-produzido pela API: login → "Gerar Checklist" → os 6
+documentos pelo input real → extração → decisões (com reclassificação) →
+"Gravar na base" → F5 → logout/login → rota → documento novo → rota
+desatualizada. Os seis números são lidos do DOM.
+
+Precisa de um banco descartável **virgem** (o mesmo `setup_db.py`, com outro
+`E2E_DB_NAME`) e do Vite apontado para a API do gate:
+
+```bash
+# banco próprio do gate de navegador
+E2E_DB_NAME=amigao_e2e_frente_k_ui python tests/e2e/frente_j/setup_db.py > /tmp/seed_kui.json
+# API + worker apontados para ele (Redis num índice só dele)
+POSTGRES_DB=amigao_e2e_frente_k_ui REDIS_URL=redis://localhost:6379/7 python -m uvicorn app.main:app --port 8010
+POSTGRES_DB=amigao_e2e_frente_k_ui REDIS_URL=redis://localhost:6379/7 python -m celery -A app.core.celery_app worker --pool=solo
+# Vite com proxy para a API do gate
+cd frontend && VITE_API_PROXY_TARGET=http://127.0.0.1:8010 npm run dev
+# o gate
+cd frontend && E2E_FRONTEND_URL=http://localhost:5173 E2E_SEED_JSON=/tmp/seed_kui.json   E2E_API_URL=http://127.0.0.1:8010 E2E_PDFS_DIR=<pasta dos PDFs>   E2E_PRINTS_DIR=<pasta de prints> npx playwright test frente-k.spec.ts
+```
+
+> `E2E_FRONTEND_URL` importa: o Vite escuta em `localhost` (IPv6), e o default
+> `127.0.0.1:5173` do `playwright.config.ts` dá `ERR_CONNECTION_REFUSED`.
+
+Resultado colado em `docs/trabalhos/consolidacao_real/CONSOLIDACAO_REAL.md`.
+
 `setup_db.py` recusa qualquer nome de banco que não comece com `amigao_e2e`
 e aplica o schema por `create_all` (mesmo caminho do `conftest.py`) — nunca
 `alembic` fora do banco de desenvolvimento (CLAUDE.md).

@@ -128,7 +128,10 @@ function DecisaoCard({ processId, decisao }: { processId: number; decisao: Decis
           <span className={`text-xs px-2 py-0.5 rounded border whitespace-nowrap ${concordanciaCls(decisao)}`}>
             {concordanciaLabel(decisao)}
           </span>
-          <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded border whitespace-nowrap ${ESTADO_CLS[decisao.estado]}`}>
+          <span
+            data-testid="decisao-estado"
+            className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded border whitespace-nowrap ${ESTADO_CLS[decisao.estado]}`}
+          >
             {decisao.estado === 'gravada' && <Database className="w-3 h-3" />}
             {ESTADO_LABEL[decisao.estado]}
           </span>
@@ -289,7 +292,10 @@ export default function DecisoesPanel({ processId }: { processId: number }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+      <p
+        data-testid="decisoes-total"
+        className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider"
+      >
         Decisões ({decisoes.length})
       </p>
       {decisoes.map(d => (
