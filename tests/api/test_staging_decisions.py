@@ -132,7 +132,7 @@ def test_decisao_inexistente_da_404(client: TestClient, db_session):
 # ---------------------------------------------------------------------------
 
 
-def _setup_observacao_tipada(db_session, email="j@example.com"):
+def _setup_observacao_tipada(db_session, email="j@example.com", tipo_obs="app"):
     """Uma observação de matrícula que o modelo rotulou `app` mas é hipoteca
     (o padrão medido no ADR-065: valor certo, tipo errado)."""
     tenant = Tenant(name="Frente J Tenant")
@@ -155,7 +155,7 @@ def _setup_observacao_tipada(db_session, email="j@example.com"):
         tenant_id=tenant.id, process_id=proc.id, source_doc_type="matricula",
         field_name="averbacao_app", field_value={"value": "AV.03 · APP · 15/04/2008"},
         status=ExtractedFieldStatus.pendente, target_entity="matricula",
-        target_field="averbacao_app", matricula_hint="3673", tipo_observacao="app",
+        target_field="averbacao_app", matricula_hint="3673", tipo_observacao=tipo_obs,
         atributos={"ato": "AV.03", "data_ato": "15/04/2008", "partes": ["BANCO DO BRASIL S/A"]},
     )
     db_session.add(row)
@@ -163,29 +163,24 @@ def _setup_observacao_tipada(db_session, email="j@example.com"):
     return tenant, proc, row
 
 
-def test_reclassificar_pela_decisao_preserva_o_sugerido_e_muda_a_chave(client: TestClient, db_session):
+def test_reclassificar_linha_sem_agrupamento_e_pelo_campo_a_campo(client: TestClient, db_session):
+    """A linha `app` não pertence a decisão nenhuma (a Frente G não agrupa APP):
+    o caminho dela é o endpoint campo a campo, que é o que a tela antiga
+    oferece. Depois de reclassificada para hipoteca, ela PASSA a integrar a
+    decisão de gravames daquela matrícula."""
     tenant, proc, row = _setup_observacao_tipada(db_session)
     db_session.commit()
     h = _login(client, "j@example.com")
 
-    # Antes: `app` tem destino (averbacao_app) mas nenhuma chave natural da
-    # Frente G — aparece em sem_agrupamento, visível.
     antes = client.get(f"/api/v1/processes/{proc.id}/staging-decisions", headers=h).json()
     assert antes["decisoes"] == []
     assert [i["staging_id"] for i in antes["sem_agrupamento"]] == [row.id]
 
     r = client.post(
-        f"/api/v1/processes/{proc.id}/staging-decisions/decidir", headers=h,
-        json={"entidade": "matricula", "identificador": "3673", "aspecto": "gravames",
-              "acao": "reclassificar", "staging_id": row.id, "tipo_observacao": "Hipoteca"},
+        f"/api/v1/processes/{proc.id}/staging-fields/{row.id}/decidir", headers=h,
+        json={"acao": "reclassificar", "tipo_observacao": "Hipoteca"},
     )
-    # A decisão-alvo (gravames) ainda não existia quando o pedido chegou —
-    # ela NASCE da reclassificação. O endpoint devolve a decisão que passou a
-    # conter a linha, não 404.
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["chave"]["aspecto"] == "gravames"
-    assert body["evidencias"][0]["tipo_observacao"] == "hipoteca"
 
     db_session.refresh(row)
     assert row.tipo_observacao == "hipoteca"
@@ -197,6 +192,59 @@ def test_reclassificar_pela_decisao_preserva_o_sugerido_e_muda_a_chave(client: T
     depois = client.get(f"/api/v1/processes/{proc.id}/staging-decisions", headers=h).json()
     assert depois["sem_agrupamento"] == []
     assert [d["chave"]["aspecto"] for d in depois["decisoes"]] == ["gravames"]
+    assert depois["decisoes"][0]["evidencias"][0]["tipo_observacao"] == "hipoteca"
+
+
+def test_reclassificar_pela_decisao_agrupada_troca_o_tipo_da_evidencia(client: TestClient, db_session):
+    """O caminho da TELA (cartão agrupado): a linha já integra a decisão de
+    gravames e a consultora corrige o tipo de UM ato. A decisão continua a
+    mesma; a evidência passa a dizer o tipo decidido."""
+    tenant, proc, row = _setup_observacao_tipada(db_session, email="j3@example.com",
+                                                 tipo_obs="hipoteca")
+    db_session.commit()
+    h = _login(client, "j3@example.com")
+
+    antes = client.get(f"/api/v1/processes/{proc.id}/staging-decisions", headers=h).json()
+    assert [d["chave"]["aspecto"] for d in antes["decisoes"]] == ["gravames"]
+
+    r = client.post(
+        f"/api/v1/processes/{proc.id}/staging-decisions/decidir", headers=h,
+        json={"entidade": "matricula", "identificador": "3673", "aspecto": "gravames",
+              "acao": "reclassificar", "staging_id": row.id,
+              "tipo_observacao": "Alienação fiduciária"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["chave"]["aspecto"] == "gravames"
+    assert body["evidencias"][0]["tipo_observacao"] == "alienacao_fiduciaria"
+
+    db_session.refresh(row)
+    assert row.atributos["tipo_sugerido"] == "hipoteca"
+
+
+def test_reclassificar_que_tira_a_linha_da_decisao_nao_e_erro(client: TestClient, db_session):
+    """Reclassificar para um tipo que a Frente G não agrupa (arrendamento)
+    esvazia a decisão. A escrita FOI feita — responder erro seria mentira; o
+    corpo vem `null` e a linha reaparece em `sem_agrupamento`."""
+    tenant, proc, row = _setup_observacao_tipada(db_session, email="j4@example.com",
+                                                 tipo_obs="hipoteca")
+    db_session.commit()
+    h = _login(client, "j4@example.com")
+
+    r = client.post(
+        f"/api/v1/processes/{proc.id}/staging-decisions/decidir", headers=h,
+        json={"entidade": "matricula", "identificador": "3673", "aspecto": "gravames",
+              "acao": "reclassificar", "staging_id": row.id,
+              "tipo_observacao": "arrendamento"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() is None
+
+    depois = client.get(f"/api/v1/processes/{proc.id}/staging-decisions", headers=h).json()
+    assert depois["decisoes"] == []
+    assert [i["staging_id"] for i in depois["sem_agrupamento"]] == [row.id]
+    db_session.refresh(row)
+    assert row.tipo_observacao == "arrendamento"
 
 
 def test_reclassificar_com_tipo_desconhecido_e_422_e_nao_toca_a_linha(client: TestClient, db_session):

@@ -633,11 +633,13 @@ class TestDecidirDecisaoAgrupada:
         # O texto que a tela MOSTRA acompanha a decisão: sem isto o cartão
         # exibiria "AV.03 · APP · …" ao lado do tipo decidido "Hipoteca".
         assert "Hipoteca" in row.field_value["value"]
-        assert "APP" in row.field_value["value_sugerido"]
+        assert row.field_value["value_sugerido"] == "AV.03 — garantia hipotecária"
         assert row.target_entity is None and row.target_field is None
         decisoes = build_decisions([row]).decisoes
         assert len(decisoes) == 1
-        assert decisoes[0].chave.aspecto == "gravames"
+        # `Decisao.chave` é a tupla (entidade, identificador, aspecto) — só o
+        # `to_dict()` da API a nomeia em campos.
+        assert decisoes[0].chave == ("matricula", "3181", "gravames")
         assert decisoes[0].evidencias[0].tipo_observacao == "hipoteca"
 
 

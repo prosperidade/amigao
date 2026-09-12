@@ -294,10 +294,35 @@ def _group_conflict_values(rows: list[ExtractedFieldStaging], target_field: str)
     return list(seen.values())
 
 
-def _values_differ(old: Any, new: Any) -> bool:
-    """True se old≠new além de tolerância (float: ~0,01%; idempotência protegida)."""
+# Colunas cujo valor é um IDENTIFICADOR REGISTRAL: "3.181" e "3181" são o
+# MESMO número, escrito de dois jeitos (a memória do projeto já nomeia a
+# classe: dedupe por identificador normalizado, nunca por string crua).
+_COLUNAS_IDENTIFICADOR_REGISTRAL = frozenset({"numero_matricula"})
+
+
+def _values_differ(old: Any, new: Any, col: Optional[str] = None) -> bool:
+    """True se old≠new além de tolerância (float: ~0,01%; idempotência protegida).
+
+    Frente J, achado do gate: sem o ramo de identificador registral abaixo, a
+    consolidação divergia de SI MESMA em todo caso com certidão. `_ensure_
+    matricula` cria a ficha com o hint já normalizado (`3181`) e marca
+    `field_sources["numero_matricula"] = "human_validated"`; a linha da
+    certidão afirma `3.181`, como o documento escreve. Comparadas como string
+    crua, as duas "divergem" — a linha vira reconciliação falsa ("anterior
+    3181, novo 3.181"), nunca recebe `consolidated_at`, e a decisão de
+    composição (ADR-067) fica presa em `parcialmente_gravada` para sempre.
+    O bug é anterior a esta frente; ficava escondido porque `_estado_de`
+    usava `any(consolidated_at)` e a linha do CAR, carimbada por outro ramo,
+    pintava a decisão inteira de verde.
+    """
     if old is None or new is None:
         return old is not new
+    if col in _COLUNAS_IDENTIFICADOR_REGISTRAL:
+        a, b = _clean_matricula_hint(old), _clean_matricula_hint(new)
+        # Só decide pela via normalizada quando AMBOS têm número extraível;
+        # senão cai na comparação comum (não inventa igualdade por ausência).
+        if a is not None and b is not None:
+            return a != b
     if isinstance(old, float) and isinstance(new, (int, float)):
         base = max(abs(old), abs(new), 1e-9)
         return abs(old - float(new)) / base > 1e-4
@@ -1124,7 +1149,7 @@ def _write_entity(
     fs_prev = dict(getattr(obj, "field_sources", None) or {})
     ja_consolidado = fs_prev.get(col) in ("human_validated", "pendente_oficializacao")
 
-    if ja_consolidado and _values_differ(old, coerced):
+    if ja_consolidado and _values_differ(old, coerced, col):
         # Doc novo diverge de campo já gravado → NUNCA sobrescreve sozinho (Ficha 05).
         reconciliacoes.append({
             "entity": row.target_entity, "entity_id": getattr(obj, "id", None),
@@ -1133,7 +1158,7 @@ def _write_entity(
         })
         return "recusado"
 
-    if not _values_differ(old, coerced):
+    if not _values_differ(old, coerced, col):
         # Idempotência: mesmo valor → reafirma proveniência mas não conta como write.
         # NÃO é recusa: o valor desta linha está na base. Consolidar duas vezes
         # não pode apagar da tela o "Gravado" da primeira.
@@ -1782,7 +1807,7 @@ def decidir_decisao_agrupada(
     chave: ChaveNatural, acao: str, staging_id: Optional[int] = None,
     valor: Any = None, tipo_observacao: Optional[str] = None,
     user_id: Optional[int] = None,
-) -> Decisao:
+) -> Optional[Decisao]:
     """Aplica UMA decisão (Frente G) às linhas de staging que ela agrupa.
 
     Reaproveita `decide_field` por linha — a Conferência por decisões não
@@ -1864,11 +1889,23 @@ def decidir_decisao_agrupada(
     )
     atualizada = localizar_decisao(rows_pos, chave)
     if atualizada is None and staging_id is not None:
+        # A reclassificação pode MUDAR a chave natural da linha (o tipo é que
+        # decide o aspecto — ADR-065/067): "app" sem chave vira "hipoteca" em
+        # `gravames`. Quando a chave pedida deixa de existir, a resposta útil
+        # é a decisão que a linha passou a integrar, não um erro.
         atualizada = next(
             (d for d in build_decisions(rows_pos).decisoes if staging_id in d.staging_ids),
             None,
         )
     if atualizada is None:
+        if staging_id is not None:
+            # A escrita FOI feita e a linha simplesmente não integra mais
+            # nenhuma decisão (ex.: RL reclassificada para `arrendamento`,
+            # que a Frente G não agrupa — passa a aparecer em
+            # `sem_agrupamento`). Erro aqui seria mentira: nada falhou. A tela
+            # recarrega a Conferência e a encontra lá. `None` é a resposta
+            # honesta — o painel invalida a query e não lê este corpo.
+            return None
         raise HTTPException(
             status_code=500,
             detail="Decisão sumiu depois de decidir — recarregue a Conferência.",

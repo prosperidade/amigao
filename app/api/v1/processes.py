@@ -1616,7 +1616,7 @@ def list_process_staging_decisions(
     return resultado.to_dict()
 
 
-@router.post("/{process_id}/staging-decisions/decidir", response_model=DecisaoOut)
+@router.post("/{process_id}/staging-decisions/decidir", response_model=Optional[DecisaoOut])
 def decide_process_staging_decision(
     process_id: int,
     body: DecisaoRequest,
@@ -1638,7 +1638,11 @@ def decide_process_staging_decision(
         valor=body.valor, tipo_observacao=body.tipo_observacao,
         user_id=current_user.id,
     )
-    return decisao.to_dict()
+    # `None` quando a reclassificação tirou a linha de toda decisão (ex.: RL
+    # que virou `arrendamento`, que a Frente G não agrupa): a escrita foi
+    # feita, a linha está em `sem_agrupamento`, e a tela recarrega para
+    # mostrá-la lá. Devolver erro seria mentira — nada falhou.
+    return decisao.to_dict() if decisao is not None else None
 
 
 @router.get("/{process_id}/confronto-identidade")

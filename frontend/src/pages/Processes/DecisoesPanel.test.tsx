@@ -201,8 +201,9 @@ describe('DecisoesPanel — a Conferência por decisões (REC-001 + CONF-001)', 
   it('decisão sem evidência tipada e concordante não mostra o bloco de edição', async () => {
     const user = userEvent.setup();
     const base = decisaoComposicao({ concordancia: 'concordam' });
-    base.evidencias = base.evidencias.map((e: Record<string, unknown>) => ({ ...e, tipo_observacao: null }));
-    decisoes = [base];
+    const evidencias = (base.evidencias as Array<Record<string, unknown>>)
+      .map(e => ({ ...e, tipo_observacao: null }));
+    decisoes = [{ ...base, evidencias }];
     render(withQuery(<DecisoesPanel processId={23} />));
 
     await user.click(await screen.findByRole('button', { name: /Matrícula 3181/ }));

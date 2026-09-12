@@ -24,6 +24,17 @@ from app.services.document_lifecycle import (
     registrar_transicao_se_mudou,
 )
 
+# Trecho VERBATIM do doc 546 da ELODI (recibo do CAR, produção). Curto de
+# propósito E legível pela régua do pipeline: `texto_sem_conteudo_legivel`
+# (a mesma que produz `MOTIVO_OCR_ILEGIVEL`) exige 600+ chars OU um sinal de
+# dado forte — 6+ dígitos seguidos, CPF ou CNPJ. Texto curto inventado ("texto
+# do documento") é ILEGÍVEL por essa régua, e desde a Frente J (item 6) o
+# estado do documento usa exatamente ela: um documento assim é `erro_leitura`,
+# não `lido`. Documento registral real sempre traz número longo (registro no
+# CAR, CNPJ, código de certificação), então a fixture passou a trazer também.
+TEXTO_LEGIVEL = "Registro no CAR: GO-5200605-82E5.AE14.076B.4637.9900.9C9D.EC86.D700"
+
+
 _SEQ = {"n": 0}
 
 
@@ -117,7 +128,7 @@ def test_derive_status_lido_com_ocr_done(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.lido
 
@@ -125,7 +136,7 @@ def test_derive_status_lido_com_ocr_done(db_session):
 def test_derive_status_classificado(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.classificado
@@ -138,7 +149,7 @@ def test_derive_status_outro_nao_conta_como_classificado(db_session):
     não específico)."""
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "outro"
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.lido
@@ -147,7 +158,7 @@ def test_derive_status_outro_nao_conta_como_classificado(db_session):
 def test_derive_status_extraido(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -162,7 +173,7 @@ def test_derive_status_extraido(db_session):
 def test_derive_status_conferido_quando_toda_linha_decidida(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -182,7 +193,7 @@ def test_derive_status_conferido_quando_toda_linha_decidida(db_session):
 def test_derive_status_extraido_quando_ha_linha_pendente(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -212,7 +223,7 @@ def test_registrar_transicao_grava_sequencia_completa_com_autor(db_session):
 
     # → lido (automático — pipeline OCR).
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     db_session.flush()
     novo = registrar_transicao_se_mudou(db_session, doc, user_id=None)
     assert novo == DocumentLifecycleStatus.lido
@@ -256,7 +267,7 @@ def test_registrar_transicao_idempotente_quando_nada_mudou(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    doc.extracted_text = TEXTO_LEGIVEL
     db_session.flush()
 
     primeiro = registrar_transicao_se_mudou(db_session, doc, user_id=None)
@@ -279,7 +290,7 @@ def test_derive_document_statuses_em_lote_bate_com_o_unitario(db_session):
     from app.services.document_lifecycle import derive_document_statuses
 
     tenant, proc, user = _seed(db_session)
-    texto = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
+    texto = TEXTO_LEGIVEL
 
     recebido = _doc(db_session, tenant, proc)                      # sem leitura
     erro = _doc(db_session, tenant, proc)                          # done sem texto legível
