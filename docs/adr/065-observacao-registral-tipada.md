@@ -246,7 +246,10 @@ determinística (`CONFIRMACAO_ENTRADA_2026-09-09.md`).
   original em `atributos["tipo_sugerido"]` (só na primeira reclassificação —
   `setdefault`), rerroteia o destino por `DESTINO_POR_TIPO` (RL/APP ganham
   coluna; gravame/evento perdem, com `sem_destino_motivo` escrito), marca
-  `field_value["tipo_decidido"]`, zera `consolidated_at` (o "Gravado" da
+  `field_value["tipo_decidido"]`, **regera o resumo visível** (o texto do
+  cartão embute o rótulo do tipo — sem regerar, a linha reclassificada para
+  hipoteca continuaria exibindo "APP"; o texto anterior fica em
+  `value_sugerido`), zera `consolidated_at` (o "Gravado" da
   rodada anterior deixa de valer) e audita `staging_tipo_reclassificado`.
   Rótulo fora do vocabulário é **422 com o rótulo no detalhe** — não vira
   `nao_classificado` calado; o escape só entra quando pedido por escrito.

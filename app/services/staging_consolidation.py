@@ -393,6 +393,18 @@ def decide_field(
             row.field_name = "observacao"
         field_value = dict(row.field_value or {}) if isinstance(row.field_value, dict) else {"value": row.field_value}
         field_value["tipo_decidido"] = novo_tipo
+        # O texto que a consultora LÊ no cartão é `Observacao.resumo()`, e ele
+        # embute o rótulo do tipo ("AV.03 · APP · 15/04/2008"). Sem regerar,
+        # a linha reclassificada para hipoteca continuaria exibindo "APP" ao
+        # lado do tipo decidido "Hipoteca" — a tela contradizendo a decisão
+        # que a consultora acabou de tomar. Regerado só quando a linha JÁ era
+        # observação tipada (veio de `_linhas_de_observacoes`); o texto
+        # anterior fica em `value_sugerido`, junto de `tipo_sugerido`.
+        if anterior:
+            field_value["value_sugerido"] = field_value.get("value")
+            field_value["value"] = Observacao(
+                tipo=novo_tipo, atributos=atributos, ordem=row.id
+            ).resumo()
         if destino is None:
             field_value["sem_destino"] = True
             field_value["sem_destino_motivo"] = (

@@ -630,6 +630,10 @@ class TestDecidirDecisaoAgrupada:
 
         assert row.tipo_observacao == "hipoteca"
         assert row.atributos["tipo_sugerido"] == "app"
+        # O texto que a tela MOSTRA acompanha a decisão: sem isto o cartão
+        # exibiria "AV.03 · APP · …" ao lado do tipo decidido "Hipoteca".
+        assert "Hipoteca" in row.field_value["value"]
+        assert "APP" in row.field_value["value_sugerido"]
         assert row.target_entity is None and row.target_field is None
         decisoes = build_decisions([row]).decisoes
         assert len(decisoes) == 1
