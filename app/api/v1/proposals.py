@@ -427,11 +427,25 @@ def accept_proposal(
     proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
     from app.services.artifact_staleness import desatualizacao_proposta  # noqa: PLC0415
 
+    # Frente J (item 3, reauditoria Codex 11/09): a spec exige BLOQUEIO, não
+    # aviso — aceitar é o ato que gera contrato (S5-B), e um contrato sobre
+    # escopo que o processo já invalidou é dano, não "aviso informativo".
+    # Diagnóstico e rota continuam só avisando (ADR-039: nunca destruir
+    # trabalho humano por um evento que o consultor talvez nem tenha visto).
+    #
+    # A mensagem nomeia o movimento REAL: a máquina S5-A não deixa uma
+    # proposta ENVIADA virar nova versão direto (`nova-versao` exige recusada
+    # ou expirada), então mandar "gere uma nova versão" aqui seria apontar
+    # para uma porta trancada — o oposto do bloqueio honesto do ADR-039.
     aviso = desatualizacao_proposta(db, proposal)
     if aviso is not None:
         raise HTTPException(
             status_code=422,
-            detail=f"Proposta desatualizada: {aviso.motivo}. Gere e valide uma nova versão.",
+            detail=(
+                f"Proposta desatualizada: {aviso.motivo}. Aceitar agora fecharia "
+                "contrato sobre escopo vencido. Recuse esta proposta e gere a "
+                "nova versão (Recusar → Nova versão), ou reveja o processo antes."
+            ),
         )
     eff = _effective_status(proposal)
     # S5-A — máquina estrita: só aceita uma proposta ENVIADA e não expirada.

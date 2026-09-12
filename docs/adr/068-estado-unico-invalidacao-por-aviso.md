@@ -270,7 +270,13 @@ contrato assinado sobre escopo que o processo já invalidou não é "aviso
 informativo", é dano. `POST /proposals/{id}/accept` agora consulta
 `desatualizacao_proposta` ANTES da máquina de estados e recusa com **422 e
 a razão** ("Proposta desatualizada: <motivo>. Gere e valide uma nova
-versão."). A proposta continua `sent`; `nova-versao` (S5-A) é o caminho. A
+versão."). A proposta continua `sent`.
+
+**A mensagem nomeia o movimento real** (ADR-039: bloqueio de FLUXO diz o
+próximo passo, não só o impedimento). "Gere uma nova versão" sozinho
+apontaria uma porta trancada: a máquina estrita do S5-A só deixa
+`nova-versao` nascer de proposta **recusada ou expirada** — de `sent` não
+sai. O caminho real é **Recusar → Nova versão**, e é isso que o 422 diz. A
 tela (`ProposalEditor`) mostra o aviso antes do clique, desabilita "Aceitar"
 e, se o 422 vier mesmo assim, o detalhe vira toast (a mutation não tinha
 `onError` — o backend gritava e faltava alto-falante, lição do caso 15).

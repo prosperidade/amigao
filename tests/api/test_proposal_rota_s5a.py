@@ -170,10 +170,22 @@ def test_aceite_recusa_proposta_desatualizada_com_razao(client: TestClient, db_s
 
     resposta = client.post(f"/api/v1/proposals/{pid}/accept", headers=h)
     assert resposta.status_code == 422
-    assert "desatualizada" in resposta.json()["detail"].lower()
-    assert "matricula-nova.pdf" in resposta.json()["detail"]
+    detalhe = resposta.json()["detail"]
+    assert "desatualizada" in detalhe.lower()
+    assert "matricula-nova.pdf" in detalhe
+    # O bloqueio nomeia o movimento REAL (ADR-039: bloqueio de fluxo diz o
+    # próximo passo). "Gere uma nova versão" sozinho apontaria porta trancada:
+    # `nova-versao` exige recusada/expirada — de `sent` não sai.
+    assert "recuse" in detalhe.lower()
     db_session.refresh(proposta)
     assert proposta.status == ProposalStatus.sent
+
+    # E o caminho que a mensagem indica funciona de fato: recusar → nova versão.
+    rec = client.post(f"/api/v1/proposals/{pid}/reject", headers=h, json={"reason": "escopo desatualizado"})
+    assert rec.status_code == 200, rec.text
+    nova = client.post(f"/api/v1/proposals/{pid}/nova-versao", headers=h)
+    assert nova.status_code == 201, nova.text
+    assert nova.json()["status"] == "draft"
 
 
 def test_aceitar_rascunho_bloqueado(client: TestClient, db_session):

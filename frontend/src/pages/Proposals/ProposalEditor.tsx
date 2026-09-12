@@ -304,7 +304,7 @@ export default function ProposalEditor() {
                 role="status"
                 className="max-w-md text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-2.5 py-1.5"
               >
-                {`Proposta desatualizada: ${avisoDesatualizado.motivo}. O aceite está bloqueado — gere e valide uma nova versão.`}
+                {`Proposta desatualizada: ${avisoDesatualizado.motivo}. O aceite está bloqueado — aceitar fecharia contrato sobre escopo vencido. Recuse e gere a nova versão, ou reveja o processo antes.`}
               </p>
             )}
             <div className="flex gap-2">
