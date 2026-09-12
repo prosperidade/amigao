@@ -75,7 +75,19 @@ seção "O que a validação achou" registra. Só então docs, gate e relatório
     (**Recusar → Nova versão**), na doutrina do ADR-039 (bloqueio de fluxo diz
     o próximo passo que existe). O teste percorre o caminho inteiro:
     422 → `reject` 200 → `nova-versao` 201 (rascunho).
-11. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
+11. **`escolher_fonte` numa evidência sem destino rejeitaria a matrícula
+    inteira.** `_reject_siblings` casa `target_entity`/`target_field`; numa
+    observação sem destino (gravame, baixa, aditivo, arrendamento — ADR-065)
+    isso é `IS NULL AND IS NULL`, ou seja, **todas** as outras observações da
+    mesma matrícula viravam `rejeitado` de uma vez. O caminho só ficou
+    alcançável porque a Frente J expôs `escolher_fonte` na decisão agrupada
+    (item 5) — a guarda entra junto com ele: linha sem destino não tem irmão
+    a rejeitar. Teste `TestFrenteJEscolherFonteSemDestino`.
+12. **Shadowing em `decidir_decisao_agrupada`**: o loop do `reabrir` usava a
+    variável `staging_id`, o mesmo nome do parâmetro lido no fim da função —
+    o fallback de lá procuraria a decisão do último membro reaberto em vez de
+    devolver o 500 honesto "a decisão sumiu". Renomeado para `membro_id`.
+13. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
 
 ## Regressão: gates de C–H
 

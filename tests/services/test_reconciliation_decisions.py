@@ -671,3 +671,38 @@ class TestFrenteJEvidenciaTipada:
             for e in decisao.evidencias:
                 if e.staging_id is None:
                     assert e.tipo_observacao is None
+
+
+class TestFrenteJEscolherFonteSemDestino:
+    """Frente J expôs `escolher_fonte` na decisão agrupada (item 5). Uma
+    evidência SEM destino (gravame/baixa/aditivo — ADR-065) não disputa coluna
+    com ninguém: `_reject_siblings` não pode varrer `target_field IS NULL` e
+    derrubar todas as outras observações da mesma matrícula."""
+
+    def test_escolher_fonte_em_gravame_nao_rejeita_as_outras_observacoes(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        escolhida = _linha(
+            db_session, tenant, proc, doc, field_name="observacao",
+            valor="AV.03 · Hipoteca · 15/04/2008", entidade=None, alvo=None,
+            hint="3673", tipo_obs="hipoteca", atributos={"ato": "AV.03", "vigencia": "vigente"},
+        )
+        vizinhas = [
+            _linha(db_session, tenant, proc, doc, field_name="observacao",
+                   valor="AV.09 · Baixa · 16/03/2017", entidade=None, alvo=None,
+                   hint="3673", tipo_obs="baixa", atributos={"ato": "AV.09"}),
+            _linha(db_session, tenant, proc, doc, field_name="observacao",
+                   valor="AV.10 · Arrendamento · 50 ha", entidade=None, alvo=None,
+                   hint="3673", tipo_obs="arrendamento", atributos={"ato": "AV.10"}),
+        ]
+
+        decide_field(
+            db_session, tenant_id=tenant.id, process_id=proc.id,
+            field_id=escolhida.id, acao="escolher_fonte", user_id=None,
+        )
+
+        db_session.refresh(escolhida)
+        assert escolhida.status == ExtractedFieldStatus.aceito
+        for v in vizinhas:
+            db_session.refresh(v)
+            assert v.status == ExtractedFieldStatus.pendente, f"{v.atributos} foi rejeitada em massa"

@@ -501,7 +501,21 @@ def decide_field(
 
 
 def _reject_siblings(db: Session, tenant_id: int, process_id: int, row: ExtractedFieldStaging) -> list[int]:
-    """Rejeita campos irmãos (mesmo destino) de outras fontes — 'escolher a fonte'."""
+    """Rejeita campos irmãos (mesmo destino) de outras fontes — 'escolher a fonte'.
+
+    Frente J: linha SEM destino não tem irmão nenhum a rejeitar. A disputa que
+    esta função resolve é pela COLUNA (duas fontes declarando `numero_matricula`
+    da mesma matrícula); observação sem destino (gravame, baixa, aditivo,
+    arrendamento — ADR-065) não disputa coluna com ninguém. Sem esta guarda,
+    `escolher_fonte` sobre uma evidência de gravame casaria
+    `target_entity IS NULL AND target_field IS NULL` e rejeitaria **todas** as
+    outras observações sem destino da mesma matrícula de uma vez — as baixas,
+    os aditivos, o arrendamento. A Frente J tornou esse caminho alcançável ao
+    expor `escolher_fonte` na decisão agrupada (item 5), então a guarda entra
+    junto com ele.
+    """
+    if row.target_field is None:
+        return []
     q = (
         db.query(ExtractedFieldStaging)
         .filter(
@@ -1785,11 +1799,16 @@ def decidir_decisao_agrupada(
 
     membros = {r.id: r for r in rows if r.id in decisao.staging_ids}
     if acao == "reabrir":
-        for staging_id in decisao.staging_ids:
-            row = membros.get(staging_id)
+        # `membro_id`, não `staging_id`: o parâmetro `staging_id` (a evidência
+        # escolhida em escolher_fonte/editar/reclassificar) é lido de novo no
+        # fim da função, e um loop que o sobrescrevesse faria o fallback de lá
+        # procurar a decisão do ÚLTIMO membro reaberto — devolvendo decisão
+        # errada em vez do 500 honesto "a decisão sumiu".
+        for membro_id in decisao.staging_ids:
+            row = membros.get(membro_id)
             if row is not None and row.status != ExtractedFieldStatus.pendente:
                 decide_field(db, tenant_id=tenant_id, process_id=process_id,
-                             field_id=staging_id, acao="reabrir", user_id=user_id)
+                             field_id=membro_id, acao="reabrir", user_id=user_id)
     elif acao == "aceitar":
         for evidencia in decisao.evidencias:
             row = membros.get(evidencia.staging_id) if evidencia.staging_id else None
