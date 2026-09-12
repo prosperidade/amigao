@@ -42,12 +42,12 @@ function decisaoComposicao(over: Record<string, unknown> = {}) {
       {
         staging_id: 1, documento_id: 10, documento_tipo: 'car', campo: 'matricula_listada',
         valor_bruto: { numero: '3181' }, valor_normalizado: { numero: '3181' },
-        unidade: null, vigencia: null, status: 'pendente', fonte_autoritativa: false,
+        unidade: null, vigencia: null, tipo_observacao: 'app', status: 'pendente', fonte_autoritativa: false,
       },
       {
         staging_id: 2, documento_id: 11, documento_tipo: 'matricula', campo: 'numero_matricula',
         valor_bruto: '3.181', valor_normalizado: '3.181',
-        unidade: null, vigencia: null, status: 'pendente', fonte_autoritativa: true,
+        unidade: null, vigencia: null, tipo_observacao: 'reserva_legal', status: 'pendente', fonte_autoritativa: true,
       },
     ],
     concordancia: 'concordam',
@@ -141,6 +141,33 @@ describe('DecisoesPanel — a Conferência por decisões (REC-001 + CONF-001)', 
 
     expect(await screen.findByText('Gravado na base')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Reabrir/ })).toBeInTheDocument();
+  });
+
+  it('estado misto aparece como parcialmente gravada, não como gravada', async () => {
+    decisoes = [decisaoComposicao({ estado: 'parcialmente_gravada' })];
+    render(withQuery(<DecisoesPanel processId={23} />));
+
+    expect(await screen.findByText('Parcialmente gravada')).toBeInTheDocument();
+    expect(screen.queryByText('Gravado na base')).not.toBeInTheDocument();
+  });
+
+  it('divergência permite escolher fonte e editar o tipo sugerido', async () => {
+    const user = userEvent.setup();
+    decisoes = [decisaoComposicao({ concordancia: 'divergem', nivel_divergencia: 'alto' })];
+    vi.mocked(api.post).mockResolvedValue({ data: decisoes[0] });
+    render(withQuery(<DecisoesPanel processId={23} />));
+    await screen.findByText(/Divergência/);
+
+    await user.selectOptions(screen.getByLabelText('Tipo de observação decidido'), 'hipoteca');
+    await user.click(screen.getByRole('button', { name: 'Editar tipo' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/processes/23/staging-decisions/decidir',
+      expect.objectContaining({
+        acao: 'reclassificar', staging_id: 1, tipo_observacao: 'hipoteca',
+      }),
+    ));
+    expect(screen.getAllByRole('button', { name: 'Escolher esta fonte' })).toHaveLength(2);
   });
 
   it('sem decisões, o painel não renderiza nada (sem_agrupamento continua na tela antiga)', async () => {

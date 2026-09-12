@@ -161,6 +161,36 @@ def test_diagnostico_decisao_alterada_apos_validacao_fica_desatualizado(db_sessi
     assert aviso.tipo == "decisao_alterada"
 
 
+def test_reextracao_cacheada_cria_staging_novo_e_desatualiza_diagnostico(db_session):
+    """Caminho do #23: o arquivo e o texto OCR são antigos, mas uma nova
+    extração insere evidência de staging depois do artefato."""
+    tenant, proc = _seed(db_session)
+    agora = datetime.now(UTC)
+    doc = _doc(db_session, tenant, proc, created_at=agora - timedelta(days=2))
+    doc.extracted_at = agora - timedelta(days=2)
+    doc.extracted_text = "Matrícula 3.181 com texto OCR já armazenado no cache."
+    diag = RegulatoryDiagnosis(
+        tenant_id=tenant.id, process_id=proc.id, content={}, version=1,
+        validated_at=agora,
+    )
+    db_session.add(diag)
+    db_session.flush()
+
+    row = ExtractedFieldStaging(
+        tenant_id=tenant.id, process_id=proc.id, document_id=doc.id,
+        field_name="numero_matricula", field_value={"value": "3.181"},
+        status=ExtractedFieldStatus.pendente, target_entity="matricula",
+        target_field="numero_matricula", created_at=agora + timedelta(minutes=3),
+    )
+    db_session.add(row)
+    db_session.flush()
+
+    aviso = desatualizacao_diagnostico(db_session, diag)
+    assert aviso is not None
+    assert aviso.tipo == "decisao_alterada"
+    assert "nova evidência" in aviso.motivo
+
+
 def test_diagnostico_sem_validacao_usa_criacao_como_corte(db_session):
     tenant, proc = _seed(db_session)
     diag = RegulatoryDiagnosis(tenant_id=tenant.id, process_id=proc.id, content={}, version=1)

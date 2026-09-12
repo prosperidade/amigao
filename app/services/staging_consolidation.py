@@ -37,7 +37,12 @@ from app.services.inconsistency_matrix import (
     norm_compare,
     parse_area_ha,
 )
-from app.services.reconciliation_decisions import ChaveNatural, Decisao, localizar_decisao
+from app.services.reconciliation_decisions import (
+    ChaveNatural,
+    Decisao,
+    build_decisions,
+    localizar_decisao,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +310,8 @@ def _values_differ(old: Any, new: Any) -> bool:
 
 def decide_field(
     db: Session, *, tenant_id: int, process_id: int, field_id: int,
-    acao: str, valor: Any = None, fonte: Optional[str] = None, user_id: Optional[int] = None,
+    acao: str, valor: Any = None, fonte: Optional[str] = None,
+    tipo_observacao: Optional[str] = None, user_id: Optional[int] = None,
 ) -> ExtractedFieldStaging:
     row = (
         db.query(ExtractedFieldStaging)
@@ -340,6 +346,60 @@ def decide_field(
             "field_id": row.id, "target_entity": row.target_entity,
             "target_field": row.target_field, "matricula_hint": row.matricula_hint,
             "decisao_anterior": anterior,
+        })
+        db.commit()
+        return row
+    if acao == "reclassificar":
+        from app.services.observacao_registral import (  # noqa: PLC0415
+            TIPOS,
+            TIPOS_GRAVAME,
+            Observacao,
+            destino_de,
+            normalizar_tipo,
+        )
+
+        if not tipo_observacao:
+            raise HTTPException(
+                status_code=422,
+                detail="'tipo_observacao' é obrigatório na ação 'reclassificar'.",
+            )
+        novo_tipo = normalizar_tipo(tipo_observacao)
+        if novo_tipo not in TIPOS or novo_tipo == "nao_classificado" and tipo_observacao != novo_tipo:
+            raise HTTPException(status_code=422, detail="Tipo de observação desconhecido.")
+        anterior = row.tipo_observacao
+        atributos = dict(row.atributos or {})
+        atributos.setdefault("tipo_sugerido", anterior)
+        row.tipo_observacao = novo_tipo
+        row.atributos = atributos
+        destino = destino_de(Observacao(tipo=novo_tipo, atributos=atributos, ordem=row.id))
+        if destino is not None:
+            row.target_entity, row.target_field = destino
+            row.field_name = row.target_field
+        else:
+            row.target_entity = None
+            row.target_field = None
+            row.field_name = "observacao"
+        field_value = dict(row.field_value or {}) if isinstance(row.field_value, dict) else {"value": row.field_value}
+        field_value["tipo_decidido"] = novo_tipo
+        if destino is None:
+            field_value["sem_destino"] = True
+            field_value["sem_destino_motivo"] = (
+                "gravame — entra na reconciliação pela matrícula"
+                if novo_tipo in TIPOS_GRAVAME
+                else "observação sem coluna correspondente no cadastro"
+            )
+        else:
+            field_value.pop("sem_destino", None)
+            field_value.pop("sem_destino_motivo", None)
+        row.field_value = field_value
+        row.consolidated_at = None
+        db.flush()
+        _audit(db, tenant_id, process_id, user_id, "staging_tipo_reclassificado", {
+            "field_id": row.id,
+            "tipo_sugerido": anterior,
+            "tipo_decidido": novo_tipo,
+            "target_entity": row.target_entity,
+            "target_field": row.target_field,
         })
         db.commit()
         return row
@@ -1681,7 +1741,9 @@ def flag_sem_casa(
 
 def decidir_decisao_agrupada(
     db: Session, *, tenant_id: int, process_id: int,
-    chave: ChaveNatural, acao: str, user_id: Optional[int] = None,
+    chave: ChaveNatural, acao: str, staging_id: Optional[int] = None,
+    valor: Any = None, tipo_observacao: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> Decisao:
     """Aplica UMA decisão (Frente G) às linhas de staging que ela agrupa.
 
@@ -1734,6 +1796,17 @@ def decidir_decisao_agrupada(
                 continue
             decide_field(db, tenant_id=tenant_id, process_id=process_id,
                          field_id=row.id, acao="aceitar", user_id=user_id)
+    elif acao in ("escolher_fonte", "editar", "reclassificar"):
+        if staging_id is None or staging_id not in membros:
+            raise HTTPException(
+                status_code=422,
+                detail="Selecione uma evidência desta decisão.",
+            )
+        decide_field(
+            db, tenant_id=tenant_id, process_id=process_id, field_id=staging_id,
+            acao=acao, valor=valor, tipo_observacao=tipo_observacao,
+            user_id=user_id,
+        )
     else:
         raise HTTPException(status_code=422, detail=f"Ação desconhecida para decisão agrupada: {acao}")
 
@@ -1747,6 +1820,11 @@ def decidir_decisao_agrupada(
         .all()
     )
     atualizada = localizar_decisao(rows_pos, chave)
+    if atualizada is None and staging_id is not None:
+        atualizada = next(
+            (d for d in build_decisions(rows_pos).decisoes if staging_id in d.staging_ids),
+            None,
+        )
     if atualizada is None:
         raise HTTPException(
             status_code=500,

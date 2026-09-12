@@ -26,6 +26,7 @@ class EvidenciaOut(BaseModel):
     valor_normalizado: Optional[Any] = None
     unidade: Optional[str] = None
     vigencia: Optional[str] = None
+    tipo_observacao: Optional[str] = None
     status: str
     fonte_autoritativa: bool = False
 
@@ -41,7 +42,7 @@ class DecisaoOut(BaseModel):
     percentual: Optional[float] = None
     valor_proposto: Optional[Any] = None
     fonte_autoritativa_doc: Optional[str] = None
-    estado: str  # pendente | decidida | gravada
+    estado: str  # pendente | decidida | parcialmente_gravada | gravada
     staging_ids: list[int] = []
 
 
@@ -66,4 +67,7 @@ class DecisaoRequest(BaseModel):
     entidade: str
     identificador: str
     aspecto: str
-    acao: Literal["aceitar", "reabrir"]
+    acao: Literal["aceitar", "reabrir", "escolher_fonte", "editar", "reclassificar"]
+    staging_id: Optional[int] = None
+    valor: Optional[Any] = None
+    tipo_observacao: Optional[str] = None

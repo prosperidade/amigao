@@ -75,6 +75,8 @@ class StagingDecisionRequest(BaseModel):
       em ``divergente_transcricao``. Cria a Ação AGORA (mesmo gerador que a
       Consolidação roda automaticamente); o campo continua divergente, a
       decisão do consultor foi "virar trabalho rastreável", não "resolver".
+    - ``reclassificar``: corrige o tipo da observação, preservando a sugestão
+      original em ``atributos.tipo_sugerido``.
     - ``reabrir``: devolve o campo a PENDENTE, desfazendo a decisão anterior.
       Pré-requisito da re-decisão: no caso 15 o consultor decidiu com a tela
       cega (sem o confronto 2923×4698) e precisa poder decidir de novo com a
@@ -83,10 +85,12 @@ class StagingDecisionRequest(BaseModel):
     """
 
     acao: Literal[
-        "aceitar", "escolher_fonte", "editar", "rejeitar", "criar_acao", "reabrir"
+        "aceitar", "escolher_fonte", "editar", "rejeitar", "criar_acao",
+        "reclassificar", "reabrir"
     ]
     valor: Optional[Any] = None   # obrigatório em "editar"
     fonte: Optional[str] = None   # metadado opcional em "escolher_fonte"
+    tipo_observacao: Optional[str] = None  # obrigatório em "reclassificar"
 
 
 class StagingDecisionResult(BaseModel):

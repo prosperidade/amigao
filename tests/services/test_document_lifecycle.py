@@ -7,6 +7,8 @@ conferido de um documento, com autor em cada transição (`None` = automático).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.document import Document, OcrStatus
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
@@ -75,11 +77,47 @@ def test_derive_status_recebido_sem_leitura(db_session):
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.recebido
 
 
+def test_ocr_done_sem_texto_legivel_e_erro_de_leitura(db_session):
+    tenant, proc, user = _seed(db_session)
+    doc = _doc(db_session, tenant, proc)
+    doc.ocr_status = OcrStatus.done
+    doc.extracted_text = "Documento digital assinado."
+    db_session.flush()
+
+    assert doc.tem_texto is False
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.erro_leitura
+
+
+def test_processando_e_desatualizado_sao_estados_distintos(db_session):
+    tenant, proc, user = _seed(db_session)
+    doc = _doc(db_session, tenant, proc)
+    doc.ocr_status = OcrStatus.processing
+    db_session.flush()
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.processando
+
+    doc.expires_at = datetime.now(UTC) - timedelta(days=1)
+    db_session.flush()
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.desatualizado
+
+
+def test_documento_removido_tem_projecao_substituido(db_session):
+    tenant, proc, user = _seed(db_session)
+    doc = _doc(db_session, tenant, proc)
+    doc.deleted_at = datetime.now(UTC)
+    db_session.flush()
+    assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.substituido
+
+
+def test_vocabulario_inclui_estados_negativos_sem_documento():
+    assert DocumentLifecycleStatus.nao_apresentado.value == "nao_apresentado"
+    assert DocumentLifecycleStatus.dispensado.value == "dispensado"
+
+
 def test_derive_status_lido_com_ocr_done(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "texto do documento"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.lido
 
@@ -87,7 +125,7 @@ def test_derive_status_lido_com_ocr_done(db_session):
 def test_derive_status_classificado(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     doc.document_type = "matricula"
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.classificado
@@ -100,7 +138,7 @@ def test_derive_status_outro_nao_conta_como_classificado(db_session):
     não específico)."""
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     doc.document_type = "outro"
     db_session.flush()
     assert derive_document_status(db_session, doc) == DocumentLifecycleStatus.lido
@@ -109,7 +147,7 @@ def test_derive_status_outro_nao_conta_como_classificado(db_session):
 def test_derive_status_extraido(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -124,7 +162,7 @@ def test_derive_status_extraido(db_session):
 def test_derive_status_conferido_quando_toda_linha_decidida(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -144,7 +182,7 @@ def test_derive_status_conferido_quando_toda_linha_decidida(db_session):
 def test_derive_status_extraido_quando_ha_linha_pendente(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
-    doc.extracted_text = "texto"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     doc.document_type = "matricula"
     db_session.flush()
     db_session.add(ExtractedFieldStaging(
@@ -174,7 +212,7 @@ def test_registrar_transicao_grava_sequencia_completa_com_autor(db_session):
 
     # → lido (automático — pipeline OCR).
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "texto do documento"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     db_session.flush()
     novo = registrar_transicao_se_mudou(db_session, doc, user_id=None)
     assert novo == DocumentLifecycleStatus.lido
@@ -218,7 +256,7 @@ def test_registrar_transicao_idempotente_quando_nada_mudou(db_session):
     tenant, proc, user = _seed(db_session)
     doc = _doc(db_session, tenant, proc)
     doc.ocr_status = OcrStatus.done
-    doc.extracted_text = "texto"
+    doc.extracted_text = "Matrícula 3.181 do Registro de Imóveis, com área rural identificada."
     db_session.flush()
 
     primeiro = registrar_transicao_se_mudou(db_session, doc, user_id=None)

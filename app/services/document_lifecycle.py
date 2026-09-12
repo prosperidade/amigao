@@ -25,6 +25,7 @@ como "extraído" mesmo assim, porque de fato tem staging.
 from __future__ import annotations
 
 import enum
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -37,13 +38,19 @@ AUDIT_ACTION = "document_status_changed"
 
 
 class DocumentLifecycleStatus(str, enum.Enum):
-    """Escada DOC-001 — cada degrau implica os anteriores."""
+    """Vocabulário único de DOC-001, incluindo os estados negativos da spec."""
 
+    nao_apresentado = "nao_apresentado"
     recebido = "recebido"
+    processando = "processando"
     lido = "lido"
     classificado = "classificado"
     extraido = "extraido"
     conferido = "conferido"
+    erro_leitura = "erro_leitura"
+    dispensado = "dispensado"
+    substituido = "substituido"
+    desatualizado = "desatualizado"
 
 
 # Mesmo conjunto que `reconciliation_decisions._DECIDIDOS` (ADR-067) — uma
@@ -54,9 +61,11 @@ _STAGING_DECIDIDOS = {"aceito", "rejeitado"}
 
 
 def _tem_leitura(doc: Document) -> bool:
-    if (doc.extracted_text or "").strip():
-        return True
-    return doc.ocr_status in (OcrStatus.done, OcrStatus.not_required)
+    # Mesma fronteira que gera `MOTIVO_OCR_ILEGIVEL` no pipeline. `done` é
+    # conclusão técnica do job, não prova de que há conteúdo utilizável.
+    from app.services.ficha01_extraction import texto_sem_conteudo_legivel  # noqa: PLC0415
+
+    return not texto_sem_conteudo_legivel(doc.extracted_text)
 
 
 def _tem_classificacao(doc: Document) -> bool:
@@ -75,7 +84,22 @@ def derive_document_status(
     """
     from app.models.extracted_field_staging import ExtractedFieldStaging  # noqa: PLC0415
 
+    if document.deleted_at is not None:
+        return DocumentLifecycleStatus.substituido
+
+    if document.expires_at is not None:
+        agora = datetime.now(UTC)
+        validade = document.expires_at
+        if validade.tzinfo is None:
+            validade = validade.replace(tzinfo=UTC)
+        if validade < agora:
+            return DocumentLifecycleStatus.desatualizado
+
     if not _tem_leitura(document):
+        if document.ocr_status == OcrStatus.processing:
+            return DocumentLifecycleStatus.processando
+        if document.ocr_status in (OcrStatus.done, OcrStatus.not_required, OcrStatus.failed):
+            return DocumentLifecycleStatus.erro_leitura
         return DocumentLifecycleStatus.recebido
 
     if not _tem_classificacao(document):

@@ -425,6 +425,14 @@ def accept_proposal(
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
     proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
+    from app.services.artifact_staleness import desatualizacao_proposta  # noqa: PLC0415
+
+    aviso = desatualizacao_proposta(db, proposal)
+    if aviso is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Proposta desatualizada: {aviso.motivo}. Gere e valide uma nova versão.",
+        )
     eff = _effective_status(proposal)
     # S5-A — máquina estrita: só aceita uma proposta ENVIADA e não expirada.
     if eff == ProposalStatus.expired:

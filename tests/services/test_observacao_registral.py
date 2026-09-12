@@ -23,6 +23,7 @@ from app.services.observacao_registral import (
     TIPO_HIPOTECA,
     TIPO_NAO_CLASSIFICADO,
     TIPO_RESERVA_LEGAL,
+    TIPO_SUCESSAO,
     VIGENCIA_BAIXADO,
     VIGENCIA_EXPIRADO,
     VIGENCIA_INDETERMINADO,
@@ -592,6 +593,20 @@ class TestRlVigente:
         ])
         assert rl_vigente(obs) is None
 
+    def test_rl_baixada_nao_e_promovida_e_anterior_valida_prevalece(self):
+        obs = observacoes_de([
+            {"ato": "AV.01", "tipo": "reserva_legal", "area_ha": "80,0", "data_ato": "01/01/2000"},
+            {"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "90,0", "data_ato": "01/01/2010"},
+            {"ato": "AV.03", "tipo": "baixa", "altera_ato": "AV.02", "data_ato": "01/01/2020"},
+        ])
+        aplicar_alteracoes(obs)
+        derivar_vigencia(obs, data_referencia=date(2021, 1, 1))
+
+        rl = rl_vigente(obs)
+        assert rl is not None
+        assert rl.ato == "AV.01"
+        assert next(o for o in obs if o.ato == "AV.02").vigencia == VIGENCIA_BAIXADO
+
 
 class TestTitularidade:
     """doc 549 — cadeia real: Nascente Agro-industrial → Alexandre Augusto
@@ -633,6 +648,17 @@ class TestTitularidade:
     def test_sem_compra_e_venda_com_adquirente_titular_atual_e_none(self):
         obs = observacoes_de([{"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "492,9252"}])
         assert titular_atual(obs) is None
+
+    def test_sucessao_transfere_titularidade_para_o_espolio(self):
+        obs = observacoes_de([
+            {"ato": "R-20", "tipo": TIPO_SUCESSAO, "data_ato": "10/04/2024",
+             "adquirentes": ["ESPÓLIO DE MARIA DA SILVA"],
+             "transmitentes": ["MARIA DA SILVA"]},
+        ])
+        atual = titular_atual(obs)
+        assert atual is not None
+        assert atual["titulares"] == ["ESPÓLIO DE MARIA DA SILVA"]
+        assert atual["ato"] == "R-20"
 
 
 class TestAtributosTemporaisNaLinhaDeStaging:

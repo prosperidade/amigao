@@ -51,6 +51,7 @@ class DocumentResponse(BaseModel):
     is_internal: bool = False
     extraction_status: Optional[str] = None
     review_required: bool = False
+    lifecycle_status: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

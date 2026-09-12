@@ -30,14 +30,21 @@ dict inventado.
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
+
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.document import Document, OcrStatus
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
 from app.models.tenant import Tenant
+from app.services.ficha01_extraction import data_referencia_do_processo
 from app.services.reconciliation_decisions import build_decisions
-from app.services.staging_consolidation import consolidate_process, decidir_decisao_agrupada
+from app.services.staging_consolidation import (
+    consolidate_process,
+    decide_field,
+    decidir_decisao_agrupada,
+)
 
 _SEQ = {"n": 0}
 
@@ -255,6 +262,14 @@ def _elodi(db_session):
     )
 
     return tenant, proc, prop, cli, rows
+
+
+def test_data_de_abertura_do_caso_alimenta_a_vigencia(db_session):
+    tenant, proc, _prop, _cli = _seed(db_session)
+    proc.opened_at = datetime(2024, 5, 20, 12, 0, tzinfo=UTC)
+    db_session.flush()
+
+    assert data_referencia_do_processo(db_session, tenant.id, proc.id) == date(2024, 5, 20)
 
 
 def _decisao(resultado, aspecto, identificador=None):
@@ -572,6 +587,19 @@ class TestDecidirDecisaoAgrupada:
         gravado = build_decisions(rows_pos2)
         assert _decisao(gravado, "composicao", "3181").estado == "gravada"
 
+    def test_estado_misto_e_parcialmente_gravada(self, db_session):
+        tenant, proc, _prop, _cli, rows = _elodi(db_session)
+        decidir_decisao_agrupada(
+            db_session, tenant_id=tenant.id, process_id=proc.id,
+            chave=("matricula", "3181", "composicao"), acao="aceitar", user_id=None,
+        )
+        rows["certidao_3181"].consolidated_at = rows["certidao_3181"].decided_at
+        rows["car_lista_3181"].consolidated_at = None
+        db_session.flush()
+
+        atual = build_decisions(list(rows.values()))
+        assert _decisao(atual, "composicao", "3181").estado == "parcialmente_gravada"
+
     def test_reabrir_devolve_a_decisao_a_pendente(self, db_session):
         tenant, proc, _prop, _cli, rows = _elodi(db_session)
         decidir_decisao_agrupada(
@@ -583,3 +611,27 @@ class TestDecidirDecisaoAgrupada:
             chave=("matricula", "3181", "composicao"), acao="reabrir", user_id=None,
         )
         assert decidida.estado == "pendente"
+
+    def test_editar_tipo_preserva_sugestao_e_reconciliacao_consumo_decidido(self, db_session):
+        tenant, proc, _prop, _cli = _seed(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        row = _linha(
+            db_session, tenant, proc, doc, field_name="averbacao_app",
+            valor="AV.03 — garantia hipotecária", entidade="matricula",
+            alvo="averbacao_app", hint="3181", tipo_obs="app",
+            atributos={"ato": "AV.03", "data_ato": "15/04/2008"},
+        )
+
+        decide_field(
+            db_session, tenant_id=tenant.id, process_id=proc.id, field_id=row.id,
+            acao="reclassificar", tipo_observacao="hipoteca", user_id=None,
+        )
+        db_session.refresh(row)
+
+        assert row.tipo_observacao == "hipoteca"
+        assert row.atributos["tipo_sugerido"] == "app"
+        assert row.target_entity is None and row.target_field is None
+        decisoes = build_decisions([row]).decisoes
+        assert len(decisoes) == 1
+        assert decisoes[0].chave.aspecto == "gravames"
+        assert decisoes[0].evidencias[0].tipo_observacao == "hipoteca"

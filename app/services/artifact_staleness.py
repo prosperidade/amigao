@@ -120,15 +120,15 @@ def _documento_novo_apos(
 def _decisao_alterada_apos(
     db: Session, *, tenant_id: int, process_id: int, cutoff: datetime
 ) -> Optional[AvisoDesatualizado]:
-    """Decisão nova, decisão mudada, decisão reaberta ou linha gravada — TUDO
-    o que mexe numa linha de staging toca `updated_at` (inclui `decided_at`
-    voltando a `NULL` no reabrir, e `consolidated_at` sendo carimbado na
-    consolidação, que por si só nunca tocava `decided_at` — os dois falsos
-    negativos que o code review desta frente mediu). Linha nunca tocada por
-    UPDATE tem `updated_at IS NULL` (sem `server_default`) — staging recém-
-    inserido e ainda pendente não soa alarme por si só; a chegada em si já é
-    coberta por `_documento_novo_apos` via o documento de origem.
+    """Linha nova OU decisão alterada depois do corte.
+
+    ``created_at`` é indispensável no caminho de reextração com texto cacheado:
+    o documento já existia e ``Document.extracted_at`` não muda, mas novas
+    linhas de staging nascem depois do artefato. ``updated_at`` continua
+    cobrindo decisão, reabertura e consolidação posteriores.
     """
+    from sqlalchemy import or_  # noqa: PLC0415
+
     from app.models.extracted_field_staging import ExtractedFieldStaging  # noqa: PLC0415
 
     row = (
@@ -136,19 +136,31 @@ def _decisao_alterada_apos(
         .filter(
             ExtractedFieldStaging.tenant_id == tenant_id,
             ExtractedFieldStaging.process_id == process_id,
-            ExtractedFieldStaging.updated_at.isnot(None),
-            ExtractedFieldStaging.updated_at > cutoff,
+            or_(
+                ExtractedFieldStaging.created_at > cutoff,
+                ExtractedFieldStaging.updated_at > cutoff,
+            ),
         )
-        .order_by(ExtractedFieldStaging.updated_at.asc())
+        .order_by(
+            ExtractedFieldStaging.created_at.asc().nullslast(),
+            ExtractedFieldStaging.updated_at.asc().nullslast(),
+        )
         .first()
     )
     if row is None:
         return None
     campo = row.target_field or row.field_name or "campo"
+    marcos = [m for m in (row.created_at, row.updated_at) if m is not None and m > cutoff]
+    desde = min(marcos)
+    nova = row.created_at is not None and row.created_at > cutoff
     return AvisoDesatualizado(
         tipo="decisao_alterada",
-        motivo=f'uma decisão da Conferência sobre "{campo}" mudou depois desta versão',
-        desde=row.updated_at,
+        motivo=(
+            f'nova evidência da Conferência sobre "{campo}" entrou depois desta versão'
+            if nova
+            else f'uma decisão da Conferência sobre "{campo}" mudou depois desta versão'
+        ),
+        desde=desde,
     )
 
 
