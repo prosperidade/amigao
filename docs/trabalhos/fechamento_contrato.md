@@ -99,6 +99,25 @@ seção "O que a validação achou" registra. Só então docs, gate e relatório
     devolvem `DocumentResponse`: 5 pontos de retorno, todos com a projeção.
 15. Docstring quebrado em `_linhas_de_observacoes` ("Sem\nA orquestração…").
 
+## Item 5 — para onde cada tipo decidido leva a linha
+
+Simulado sobre uma linha REAL do #23 (`staging_id=1606`, matrícula 3.181,
+hoje `hipoteca`), trocando o tipo por cada um dos 20 do vocabulário e
+recalculando destino (`destino_de`) e chave natural (`_chave_de`) — funções
+puras, sem banco. Prova que a reclassificação não cria roteamento maluco: o
+consultor muda O QUE o ato é, e a linha vai para a decisão que corresponde.
+
+| tipo decidido | destino (coluna) | decisão resultante |
+|---|---|---|
+| `hipoteca`, `alienacao_fiduciaria`, `penhora` | — (gravame não tem coluna própria) | `matricula:3181:gravames` |
+| `compra_venda`, `sucessao`, `inventario`, `adjudicacao`, `formal_partilha` | — | `matricula:3181:titularidade` |
+| `reserva_legal` | `matricula.averbacao_rl` | `matricula:3181:reserva_legal` |
+| `app` | `matricula.averbacao_app` | sem agrupamento (grava a coluna, sem decisão própria na Frente G) |
+| `aditivo`, `baixa`, `georreferenciamento`, `arrendamento`, `servidao`, `usufruto`, `compromisso_compra_venda`, `area_registrada`, `nao_classificado` | — | sem agrupamento (visível, campo a campo) |
+
+Rótulo fora dos 20 → **422 nomeando o rótulo**; `nao_classificado` só entra
+quando pedido por escrito.
+
 ## Regressão: gates de C–H
 
 **Sem banco (rodado em 11/09, `python -m pytest` no venv do host — 227 testes,
