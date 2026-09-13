@@ -8,7 +8,10 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 225.** (#223 e #224 abertas pela Frente G/I —
+> **PRÓXIMO NÚMERO LIVRE: 228.** (#225 a #227 abertas pela Frente L —
+> `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
+> (`gh pr list` vazio), então 225 estava mesmo livre.)
+> Histórico da contagem anterior: (#223 e #224 abertas pela Frente G/I —
 > reconciliação por decisões + aceite real em produção, 10-11/09, PRs #160/#162,
 > ADR-067. Ver bloco "Frente G/I" abaixo. #222 aberta e fechada no mesmo PR —
 > `fix/cobertura-janela`, 10/09, achado Codex 10/09 sobre a cobertura declarada
@@ -1537,6 +1540,46 @@ procurador, cônjuge) além de adquirente/transmitente.
 lista completa com o porquê de cada item não ter sido puxado para dentro.
 **Origem:** ADR-064 (N2), ADR-065 ("Fora do escopo"), CONFIRMACAO_ENTRADA_2026-09-09.md
 (HIST-001). Ver ADR-066 e `docs/trabalhos/temporalidade_ato.md`.
+
+### Abertas pela Frente L — except envenenado + soltas da Conferência (12/09, `fix/pos-reteste-l`)
+
+A varredura da classe do `except` que escreve em sessão abortada (5 pontos
+corrigidos, 5 descartados com razão) e a classificação das 58 linhas soltas do
+caso #23 (58 → 28, cada sobra com motivo próprio). Detalhe em
+`docs/trabalhos/pos_reteste_l.md`.
+
+**225. APP não tem chave natural; Reserva Legal tem duas.** A RL agrupa por
+matrícula (regra 2a de `_chave_de`) e por imóvel (2b). APP está no mesmo
+`TIPOS_AREA_PARCIAL`, tem a mesma coluna (`matricula.averbacao_app`) e o mesmo
+par CAR × matrícula — e não tem regra nenhuma. No caso #23 custa 1 linha solta
+(`app_declarada_ha` do CAR) porque não há averbação de APP no caso; num caso que
+tenha, custa exatamente a divisão que a regra da RL já conserta (a averbação na
+matrícula de um lado, a declaração do CAR do outro, sem nada dizendo que falam
+do mesmo objeto). Fora do recorte da Frente L por disciplina: fechar exige
+`_ASPECTOS_NUMERICOS`, um `_injetar_app_total` espelhando
+`_injetar_reserva_legal_total` e rótulos — não é a linha de código que parece.
+
+**226. Aditivo não carrega referência ao ato que altera.** `tipo_observacao =
+"aditivo"` diz que o ato modifica outro, e nada diz QUAL. Por isso os 3 aditivos
+do #23 continuam soltos: dobrá-los na decisão do ato alterado seria adivinhar.
+Fechar exige a extração gravar o vínculo (`ato_ref` em `atributos`) — e, antes
+disso, a Isis dizer se quer a baixa/o aditivo como decisão própria ou como
+evidência dentro da decisão do ato que eles encerram/alteram (a mesma pergunta
+vale para as 18 baixas do caso, 13 delas na matrícula 3.313).
+
+**227. As suítes de worker neutralizam `rollback()` no wrapper de sessão.**
+`tests/workers/test_ocr_tasks.py` e `test_audio_tasks.py` têm
+`_NoCloseSession.rollback() -> None` ("não rolar back a transação externa do
+teste"). É um contorno legítimo para o fixture compartilhado — que usa
+`sessionmaker(bind=connection)`, cujo default no SQLAlchemy 2 é
+`join_transaction_mode="rollback_only"`, em que um rollback desfaz a transação
+do teste inteiro. Mas o efeito colateral é que **nenhum teste dessas suítes
+consegue exercitar um rollback**: o conserto do item 1 desta frente seria
+invisível ali. O caminho certo é o fixture compartilhado passar a
+`create_savepoint` (o modo que a documentação do SQLAlchemy recomenda para esse
+padrão, e que `tests/services/test_frente_l_sessao_envenenada.py` já usa
+sobrepondo `db_session` localmente) e os wrappers pararem de mentir. Mudança de
+conftest global — fora do recorte, com risco de mexer em toda a suíte.
 
 ### Abertas pela Frente G/I — reconciliação por decisões + aceite real (10-11/09, `feat/reconciliacao-decisoes` PR #160, `fix/gravames-sem-entity-matricula` PR #162, ADR-067)
 
