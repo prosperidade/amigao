@@ -169,3 +169,49 @@ def test_baixa_continua_fora_porque_e_aresta_de_outro_ato(resultado):
     baixas = [s for s in resultado.sem_agrupamento if s["motivo"].startswith("baixa")]
     assert len(baixas) == 18
     assert "aresta de outro ato" in baixas[0]["motivo"]
+
+
+# ---------------------------------------------------------------------------
+# Dois atos não são duas versões de um fato
+# ---------------------------------------------------------------------------
+
+def test_dois_arrendamentos_na_mesma_matricula_nao_competem():
+    """Achado ao escrever esta frente, antes do PR.
+
+    O replay acima carrega `field_name`/`tipo_observacao`/`hint` reais, mas o
+    `razao_linha_a_linha.json` não guarda `atributos` — então lá as duas
+    averbações de arrendamento da 3.181 chegam sem `ato` e sem `vigencia`. Com
+    o dado completo, as duas cairiam no MESMO `campo` ("observacao") e o ramo de
+    texto de `_comparar` as poria uma contra a outra: "divergem" entre dois
+    contratos que coexistem, e uma proposta que descartaria o outro.
+
+    É o mesmo motivo pelo qual `gravames` já não compara valor. A fixture aqui
+    tem os `atributos` que produção grava (`observacao_registral`), justamente
+    para exercitar o caminho que o replay não alcança.
+    """
+    def _arrendamento(sid: int, ato: str, texto: str) -> ExtractedFieldStaging:
+        return ExtractedFieldStaging(
+            id=sid, tenant_id=1, process_id=1, document_id=548,
+            source_doc_type="matricula", field_name="observacao",
+            field_value={"value": texto},
+            target_entity=None, target_field=None,
+            matricula_hint="3181", tipo_observacao="arrendamento",
+            atributos={"ato": ato, "vigencia": "vigente"},
+            status=ExtractedFieldStatus.pendente,
+        )
+
+    resultado = build_decisions([
+        _arrendamento(101, "AV.10", "Arrendamento — 15 anos, 01/01/2013 a 01/01/2028"),
+        _arrendamento(102, "AV.11", "Arrendamento parcial — 120,0000 ha"),
+    ])
+
+    assert len(resultado.decisoes) == 1
+    d = resultado.decisoes[0]
+    assert d.chave == ("matricula", "3181", "limitacoes")
+    # O rótulo de cada evidência é o ATO, não a coluna.
+    assert {e.campo for e in d.evidencias} == {"AV.10", "AV.11"}
+    # Coexistem — nunca "divergem".
+    assert d.concordancia == "concordam"
+    assert d.nivel_divergencia is None
+    # E a proposta é a síntese dos dois, não um deles.
+    assert "AV.10" in str(d.valor_proposto) and "AV.11" in str(d.valor_proposto)

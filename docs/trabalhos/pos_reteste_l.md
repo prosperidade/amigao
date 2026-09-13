@@ -186,6 +186,27 @@ decisões 20 → 32
 toda solta que sobra tem razão própria (nenhuma na frase genérica)
 ```
 
+### Um defeito do próprio conserto, achado antes do PR
+
+Dar chave a `limitacoes` criou, de graça, um problema que `gravames` já tinha
+resolvido: as duas averbações de arrendamento da 3.181 caem no mesmo `campo`
+(`observacao`) e o ramo de texto de `_comparar` as poria **uma contra a
+outra** — "divergem" entre dois contratos que coexistem, e uma proposta que
+descartaria o outro. Dois atos não são duas versões de um fato.
+
+`_ASPECTOS_DE_ATO = {gravames, limitacoes}` passou a reger os três pontos que
+já tratavam gravame assim: a evidência é rotulada pelo ATO (AV.10, R.15), a
+comparação não põe atos em competição, e a proposta é a síntese, não um
+vencedor. A averbação dentro de `georreferenciamento` também deixou de se
+chamar "observacao" na tela.
+
+O replay de produção **não pegaria isso**: o `razao_linha_a_linha.json` não
+guarda `atributos`, então ali as duas averbações chegam sem `ato` e sem
+`vigencia`. O teste que fecha esse caminho
+(`test_dois_arrendamentos_na_mesma_matricula_nao_competem`) traz os `atributos`
+que a produção grava — é a fronteira do harness, dita em voz alta em vez de
+descoberta pela consultora.
+
 ### Dois testes de terceiro reprovaram o conserto — e estavam certos
 
 1. `test_campos_sem_regra_de_chave_aparecem_visiveis` usava `cartorio` como

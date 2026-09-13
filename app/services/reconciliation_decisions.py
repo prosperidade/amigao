@@ -117,6 +117,15 @@ _LABEL_ASPECTO: dict[str, str] = {
 # cartório, denominação, denominação anterior, registro anterior e NIRF/CIB
 # chegavam como CINCO linhas soltas POR matrícula — 17 cliques para afirmar a
 # identidade de 4 matrículas, sem que a tela dissesse que falavam do mesmo fato.
+# Aspectos em que cada evidência é um ATO, não uma resposta para a mesma
+# pergunta. Dois gravames — ou dois arrendamentos — na mesma matrícula não são
+# duas versões de um fato: são dois fatos que coexistem. Compará-los pelo VALOR
+# produziria "divergem" entre coisas que não competem, e escolher um "vencedor"
+# descartaria o outro. Medido ao escrever a Frente L: as duas averbações de
+# arrendamento da 3.181 caíam no mesmo `campo` ("observacao") e entravam na
+# comparação texto-a-texto uma contra a outra.
+_ASPECTOS_DE_ATO = frozenset({"gravames", "limitacoes"})
+
 _CAMPOS_IDENTIFICACAO_MATRICULA = frozenset({
     "cartorio",
     "denominacao_imovel",
@@ -518,7 +527,11 @@ def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
         valor_normalizado = raw
     vigencia = (row.atributos or {}).get("vigencia") if isinstance(row.atributos, dict) else None
     campo = row.target_field or row.field_name
-    if aspecto == "gravames":
+    if aspecto == "georreferenciamento" and row.tipo_observacao:
+        # A averbação entra ao lado do código que grava; rotulá-la "observacao"
+        # daria vocabulário de log onde cabe o ato (AV.05).
+        campo = (row.atributos or {}).get("ato") or "averbação de georreferenciamento"
+    if aspecto in _ASPECTOS_DE_ATO:
         if row.target_field == "onus_gravames":
             # A linha agregada (Frente K) não é mais um ato: é a SÍNTESE que
             # pousa na coluna. Mostrá-la como ato daria "onus_gravames:
@@ -526,10 +539,14 @@ def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
             campo = "ônus vigentes (o que vai para a base)"
             valor_normalizado = _resumo_onus(raw)
         else:
-            # A pergunta de gravame não é "qual valor", é "este ato está
+            # A pergunta de um ato não é "qual valor", é "este ato está
             # vigente" — o rótulo é o próprio ato (AV.03, R.15), não a coluna.
             campo = (row.atributos or {}).get("ato") or campo
-            valor_normalizado = vigencia or "indeterminado"
+            # Gravame tem vigência por vocabulário (`TIPOS_COM_VIGENCIA`);
+            # compromisso de compra e venda, não. Para esse, "indeterminado"
+            # seria dizer que não se sabe o que o registro afirma — o texto do
+            # próprio ato diz mais e não inventa estado nenhum.
+            valor_normalizado = vigencia or raw or "indeterminado"
     return Evidencia(
         staging_id=row.id,
         documento_id=row.document_id,
@@ -552,7 +569,7 @@ def _comparar(aspecto: str, evidencias: list[Evidencia]) -> tuple[str, Optional[
     evidência é uma síntese de atos) — múltiplas fontes corroborando é
     "concordam" por definição.
     """
-    if aspecto in ("composicao", "gravames"):
+    if aspecto == "composicao" or aspecto in _ASPECTOS_DE_ATO:
         return ("concordam" if len(evidencias) > 1 else "fonte_unica"), None, None, None
 
     if aspecto in _ASPECTOS_NUMERICOS:
@@ -653,9 +670,9 @@ def _montar_decisao(chave: ChaveNatural, membros: list[ExtractedFieldStaging]) -
             if (e.documento_tipo or "").lower() == fonte_doc:
                 e.fonte_autoritativa = True
 
-    if aspecto == "gravames":
+    if aspecto in _ASPECTOS_DE_ATO:
         # Síntese dos atos, não "o valor vencedor" — não faz sentido escolher
-        # UM gravame como proposta e descartar os outros.
+        # UM gravame (ou UM arrendamento) como proposta e descartar os outros.
         proposto: Any = "; ".join(f"{e.campo}: {e.valor_normalizado}" for e in evidencias) or None
     else:
         proposto = next((e.valor_normalizado for e in evidencias if e.fonte_autoritativa), None)
