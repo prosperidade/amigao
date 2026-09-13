@@ -303,8 +303,14 @@ representante Joel entra, e isso é achado, não escopo.
 | | |
 |---|---|
 | `tests/services/test_frente_l_sessao_envenenada.py` | 8 passed |
-| `tests/services/test_frente_l_soltas.py` | 8 passed |
+| `tests/services/test_frente_l_soltas.py` | 9 passed |
 | `tests/workers/` (suíte existente, tocada pelo item 1) | 20 passed |
+| suítes que dependem de `reconciliation_decisions` (reconciliação, staging-decisions, Frentes H e K) | 67 passed |
 | `frontend/src/pages/Processes/ConsolidacaoPanel.test.tsx` | 4 passed (1 novo) |
 | `cd frontend && npm run build` (o gate real: `tsc -b`) | ✓ built |
-| suíte de backend | ver PR |
+| `pytest tests/ -q` — suíte de backend inteira | **2014 passed** (39 min) |
+| `ruff check app/ scripts/ tests/…` | All checks passed |
+
+Os 4 caminhos de credencial do gate de OCR foram exercitados de verdade (sem
+credencial, `--env-file`, variável de ambiente, arquivo inexistente); o que
+ainda não rodou é o gate em si, por falta do acesso ao R2 de produção.
