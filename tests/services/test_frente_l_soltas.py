@@ -11,6 +11,15 @@ Esta suíte replica aquele staging contra `build_decisions`. Nada aqui é
 inventado: doc_type, field_name, tipo_observacao, target e hint de matrícula
 vêm do arquivo, como a regra da suíte de reconciliação exige ("toda fixture de
 reconciliação nasce de linha real de staging").
+
+A FRONTEIRA DESTE REPLAY, dita em voz alta (auditoria de 12/09): o arquivo
+guarda ROTEAMENTO, não conteúdo. Não tem `atributos`, `field_value` real,
+`decided_value` nem `consolidated_at`. Portanto o que esta suíte prova é para
+QUAL decisão cada linha vai — e só isso. Concordância, divergência, proposta,
+vigência, titularidade e estado da decisão NÃO são medidos aqui: dependem de
+dados que o arquivo não carrega, e afirmá-los a partir deste replay seria
+inventar. A prova semântica pede o staging completo do #23, que hoje só existe
+no dump de produção.
 """
 
 from __future__ import annotations
@@ -74,8 +83,13 @@ def test_as_soltas_caem_de_58_para_28(resultado):
         "30 das 58 linhas soltas ganharam chave natural nesta frente "
         f"(antes: {SOLTAS_ANTES})"
     )
-    assert len(resultado.decisoes) == 32, (
-        f"as 30 linhas viraram 12 decisões (antes: {DECISOES_ANTES})"
+    # 26 decisões novas para 30 linhas — e o número é honesto sobre o que
+    # mudou: só 13 linhas COLAPSAM (georreferenciamento 7→4, limitações 4→3,
+    # município/UF 2→2). As outras 17 (cabeçalho) viram uma decisão CADA, por
+    # atributo, como a SPEC manda. O ganho ali não é clique a menos: é a linha
+    # deixar de ser solta e virar fato que acumula fonte, proposta e estado.
+    assert len(resultado.decisoes) == 46, (
+        f"20 decisões antes desta frente + 26 novas (antes: {DECISOES_ANTES})"
     )
     # Nenhuma linha some: toda linha do staging ou está numa decisão ou está
     # solta, com motivo — nunca em lugar nenhum.
@@ -87,19 +101,33 @@ def test_as_soltas_caem_de_58_para_28(resultado):
 # Grupo 1 — o que ganhou chave
 # ---------------------------------------------------------------------------
 
-def test_cabecalho_da_matricula_vira_uma_decisao_por_matricula(resultado):
+def test_cabecalho_da_matricula_vira_uma_decisao_por_atributo(resultado):
+    """A primeira versão juntava os cinco atributos numa decisão só.
+
+    A auditoria de 12/09 reprovou com a SPEC: a régua agrupa evidências do
+    MESMO atributo, e cartório, denominação, registro anterior e NIRF são
+    atributos diferentes — "divergência" entre um cartório e um NIRF não
+    significa nada. Cada um é a sua decisão; o bloco visual, se a Isis quiser,
+    é apresentação, não chave.
+    """
     chaves = _chaves(resultado)
     for numero in ("3181", "3313", "3673", "4387"):
-        assert f"matricula:{numero}:identificacao_matricula" in chaves
+        for aspecto in ("cartorio", "denominacao", "registro_anterior", "nirf_cib"):
+            assert f"matricula:{numero}:{aspecto}" in chaves
 
-    d = next(d for d in resultado.decisoes if d.chave == ("matricula", "3313", "identificacao_matricula"))
-    campos = {e.campo for e in d.evidencias}
-    # A 3.313 é a única com denominação anterior — 5 cliques viraram 1.
-    assert campos == {
-        "cartorio", "denominacao_imovel", "denominacao_anterior",
-        "registro_anterior", "nirf_cib",
-    }
-    assert d.label == "Identificação da matrícula 3313"
+    # Denominação anterior só a 3.313 tem.
+    assert "matricula:3313:denominacao_anterior" in chaves
+    assert "matricula:3181:denominacao_anterior" not in chaves
+
+    d = next(d for d in resultado.decisoes if d.chave == ("matricula", "3313", "cartorio"))
+    assert d.label == "Cartório — matrícula 3313"
+    assert [e.campo for e in d.evidencias] == ["cartorio"]
+    assert d.fonte_autoritativa_doc == "matricula"
+
+    # NIRF/CIB é número da Receita que a matrícula só CITA — sem autoridade
+    # registral eleita.
+    nirf = next(d for d in resultado.decisoes if d.chave == ("matricula", "3313", "nirf_cib"))
+    assert nirf.fonte_autoritativa_doc is None
 
 
 def test_georreferenciamento_reune_o_codigo_e_a_averbacao(resultado):
@@ -127,13 +155,23 @@ def test_limitacoes_de_uso_ganham_decisao_por_matricula(resultado):
     assert d.label == "Limitações de uso e posse — matrícula 3181"
 
 
-def test_municipio_e_uf_sao_um_fato_so(resultado):
-    d = next(d for d in resultado.decisoes if d.chave[2] == "localizacao")
-    assert {e.campo for e in d.evidencias} == {"municipality", "state"}
-    assert d.label == "Localização do imóvel"
+def test_municipio_e_uf_sao_dois_atributos_e_duas_decisoes(resultado):
+    """Mesma régua do cabeçalho, aplicada ao imóvel.
+
+    A primeira versão fez uma decisão "localização" com os dois. Se cartório ≠
+    denominação obriga a separar, município ≠ UF obriga igual — e a SPEC não
+    determina uma decisão única de localização.
+    """
+    municipio = next(d for d in resultado.decisoes if d.chave[2] == "municipio")
+    uf = next(d for d in resultado.decisoes if d.chave[2] == "uf")
+    assert [e.campo for e in municipio.evidencias] == ["municipality"]
+    assert [e.campo for e in uf.evidencias] == ["state"]
+    assert municipio.label == "Município do imóvel"
+    assert uf.label == "UF do imóvel"
     # Sem fonte autoritativa eleita: CAR e matrícula afirmam a localização por
     # razões diferentes, e esconder a divergência seria pior que mostrá-la.
-    assert d.fonte_autoritativa_doc is None
+    assert municipio.fonte_autoritativa_doc is None
+    assert uf.fonte_autoritativa_doc is None
 
 
 # ---------------------------------------------------------------------------
@@ -165,10 +203,19 @@ def test_as_28_sobras_sao_as_quatro_familias_esperadas(resultado):
     }
 
 
-def test_baixa_continua_fora_porque_e_aresta_de_outro_ato(resultado):
+def test_a_frase_da_baixa_nao_promete_o_que_o_codigo_nao_faz(resultado):
+    """A auditoria pegou a frase anterior superdeclarando.
+
+    Ela dizia que a baixa "entra na decisão do ato que encerra". Não entra: a
+    LINHA continua solta; o que chega à decisão de gravames é o EFEITO dela (a
+    vigência calculada). Motivo que descreve o desejo em vez do código é a
+    mesma doença que esta frente veio tratar.
+    """
     baixas = [s for s in resultado.sem_agrupamento if s["motivo"].startswith("baixa")]
     assert len(baixas) == 18
-    assert "aresta de outro ato" in baixas[0]["motivo"]
+    motivo = baixas[0]["motivo"]
+    assert "o que ela produz" in motivo and "fica individual" in motivo
+    assert "entra na decisão do ato que encerra" not in motivo
 
 
 # ---------------------------------------------------------------------------
