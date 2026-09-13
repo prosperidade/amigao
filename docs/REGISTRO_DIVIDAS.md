@@ -8,7 +8,7 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 228.** (#225 a #227 abertas pela Frente L —
+> **PRÓXIMO NÚMERO LIVRE: 229.** (#225 a #228 abertas pela Frente L —
 > `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
 > (`gh pr list` vazio), então 225 estava mesmo livre.)
 > Histórico da contagem anterior: (#223 e #224 abertas pela Frente G/I —
@@ -1580,6 +1580,20 @@ invisível ali. O caminho certo é o fixture compartilhado passar a
 padrão, e que `tests/services/test_frente_l_sessao_envenenada.py` já usa
 sobrepondo `db_session` localmente) e os wrappers pararem de mentir. Mudança de
 conftest global — fora do recorte, com risco de mexer em toda a suíte.
+
+**228. `download_bytes` trata "bucket não existe" como "objeto não existe".**
+`app/services/storage.py:288` agrupa `NoSuchBucket` com `NoSuchKey`/`404` no
+mesmo `return b""`. Um nome de bucket errado, um token sem permissão no bucket
+ou um endpoint apontado para o lugar errado saem, para quem chama, como
+"arquivo ausente" — e o OCR registra ausência de arquivo onde houve erro de
+configuração. É a MESMA classe que o PR do R2 já fechou uma vez para
+`SignatureDoesNotMatch` (memória "nunca engolir erro de I/O retornando vazio:
+separar NoSuchKey de falhou"); `NoSuchBucket` ficou dentro da exceção. Achado
+ao escrever o pré-voo do `gate_ocr_originais.py` (que por isso pergunta pelo
+bucket com `head_bucket` antes de baixar qualquer coisa, em vez de confiar no
+`b""`). O conserto é uma linha — tirar `"NoSuchBucket"` da tupla —, mas muda
+comportamento de I/O em produção e ficou de fora do recorte da Frente L de
+propósito: merece ser o assunto do PR que o fizer, não um efeito colateral.
 
 ### Abertas pela Frente G/I — reconciliação por decisões + aceite real (10-11/09, `feat/reconciliacao-decisoes` PR #160, `fix/gravames-sem-entity-matricula` PR #162, ADR-067)
 

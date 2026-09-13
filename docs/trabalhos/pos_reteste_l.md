@@ -239,13 +239,35 @@ Não usa banco descartável: usa **banco nenhum**. `extract_text_from_pdf` é
 função pura sobre bytes, e o lado "produção" entra por arquivo exportado. Assim
 o gate não tem como escrever onde não deve.
 
+**A credencial não precisa ir para disco — medido, não suposto.**
+`Settings` é pydantic-settings com `env_file=".env"`, e nessa biblioteca
+**variável de ambiente vence arquivo**. Conferido: com o `.env` de dev dizendo
+`MINIO_SERVER=localhost:9000`, rodar com a variável exportada dá o endpoint da
+variável. É a ergonomia do `PGPASSWORD` do `pg_dump` — a credencial vive no
+comando, e o `.env` de dev fica intocado.
+
+`--env-file` existe para quem prefere não colar segredo no terminal (o
+histórico do PowerShell guarda). Ele carrega, com `override`, o arquivo
+**apontado** — nunca o `.env` padrão — antes de `app.core.config` ser
+importado, que é o único instante em que as settings leem o ambiente.
+`wt-pos-reteste/.env.prod-readonly` está criado, vazio, para o André preencher;
+`git check-ignore -v` confirma que o `.gitignore` já o bloqueia na linha 34
+(`.env.*`, com allowlist só para os `.example`) — nenhuma linha nova foi
+precisa, e `git status` não o enxerga.
+
+Leitura é leitura: `download_bytes` **não** chama `_ensure_bucket_exists` (só
+`upload_file`/`upload_bytes` chamam, e é lá que mora o `create_bucket`). Um
+token R2 "Object Read only" basta e este gate não tem como criar nada.
+
+Os quatro caminhos foram exercitados: sem credencial (para com exit 2 dizendo
+que os documentos são do R2 e o endpoint é o local), `--env-file` (o endpoint
+efetivo vira o do arquivo), variável de ambiente sem arquivo nenhum (idem), e
+`--env-file` inexistente (mensagem limpa).
+
 **O que falta, e por isso não rodou:**
 
-1. **Credencial de leitura do R2 de produção.** O `.env` desta máquina aponta
-   para o MinIO local (`localhost:9000`) — os originais do #23 não estão nele.
-   Preciso de `MINIO_SERVER` (`<account>.r2.cloudflarestorage.com`),
-   `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` e o bucket, com `S3_REGION=auto`
-   (R2 recusa `us-east-1` no GET — dívida já registrada).
+1. **A credencial de leitura do R2 de produção**, por qualquer dos dois
+   caminhos acima.
 2. **O lado de produção da tabela.** Existe local: o backup
    `backups_amigao/backup_prod_20260909T120549Z.dump` tem a tabela `documents`
    com `storage_key` e `extracted_text` dos 6 documentos. O `pg_restore` já
@@ -253,6 +275,21 @@ o gate não tem como escrever onde não deve.
    auto-modo** ("Production Reads"). Basta a liberação (ou o export dos 6
    registros por outro caminho) para essa metade ficar pronta sem nenhuma
    credencial nova.
+
+### Um achado do próprio pré-voo
+
+`download_bytes` devolve `b""` tanto para `NoSuchKey` quanto para
+`NoSuchBucket`. Sem checagem própria, um nome de bucket errado (ou um token sem
+permissão nele) sairia na tabela do gate como *"arquivo ausente no storage"* —
+conclusão errada vestida de achado, justo no gate que existe para achar coisa.
+O pré-voo pergunta pelo bucket com `head_bucket` antes de baixar qualquer
+coisa, e para com a causa à vista.
+
+A conflação dentro de `download_bytes` é a **dívida #228**: é a mesma classe que
+o PR do R2 já fechou para `SignatureDoesNotMatch` ("nunca engolir erro de I/O
+retornando vazio"), e `NoSuchBucket` ficou dentro da exceção. O conserto é uma
+linha, mas muda comportamento de I/O em produção — merece ser o assunto do PR
+que o fizer, não efeito colateral deste.
 
 Com as duas coisas o gate roda em uma passagem e responde as três perguntas do
 enunciado: o texto bate com o de produção, as áreas saem iguais, e o doc 551
