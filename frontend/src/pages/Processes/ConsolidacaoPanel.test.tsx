@@ -201,7 +201,7 @@ describe('ConsolidacaoPanel — a linha solta diz por que é individual (Frente 
               {
                 staging_id: 7,
                 motivo:
-                  'baixa — é a aresta de outro ato, não um fato próprio: ela entra na decisão do ato que encerra, pela vigência que cancela',
+                  'baixa — não é fato próprio: o que ela produz (o ato deixar de vigorar) já aparece na decisão de gravames da matrícula. A linha em si fica individual porque nenhuma chave a alcança',
               },
             ],
           },
@@ -214,7 +214,7 @@ describe('ConsolidacaoPanel — a linha solta diz por que é individual (Frente 
   it('mostra a razão na linha, e só na linha que está solta', async () => {
     render(withQuery(<ConsolidacaoPanel processId={1} />));
 
-    expect(await screen.findByText(/é a aresta de outro ato/)).toBeInTheDocument();
+    expect(await screen.findByText(/o que ela produz/)).toBeInTheDocument();
     // A outra linha do fixture está numa decisão (ou simplesmente não é solta):
     // o selo aparece uma vez só, nunca em toda linha.
     expect(screen.getAllByText('Decisão individual:')).toHaveLength(1);
