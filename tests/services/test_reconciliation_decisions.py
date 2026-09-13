@@ -513,8 +513,15 @@ class TestRegressaoFrentesAnteriores:
         for item in resultado.sem_agrupamento:
             assert item["motivo"]
 
-    def test_cartorio_agora_entra_na_identificacao_da_matricula(self, db_session):
-        """O contraexemplo do teste acima — a mudança é deliberada, não deriva."""
+    def test_cartorio_agora_tem_chave_propria(self, db_session):
+        """O contraexemplo do teste acima — a mudança é deliberada, não deriva.
+
+        Nasceu afirmando `identificacao_matricula` (a primeira versão juntava os
+        cinco atributos do cabeçalho). A auditoria reprovou o agrupamento com a
+        SPEC — evidências do MESMO atributo —, e cartório passou a ter aspecto
+        próprio. O teste acompanha o contrato; o que ele guarda continua sendo
+        "cartório deixou de ser linha solta".
+        """
         tenant, proc, _prop, _cli, _rows = _elodi(db_session)
         doc = _doc(db_session, tenant, proc, "matricula")
         linha = _linha(db_session, tenant, proc, doc, field_name="cartorio",
@@ -523,7 +530,7 @@ class TestRegressaoFrentesAnteriores:
         resultado = build_decisions([linha])
         assert resultado.sem_agrupamento == []
         assert [d.chave for d in resultado.decisoes] == [
-            ("matricula", "9999", "identificacao_matricula")
+            ("matricula", "9999", "cartorio")
         ]
 
 
