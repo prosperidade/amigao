@@ -169,3 +169,54 @@ describe('ConsolidacaoPanel — "Aceito" não é "Gravado" (validações 30/07 e
     expect(screen.getByText('Pendente')).toBeInTheDocument();
   });
 });
+
+describe('ConsolidacaoPanel — a linha solta diz por que é individual (Frente L)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/staging-fields')) {
+        return Promise.resolve({
+          data: [
+            linhaAceita(),
+            linhaAceita({
+              id: 7,
+              field_name: 'observacao',
+              field_value: { value: 'AV.09 — baixa da hipoteca do R.06' },
+              target_entity: null,
+              target_field: null,
+              decided_value: null,
+              status: 'pendente',
+            }),
+          ],
+        });
+      }
+      if (url.includes('/matriculas-rotulos')) return Promise.resolve({ data: {} });
+      if (url.includes('/staging-decisions')) {
+        // O staging_id 7 ficou fora de decisão agrupada, COM razão — a mesma
+        // frase que `_chave_de` devolve para uma baixa no caso #23.
+        return Promise.resolve({
+          data: {
+            decisoes: [],
+            sem_agrupamento: [
+              {
+                staging_id: 7,
+                motivo:
+                  'baixa — não é fato próprio: o que ela produz (o ato deixar de vigorar) já aparece na decisão de gravames da matrícula. A linha em si fica individual porque nenhuma chave a alcança',
+              },
+            ],
+          },
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it('mostra a razão na linha, e só na linha que está solta', async () => {
+    render(withQuery(<ConsolidacaoPanel processId={1} />));
+
+    expect(await screen.findByText(/o que ela produz/)).toBeInTheDocument();
+    // A outra linha do fixture está numa decisão (ou simplesmente não é solta):
+    // o selo aparece uma vez só, nunca em toda linha.
+    expect(screen.getAllByText('Decisão individual:')).toHaveLength(1);
+  });
+});

@@ -12,6 +12,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.db_rescue import gravar_desfecho_de_falha
 from app.models.legislation import LegislationDocument
 from app.models.legislation_alert import LegislationAlert
 from app.models.process import Process, ProcessStatus
@@ -76,6 +77,8 @@ def _run_single_crawler(db: Session, crawler_name: str) -> MonitoringResult:
     alerts_count = 0
 
     for cdoc in crawled_docs:
+        existing_id: Optional[int] = None
+        novo_id: Optional[int] = None
         try:
             # Dedup: verificar se documento ja existe
             existing = _find_existing(db, cdoc)
@@ -84,9 +87,12 @@ def _run_single_crawler(db: Session, crawler_name: str) -> MonitoringResult:
                 if existing.content_hash == cdoc.content_hash:
                     skipped += 1
                     continue
-                # Conteudo mudou — atualizar
+                # Conteudo mudou — atualizar. O id sai do ORM ANTES do trecho
+                # que pode cair: lê-lo no `except` dispararia lazy-load numa
+                # sessão já abortada (a lição da Frente K).
+                existing_id = existing.id
                 existing.full_text = cdoc.content
-                ingest_legislation_document(existing.id, db, raw_text=cdoc.content)
+                ingest_legislation_document(existing_id, db, raw_text=cdoc.content)
                 alerts_count += _create_alerts_for_document(db, existing, "updated")
                 new_count += 1
             else:
@@ -107,12 +113,39 @@ def _run_single_crawler(db: Session, crawler_name: str) -> MonitoringResult:
                 )
                 db.add(doc)
                 db.flush()
+                novo_id = doc.id
 
-                ingest_legislation_document(doc.id, db, raw_text=cdoc.content)
+                ingest_legislation_document(novo_id, db, raw_text=cdoc.content)
                 alerts_count += _create_alerts_for_document(db, doc, "new_legislation")
                 new_count += 1
 
+            # Frente L — cada documento fecha a própria transação. O laço já
+            # tratava erro por item para seguir o lote, mas TUDO vivia numa
+            # transação só: um documento ruim derrubava os bons junto, e o
+            # `db.commit()` do fim do ciclo levava o crawler inteiro. "Radar
+            # não cancela o voo" vale aqui — um item ruim custa um item.
+            db.commit()
+
         except Exception as exc:
+            # Aqui é o DONO da sessão — e por isso é aqui que o socorro mora.
+            #
+            # Medido em 12/09: depois de um flush falho a sessão exige
+            # `rollback()`; savepoint dentro do serviço não recupera. Sem este
+            # rollback, TODA iteração seguinte falharia por
+            # `PendingRollbackError` e o relatório culparia os documentos
+            # errados — o lote inteiro morrendo por causa de um.
+            #
+            # Com o rollback, a sessão volta utilizável e o carimbo de `failed`
+            # é gravado numa transação limpa, pela mesma porta dos workers. O
+            # documento NÃO fica "processing" para sempre, e o próximo item do
+            # lote roda normalmente.
+            db.rollback()
+            doc_id = existing_id or novo_id
+            if doc_id:
+                gravar_desfecho_de_falha(
+                    db, LegislationDocument, doc_id,
+                    status="failed", error_message=str(exc)[:500],
+                )
             errors.append(f"{cdoc.identifier}: {exc}")
             logger.warning("Erro ingerindo doc '%s': %s", cdoc.identifier, exc)
 

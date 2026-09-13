@@ -42,8 +42,13 @@ from app.models.extracted_field_staging import (
 )
 from app.services.inconsistency_matrix import _clean_matricula_hint, norm_compare, parse_area_ha
 from app.services.observacao_registral import (
+    TIPO_ADITIVO,
+    TIPO_BAIXA,
+    TIPO_GEORREFERENCIAMENTO,
+    TIPO_NAO_CLASSIFICADO,
     TIPO_RESERVA_LEGAL,
     TIPOS_GRAVAME,
+    TIPOS_LIMITACAO,
     TIPOS_TRANSFERENCIA_TITULARIDADE,
     Observacao,
     cadeia_titularidade,
@@ -80,6 +85,22 @@ _FONTE_AUTORITATIVA_POR_ASPECTO: dict[str, Optional[str]] = {
     "car": "car",
     "identificacao": None,
     "area_total": None,
+    # Frente L — ADR-062: averbação e cabeçalho são fato REGISTRAL, a matrícula
+    # manda. Três exceções ficam sem fonte única de propósito: NIRF/CIB é
+    # identificador da Receita que a matrícula apenas CITA (eleger o registro
+    # como autoridade ali diria que ele manda num número que não é dele), e
+    # município/UF são afirmados pelo CAR (ambiental) e pela matrícula
+    # (registral) por razões diferentes — eleger um vencedor esconderia a
+    # divergência em vez de mostrá-la.
+    "georreferenciamento": "matricula",
+    "limitacoes": "matricula",
+    "cartorio": "matricula",
+    "denominacao": "matricula",
+    "denominacao_anterior": "matricula",
+    "registro_anterior": "matricula",
+    "nirf_cib": None,
+    "municipio": None,
+    "uf": None,
 }
 
 _LABEL_ASPECTO: dict[str, str] = {
@@ -92,6 +113,60 @@ _LABEL_ASPECTO: dict[str, str] = {
     "car": "CAR (número/status)",
     "identificacao": "Representante",
     "area_total": "Área total do imóvel",
+    "georreferenciamento": "Georreferenciamento — matrícula {id}",
+    "limitacoes": "Limitações de uso e posse — matrícula {id}",
+    "cartorio": "Cartório — matrícula {id}",
+    "denominacao": "Denominação — matrícula {id}",
+    "denominacao_anterior": "Denominação anterior — matrícula {id}",
+    "registro_anterior": "Registro anterior — matrícula {id}",
+    "nirf_cib": "NIRF/CIB — matrícula {id}",
+    "municipio": "Município do imóvel",
+    "uf": "UF do imóvel",
+}
+
+# Aspectos em que cada evidência é um ATO, não uma resposta para a mesma
+# pergunta. Dois gravames — ou dois arrendamentos — na mesma matrícula não são
+# duas versões de um fato: são dois fatos que coexistem. Compará-los pelo VALOR
+# produziria "divergem" entre coisas que não competem, e escolher um "vencedor"
+# descartaria o outro. Medido ao escrever a Frente L: as duas averbações de
+# arrendamento da 3.181 caíam no mesmo `campo` ("observacao") e entravam na
+# comparação texto-a-texto uma contra a outra.
+_ASPECTOS_DE_ATO = frozenset({"gravames", "limitacoes"})
+
+# Frente L — campos do CABEÇALHO da matrícula, UM ASPECTO POR ATRIBUTO.
+#
+# A primeira versão desta frente juntou os cinco numa decisão só
+# ("identificação da matrícula"), e a auditoria de 12/09 reprovou com a SPEC na
+# mão (§ "agrupar evidências do MESMO atributo"): cartório, denominação,
+# denominação anterior, registro anterior e NIRF/CIB são atributos DIFERENTES.
+# Uma decisão que reúne cinco perguntas não tem proposta única, e a
+# "divergência" entre um cartório e um NIRF não significa nada — junta o que a
+# régua manda comparar separado.
+#
+# O ganho aqui NÃO é clique a menos: no caso #23 cada atributo tem uma fonte
+# só, então são 17 linhas e 17 decisões. É que cada atributo deixa de ser linha
+# solta e vira FATO — ganha proposta, fonte autoritativa e estado agregado, e
+# quando um segundo documento declarar o mesmo cartório as duas evidências caem
+# sozinhas na mesma decisão e a divergência aparece. Solta não acumula fonte;
+# decisão acumula.
+#
+# Se a Isis quiser um BLOCO "identificação da matrícula" na tela, isso é
+# APRESENTAÇÃO (agrupar cartões por prefixo de chave), não chave natural — e é
+# decisão dela. A pergunta está em `docs/trabalhos/pos_reteste_l.md`.
+_ASPECTO_POR_CAMPO_MATRICULA: dict[str, str] = {
+    "cartorio": "cartorio",
+    "denominacao_imovel": "denominacao",
+    "denominacao_anterior": "denominacao_anterior",
+    "registro_anterior": "registro_anterior",
+    "nirf_cib": "nirf_cib",
+}
+
+# Mesmo argumento para o imóvel: município e UF são dois atributos, não um
+# "fato locativo". A SPEC não determina uma decisão única de localização, e
+# juntá-los repetiria o erro do cabeçalho numa escala menor.
+_ASPECTO_POR_CAMPO_IMOVEL: dict[str, str] = {
+    "municipality": "municipio",
+    "state": "uf",
 }
 
 
@@ -291,6 +366,40 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
             return ("matricula", hint, "titularidade"), None
         return None, "compra e venda sem matrícula identificável"
 
+    # 3c) Georreferenciamento — o CÓDIGO de certificação e a AVERBAÇÃO que o
+    # registra são o MESMO ato (Frente L). No caso #23 o código
+    # (`geo_certificacao_codigo`, que grava) vinha por uma linha solta e a
+    # averbação de georreferenciamento por outra: a consultora decidia duas
+    # vezes o mesmo georreferenciamento, e nenhuma das duas telas dizia que a
+    # outra existia. É o mesmo desenho do conserto de `gravames` na Frente K —
+    # a linha que grava entra na decisão que fala do fato.
+    if entity == "matricula" and target_field == "geo_certificacao_codigo":
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, "georreferenciamento"), None
+        return None, "certificação de georreferenciamento sem matrícula identificável"
+
+    if row.tipo_observacao == TIPO_GEORREFERENCIAMENTO:
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, "georreferenciamento"), None
+        return None, "averbação de georreferenciamento sem matrícula identificável"
+
+    # 3d) Limitações de uso e posse — arrendamento, servidão, usufruto e
+    # compromisso de compra e venda (`TIPOS_LIMITACAO`). São atos que PESAM
+    # sobre a matrícula, com prazo ou sem, e que nenhuma regra alcançava: no
+    # caso #23 cada um era uma linha solta, sem vínculo visível com a matrícula
+    # de que falam. A pergunta é a mesma dos gravames — "o que limita esta
+    # matrícula hoje" —, mas a natureza jurídica é outra (não é garantia real),
+    # e por isso a chave é própria e não a fusão com `gravames`: misturar
+    # arrendamento com hipoteca faria a decisão de ônus da base (que só reúne
+    # gravame) parecer incompleta.
+    if row.tipo_observacao in TIPOS_LIMITACAO:
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, "limitacoes"), None
+        return None, "limitação de uso sem matrícula identificável"
+
     # 4) Área total do imóvel — CAR gráfica × CAR documental × soma das
     # matrículas (a soma é injetada depois, `_injetar_area_total`).
     if entity == "imovel" and field_name in ("area_declarada_ha", "area_documental_ha"):
@@ -319,6 +428,89 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
     # 8) CAR — número e status do cadastro (ADR-062: CAR manda no ambiental).
     if entity == "imovel" and field_name in ("numero_car", "status_car"):
         return ("imovel", pid, "car"), None
+
+    # 9) Cabeçalho da matrícula — uma decisão POR ATRIBUTO (cartório,
+    # denominação, denominação anterior, registro anterior, NIRF/CIB). Cada um
+    # é uma pergunta própria que várias fontes podem responder; a régua da SPEC
+    # agrupa evidências do MESMO atributo, nunca atributos diferentes.
+    if entity == "matricula" and target_field in _ASPECTO_POR_CAMPO_MATRICULA:
+        hint = _clean_matricula_hint(row.matricula_hint)
+        if hint:
+            return ("matricula", hint, _ASPECTO_POR_CAMPO_MATRICULA[target_field]), None
+        return None, "cabeçalho de matrícula sem número identificável"
+
+    # 10) Onde o imóvel fica — município e UF, cada um o seu aspecto, pelo
+    # mesmo motivo do item 9. O CAR diz uma coisa, a matrícula pode dizer
+    # outra: é aí que a decisão serve para alguma coisa.
+    if entity == "imovel" and target_field in _ASPECTO_POR_CAMPO_IMOVEL:
+        return ("imovel", pid, _ASPECTO_POR_CAMPO_IMOVEL[target_field]), None
+
+    # ---------------------------------------------------------------------
+    # Fora de agrupamento DE PROPÓSITO — com a razão dita, não por omissão.
+    #
+    # Frente L: das 58 linhas soltas do caso #23, 30 ganharam chave (regras
+    # 3c, 3d, 9 e 10) e 28 continuam individuais. "Continuar individual" não é
+    # o mesmo que "ninguém pensou nelas" — e a Conferência não pode fazer as
+    # duas parecerem iguais. Cada bloco abaixo diz por que a linha é uma
+    # decisão sozinha, e a frase aparece na tela (`sem_agrupamento.motivo`).
+    # ---------------------------------------------------------------------
+    if row.tipo_observacao == TIPO_BAIXA:
+        # A frase anterior dizia que a baixa "entra na decisão do ato que
+        # encerra" — e a auditoria de 12/09 mostrou que não entra: quem chega
+        # lá é só o EFEITO (a vigência calculada), não esta linha. Motivo que
+        # descreve o desejo em vez do código é a mesma doença que esta frente
+        # veio tratar.
+        return None, (
+            "baixa — não é fato próprio: o que ela produz (o ato deixar de "
+            "vigorar) já aparece na decisão de gravames da matrícula. A linha "
+            "em si fica individual porque nenhuma chave a alcança"
+        )
+
+    if row.tipo_observacao == TIPO_ADITIVO:
+        return None, (
+            "aditivo — altera outro ato, e a extração ainda não registra QUAL "
+            "(sem esse vínculo, agrupá-lo seria adivinhar de que fato ele fala)"
+        )
+
+    if row.tipo_observacao == TIPO_NAO_CLASSIFICADO:
+        return None, (
+            "ato que o vocabulário não cobre — reclassifique a evidência para "
+            "que uma chave o alcance"
+        )
+
+    # LACUNA ASSUMIDA, não "corretamente fora". A auditoria de 12/09 apontou:
+    # a SPEC nomeia APP e cadastros rurais entre os BLOCOS MÍNIMOS da
+    # Conferência, então estes dois deveriam ser decisão. "Fonte única, nenhum
+    # ganho de clique" é fato, e não é justificativa — economia de gesto não
+    # decide o que a SPEC manda conferir. Ficam fora do recorte desta frente
+    # com a dívida nomeada, e a frase diz isso à consultora em vez de fingir
+    # que a ausência é desenho. Dívida #225.
+    if entity == "imovel" and field_name == "modulos_fiscais":
+        return None, (
+            "módulos fiscais — LACUNA: a Conferência deveria tratá-lo como "
+            "decisão (bloco mínimo de cadastro rural) e ainda não tem chave "
+            "para ele. Fica individual até a dívida #225 ser fechada"
+        )
+
+    # A averbação de APP na matrícula — o OUTRO lado da mesma lacuna. Achada no
+    # staging REAL do #23 (dump de produção de 09/09, ids 1572 e 1581), que o
+    # replay de roteamento não tinha: ela caía na frase genérica, o que tornava
+    # falsa a afirmação "toda solta diz a própria razão". Dado real achou o que
+    # o replay não achava.
+    if entity == "matricula" and target_field == "averbacao_app":
+        return None, (
+            "averbação de APP da matrícula — LACUNA: a Reserva Legal tem chave "
+            "por matrícula (regra 2a) e a APP, que a SPEC nomeia no mesmo bloco "
+            "mínimo, não tem. Fica individual até a dívida #225 ser fechada"
+        )
+
+    if entity == "imovel" and field_name == "app_declarada_ha":
+        return None, (
+            "APP declarada pelo CAR — LACUNA: a Reserva Legal tem chave por "
+            "matrícula e por imóvel (regras 2a/2b) e a APP, que a SPEC nomeia no "
+            "mesmo bloco mínimo, não tem nenhuma. Fica individual até a dívida "
+            "#225 ser fechada"
+        )
 
     return None, "tipo sem chave natural mapeada nesta frente — decide-se campo a campo"
 
@@ -398,7 +590,11 @@ def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
         valor_normalizado = raw
     vigencia = (row.atributos or {}).get("vigencia") if isinstance(row.atributos, dict) else None
     campo = row.target_field or row.field_name
-    if aspecto == "gravames":
+    if aspecto == "georreferenciamento" and row.tipo_observacao:
+        # A averbação entra ao lado do código que grava; rotulá-la "observacao"
+        # daria vocabulário de log onde cabe o ato (AV.05).
+        campo = (row.atributos or {}).get("ato") or "averbação de georreferenciamento"
+    if aspecto in _ASPECTOS_DE_ATO:
         if row.target_field == "onus_gravames":
             # A linha agregada (Frente K) não é mais um ato: é a SÍNTESE que
             # pousa na coluna. Mostrá-la como ato daria "onus_gravames:
@@ -406,10 +602,14 @@ def _evidencia_de(row: ExtractedFieldStaging, aspecto: str) -> Evidencia:
             campo = "ônus vigentes (o que vai para a base)"
             valor_normalizado = _resumo_onus(raw)
         else:
-            # A pergunta de gravame não é "qual valor", é "este ato está
+            # A pergunta de um ato não é "qual valor", é "este ato está
             # vigente" — o rótulo é o próprio ato (AV.03, R.15), não a coluna.
             campo = (row.atributos or {}).get("ato") or campo
-            valor_normalizado = vigencia or "indeterminado"
+            # Gravame tem vigência por vocabulário (`TIPOS_COM_VIGENCIA`);
+            # compromisso de compra e venda, não. Para esse, "indeterminado"
+            # seria dizer que não se sabe o que o registro afirma — o texto do
+            # próprio ato diz mais e não inventa estado nenhum.
+            valor_normalizado = vigencia or raw or "indeterminado"
     return Evidencia(
         staging_id=row.id,
         documento_id=row.document_id,
@@ -432,7 +632,7 @@ def _comparar(aspecto: str, evidencias: list[Evidencia]) -> tuple[str, Optional[
     evidência é uma síntese de atos) — múltiplas fontes corroborando é
     "concordam" por definição.
     """
-    if aspecto in ("composicao", "gravames"):
+    if aspecto == "composicao" or aspecto in _ASPECTOS_DE_ATO:
         return ("concordam" if len(evidencias) > 1 else "fonte_unica"), None, None, None
 
     if aspecto in _ASPECTOS_NUMERICOS:
@@ -533,9 +733,9 @@ def _montar_decisao(chave: ChaveNatural, membros: list[ExtractedFieldStaging]) -
             if (e.documento_tipo or "").lower() == fonte_doc:
                 e.fonte_autoritativa = True
 
-    if aspecto == "gravames":
+    if aspecto in _ASPECTOS_DE_ATO:
         # Síntese dos atos, não "o valor vencedor" — não faz sentido escolher
-        # UM gravame como proposta e descartar os outros.
+        # UM gravame (ou UM arrendamento) como proposta e descartar os outros.
         proposto: Any = "; ".join(f"{e.campo}: {e.valor_normalizado}" for e in evidencias) or None
     else:
         proposto = next((e.valor_normalizado for e in evidencias if e.fonte_autoritativa), None)

@@ -8,7 +8,10 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 225.** (#223 e #224 abertas pela Frente G/I —
+> **PRÓXIMO NÚMERO LIVRE: 231.** (#225 a #230 abertas pela Frente L —
+> `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
+> (`gh pr list` vazio), então 225 estava mesmo livre.)
+> Histórico da contagem anterior: (#223 e #224 abertas pela Frente G/I —
 > reconciliação por decisões + aceite real em produção, 10-11/09, PRs #160/#162,
 > ADR-067. Ver bloco "Frente G/I" abaixo. #222 aberta e fechada no mesmo PR —
 > `fix/cobertura-janela`, 10/09, achado Codex 10/09 sobre a cobertura declarada
@@ -1537,6 +1540,90 @@ procurador, cônjuge) além de adquirente/transmitente.
 lista completa com o porquê de cada item não ter sido puxado para dentro.
 **Origem:** ADR-064 (N2), ADR-065 ("Fora do escopo"), CONFIRMACAO_ENTRADA_2026-09-09.md
 (HIST-001). Ver ADR-066 e `docs/trabalhos/temporalidade_ato.md`.
+
+### Abertas pela Frente L — except envenenado + soltas da Conferência (12/09, `fix/pos-reteste-l`)
+
+A varredura da classe do `except` que escreve em sessão abortada (5 pontos
+corrigidos, 5 descartados com razão) e a classificação das 58 linhas soltas do
+caso #23 (58 → 28, cada sobra com motivo próprio). Detalhe em
+`docs/trabalhos/pos_reteste_l.md`.
+
+**225. APP não tem chave natural; Reserva Legal tem duas.** A RL agrupa por
+matrícula (regra 2a de `_chave_de`) e por imóvel (2b). APP está no mesmo
+`TIPOS_AREA_PARCIAL`, tem a mesma coluna (`matricula.averbacao_app`) e o mesmo
+par CAR × matrícula — e não tem regra nenhuma. No caso #23 custa 1 linha solta
+(`app_declarada_ha` do CAR) porque não há averbação de APP no caso; num caso que
+tenha, custa exatamente a divisão que a regra da RL já conserta (a averbação na
+matrícula de um lado, a declaração do CAR do outro, sem nada dizendo que falam
+do mesmo objeto). Fora do recorte da Frente L por disciplina: fechar exige
+`_ASPECTOS_NUMERICOS`, um `_injetar_app_total` espelhando
+`_injetar_reserva_legal_total` e rótulos — não é a linha de código que parece.
+
+**226. Aditivo não carrega referência ao ato que altera.** `tipo_observacao =
+"aditivo"` diz que o ato modifica outro, e nada diz QUAL. Por isso os 3 aditivos
+do #23 continuam soltos: dobrá-los na decisão do ato alterado seria adivinhar.
+Fechar exige a extração gravar o vínculo (`ato_ref` em `atributos`) — e, antes
+disso, a Isis dizer se quer a baixa/o aditivo como decisão própria ou como
+evidência dentro da decisão do ato que eles encerram/alteram (a mesma pergunta
+vale para as 18 baixas do caso, 13 delas na matrícula 3.313).
+
+**227. As suítes de worker neutralizam `rollback()` no wrapper de sessão.**
+`tests/workers/test_ocr_tasks.py` e `test_audio_tasks.py` têm
+`_NoCloseSession.rollback() -> None` ("não rolar back a transação externa do
+teste"). É um contorno legítimo para o fixture compartilhado — que usa
+`sessionmaker(bind=connection)`, cujo default no SQLAlchemy 2 é
+`join_transaction_mode="rollback_only"`, em que um rollback desfaz a transação
+do teste inteiro. Mas o efeito colateral é que **nenhum teste dessas suítes
+consegue exercitar um rollback**: o conserto do item 1 desta frente seria
+invisível ali. O caminho certo é o fixture compartilhado passar a
+`create_savepoint` (o modo que a documentação do SQLAlchemy recomenda para esse
+padrão, e que `tests/services/test_frente_l_sessao_envenenada.py` já usa
+sobrepondo `db_session` localmente) e os wrappers pararem de mentir. Mudança de
+conftest global — fora do recorte, com risco de mexer em toda a suíte.
+
+**228. `download_bytes` trata "bucket não existe" como "objeto não existe".**
+`app/services/storage.py:288` agrupa `NoSuchBucket` com `NoSuchKey`/`404` no
+mesmo `return b""`. Um nome de bucket errado, um token sem permissão no bucket
+ou um endpoint apontado para o lugar errado saem, para quem chama, como
+"arquivo ausente" — e o OCR registra ausência de arquivo onde houve erro de
+configuração. É a MESMA classe que o PR do R2 já fechou uma vez para
+`SignatureDoesNotMatch` (memória "nunca engolir erro de I/O retornando vazio:
+separar NoSuchKey de falhou"); `NoSuchBucket` ficou dentro da exceção. Achado
+ao escrever o pré-voo do `gate_ocr_originais.py` (que por isso pergunta pelo
+bucket com `head_bucket` antes de baixar qualquer coisa, em vez de confiar no
+`b""`). O conserto é uma linha — tirar `"NoSuchBucket"` da tupla —, mas muda
+comportamento de I/O em produção e ficou de fora do recorte da Frente L de
+propósito: merece ser o assunto do PR que o fizer, não um efeito colateral.
+
+**229. `except` que engole erro de banco e devolve a sessão ao chamador — 11
+pontos.** Classe DIFERENTE da que a Frente L fechou, e que a primeira varredura
+desta frente nem procurava. Desenho: uma função recebe `db`, o `try` toca a
+sessão, e o `except` não re-levanta nem faz rollback — quem chamou segue com
+uma sessão que pode estar abortada e só descobre no commit seguinte, longe da
+causa. `scripts/varredura_except_envenenado.py` (regra R2) lista os 11:
+`api/v1/contracts.py:413`, `api/v1/intake.py:1200`, `api/v1/messaging.py:160` e
+`:189`, `core/db_rescue.py:105` (este é por desenho — é o último recurso do
+socorro, e os chamadores agora leem o retorno), `services/intake_enrichment.py:184`,
+`services/knowledge_catalog.py:441`, `services/rota_contexto.py:424`,
+`services/rota_materializer.py:580`, `services/rota_shadow.py:88`,
+`workers/audio_tasks.py:71` (ramo genérico, ao lado do `SQLAlchemyError` que a
+Frente L consertou). O de `knowledge_catalog.search` é o mais feio: erro de
+banco vira RAG devolvendo zero trecho, que é a memória "nunca engolir erro de
+I/O retornando vazio" acontecendo de novo. Cada um pede julgamento próprio
+(alguns são best-effort legítimo sobre leitura que não é pré-requisito), por
+isso vira dívida e não conserto em lote.
+
+**230. Evidência de `composicao` mostra o DICT bruto do CAR na tela.** Medido no
+staging real do #23 (dump de produção de 09/09, linha do CAR
+`matricula_listada`): `field_value["value"]` é um dicionário
+(`{"data": "01/10/2013", "numero": "3181", "cartorio": ...}`), e `_evidencia_de`
+devolve o valor bruto para aspectos não-numéricos — então a Conferência exibe o
+dicionário onde deveria exibir o número da matrícula. Não afeta comparação
+(`composicao` não compara valor) nem gravação; é vocabulário de log chegando à
+consultora, a mesma família do "dict serializado → 3,5M ha" do PR #72, só que
+sem o estrago numérico. Achado pelo replay SEMÂNTICO com dado real — o replay de
+roteamento não tinha como ver, porque não carrega `field_value`. Fora do recorte
+da Frente L: é aspecto da Frente G, não desta.
 
 ### Abertas pela Frente G/I — reconciliação por decisões + aceite real (10-11/09, `feat/reconciliacao-decisoes` PR #160, `fix/gravames-sem-entity-matricula` PR #162, ADR-067)
 

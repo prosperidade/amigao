@@ -30,8 +30,10 @@ from datetime import UTC, datetime
 from typing import Any, Optional
 
 from celery.exceptions import MaxRetriesExceededError
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.celery_app import celery_app
+from app.core.db_rescue import gravar_desfecho_de_falha
 from app.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,19 @@ def _preferencias_ia(db, *, tenant_id: int, user_id: int) -> Optional[dict]:
             .first()
         )
         return get_ai_runtime(user) if user else None
+    except SQLAlchemyError as exc:
+        # Frente L / auditoria 12/09 — erro de BANCO aqui não é "preferência
+        # indisponível": a transação fica abortada e quem continua só descobre
+        # no commit lá adiante, depois de já ter gasto a transcrição. Best-
+        # effort vale para usuário ausente ou chave indecifrável, não para a
+        # sessão ter morrido. O rollback devolve uma sessão utilizável ao
+        # chamador, que segue na conta do sistema — sem carregar a bomba.
+        logger.warning(
+            "transcribe_audio_document: erro de banco ao ler prefs de IA "
+            "(sessão desfeita para o chamador seguir): %s", exc,
+        )
+        db.rollback()
+        return None
     except Exception as exc:  # noqa: BLE001 — preferência não é pré-requisito
         logger.warning("transcribe_audio_document: prefs de IA indisponíveis: %s", exc)
         return None
@@ -208,10 +223,37 @@ def transcribe_audio_document(
         try:
             check_tenant_monthly_budget(tenant_id, db)
         except Exception as exc:
-            doc.ocr_status = OcrStatus.failed
-            doc.ocr_error = "Orçamento mensal de IA do escritório esgotado — transcrição não executada."
-            db.add(doc)
-            db.commit()
+            # Frente L (12/09) — o socorro roda FORA da transação que caiu.
+            # `check_tenant_monthly_budget` CONSULTA o banco (soma o gasto do
+            # mês): erro de banco ali — timeout, conexão derrubada — aborta a
+            # transação, e o `doc.ocr_status = failed` + `commit()` que vinha
+            # aqui morria de `PendingRollbackError`. O documento ficava
+            # "processing" para sempre, que é exatamente o sintoma que o
+            # PR #69 já tinha caçado por outra causa.
+            # O motivo também deixa de mentir: veredito de orçamento e falha ao
+            # consultar o orçamento são coisas diferentes.
+            falha_de_banco = isinstance(exc, SQLAlchemyError)
+            motivo = (
+                "Não foi possível consultar o orçamento de IA do escritório "
+                "(falha de banco). Tente reprocessar."
+                if falha_de_banco
+                else "Orçamento mensal de IA do escritório esgotado — transcrição não executada."
+            )
+            gravou = gravar_desfecho_de_falha(
+                db, Document, doc_id,
+                nao_sobrescrever={"ocr_status": OcrStatus.done},
+                ocr_status=OcrStatus.failed,
+                ocr_error=motivo,
+            )
+            # O retorno NÃO é decorativo (auditoria de 12/09): `False` = o
+            # desfecho não foi gravado e o documento continua em `processing`.
+            # Devolver aqui um dicionário de status seria dizer "tratei" sobre
+            # um estado que ninguém corrigiu, e a task terminaria com sucesso
+            # deixando o documento preso — a mesma falha silenciosa que esta
+            # frente veio fechar, um nível acima. Levantar devolve o caso ao
+            # retry do Celery, que é quem sabe se tenta de novo.
+            if not gravou:
+                raise
             logger.warning(
                 "transcribe_audio_document: budget guard rejeitou tenant=%s doc=%s: %s",
                 tenant_id, doc_id, exc,
@@ -221,7 +263,11 @@ def transcribe_audio_document(
                 status_label="skipped_budget", method="none",
                 chars=0, cost_usd=0.0, error=str(exc),
             )
-            return {"status": "budget_exceeded", "doc_id": doc_id, "error": str(exc)}
+            return {
+                "status": "budget_check_failed" if falha_de_banco else "budget_exceeded",
+                "doc_id": doc_id,
+                "error": str(exc),
+            }
 
         # 5) Transcrição. BYOK: se o consultor configurou chave própria, a
         # transcrição sai na conta dele — mesma regra dos demais agentes.

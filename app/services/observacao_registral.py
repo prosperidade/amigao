@@ -1,4 +1,4 @@
-﻿"""Observação registral TIPADA — o que o ato É, antes de dizer onde ele pousa.
+"""Observação registral TIPADA — o que o ato É, antes de dizer onde ele pousa.
 
 Frente E (ADR-065). Até aqui a extração de matrícula devolvia **gavetas**:
 `averbacao_app`, `averbacao_rl`, `onus`. Quem lê uma certidão sabe que ela não é
@@ -140,6 +140,17 @@ TIPOS_AREA_PARCIAL = frozenset({
 # é exatamente a mesma linha que `TIPOS_AREA_PARCIAL` já traçou (objeto que
 # existe DENTRO do imóvel, com vida própria), somada aos gravames.
 TIPOS_COM_VIGENCIA = TIPOS_GRAVAME | TIPOS_AREA_PARCIAL
+
+# Frente L — atos que LIMITAM uso/posse sem serem garantia real (gravame) e sem
+# transferirem a titularidade. No caso #23 eles não tinham chave natural
+# nenhuma: cada arrendamento e o compromisso de compra e venda apareciam como
+# linha solta na Conferência, um clique cada, sem nada que dissesse de que
+# matrícula falavam. São o mesmo tipo de pergunta que os gravames respondem
+# ("o que pesa sobre esta matrícula hoje"), só que por outra natureza jurídica
+# — daí a chave própria, e não a fusão com `gravames`.
+TIPOS_LIMITACAO = frozenset({
+    TIPO_COMPROMISSO, TIPO_ARRENDAMENTO, TIPO_SERVIDAO, TIPO_USUFRUTO,
+})
 
 # Só `arrendamento`/`usufruto` carregam PRAZO com termo final no vocabulário
 # medido (doc 548 AV.10: "15 anos ... 01/01/2013 a 01/01/2028"). Hipoteca tem
