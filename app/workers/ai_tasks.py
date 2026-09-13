@@ -14,6 +14,7 @@ import logging
 from datetime import UTC, datetime
 
 from app.core.celery_app import celery_app
+from app.core.db_rescue import gravar_desfecho_de_falha
 from app.db.session import SessionLocal
 from app.models.ai_job import AIJob, AIJobStatus, AIJobType
 from app.models.document import Document
@@ -34,6 +35,7 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
     """
     db = SessionLocal()
     job: AIJob | None = None
+    job_id: int | None = None
     try:
         process = db.query(Process).filter(
             Process.id == process_id,
@@ -57,6 +59,10 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
         db.add(job)
         db.commit()
         db.refresh(job)
+        # Frente L — o identificador sai do ORM ANTES do trecho que pode cair.
+        # Ler `job.id` dentro do `except` dispararia lazy-load numa sessão já
+        # abortada; o socorro precisa de inteiros, não de objeto.
+        job_id = job.id
 
         description = getattr(process, "description", "") or ""
         demand_type = getattr(process, "demand_type", None)
@@ -99,15 +105,17 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
 
     except Exception as exc:
         logger.exception("run_llm_classification: erro process_id=%d: %s", process_id, exc)
-        if job:
-            try:
-                job.status = AIJobStatus.failed
-                job.error = str(exc)
-                job.finished_at = datetime.now(UTC)
-                db.add(job)
-                db.commit()
-            except Exception:
-                pass
+        # Frente L — o socorro desfaz a transação morta antes de escrever.
+        # Antes, `job.status = ...` + `db.commit()` rodavam na sessão que o
+        # `db.commit()` do `try` acabara de abortar, e o `except Exception: pass`
+        # engolia o `PendingRollbackError` resultante: o AIJob ficava "running"
+        # para sempre, sem uma linha de log dizendo por quê.
+        gravar_desfecho_de_falha(
+            db, AIJob, job_id,
+            status=AIJobStatus.failed,
+            error=str(exc),
+            finished_at=datetime.now(UTC),
+        )
         raise self.retry(exc=exc, countdown=30)
     finally:
         db.close()
@@ -126,6 +134,7 @@ def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: 
     """
     db = SessionLocal()
     job: AIJob | None = None
+    job_id: int | None = None
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
@@ -160,6 +169,10 @@ def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: 
         db.add(job)
         db.commit()
         db.refresh(job)
+        # Frente L — o identificador sai do ORM ANTES do trecho que pode cair.
+        # Ler `job.id` dentro do `except` dispararia lazy-load numa sessão já
+        # abortada; o socorro precisa de inteiros, não de objeto.
+        job_id = job.id
 
         from app.services.document_extractor import extract_document_fields  # noqa: PLC0415
 
@@ -192,15 +205,15 @@ def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: 
 
     except Exception as exc:
         logger.exception("run_document_extraction: erro document_id=%d: %s", document_id, exc)
-        if job:
-            try:
-                job.status = AIJobStatus.failed
-                job.error = str(exc)
-                job.finished_at = datetime.now(UTC)
-                db.add(job)
-                db.commit()
-            except Exception:
-                pass
+        # Frente L — mesma classe do `run_llm_classification` acima: sem o
+        # rollback, o carimbo de falha morria na sessão envenenada e o AIJob
+        # ficava "running".
+        gravar_desfecho_de_falha(
+            db, AIJob, job_id,
+            status=AIJobStatus.failed,
+            error=str(exc),
+            finished_at=datetime.now(UTC),
+        )
         raise self.retry(exc=exc, countdown=30)
     finally:
         db.close()
