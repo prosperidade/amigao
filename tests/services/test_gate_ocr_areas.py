@@ -46,7 +46,7 @@ def test_a_mesma_area_em_qualquer_notacao_e_encontrada(gate, escrita):
 
 
 def test_notacao_americana_nao_e_aceita_de_proposito(gate):
-    """`926.3654` fica de fora — e isso é escolha, não esquecimento.
+    r"""`926.3654` fica de fora — e isso é escolha, não esquecimento.
 
     Em português o ponto é separador de milhar: aceitar `\d+\.\d+` faria
     `2.180` (dois mil cento e oitenta) ser lido como 2,180 ha e casar com
