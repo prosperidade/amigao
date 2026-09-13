@@ -488,15 +488,18 @@ class TestContagemNadaSePerde:
 
 class TestRegressaoFrentesAnteriores:
     """Campos das Frentes C-F que NÃO têm chave natural nesta frente continuam
-    visíveis em `sem_agrupamento` — nunca escondidos, nunca quebrados."""
+    visíveis em `sem_agrupamento` — nunca escondidos, nunca quebrados.
+
+    Frente L (12/09): `cartorio` SAIU desta lista — passou a ter chave
+    (`identificacao_matricula`, junto com denominação, registro anterior e
+    NIRF/CIB: é tudo "que matrícula é esta?"). O mecanismo que este teste
+    guarda continua o mesmo, medido nos campos que seguem sem regra.
+    """
 
     def test_campos_sem_regra_de_chave_aparecem_visiveis(self, db_session):
         tenant, proc, _prop, _cli, _rows = _elodi(db_session)
         doc = _doc(db_session, tenant, proc, "matricula")
         extras = [
-            _linha(db_session, tenant, proc, doc, field_name="cartorio",
-                   valor="CRI de São João d'Aliança", entidade="matricula",
-                   alvo="cartorio", hint="9999"),
             _linha(db_session, tenant, proc, doc, field_name="modulos_fiscais",
                    valor="31,1547", entidade="imovel", alvo="modulos_fiscais"),
             _linha(db_session, tenant, proc, doc, field_name="numero_ccir",
@@ -509,6 +512,19 @@ class TestRegressaoFrentesAnteriores:
         assert len(resultado.sem_agrupamento) == len(extras)
         for item in resultado.sem_agrupamento:
             assert item["motivo"]
+
+    def test_cartorio_agora_entra_na_identificacao_da_matricula(self, db_session):
+        """O contraexemplo do teste acima — a mudança é deliberada, não deriva."""
+        tenant, proc, _prop, _cli, _rows = _elodi(db_session)
+        doc = _doc(db_session, tenant, proc, "matricula")
+        linha = _linha(db_session, tenant, proc, doc, field_name="cartorio",
+                       valor="CRI de São João d'Aliança", entidade="matricula",
+                       alvo="cartorio", hint="9999")
+        resultado = build_decisions([linha])
+        assert resultado.sem_agrupamento == []
+        assert [d.chave for d in resultado.decisoes] == [
+            ("matricula", "9999", "identificacao_matricula")
+        ]
 
 
 class TestValeriaPF:

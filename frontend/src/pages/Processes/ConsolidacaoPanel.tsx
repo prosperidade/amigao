@@ -189,6 +189,19 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
     () => new Set(reconciliation?.decisoes?.flatMap(d => d.staging_ids) ?? []),
     [reconciliation],
   );
+  // Frente L — a razão de a linha NÃO estar numa decisão agrupada, na tela.
+  // O backend sempre mandou `sem_agrupamento[].motivo`; ninguém o lia. Depois
+  // de dar razão própria a cada uma das 28 sobras do caso #23 (baixa é aresta
+  // de outro ato, aditivo não diz qual ato altera, ...), deixar a frase no
+  // payload seria decoração: "continuar individual" e "ninguém pensou nisso"
+  // continuariam idênticos na tela.
+  const motivoSolta = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const s of reconciliation?.sem_agrupamento ?? []) {
+      if (s.motivo) m.set(s.staging_id, s.motivo);
+    }
+    return m;
+  }, [reconciliation]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['staging-fields', processId] });
@@ -402,6 +415,15 @@ export default function ConsolidacaoPanel({ processId }: { processId: number }) 
                     <span>
                       <strong className="font-semibold">Aceito, mas não entra na base:</strong>{' '}
                       {f.sem_casa_motivo ?? 'este campo não tem destino no cadastro.'}
+                    </span>
+                  </span>
+                )}
+                {motivoSolta.has(f.id) && (
+                  <span className="basis-full order-last flex items-start gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-500/10 border border-slate-200 dark:border-slate-500/30 rounded px-2 py-1">
+                    <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="font-semibold">Decisão individual:</strong>{' '}
+                      {motivoSolta.get(f.id)}
                     </span>
                   </span>
                 )}

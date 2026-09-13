@@ -223,9 +223,16 @@ def test_reclassificar_pela_decisao_agrupada_troca_o_tipo_da_evidencia(client: T
 
 
 def test_reclassificar_que_tira_a_linha_da_decisao_nao_e_erro(client: TestClient, db_session):
-    """Reclassificar para um tipo que a Frente G não agrupa (arrendamento)
-    esvazia a decisão. A escrita FOI feita — responder erro seria mentira; o
-    corpo vem `null` e a linha reaparece em `sem_agrupamento`."""
+    """Reclassificar para um tipo que a Conferência não agrupa esvazia a
+    decisão. A escrita FOI feita — responder erro seria mentira; o corpo vem
+    `null` e a linha reaparece em `sem_agrupamento`.
+
+    Frente L (12/09): o tipo usado aqui era `arrendamento`, que PASSOU a ter
+    chave própria (`limitacoes`). O mecanismo guardado é o mesmo; o tipo é
+    agora `baixa`, que segue de fora de propósito — é a aresta de outro ato,
+    não um fato próprio. Trocar o tipo mantém o teste medindo o que ele diz
+    medir; mantê-lo em `arrendamento` o deixaria verde medindo outra coisa.
+    """
     tenant, proc, row = _setup_observacao_tipada(db_session, email="j4@example.com",
                                                  tipo_obs="hipoteca")
     db_session.commit()
@@ -235,7 +242,7 @@ def test_reclassificar_que_tira_a_linha_da_decisao_nao_e_erro(client: TestClient
         f"/api/v1/processes/{proc.id}/staging-decisions/decidir", headers=h,
         json={"entidade": "matricula", "identificador": "3673", "aspecto": "gravames",
               "acao": "reclassificar", "staging_id": row.id,
-              "tipo_observacao": "arrendamento"},
+              "tipo_observacao": "baixa"},
     )
     assert r.status_code == 200, r.text
     assert r.json() is None
@@ -244,7 +251,7 @@ def test_reclassificar_que_tira_a_linha_da_decisao_nao_e_erro(client: TestClient
     assert depois["decisoes"] == []
     assert [i["staging_id"] for i in depois["sem_agrupamento"]] == [row.id]
     db_session.refresh(row)
-    assert row.tipo_observacao == "arrendamento"
+    assert row.tipo_observacao == "baixa"
 
 
 def test_reclassificar_com_tipo_desconhecido_e_422_e_nao_toca_a_linha(client: TestClient, db_session):
