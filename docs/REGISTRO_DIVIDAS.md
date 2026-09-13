@@ -8,7 +8,7 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 229.** (#225 a #228 abertas pela Frente L —
+> **PRÓXIMO NÚMERO LIVRE: 230.** (#225 a #229 abertas pela Frente L —
 > `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
 > (`gh pr list` vazio), então 225 estava mesmo livre.)
 > Histórico da contagem anterior: (#223 e #224 abertas pela Frente G/I —
@@ -1594,6 +1594,24 @@ bucket com `head_bucket` antes de baixar qualquer coisa, em vez de confiar no
 `b""`). O conserto é uma linha — tirar `"NoSuchBucket"` da tupla —, mas muda
 comportamento de I/O em produção e ficou de fora do recorte da Frente L de
 propósito: merece ser o assunto do PR que o fizer, não um efeito colateral.
+
+**229. `except` que engole erro de banco e devolve a sessão ao chamador — 11
+pontos.** Classe DIFERENTE da que a Frente L fechou, e que a primeira varredura
+desta frente nem procurava. Desenho: uma função recebe `db`, o `try` toca a
+sessão, e o `except` não re-levanta nem faz rollback — quem chamou segue com
+uma sessão que pode estar abortada e só descobre no commit seguinte, longe da
+causa. `scripts/varredura_except_envenenado.py` (regra R2) lista os 11:
+`api/v1/contracts.py:413`, `api/v1/intake.py:1200`, `api/v1/messaging.py:160` e
+`:189`, `core/db_rescue.py:105` (este é por desenho — é o último recurso do
+socorro, e os chamadores agora leem o retorno), `services/intake_enrichment.py:184`,
+`services/knowledge_catalog.py:441`, `services/rota_contexto.py:424`,
+`services/rota_materializer.py:580`, `services/rota_shadow.py:88`,
+`workers/audio_tasks.py:71` (ramo genérico, ao lado do `SQLAlchemyError` que a
+Frente L consertou). O de `knowledge_catalog.search` é o mais feio: erro de
+banco vira RAG devolvendo zero trecho, que é a memória "nunca engolir erro de
+I/O retornando vazio" acontecendo de novo. Cada um pede julgamento próprio
+(alguns são best-effort legítimo sobre leitura que não é pré-requisito), por
+isso vira dívida e não conserto em lote.
 
 ### Abertas pela Frente G/I — reconciliação por decisões + aceite real (10-11/09, `feat/reconciliacao-decisoes` PR #160, `fix/gravames-sem-entity-matricula` PR #162, ADR-067)
 

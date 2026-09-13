@@ -1,300 +1,250 @@
 # Frente L — três correções independentes
 
 Branch `fix/pos-reteste-l` · worktree `wt-pos-reteste` · dívidas faixa 200-299.
-Medido em 12/09/2026.
+Medido em 12/09/2026, e **revisado no mesmo dia depois de uma auditoria de
+terceiro que reprovou meia frente**. Este documento é a versão pós-auditoria.
 
-Três itens sem dependência entre si. Dois entregues e provados; o terceiro
-parado numa credencial que não existe nesta máquina — dito onde parou e o que
-falta, não contornado.
+O que a auditoria derrubou, e que aqui está corrigido:
+
+| reprovado | o que era | o que é agora |
+|---|---|---|
+| varredura sem instrumento | "um script AST percorreu `app/`" — e o script não estava na árvore | `scripts/varredura_except_envenenado.py`, versionado, com 2 regras e a fronteira declarada |
+| savepoint como socorro | o serviço tentava carimbar `failed` confiando em `begin_nested()` | **medido: `begin_nested` não recupera flush falho.** O carimbo passou para o dono da transação |
+| retorno ignorado | `gravar_desfecho_de_falha` podia devolver `False` e ninguém lia | os 4 chamadores leem e levantam |
+| cabeçalho como decisão única | 5 atributos numa chave só | uma decisão POR ATRIBUTO, como a SPEC manda |
+| "corretamente fora" | APP e módulos fiscais como desenho | **lacuna assumida**, com a SPEC citada |
+| replay como prova semântica | "30 linhas → 12 decisões corretas" | o replay prova ROTEAMENTO; a semântica está bloqueada e dita como tal |
+| regex do gate | não achava `926,36.54` | comparação NUMÉRICA por `parse_area_ha`, com teste |
 
 ---
 
 ## 1 — O `except` que grava numa sessão envenenada
 
-### A classe
+### O instrumento, agora na árvore
 
-A Frente K mediu a primeira ocorrência em `consolidate_process_endpoint`: um
-`DataError` no `flush` abortou a transação, o bloco de resgate leu
-`current_user.tenant_id` (lazy-load numa sessão morta) e caiu de
-`PendingRollbackError` **antes** de registrar a auditoria. A consultora recebeu
-`Internal Server Error` no lugar da frase que aquele bloco existe para dar.
+`scripts/varredura_except_envenenado.py`. Duas regras explícitas:
 
-O Codex apontou o mesmo desenho em `legislation_service.py:82-113`. A varredura
-desta frente foi atrás da CLASSE inteira, não do ponto: um script AST percorreu
-`app/` procurando `try` que toca o banco com um `except` que escreve no ORM sem
-`rollback` antes — incluindo o caso transitivo, em que quem toca o banco no
-`try` é uma função que recebe `db` como argumento.
+- **R1** — `try` que toca a sessão (inclusive o caso transitivo: função que
+  recebe `db`) com `except` que escreve no ORM sem `rollback` antes. É o
+  desenho do caso que a Frente K achou.
+- **R2** — função que recebe `db`, cujo `try` toca a sessão e cujo `except`
+  **não re-levanta e não faz rollback**: devolve o controle com uma sessão que
+  pode estar abortada. Esta regra não existia na primeira passagem — foi a
+  auditoria que mostrou o caso (`_preferencias_ia`), e a regra veio depois.
 
-### O que a varredura achou
+E a fronteira, escrita no topo do arquivo: só um arquivo por vez, não segue
+cadeia de chamada, não avalia decorator nem context manager próprio, não
+distingue erro de banco de erro de rede. **Reduz o espaço de busca e torna o
+resultado reproduzível; não prova ausência.**
 
-**Cinco pontos da classe — todos corrigidos:**
+Estado hoje: **R1 = 0** (os cinco fechados), **R2 = 11** — classe nova,
+registrada como dívida **#229**, com a lista. Um deles foi fechado aqui
+(`_preferencias_ia`, o confirmado pela auditoria): erro de banco ao ler
+preferência de IA não é "preferência indisponível" — a transcrição seguia e só
+descobria a sessão morta no commit, depois de já ter gasto o LLM.
 
-| ponto | o que o `try` derruba | o que o `except` perdia |
-|---|---|---|
-| `app/services/legislation_service.py:113` | `db.flush()` do texto extraído | status `failed` + causa; documento ficava `processing` |
-| `app/workers/ai_tasks.py:100` (`run_llm_classification`) | `db.commit()` do processo + job | AIJob ficava `running` **para sempre**, engolido por `except Exception: pass` |
-| `app/workers/ai_tasks.py:193` (`run_document_extraction`) | idem | idem |
-| `app/workers/audio_tasks.py:210` (budget guard) | `check_tenant_monthly_budget` CONSULTA o banco | `ocr_status=failed`; documento preso em `processing` |
-| `app/workers/ocr_tasks.py:267` (budget guard) | idem | idem — mesmo sintoma que o PR #69 caçou por outra causa |
+O instrumento também deixou de isentar `try` com `begin_nested()`, porque a
+medição abaixo mostrou que savepoint não é tratamento. A versão anterior
+isentava — e teria escondido exatamente o defeito que esta frente acabara de
+introduzir.
 
-**Cinco candidatos examinados e descartados, com razão:**
+### Os cinco pontos da R1
 
-| ponto | por que NÃO é da classe |
+| ponto | o que se perdia |
 |---|---|
-| `app/api/v1/contracts.py:386` | o `try` é `render_pdf` — renderização pura, não toca sessão |
-| `app/api/v1/processes.py:1153` | o `try` é `run_agent_chain.delay` — fila Celery; falha de fila não aborta transação |
-| `app/api/websockets.py:43` | Redis, não banco |
-| `app/workers/audio_tasks.py:130` | o `try` é `storage.download_bytes` — rede/S3, não sessão |
-| `app/workers/ocr_tasks.py:153` | idem |
+| `legislation_service` | status `failed` + causa; o erro que subia era o do SQLAlchemy, não a causa |
+| `ai_tasks:100` / `:193` | AIJob ficava `running` **para sempre**, engolido por `except Exception: pass` |
+| `ocr_tasks` / `audio_tasks` (budget guard) | documento preso em `processing` — mesmo sintoma que o PR #69 caçou por outra causa |
 
-### Os dois desenhos de conserto
+Cinco candidatos descartados com razão (render de PDF, fila Celery, Redis,
+download de storage ×2): o `try` deles não tem como envenenar sessão. A
+auditoria conferiu os cinco descartes e confirmou todos.
 
-Não é um só, porque não é um problema só — **de quem é a transação** muda a
-resposta:
+### A aposta que a medição derrubou
 
-- **Worker dono da própria sessão** (`SessionLocal()`): porta nova
-  `app/core/db_rescue.py::gravar_desfecho_de_falha` — desfaz a transação morta,
-  recarrega a linha **pelo identificador** (nunca pelo objeto ORM expirado),
-  escreve e commita. O `except Exception: pass` que havia nos workers virou
-  `logger.exception`: socorro que falha grita, não some.
+A primeira versão desta frente pôs o socorro **dentro** do
+`legislation_service`, com `db.begin_nested()`, argumentando que o savepoint
+desfaria só o trecho que caiu e deixaria a transação de fora viva. Parecia
+certo. Medido contra o Postgres de dev:
 
-- **Serviço dentro da transação de outro** (`legislation_service`, chamado pelo
-  endpoint que acabou de criar a própria linha): `rollback` ali apagaria o
-  documento que se quer marcar como falho. O trecho arriscado passou a rodar em
-  `db.begin_nested()` — o SAVEPOINT desfaz só o que caiu, a transação de fora
-  sobrevive, e com ela a linha que recebe o carimbo.
+```python
+o.txt = "mau" + chr(0) + "byte"     # pendência de quem CHAMOU
+with db.begin_nested():
+    db.query(T)...                  # autoflush cai aqui
+# depois do `with`:  db.is_active -> False
+# no_autoflush + expire -> NÃO recuperam.  Só db.rollback() recupera.
+```
 
-### De brinde, um motivo que mentia
+**`begin_nested()` não torna um flush falho recuperável.** E `rollback()` é de
+quem é DONO da transação — nunca de um serviço que a pegou emprestada, porque
+desfazer tudo apagaria o trabalho de quem chamou.
 
-O guard de orçamento tratava "orçamento esgotado" e "não consegui consultar o
-orçamento" como a mesma coisa. Agora o documento recebe o motivo certo e o
-retorno distingue `budget_exceeded` de `budget_check_failed`. Antes do conserto
-isso era inócuo (a escrita morria de qualquer jeito); depois dele, a frase
-errada ficaria gravada na base.
+Então o desenho mudou:
 
-### O teste
+- **`legislation_service`** faz o trabalho e, se cair, garante a única coisa
+  que consegue garantir sempre: **a causa real sobe**, nunca um
+  `PendingRollbackError` genérico. Não tenta mais carimbar.
+- **`legislation_monitor`** (dono da sessão) faz `rollback()`, carimba `failed`
+  pela porta de `db_rescue`, e commita por documento. Um documento ruim custa
+  um documento — antes custava o crawler inteiro, porque tudo vivia numa
+  transação só e o `db.commit()` do fim morria junto.
 
-`tests/services/test_frente_l_sessao_envenenada.py` — 8 testes, **o veneno é
-real**:
+Um teste revelou uma distinção que ninguém tinha nomeado: documento **novo**
+que falha nunca chega a existir (o `add`+`flush` morre no mesmo rollback), então
+não há o que carimbar — e isso está certo, não é falha do socorro. O caminho
+que a auditoria confirmou é o de **atualização**, e é lá que o carimbo pousa.
 
-- byte NUL no texto (o que um PDF com camada de texto corrompida entrega) →
-  o `flush` cai de verdade;
-- `SELECT 1/0` dentro do guard de orçamento → o Postgres aborta a transação de
-  verdade.
+### O retorno não é decorativo
 
-E cobra o desfecho: o AIJob sai `failed` com a causa, o documento sai `failed`
-com o motivo, e **a causa real sobe** — não o `PendingRollbackError` genérico.
+`gravar_desfecho_de_falha` devolve `bool`, e os quatro chamadores passaram a
+ler:
 
-Dois achados do próprio teste, que valem mais que o verde:
+- **ocr/audio (budget guard)**: `False` → `raise`. Devolver
+  `{"status": "budget_check_failed"}` seria dizer "tratei" sobre um documento
+  que continua em `processing` — a mesma falha silenciosa que a frente veio
+  fechar, um nível acima.
+- **ai_tasks ×2**: `False` → levanta a **causa original**, sem `self.retry`.
+  Retry com o banco fora cria um AIJob órfão NOVO a cada tentativa e esconde a
+  causa atrás de um "Retry".
 
-1. **O fixture compartilhado escondia o mecanismo.** `tests/conftest.py` faz
-   `sessionmaker(bind=connection)`, e o default do SQLAlchemy 2 nesse arranjo é
-   `join_transaction_mode="rollback_only"`: um `rollback()` desfaz a transação
-   externa do teste inteiro. Com ele, o socorro "não achava a linha" — sintoma
-   do harness, não do código. O módulo sobrepõe `db_session` com
-   `create_savepoint`, que é o modo que a documentação recomenda para esse
-   padrão e o que reproduz a semântica de produção. (As outras suítes de worker
-   vão além: neutralizam `rollback()` para no-op — o que tornaria este conserto
-   invisível.)
+E a trava de concorrência que a auditoria levantou como hipótese: o socorro
+recarrega a linha depois do rollback, e nesse intervalo outra execução pode
+tê-la concluído. `nao_sobrescrever={"ocr_status": done}` impede carimbar
+`failed` por cima de trabalho bom — devolvendo `True`, porque o desfecho
+existe, só não é este.
 
-2. **O teste caiu no próprio bug que testa**: lia `processo.id` DEPOIS de
-   envenenar a sessão. Os inteiros saem do ORM antes — a mesma regra que o
-   código passou a seguir.
+### Os testes
+
+`test_frente_l_sessao_envenenada.py` (8) e `test_frente_l_auditoria.py` (7).
+O veneno é real: byte NUL vindo do texto (PDF real faz isso) e `SELECT 1/0`
+dentro do guard de orçamento. O teste do monitor roda o **laço de verdade**
+(`_run_single_crawler` com crawler falso), não uma imitação do laço.
+
+Dois achados dos próprios testes: o fixture compartilhado usa
+`join_transaction_mode` default (`rollback_only`), em que um rollback desfaz o
+teste inteiro — com ele o socorro "não achava a linha", sintoma do harness; e
+um teste caiu no bug que testa, lendo `processo.id` depois de envenenar.
 
 ---
 
-## 2 — As 57 unidades soltas da Conferência
+## 2 — As soltas da Conferência: 58 → 28
 
-### O número de partida
+Medido replayando as **118 linhas reais de produção** do caso #23
+(`razao_linha_a_linha.json`) contra `build_decisions`.
 
-O percurso de navegador da Frente K terminou com
-`Conferência: 19/76 decisão(ões) · 57 pendente(s)`: 20 decisões agrupadas e o
-resto cobrado como clique avulso. O razão linha a linha daquela rodada
-(`docs/trabalhos/consolidacao_real/razao_linha_a_linha.json`, 118 linhas do
-staging **real** de produção da ELODI, 5 a mais que as 113 do percurso de
-navegador) registra **58 soltas**. É contra esse arquivo — dado de produção,
-não fixture — que esta frente mede.
+### A fronteira desta medição — dita antes do número
 
-### Os três grupos
+O arquivo guarda **roteamento, não conteúdo**: não tem `atributos`,
+`field_value` real, `decided_value` nem `consolidated_at`. Então o replay prova
+**para qual decisão cada linha vai**, e só isso. Concordância, divergência,
+proposta, vigência, titularidade e estado da decisão **não são medidos aqui** —
+afirmá-los a partir deste replay seria inventar, e a versão anterior deste
+documento inventou ("30 linhas → 12 decisões semanticamente corretas").
 
-**Grupo A — merecem chave natural (30 linhas → 12 decisões). Implementado.**
+A prova semântica pede o staging completo do #23. Ele existe no dump de
+produção local; **a leitura está barrada pelo classificador de auto-modo** (ver
+item 3). O banco de DEV está vazio — conferido, não suposto.
 
-| o que era | quantas linhas | vira | por quê |
+### O que ganhou chave
+
+| o que era | linhas | vira | por quê |
 |---|---:|---|---|
-| cartório, denominação, denominação anterior, registro anterior, NIRF/CIB | 17 | `matricula:<n>:identificacao_matricula` (4 decisões) | tudo responde UMA pergunta: "que matrícula é esta?". Eram 5 cliques por matrícula |
-| código de certificação + averbação de georreferenciamento | 7 | `matricula:<n>:georreferenciamento` (4) | o código (que GRAVA) e a AV que o registra são o MESMO ato — mesma correção que a Frente K fez em `gravames` |
-| arrendamento, compromisso de compra e venda (+ servidão e usufruto por vocabulário) | 4 | `matricula:<n>:limitacoes` (3) | atos que PESAM sobre a matrícula, com prazo ou sem; nenhuma regra os alcançava |
-| município + UF | 2 | `imovel:<id>:localizacao` (1) | um fato locativo só, e que compete entre fontes |
+| cartório · denominação · denominação anterior · registro anterior · NIRF/CIB | 17 | **uma decisão por ATRIBUTO** (17) | a SPEC agrupa evidências do MESMO atributo; "divergência" entre um cartório e um NIRF não significa nada |
+| código de certificação + averbação de georreferenciamento | 7 | `georreferenciamento` (4) | o código (que GRAVA) e a AV que o registra são o MESMO ato |
+| arrendamento, compromisso de compra e venda (+ servidão, usufruto) | 4 | `limitacoes` (3) | atos que PESAM sobre a matrícula e que nenhuma regra alcançava |
+| município · UF | 2 | uma decisão cada (2) | mesma régua do cabeçalho: dois atributos, duas perguntas |
 
-Chave própria para `limitacoes`, e não fusão com `gravames`: arrendamento não é
-garantia real, e misturá-lo faria a decisão de ônus da base — que só reúne
-gravame — parecer incompleta.
+**Resultado: soltas 58 → 28, decisões 20 → 46.**
 
-**Grupo B — corretamente fora (28 linhas). Cada uma diz a razão.**
+E o número é honesto sobre o que mudou: só **13 linhas colapsam**. As 17 do
+cabeçalho viram 17 decisões — nenhum clique a menos no caso #23, onde cada
+atributo tem uma fonte só. O ganho ali é outro: a linha deixa de ser solta e
+vira FATO, com proposta, fonte autoritativa e estado; quando um segundo
+documento declarar o mesmo cartório, as duas evidências caem sozinhas na mesma
+decisão e a divergência aparece. Solta não acumula fonte; decisão acumula.
 
-| sobra | linhas | razão (aparece na tela) |
+### Pergunta para a Isis (não decidida aqui)
+
+**A consultora quer um BLOCO "identificação da matrícula" na tela?** Se sim,
+isso é apresentação — agrupar cartões por prefixo de chave —, não chave
+natural. A chave continua por atributo de qualquer forma; o que ela decide é se
+os cinco cartões aparecem juntos sob um título. Não dá para inventar por ela.
+
+### O que fica de fora, e a diferença entre "fora" e "lacuna"
+
+| sobra | linhas | classificação |
 |---|---:|---|
-| `baixa` | 18 | é a **aresta** de outro ato: entra na decisão do ato que encerra, pela vigência que cancela |
-| `nao_classificado` | 5 | ato que o vocabulário não cobre — reclassifique para que uma chave o alcance |
-| `aditivo` | 3 | altera outro ato, e a extração **não registra qual**; agrupar seria adivinhar |
-| `app_declarada_ha` | 1 | assimetria conhecida — ver abaixo |
-| `modulos_fiscais` | 1 | declaração de fonte única do CAR; agrupar não pouparia gesto |
+| `baixa` | 18 | **fora por desenho** — não é fato próprio; o efeito dela (o ato deixar de vigorar) já aparece na decisão de gravames |
+| `nao_classificado` | 5 | **fora por desenho** — reclassifique antes que qualquer chave a alcance |
+| `aditivo` | 3 | **fora por limitação** — altera outro ato e a extração não registra qual (dívida #226) |
+| `app_declarada_ha` | 1 | **LACUNA ASSUMIDA** — a SPEC nomeia APP no bloco mínimo; a RL tem duas chaves e a APP nenhuma (dívida #225) |
+| `modulos_fiscais` | 1 | **LACUNA ASSUMIDA** — a SPEC inclui cadastro rural no bloco mínimo (dívida #225) |
 
-Antes desta frente as 28 caíam todas na mesma frase genérica *"tipo sem chave
-natural mapeada nesta frente"*. "Continuar individual" e "ninguém pensou nisso"
-apareciam iguais na tela; agora não.
+A auditoria estava certa nos dois últimos: "fonte única, nenhum ganho de
+clique" é fato, e não é justificativa. Economia de gesto não decide o que a
+SPEC manda conferir. As frases na tela dizem "LACUNA" e citam a dívida.
 
-E a frase chega à tela: o backend sempre mandou `sem_agrupamento[].motivo` e
-**ninguém o lia** — `ConsolidacaoPanel` usava a resposta só para saber que
-staging_ids tirar da lista. Dar razão própria a cada sobra e deixá-la no payload
-seria decoração. A linha solta passa a mostrar *"Decisão individual: <razão>"*,
-no mesmo desenho dos selos que já existem ali (`sem_casa`, `sem_ancora`).
-
-**Grupo C — precisam da Isis. Não inventado.**
-
-1. **As 18 baixas** (13 só na matrícula 3.313). O sistema já usa a baixa para
-   calcular o que está vigente; a tela mostra cada uma solta. A pergunta é de
-   produto: a consultora quer **decidir** cada baixa, ou ver só o resultado
-   líquido dentro da decisão de gravames do ato que ela encerra? As duas são
-   defensáveis e mudam o número de gestos.
-2. **Os 3 aditivos.** Mesma pergunta, mais um bloqueio técnico: o aditivo não
-   carrega referência ao ato que altera. Dobrá-lo na decisão do ato exigiria a
-   Isis dizer que quer isso E uma mudança na extração para gravar o vínculo.
-3. **`denominacao_anterior`** entrou em "identificação da matrícula". É
-   identidade ou nota histórica? Chamada menor, mas é dela.
-
-### Achado fora do recorte
-
-**APP não tem chave; Reserva Legal tem duas.** A RL ganhou chave por matrícula
-(regra 2a) e por imóvel (2b). APP — que está no mesmo `TIPOS_AREA_PARCIAL`, tem
-a mesma coluna (`averbacao_app`) e o mesmo par CAR × matrícula — não tem
-nenhuma. No caso #23 isso custa 1 linha solta (`app_declarada_ha`) e nada mais,
-porque não há averbação de APP no caso. Num caso que tenha, custa exatamente a
-divisão que a regra da RL já conserta. Ficou de fora por disciplina de recorte
-(implementá-la puxa `_ASPECTOS_NUMERICOS`, `_injetar_*` e rótulos), e está
-registrada aqui em vez de resolvida em silêncio.
-
-### O gate
-
-`tests/services/test_frente_l_soltas.py` replica as 118 linhas reais contra
-`build_decisions`:
-
-```
-soltas   58 → 28
-decisões 20 → 32
-118 linhas: nenhuma fora de decisão E fora das soltas
-toda solta que sobra tem razão própria (nenhuma na frase genérica)
-```
+Também estava certa sobre a `baixa`: a frase anterior dizia que ela "entra na
+decisão do ato que encerra", e não entra — a linha continua solta, o que chega
+lá é o efeito. Motivo que descreve o desejo em vez do código é a mesma doença
+que esta frente veio tratar. Corrigida.
 
 ### Um defeito do próprio conserto, achado antes do PR
 
-Dar chave a `limitacoes` criou, de graça, um problema que `gravames` já tinha
-resolvido: as duas averbações de arrendamento da 3.181 caem no mesmo `campo`
-(`observacao`) e o ramo de texto de `_comparar` as poria **uma contra a
-outra** — "divergem" entre dois contratos que coexistem, e uma proposta que
-descartaria o outro. Dois atos não são duas versões de um fato.
-
-`_ASPECTOS_DE_ATO = {gravames, limitacoes}` passou a reger os três pontos que
-já tratavam gravame assim: a evidência é rotulada pelo ATO (AV.10, R.15), a
-comparação não põe atos em competição, e a proposta é a síntese, não um
-vencedor. A averbação dentro de `georreferenciamento` também deixou de se
-chamar "observacao" na tela.
-
-O replay de produção **não pegaria isso**: o `razao_linha_a_linha.json` não
-guarda `atributos`, então ali as duas averbações chegam sem `ato` e sem
-`vigencia`. O teste que fecha esse caminho
-(`test_dois_arrendamentos_na_mesma_matricula_nao_competem`) traz os `atributos`
-que a produção grava — é a fronteira do harness, dita em voz alta em vez de
-descoberta pela consultora.
-
-### Dois testes de terceiro reprovaram o conserto — e estavam certos
-
-1. `test_campos_sem_regra_de_chave_aparecem_visiveis` usava `cartorio` como
-   exemplo de campo sem chave. Deixou de ser: a mudança é exatamente esta.
-   O teste ficou guardando o mesmo mecanismo com os campos que **seguem** sem
-   regra (`modulos_fiscais`, `numero_ccir`, `app_declarada_ha`), e ganhou o
-   contraexemplo (`cartorio` agora cai em `identificacao_matricula`) para que a
-   mudança seja deliberada, não deriva.
-2. `test_reclassificar_que_tira_a_linha_da_decisao_nao_e_erro` reclassificava
-   hipoteca → **arrendamento** para provar que esvaziar uma decisão não é erro.
-   Arrendamento passou a ter chave (`limitacoes`), então o teste mediria outra
-   coisa e continuaria verde. Passou a usar `baixa`, que segue de fora de
-   propósito.
-
-Nos dois casos o teste foi ajustado porque o CONTRATO mudou de propósito, não
-para calar vermelho — e o motivo está escrito no próprio teste.
+Dar chave a `limitacoes` recriou o problema que `gravames` já resolvia: as duas
+averbações de arrendamento da 3.181 caem no mesmo `campo` e o ramo de texto as
+punha **uma contra a outra**. `_ASPECTOS_DE_ATO` passou a reger os três pontos
+que já tratavam gravame assim. O replay **não pegaria isso** (não tem
+`atributos`); o teste que fecha traz os `atributos` que a produção grava.
 
 ---
 
-## 3 — OCR dos PDFs originais — PARADO, com o que falta nomeado
+## 3 — OCR dos originais: PARADO, com o que falta nomeado
 
-**O que está pronto:** `scripts/gate_ocr_originais.py`. Baixa cada original do
-storage, roda a cascata REAL (`extract_text_from_pdf`: pypdf → Gemini Vision →
-OpenAI Vision) e monta a tabela produção × OCR-do-arquivo por documento:
-caracteres, método, modelo, custo, similaridade normalizada e presença das
-áreas `926,3654` / `725,4663` — inclusive com outra pontuação, que é
-exatamente o achado que a frente procura.
+`scripts/gate_ocr_originais.py` responde as três perguntas **com veredito**,
+não com tabela para alguém julgar depois:
 
-Não usa banco descartável: usa **banco nenhum**. `extract_text_from_pdf` é
-função pura sobre bytes, e o lado "produção" entra por arquivo exportado. Assim
-o gate não tem como escrever onde não deve.
+1. **o texto bate?** similaridade normalizada contra `LIMIAR_SIMILARIDADE`
+   (0,90), APROVADO/REPROVADO, e as maiores diferenças no JSON;
+2. **as áreas saem iguais?** comparação **numérica** via `parse_area_ha` — as
+   quatro matrículas do #23 e o total. `926,36.54` (notação registral: 926 ha,
+   36 a, 54 ca) é o MESMO número que `926,3654`, e a versão anterior comparava
+   string e não achava justamente o exemplo do enunciado. Cobrado só do
+   documento que declara a área, para não reprovar por pergunta errada;
+3. **o doc 551 continua ilegível?** procura o representante e marcas de CNH. Se
+   o Vision ler, o gate DIZ que leu — achado, não escopo.
 
-**A credencial não precisa ir para disco — medido, não suposto.**
-`Settings` é pydantic-settings com `env_file=".env"`, e nessa biblioteca
-**variável de ambiente vence arquivo**. Conferido: com o `.env` de dev dizendo
-`MINIO_SERVER=localhost:9000`, rodar com a variável exportada dá o endpoint da
-variável. É a ergonomia do `PGPASSWORD` do `pg_dump` — a credencial vive no
-comando, e o `.env` de dev fica intocado.
+Antes de tudo confere o **SHA-256 dos bytes baixados** contra o
+`checksum_sha256` de produção: sem isso, todo o resto podia estar comparando
+outro arquivo.
 
-`--env-file` existe para quem prefere não colar segredo no terminal (o
-histórico do PowerShell guarda). Ele carrega, com `override`, o arquivo
-**apontado** — nunca o `.env` padrão — antes de `app.core.config` ser
-importado, que é o único instante em que as settings leem o ambiente.
-`wt-pos-reteste/.env.prod-readonly` está criado, vazio, para o André preencher;
-`git check-ignore -v` confirma que o `.gitignore` já o bloqueia na linha 34
-(`.env.*`, com allowlist só para os `.example`) — nenhuma linha nova foi
-precisa, e `git status` não o enxerga.
+`tests/services/test_gate_ocr_areas.py` (10 testes) fecha as funções que
+decidem o veredito — o gate não roda em CI, então elas precisam de rede
+própria. Um deles registra uma escolha: notação americana (`926.3654`) **não**
+é aceita, de propósito, porque em português o ponto é separador de milhar e um
+extrator frouxo faria `2.180` casar por acidente. OCR em notação americana
+REPROVA e um humano olha — falha barulhenta em vez de silenciosa.
 
-Leitura é leitura: `download_bytes` **não** chama `_ensure_bucket_exists` (só
-`upload_file`/`upload_bytes` chamam, e é lá que mora o `create_bucket`). Um
-token R2 "Object Read only" basta e este gate não tem como criar nada.
+### O que falta
 
-Os quatro caminhos foram exercitados: sem credencial (para com exit 2 dizendo
-que os documentos são do R2 e o endpoint é o local), `--env-file` (o endpoint
-efetivo vira o do arquivo), variável de ambiente sem arquivo nenhum (idem), e
-`--env-file` inexistente (mensagem limpa).
+1. **Credencial de leitura do R2 de produção.** Não precisa ir para disco:
+   variável de ambiente vence o `.env` no pydantic-settings (medido), como o
+   `PGPASSWORD`. `--env-file` existe para quem prefere não colar segredo no
+   terminal; `.env.prod-readonly` já é bloqueado pelo `.gitignore` linha 34.
+2. **O lado de produção da tabela.** O backup
+   `backups_amigao/backup_prod_20260909T120549Z.dump` tem `documents` (com
+   `storage_key`, `checksum_sha256`, `extracted_text`) e
+   `extracted_field_staging` (o que o item 2 precisa para a prova semântica).
+   O `pg_restore` extrai; **ler o conteúdo foi barrado pelo classificador de
+   auto-modo** ("Production Reads"), duas vezes.
 
-**O que falta, e por isso não rodou:**
-
-1. **A credencial de leitura do R2 de produção**, por qualquer dos dois
-   caminhos acima.
-2. **O lado de produção da tabela.** Existe local: o backup
-   `backups_amigao/backup_prod_20260909T120549Z.dump` tem a tabela `documents`
-   com `storage_key` e `extracted_text` dos 6 documentos. O `pg_restore` já
-   extraiu a tabela; **ler o conteúdo foi barrado pelo classificador de
-   auto-modo** ("Production Reads"). Basta a liberação (ou o export dos 6
-   registros por outro caminho) para essa metade ficar pronta sem nenhuma
-   credencial nova.
-
-### Um achado do próprio pré-voo
+### Achado do pré-voo → dívida #228
 
 `download_bytes` devolve `b""` tanto para `NoSuchKey` quanto para
-`NoSuchBucket`. Sem checagem própria, um nome de bucket errado (ou um token sem
-permissão nele) sairia na tabela do gate como *"arquivo ausente no storage"* —
-conclusão errada vestida de achado, justo no gate que existe para achar coisa.
-O pré-voo pergunta pelo bucket com `head_bucket` antes de baixar qualquer
-coisa, e para com a causa à vista.
-
-A conflação dentro de `download_bytes` é a **dívida #228**: é a mesma classe que
-o PR do R2 já fechou para `SignatureDoesNotMatch` ("nunca engolir erro de I/O
-retornando vazio"), e `NoSuchBucket` ficou dentro da exceção. O conserto é uma
-linha, mas muda comportamento de I/O em produção — merece ser o assunto do PR
-que o fizer, não efeito colateral deste.
-
-Com as duas coisas o gate roda em uma passagem e responde as três perguntas do
-enunciado: o texto bate com o de produção, as áreas saem iguais, e o doc 551
-continua ilegível (confirmando o limite) ou o Vision o lê — caso em que o
-representante Joel entra, e isso é achado, não escopo.
+`NoSuchBucket`. Um bucket errado sairia na tabela como "arquivo ausente" —
+conclusão errada vestida de achado. O gate pergunta pelo bucket com
+`head_bucket` antes de baixar. O conserto na função é uma linha, mas muda I/O
+em produção: merece ser o assunto do PR que o fizer.
 
 ---
 
@@ -302,15 +252,21 @@ representante Joel entra, e isso é achado, não escopo.
 
 | | |
 |---|---|
-| `tests/services/test_frente_l_sessao_envenenada.py` | 8 passed |
-| `tests/services/test_frente_l_soltas.py` | 9 passed |
-| `tests/workers/` (suíte existente, tocada pelo item 1) | 20 passed |
-| suítes que dependem de `reconciliation_decisions` (reconciliação, staging-decisions, Frentes H e K) | 67 passed |
-| `frontend/src/pages/Processes/ConsolidacaoPanel.test.tsx` | 4 passed (1 novo) |
-| `cd frontend && npm run build` (o gate real: `tsc -b`) | ✓ built |
-| `pytest tests/ -q` — suíte de backend inteira | **2014 passed** (39 min) |
-| `ruff check app/ scripts/ tests/…` | All checks passed |
+| `pytest tests/ -q` — suíte inteira | ver PR |
+| `test_frente_l_sessao_envenenada.py` | 8 passed |
+| `test_frente_l_auditoria.py` (novo) | 7 passed |
+| `test_frente_l_soltas.py` | 9 passed |
+| `test_gate_ocr_areas.py` (novo) | 10 passed |
+| `ConsolidacaoPanel.test.tsx` | 4 passed (1 novo) |
+| `cd frontend && npm run build` (o gate real) | ✓ built |
+| `ruff check` | All checks passed |
+| `scripts/varredura_except_envenenado.py` | R1 = 0 · R2 = 11 (dívida #229) |
 
-Os 4 caminhos de credencial do gate de OCR foram exercitados de verdade (sem
-credencial, `--env-file`, variável de ambiente, arquivo inexistente); o que
-ainda não rodou é o gate em si, por falta do acesso ao R2 de produção.
+Dívidas abertas: **#225** (APP/cadastro rural sem chave — lacuna assumida),
+**#226** (aditivo sem referência ao ato), **#227** (suítes de worker
+neutralizam `rollback()`), **#228** (`NoSuchBucket` confundido com
+`NoSuchKey`), **#229** (11 pontos da classe R2).
+
+O que esta frente **não** move: nenhum dos 15 da matriz. Não há percurso
+autenticado, DOM, F5 nem sessão nova para estas mudanças — REC-001 e CONF-001
+melhoram por dentro e continuam PARCIAL.
