@@ -55,6 +55,19 @@ def _preferencias_ia(db, *, tenant_id: int, user_id: int) -> Optional[dict]:
             .first()
         )
         return get_ai_runtime(user) if user else None
+    except SQLAlchemyError as exc:
+        # Frente L / auditoria 12/09 — erro de BANCO aqui não é "preferência
+        # indisponível": a transação fica abortada e quem continua só descobre
+        # no commit lá adiante, depois de já ter gasto a transcrição. Best-
+        # effort vale para usuário ausente ou chave indecifrável, não para a
+        # sessão ter morrido. O rollback devolve uma sessão utilizável ao
+        # chamador, que segue na conta do sistema — sem carregar a bomba.
+        logger.warning(
+            "transcribe_audio_document: erro de banco ao ler prefs de IA "
+            "(sessão desfeita para o chamador seguir): %s", exc,
+        )
+        db.rollback()
+        return None
     except Exception as exc:  # noqa: BLE001 — preferência não é pré-requisito
         logger.warning("transcribe_audio_document: prefs de IA indisponíveis: %s", exc)
         return None
@@ -226,11 +239,21 @@ def transcribe_audio_document(
                 if falha_de_banco
                 else "Orçamento mensal de IA do escritório esgotado — transcrição não executada."
             )
-            gravar_desfecho_de_falha(
+            gravou = gravar_desfecho_de_falha(
                 db, Document, doc_id,
+                nao_sobrescrever={"ocr_status": OcrStatus.done},
                 ocr_status=OcrStatus.failed,
                 ocr_error=motivo,
             )
+            # O retorno NÃO é decorativo (auditoria de 12/09): `False` = o
+            # desfecho não foi gravado e o documento continua em `processing`.
+            # Devolver aqui um dicionário de status seria dizer "tratei" sobre
+            # um estado que ninguém corrigiu, e a task terminaria com sucesso
+            # deixando o documento preso — a mesma falha silenciosa que esta
+            # frente veio fechar, um nível acima. Levantar devolve o caso ao
+            # retry do Celery, que é quem sabe se tenta de novo.
+            if not gravou:
+                raise
             logger.warning(
                 "transcribe_audio_document: budget guard rejeitou tenant=%s doc=%s: %s",
                 tenant_id, doc_id, exc,

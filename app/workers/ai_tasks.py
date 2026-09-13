@@ -110,12 +110,19 @@ def run_llm_classification(self, *, process_id: int, tenant_id: int, user_id: in
         # `db.commit()` do `try` acabara de abortar, e o `except Exception: pass`
         # engolia o `PendingRollbackError` resultante: o AIJob ficava "running"
         # para sempre, sem uma linha de log dizendo por quê.
-        gravar_desfecho_de_falha(
+        gravou = gravar_desfecho_de_falha(
             db, AIJob, job_id,
             status=AIJobStatus.failed,
             error=str(exc),
             finished_at=datetime.now(UTC),
         )
+        if not gravou:
+            # O retorno NÃO é decorativo (auditoria de 12/09). `False` aqui
+            # quer dizer que rollback, recarga E commit falharam: o banco não
+            # está respondendo, e o AIJob ficou `running`. Pedir retry nesse
+            # estado cria um job órfão NOVO a cada tentativa e esconde a causa
+            # atrás de um "Retry". A exceção original sobe crua.
+            raise
         raise self.retry(exc=exc, countdown=30)
     finally:
         db.close()
@@ -208,12 +215,19 @@ def run_document_extraction(self, *, document_id: int, tenant_id: int, user_id: 
         # Frente L — mesma classe do `run_llm_classification` acima: sem o
         # rollback, o carimbo de falha morria na sessão envenenada e o AIJob
         # ficava "running".
-        gravar_desfecho_de_falha(
+        gravou = gravar_desfecho_de_falha(
             db, AIJob, job_id,
             status=AIJobStatus.failed,
             error=str(exc),
             finished_at=datetime.now(UTC),
         )
+        if not gravou:
+            # O retorno NÃO é decorativo (auditoria de 12/09). `False` aqui
+            # quer dizer que rollback, recarga E commit falharam: o banco não
+            # está respondendo, e o AIJob ficou `running`. Pedir retry nesse
+            # estado cria um job órfão NOVO a cada tentativa e esconde a causa
+            # atrás de um "Retry". A exceção original sobe crua.
+            raise
         raise self.retry(exc=exc, countdown=30)
     finally:
         db.close()

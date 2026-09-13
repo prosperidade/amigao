@@ -33,6 +33,8 @@ def gravar_desfecho_de_falha(
     db: Session,
     model: type[Any],
     pk: Optional[int],
+    *,
+    nao_sobrescrever: Optional[dict[str, Any]] = None,
     **campos: Any,
 ) -> bool:
     """Grava ``campos`` na linha ``pk`` depois de desfazer a transação morta.
@@ -55,6 +57,20 @@ def gravar_desfecho_de_falha(
     não deve ser gravado de qualquer modo, e perguntar antes ("a sessão está
     ativa?") acopla o socorro ao estado interno do SQLAlchemy — exatamente o que
     quebrou antes.
+
+    ``nao_sobrescrever`` é a trava de concorrência (auditoria de 12/09): o
+    socorro recarrega a linha DEPOIS do rollback, e nesse intervalo outra
+    execução pode tê-la concluído. Marcar ``failed`` por cima de um ``done``
+    alheio seria estragar trabalho bom para registrar o próprio fracasso.
+    Passando ``{"ocr_status": OcrStatus.done}``, a porta não escreve se a linha
+    já estiver nesse estado — e devolve ``True``, porque o desfecho existe: só
+    não é este. Quem chama não precisa distinguir "gravei failed" de "alguém já
+    gravou done"; os dois significam "a linha não ficou presa".
+
+    **O retorno NÃO é decorativo.** ``False`` significa que o desfecho não foi
+    gravado — a linha continua no estado intermediário. Quem chama tem de
+    tratar; ignorar o ``False`` recria, um nível acima, exatamente a falha
+    silenciosa que esta porta existe para fechar.
     """
     if pk is None:
         logger.error(
@@ -72,6 +88,15 @@ def gravar_desfecho_de_falha(
                 model.__name__, pk,
             )
             return False
+        if nao_sobrescrever:
+            for nome, valor in nao_sobrescrever.items():
+                if getattr(obj, nome, None) == valor:
+                    logger.info(
+                        "socorro: %s id=%s já está em %s=%s — outra execução "
+                        "concluiu; nada a sobrescrever",
+                        model.__name__, pk, nome, valor,
+                    )
+                    return True
         for nome, valor in campos.items():
             setattr(obj, nome, valor)
         db.add(obj)

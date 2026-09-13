@@ -119,10 +119,24 @@ def semeado(db_session):
 
 
 # ---------------------------------------------------------------------------
-# 1) legislation_service.ingest_legislation_document — SAVEPOINT
+# 1) legislation_service — a causa real sobe; o carimbo é de quem é dono
 # ---------------------------------------------------------------------------
 
-def test_legislacao_texto_com_nul_grava_failed_e_preserva_a_causa(db_session):
+def test_legislacao_com_nul_deixa_subir_a_causa_real(db_session):
+    """O contrato do serviço mudou — por medição, não por gosto.
+
+    A primeira versão desta frente pôs o socorro DENTRO do serviço, apostando
+    que `db.begin_nested()` tornasse um flush falho recuperável. Medido em
+    12/09 contra o Postgres de dev: não torna. Depois de um flush falho a
+    sessão exige `rollback()`, e rollback é de quem é DONO da transação — um
+    serviço que a pegou emprestada não pode desfazer o trabalho de quem chamou.
+
+    Então o que o serviço garante é o que consegue garantir SEMPRE: a causa
+    real sobe, nunca um `PendingRollbackError` genérico que esconde o que
+    houve. O carimbo de `failed` é do dono da sessão — provado em
+    `test_frente_l_auditoria.py`, onde o `legislation_monitor` o grava depois
+    do próprio rollback e o lote segue.
+    """
     doc = LegislationDocument(
         title="Lei de teste", source_type="lei", scope="federal", status="pending",
     )
@@ -132,17 +146,8 @@ def test_legislacao_texto_com_nul_grava_failed_e_preserva_a_causa(db_session):
     with pytest.raises(Exception) as excinfo:
         ingest_legislation_document(doc.id, db_session, raw_text=TEXTO_COM_NUL)
 
-    # A causa real sobe — não o PendingRollbackError do socorro atropelado.
     assert not isinstance(excinfo.value, PendingRollbackError)
     assert "NUL" in str(excinfo.value)
-
-    # E a sessão de quem chamou continua utilizável: o carimbo de falha é
-    # gravável, que é o ponto do savepoint (rollback aqui apagaria o `doc`).
-    db_session.commit()
-    relido = db_session.get(LegislationDocument, doc.id)
-    assert relido is not None, "o savepoint não podia levar a própria linha junto"
-    assert relido.status == "failed"
-    assert "NUL" in (relido.error_message or "")
 
 
 def test_legislacao_caminho_feliz_continua_gravando(db_session):

@@ -69,8 +69,32 @@ def ingest_legislation_document(
     file_bytes: bytes | None = None,
     html_content: str | None = None,
 ) -> LegislationDocument:
-    """
-    Processa um documento legislativo: extrai texto, calcula hash, armazena texto completo.
+    """Processa um documento legislativo: extrai texto, hash, armazena o texto.
+
+    QUEM CARIMBA O FRACASSO NAO E ESTE SERVICO — e isso e decisao, nao
+    esquecimento. Medido em 12/09 contra o Postgres de dev: com uma pendencia
+    suja de quem CHAMOU (um byte NUL no texto, que o `legislation_monitor`
+    atribui antes de chamar aqui), o autoflush dentro de `db.begin_nested()`
+    derruba a transacao — e **depois do `with` a sessao continua exigindo
+    `rollback()`**. `no_autoflush` e `expire` nao recuperam; so o rollback.
+
+    Ou seja: `begin_nested()` NAO torna um flush falho recuperavel. A primeira
+    versao desta frente apostou que tornava, escreveu o socorro aqui dentro, e a
+    medicao derrubou a aposta. Rollback e do DONO da transacao — nunca de um
+    servico que a pegou emprestada, porque desfazer tudo apagaria o trabalho de
+    quem chamou.
+
+    Entao o contrato aqui e o menor que da para cumprir SEMPRE:
+
+    1. faz o trabalho;
+    2. se cair, a CAUSA REAL sobe — nunca um `PendingRollbackError` generico
+       que esconde o que houve;
+    3. carimbar `failed` e de quem e dono da sessao. `legislation_monitor` faz
+       isso com `gravar_desfecho_de_falha` depois do proprio rollback, e por
+       isso um documento ruim custa um documento, nao o lote.
+
+    A unica excecao e o texto vazio: ali nada foi ao banco e falhou, a sessao
+    esta sadia, e o carimbo e parte do resultado normal.
     """
     doc = db.query(LegislationDocument).filter(LegislationDocument.id == doc_id).first()
     if not doc:
@@ -79,46 +103,31 @@ def ingest_legislation_document(
     doc.status = "processing"
     db.flush()
 
-    # Frente L (12/09) — o trecho arriscado roda num SAVEPOINT.
-    #
-    # O `except` abaixo grava "failed" + a causa: e antes ele fazia isso na MESMA
-    # transacao que o `db.flush()` do `try` acabara de abortar. Basta o texto
-    # extraído trazer um byte NUL (PDF real faz isso) ou um valor não caber na
-    # coluna para o flush cair — e então o flush do socorro cair junto, de
-    # `PendingRollbackError`. Quem chamava recebia o erro genérico do SQLAlchemy
-    # no lugar da causa, e o documento ficava "processing" para sempre.
-    #
-    # Aqui não cabe `db.rollback()` (a porta de `app/core/db_rescue.py`): este
-    # serviço roda DENTRO da transação de quem chama — o endpoint que acabou de
-    # criar a própria linha `doc`, ou o monitor no meio de um lote. Desfazer
-    # tudo seria apagar o documento que queremos marcar como falho. O savepoint
-    # desfaz só o trecho que caiu; a transação de fora sobrevive, e com ela a
-    # linha que recebe o carimbo.
     try:
-        with db.begin_nested():
-            # 1. Extrair texto
-            if raw_text:
-                text = raw_text
-            elif file_bytes:
-                text = extract_text_from_pdf(file_bytes)
-            elif html_content:
-                text = extract_text_from_html(html_content)
-            else:
-                raise ValueError("Nenhuma fonte de texto fornecida")
+        # 1. Extrair texto
+        if raw_text:
+            text = raw_text
+        elif file_bytes:
+            text = extract_text_from_pdf(file_bytes)
+        elif html_content:
+            text = extract_text_from_html(html_content)
+        else:
+            raise ValueError("Nenhuma fonte de texto fornecida")
 
-            if not text.strip():
-                doc.status = "failed"
-                doc.error_message = "Texto extraido vazio"
-                db.flush()
-                return doc
-
-            # 2. Armazenar texto completo
-            doc.full_text = text
-            doc.content_hash = hashlib.sha256(text.encode()).hexdigest()
-            doc.token_count = _estimate_tokens(text)
-            doc.status = "indexed"
-            doc.error_message = None
+        if not text.strip():
+            # Sessao sadia: nada foi ao banco e falhou. Carimbar aqui e legitimo.
+            doc.status = "failed"
+            doc.error_message = "Texto extraido vazio"
             db.flush()
+            return doc
+
+        # 2. Armazenar texto completo
+        doc.full_text = text
+        doc.content_hash = hashlib.sha256(text.encode()).hexdigest()
+        doc.token_count = _estimate_tokens(text)
+        doc.status = "indexed"
+        doc.error_message = None
+        db.flush()
 
         logger.info(
             "legislation doc %d processado: ~%d tokens",
@@ -126,13 +135,15 @@ def ingest_legislation_document(
         )
         return doc
 
-    except Exception as exc:
-        # O savepoint já foi desfeito pelo `with`: a sessão está utilizável e
-        # este flush grava de verdade.
-        doc.status = "failed"
-        doc.error_message = str(exc)[:500]
-        db.flush()
-        logger.exception("Erro processando legislation doc %d", doc_id)
+    except Exception:
+        # Nenhuma escrita de socorro aqui: a sessao pode estar abortada, e
+        # tentar gravar trocaria a causa real por `PendingRollbackError` — foi
+        # exatamente assim que o documento ficava "processing" e o erro que
+        # chegava ao topo nao dizia nada. Quem e dono da transacao carimba.
+        logger.exception(
+            "legislation doc %d falhou; o carimbo de 'failed' e de quem e dono "
+            "da sessao (ver legislation_monitor)", doc_id,
+        )
         raise
 
 

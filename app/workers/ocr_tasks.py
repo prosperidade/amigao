@@ -283,11 +283,21 @@ def ocr_then_extract(
                 if falha_de_banco
                 else "Orçamento mensal de IA do escritório esgotado — leitura não executada."
             )
-            gravar_desfecho_de_falha(
+            gravou = gravar_desfecho_de_falha(
                 db, Document, doc_id,
+                nao_sobrescrever={"ocr_status": OcrStatus.done},
                 ocr_status=OcrStatus.failed,
                 ocr_error=motivo,
             )
+            # O retorno NÃO é decorativo (auditoria de 12/09): `False` = o
+            # desfecho não foi gravado e o documento continua em `processing`.
+            # Devolver aqui um dicionário de status seria dizer "tratei" sobre
+            # um estado que ninguém corrigiu, e a task terminaria com sucesso
+            # deixando o documento preso — a mesma falha silenciosa que esta
+            # frente veio fechar, um nível acima. Levantar devolve o caso ao
+            # retry do Celery, que é quem sabe se tenta de novo.
+            if not gravou:
+                raise
             logger.warning(
                 "ocr_then_extract: budget guard rejeitou tenant=%s doc=%s: %s",
                 tenant_id, doc_id, exc,
