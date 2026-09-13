@@ -8,7 +8,7 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 230.** (#225 a #229 abertas pela Frente L —
+> **PRÓXIMO NÚMERO LIVRE: 231.** (#225 a #230 abertas pela Frente L —
 > `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
 > (`gh pr list` vazio), então 225 estava mesmo livre.)
 > Histórico da contagem anterior: (#223 e #224 abertas pela Frente G/I —
@@ -1612,6 +1612,18 @@ banco vira RAG devolvendo zero trecho, que é a memória "nunca engolir erro de
 I/O retornando vazio" acontecendo de novo. Cada um pede julgamento próprio
 (alguns são best-effort legítimo sobre leitura que não é pré-requisito), por
 isso vira dívida e não conserto em lote.
+
+**230. Evidência de `composicao` mostra o DICT bruto do CAR na tela.** Medido no
+staging real do #23 (dump de produção de 09/09, linha do CAR
+`matricula_listada`): `field_value["value"]` é um dicionário
+(`{"data": "01/10/2013", "numero": "3181", "cartorio": ...}`), e `_evidencia_de`
+devolve o valor bruto para aspectos não-numéricos — então a Conferência exibe o
+dicionário onde deveria exibir o número da matrícula. Não afeta comparação
+(`composicao` não compara valor) nem gravação; é vocabulário de log chegando à
+consultora, a mesma família do "dict serializado → 3,5M ha" do PR #72, só que
+sem o estrago numérico. Achado pelo replay SEMÂNTICO com dado real — o replay de
+roteamento não tinha como ver, porque não carrega `field_value`. Fora do recorte
+da Frente L: é aspecto da Frente G, não desta.
 
 ### Abertas pela Frente G/I — reconciliação por decisões + aceite real (10-11/09, `feat/reconciliacao-decisoes` PR #160, `fix/gravames-sem-entity-matricula` PR #162, ADR-067)
 

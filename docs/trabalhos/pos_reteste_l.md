@@ -141,9 +141,43 @@ proposta, vigência, titularidade e estado da decisão **não são medidos aqui*
 afirmá-los a partir deste replay seria inventar, e a versão anterior deste
 documento inventou ("30 linhas → 12 decisões semanticamente corretas").
 
-A prova semântica pede o staging completo do #23. Ele existe no dump de
-produção local; **a leitura está barrada pelo classificador de auto-modo** (ver
-item 3). O banco de DEV está vazio — conferido, não suposto.
+### A prova semântica: o dump foi liberado, e a resposta é outra
+
+O André liberou a leitura do backup de produção. O que ele tem, medido:
+
+- `extracted_field_staging` do #23: **42 linhas**, não 118;
+- **sem as colunas `tipo_observacao` e `atributos`** — elas vieram nas migrations
+  das Frentes E/F, depois do backup de 09/09.
+
+Ou seja: o backup é de outra GERAÇÃO de extração. Ele não pode validar a medição
+de 118 linhas, e não tem como exercitar gravames, limitações, georreferenciamento
+nem Reserva Legal tipada — as colunas não existem ali. Isso é resposta, não
+desculpa: o staging das 118 linhas vive no banco de produção corrente.
+
+O que ele **pôde** provar, e provou: os aspectos que esta frente criou no
+cabeçalho da matrícula, com `field_value`, `status`, `decided_value` e
+`consolidated_at` REAIS. 42 linhas → **35 decisões, 3 soltas**, com semântica de
+verdade:
+
+```
+imovel:23:area_total    concordam / informativo   CAR 2180.8267 x soma 2180.3923
+matricula:3181:cartorio fonte_unica / decidida    "Registro de Imóveis de Alto Paraíso"
+matricula:4387:nirf_cib fonte_unica / PENDENTE    9.475.495-0   (estado por linha, real)
+matricula:3181:composicao concordam               CAR + certidão, mesmo fato
+```
+
+E achou duas coisas que o replay de roteamento **não tinha como achar**:
+
+1. **A afirmação "toda solta diz a própria razão" era falsa em produção.** As
+   linhas `averbacao_app` da matrícula (ids 1572 e 1581) caíam na frase
+   genérica — o arquivo de 118 linhas não tem esse campo. Corrigido: agora
+   dizem LACUNA e citam a dívida #225, como o par delas do CAR.
+2. **A evidência de `composicao` mostra o DICT bruto do CAR** na tela
+   (`{"data": "01/10/2013", "numero": "3181", ...}`) onde deveria mostrar o
+   número. Não afeta comparação nem gravação — é vocabulário de log chegando à
+   consultora. Aspecto da Frente G, não desta: dívida **#230**.
+
+O banco de DEV está vazio — conferido, não suposto.
 
 ### O que ganhou chave
 

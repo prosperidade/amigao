@@ -262,3 +262,25 @@ def test_dois_arrendamentos_na_mesma_matricula_nao_competem():
     assert d.nivel_divergencia is None
     # E a proposta é a síntese dos dois, não um deles.
     assert "AV.10" in str(d.valor_proposto) and "AV.11" in str(d.valor_proposto)
+
+
+def test_averbacao_de_app_na_matricula_tambem_diz_a_propria_razao():
+    """Achado no staging REAL do #23 (dump de produção de 09/09, ids 1572/1581).
+
+    O replay de roteamento acima não tem linha `averbacao_app` — e ela caía na
+    frase genérica, o que tornava FALSA a afirmação "toda solta diz a própria
+    razão". Dado real achou o que o replay não achava; a forma da linha aqui é
+    a de produção (entidade + destino), sem conteúdo pessoal.
+    """
+    linha = ExtractedFieldStaging(
+        id=1572, tenant_id=1, process_id=23, document_id=549,
+        source_doc_type="matricula", field_name="averbacao_app",
+        field_value={"value": "AV.04 — reserva de APP"},
+        target_entity="matricula", target_field="averbacao_app",
+        matricula_hint="3673", status=ExtractedFieldStatus.pendente,
+    )
+    resultado = build_decisions([linha])
+    assert resultado.decisoes == []
+    motivo = resultado.sem_agrupamento[0]["motivo"]
+    assert "tipo sem chave natural mapeada nesta frente" not in motivo
+    assert "LACUNA" in motivo and "#225" in motivo

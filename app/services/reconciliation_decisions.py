@@ -492,6 +492,18 @@ def _chave_de(row: ExtractedFieldStaging) -> tuple[Optional[ChaveNatural], Optio
             "para ele. Fica individual até a dívida #225 ser fechada"
         )
 
+    # A averbação de APP na matrícula — o OUTRO lado da mesma lacuna. Achada no
+    # staging REAL do #23 (dump de produção de 09/09, ids 1572 e 1581), que o
+    # replay de roteamento não tinha: ela caía na frase genérica, o que tornava
+    # falsa a afirmação "toda solta diz a própria razão". Dado real achou o que
+    # o replay não achava.
+    if entity == "matricula" and target_field == "averbacao_app":
+        return None, (
+            "averbação de APP da matrícula — LACUNA: a Reserva Legal tem chave "
+            "por matrícula (regra 2a) e a APP, que a SPEC nomeia no mesmo bloco "
+            "mínimo, não tem. Fica individual até a dívida #225 ser fechada"
+        )
+
     if entity == "imovel" and field_name == "app_declarada_ha":
         return None, (
             "APP declarada pelo CAR — LACUNA: a Reserva Legal tem chave por "
