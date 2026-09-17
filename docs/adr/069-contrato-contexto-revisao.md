@@ -50,7 +50,9 @@ desatualizados; seus resultados anteriores permanecem no histórico.
 
 `AgentExecution` guarda snapshot, passos, dependências, cursor, revisão e chave
 idempotente. Lock transacional por caso e unicidade impedem duas retomadas
-concorrentes de gravarem o mesmo efeito. Leituras independentes continuam; síntese
+concorrentes de gravarem o mesmo efeito. Gestos aguardam contenção breve de
+atualização do painel por até um segundo; contenção persistente retorna conflito,
+sem repetir efeito. Leituras independentes continuam; síntese
 aguarda apenas suas dependências. `completed` exige todos os passos previstos e
 suas revisões resolvidas. Rejeitar resolve a revisão, mas não autoriza consumir o
 texto rejeitado. `stop_on_review=False` não contorna o gate.

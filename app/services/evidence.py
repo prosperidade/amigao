@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from time import monotonic, sleep
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -32,8 +33,15 @@ def lock_case(db: Session, tenant_id: int, process_id: int, *, wait: bool = True
     key = int(canonical_hash(["evidence", tenant_id, process_id])[:15], 16)
     function = "pg_advisory_xact_lock" if wait else "pg_try_advisory_xact_lock"
     acquired = db.execute(text(f"SELECT {function}(:key)"), {"key": key}).scalar()
-    if not wait and not acquired:
-        raise HTTPException(409, "Execução ou revisão concorrente; recarregue o estado")
+    if not wait:
+        # A panel refresh also captures evidence. Brief contention with that read
+        # must not reject a legitimate gesture; a running execution still gets 409.
+        deadline = monotonic() + 1.0
+        while not acquired and monotonic() < deadline:
+            sleep(.05)
+            acquired = db.execute(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": key}).scalar()
+        if not acquired:
+            raise HTTPException(409, "Execução ou revisão concorrente; recarregue o estado")
 
 
 def versions(db, tenant_id, process_id):

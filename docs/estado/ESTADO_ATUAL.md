@@ -9,20 +9,27 @@ consumo bruto. Duas skills existentes em v1.3.0; quatro métodos-base ausentes
 reportam capacidade insuficiente, sem inventar skills. Cinco agentes congelados
 também no worker e scheduler.
 
-Provas locais até este pulso: após corrigir as três falhas do recorte ampliado
-(expectativa antiga SIGEF→crítico e mapa de etapa apontando para intake congelado),
-a revalidação passou **40 testes** de contrato, integração, matriz, auditor,
-cadeias e retry. O último recorte passou **9 testes**, incluindo gate autenticado
-de navegador, consulta preservada e contexto de UF. O navegador exercitou rejeição,
-F5, correção, nova sessão, histórico, retomada e capacidade insuficiente na tela.
-Banco/autenticação reais; LLM controlado e Celery eager, sem prova de broker remoto.
-Build/lint frontend e regressão do resumo passaram. CI final ainda pendente; os
-cinco jobs de lint/frontend/portal/mobile/migrations já passaram na execução
-35262108074, com backend ainda em andamento. Banco DEV
+Provas locais: **25 testes** passaram no recorte de isolamento, matriz, ramo de
+etapa e RAG; **7 testes** passaram com o fallback de RAG exercitando erro SQL real.
+Outro recorte teve **63 passados e 2 falhas**: expectativa antiga de aviso do
+atendimento e disputa entre atualização do painel e gesto humano. Após correção,
+**9 testes passaram**, incluindo navegador e retomadas simultâneas. O navegador
+exercitou rejeição, F5, correção, nova sessão, histórico, retomada e capacidade
+insuficiente na tela. PostgreSQL/autenticação reais; LLM controlado e Celery eager,
+sem prova de broker remoto. Build/lint frontend e regressão do resumo passaram.
+
+As primeiras execuções completas expuseram regressões, corrigidas na branch:
+fixtures com commit agora têm schema isolado; entrada manual não exige intake;
+fonte única não comprova confronto; fallback de parâmetro opcional do RAG usa
+savepoint; gestos toleram contenção breve do polling, mantendo conflito de execução.
+**Gate de integração:** consultar os checks do SHA atual e o relatório final no
+[PR #172](https://github.com/prosperidade/amigao/pull/172). Não usar o resultado de
+um SHA anterior como aprovação do atual. Migrations passaram o ciclo completo
+upgrade/downgrade/upgrade em banco descartável nas execuções anteriores. Banco DEV
 `127.0.0.1:15432/amigao_db` estava indisponível; nenhuma migration aplicada nele.
 Não há prova com modelo real nem homologação dos documentos originais neste lote.
-Este pulso não declara REVIEW-001 fechado nem aptidão a merge; atualizar com o
-resultado dos gates no fechamento do PR.
+Este pulso não declara REVIEW-001 homologado em produção nem aptidão a merge
+independentemente dos checks e da autorização explícita do responsável.
 
 **Pulso 2026-09-10 (RECONCILIAÇÃO POR DECISÕES — ACEITE REAL PÓS-DEPLOY, PR #160
 MERGEADO, `3391402`):** merge autorizado pelo André ("pode mergear 160"). Deploy

@@ -165,9 +165,8 @@ def test_gate_nao_exige_atendimento_congelado(client: TestClient, db_session):
     assert not any("agentes desta etapa não foram executados" in a for a in gate["avisos"])
 
 
-def test_aviso_nao_e_bloqueio(client: TestClient, db_session):
-    """Radar-não-cancela: com as ações marcadas, o avanço é permitido mesmo sem
-    os agentes. O aviso informa; ele não tranca."""
+def test_entrada_manual_marcada_libera_sem_aviso_de_agente_congelado(client: TestClient, db_session):
+    """Com as ações marcadas, a entrada manual avança sem exigir atendimento."""
     tenant, user, process = _seed_e1(db_session)
     headers = _login(client, user.email, "senha123")
     cl = _checklist_e1(db_session, process)
@@ -182,7 +181,7 @@ def test_aviso_nao_e_bloqueio(client: TestClient, db_session):
 
     assert gate["can_advance"] is True          # não trava
     assert gate["agentes_executados"] is True   # nenhuma chain aplicável à E1
-    assert gate["avisos"]
+    assert not any("agentes" in aviso for aviso in gate["avisos"])
 
 
 # ---------------------------------------------------------------------------
