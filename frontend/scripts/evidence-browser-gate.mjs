@@ -47,10 +47,18 @@ try {
   await secondPage.getByLabel('Mostrar versões anteriores').check();
   await expect(secondPage.locator('article')).toHaveCount(3);
   await expect(secondPage.getByText('Substituída por correção', { exact: true }).first()).toBeVisible();
-  await secondPage.getByRole('button', { name: 'Retomar execução', exact: true }).first().click();
+  const [resumed] = await Promise.all([
+    secondPage.waitForResponse(r => r.url().endsWith('/resume') && r.request().method() === 'POST'),
+    secondPage.getByRole('button', { name: 'Retomar execução', exact: true }).first().click(),
+  ]);
+  expect(resumed.status()).toBe(200);
   await expect(secondPage.locator('article')).toHaveCount(3);
   await secondPage.locator('select').filter({ has: secondPage.locator('option[value=extrator]') }).first().selectOption('extrator');
-  await secondPage.getByRole('button', { name: 'Executar', exact: true }).click();
+  const [missing] = await Promise.all([
+    secondPage.waitForResponse(r => r.url().endsWith('/agents/run-async') && r.request().method() === 'POST'),
+    secondPage.getByRole('button', { name: 'Executar', exact: true }).click(),
+  ]);
+  expect(missing.status(), await missing.text()).toBe(202);
   await expect(secondPage.getByText('CAPACIDADE INSUFICIENTE', { exact: true })).toBeVisible({ timeout: 20000 });
   await secondContext.close();
   console.log('PASS: DOM reject, reload, correction, fresh login, version history, resume, missing capability');

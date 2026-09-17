@@ -97,10 +97,10 @@ def persist_object(db, tenant_id, process_id, obj: EvidenceObject, *, agent=None
             if ref == obj.knowledge.verification.source:
                 record = premise.source_record or {}
                 verification = obj.knowledge.verification
-                if (record.get("scope") != verification.scope or record.get("identifiers") != verification.identifiers
+                if (record.get("status") != "success" or record.get("scope") != verification.scope or record.get("identifiers") != verification.identifiers
                     or record.get("consulted_at") != verification.consulted_at.isoformat()):
                     raise HTTPException(422, "Escopo, identificadores e data não correspondem à consulta preservada")
-            if ref == obj.knowledge.verification.preserved_response and not (premise.source_record or {}).get("response"):
+            if ref == obj.knowledge.verification.preserved_response and (premise.source_record or {}).get("response") is None:
                 raise HTTPException(422, "Resposta da consulta não foi preservada")
     if obj.kind == "conclusao":
         from app.services.citation_evaluator import extract_citations, validate_citations

@@ -1,6 +1,6 @@
 # Estado Atual — Regente Ambiental
 
-**Pulso 2026-09-17 — Incremento 1 em validação no PR #172, sem merge/deploy.**
+**Pulso 2026-09-17 — Incremento 1 em validação no PR #172, sem merge/deploy de produção.**
 Plano v1.1 e mergulho publicados intactos em commits documentais isolados;
 triagem do #171 indexada e PR antigo fechado sem merge. Fundação adiciona
 contexto autorizado único, quatro objetos, revisão por versão, invalidação,
@@ -9,11 +9,16 @@ consumo bruto. Duas skills existentes em v1.3.0; quatro métodos-base ausentes
 reportam capacidade insuficiente, sem inventar skills. Cinco agentes congelados
 também no worker e scheduler.
 
-Provas locais até este pulso: 13 testes iniciais de contrato/percurso passaram;
-recorte ampliado de agentes teve **237 passados e 3 falhas**, classificadas e em
-correção (expectativa antiga SIGEF→crítico e mapa de etapa apontando para intake
-congelado). Build/lint frontend e regressão do resumo passaram. Gate de navegador,
-novos casos de retenção/ausência e CI final ainda pendentes. Banco DEV
+Provas locais até este pulso: após corrigir as três falhas do recorte ampliado
+(expectativa antiga SIGEF→crítico e mapa de etapa apontando para intake congelado),
+a revalidação passou **40 testes** de contrato, integração, matriz, auditor,
+cadeias e retry. O último recorte passou **9 testes**, incluindo gate autenticado
+de navegador, consulta preservada e contexto de UF. O navegador exercitou rejeição,
+F5, correção, nova sessão, histórico, retomada e capacidade insuficiente na tela.
+Banco/autenticação reais; LLM controlado e Celery eager, sem prova de broker remoto.
+Build/lint frontend e regressão do resumo passaram. CI final ainda pendente; os
+cinco jobs de lint/frontend/portal/mobile/migrations já passaram na execução
+35262108074, com backend ainda em andamento. Banco DEV
 `127.0.0.1:15432/amigao_db` estava indisponível; nenhuma migration aplicada nele.
 Não há prova com modelo real nem homologação dos documentos originais neste lote.
 Este pulso não declara REVIEW-001 fechado nem aptidão a merge; atualizar com o

@@ -57,3 +57,22 @@ ADR-069 está livre no checkout conferido. A faixa de dívidas 200–299 já con
 Após esta triagem, o PR #171 foi fechado sem merge conforme instrução do André. A consulta posterior confirmou `state=CLOSED`, `mergedAt=null` e o mesmo head `e30a8dd7296743d8ef545ce64962d957c9fd0a12`. A branch original foi preservada. Nenhuma contenção foi transportada nesta etapa documental.
 
 O push da branch documental foi bloqueado pela revisão automática de aprovação por exigir autorização explícita para publicar os documentos internos no remoto. Os commits são locais até essa autorização. Nenhum código, migration ou banco foi alterado nesta etapa.
+
+## Atualização após autorização e implementação — 2026-09-17
+
+A autorização explícita posterior do André permitiu publicar `9e02b98`,
+`a4a2633` e a indexação `a42a1cd` em `prosperidade/amigao`, branch
+`feat/contrato-evidencia`, PR novo #172. Portanto, o bloqueio descrito acima é
+histórico e foi superado; os documentos estão no PR, não foram mergeados na main.
+
+Em `ab6dbf8`, foram transportados seletivamente o renderer/teste de resumo e os
+princípios de denominação com fonte única e SIGEF não determinado. O commit cita
+`e30a8dd7` e conserva coautoria. A comparação nova usa identidades/versionamento e
+não aplica status ao staging. Resumo legado deriva da matriz quando ela existe;
+as conclusões novas são objetos revisáveis, não o resumo do job.
+
+UF/objetivo usam o construtor autorizado único; e-mail continua fora deste lote.
+As expectativas antigas SIGEF→crítico/orçamento, consumo bruto sem revisão e
+prioridade da UF do payload foram substituídas pelas exigências da v1.1 com provas
+dirigidas. Não houve cherry-pick nem merge integral do #171. ADR-069 e dívidas
+231–232 foram utilizados para registrar a fundação e suas fronteiras.

@@ -422,7 +422,7 @@ def test_verified_query_preserves_scope_and_is_invalidated_by_query_revision(com
     with factory() as db:
         query = EvidenceObject(id="query-test", version=1, kind="fonte_primaria", origin="consulta",
                                attributes={"literal": "Resposta controlada negativa no escopo"})
-        record = {"scope": "fixture-scope", "identifiers": ["fixture-id"], "consulted_at": now.isoformat(), "response": {"matches": []}}
+        record = {"status": "success", "scope": "fixture-scope", "identifiers": ["fixture-id"], "consulted_at": now.isoformat(), "response": []}
         persist_object(db, case["tenant"], case["case"], query, source_record=record)
         conclusion = EvidenceObject(id="verified-test", version=1, kind="conclusao", origin="diagnostico",
             statement="Ausência verificada no escopo sintético", conclusion_class="fato_documental",
