@@ -15,6 +15,8 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+from app.core.ai_trace import tracked_completion
+
 if TYPE_CHECKING:
     from datetime import datetime
 
@@ -346,7 +348,7 @@ def complete(
                 resp = None
                 for _attempt in range(_max_retries + 1):
                     try:
-                        resp = litellm.completion(
+                        resp = tracked_completion(litellm.completion,
                             model=_model,
                             messages=messages,
                             max_tokens=mt,

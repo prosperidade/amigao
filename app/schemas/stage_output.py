@@ -156,6 +156,20 @@ class SourceRef(_StrictModel):
     # chunk é conhecido); os demais tipos seguem None e a tela nada mostra.
     fonte_origem: str | None = Field(default=None, description="De onde veio o texto (Planalto, DOU, curadoria, agregador)")
     fonte_oficial: bool | None = Field(default=None, description="True = origem oficial (conferida ou de domínio oficial)")
+    evidence_id: str | None = None
+    evidence_version: int | None = Field(default=None, ge=1)
+    document_hash: str | None = None
+    page: int | None = Field(default=None, ge=1)
+    primary: bool = False
+
+    @model_validator(mode="after")
+    def primary_requires_identity(self):
+        if self.primary and (
+            self.tipo in {"auditor", "matriz", "sem_fonte"}
+            or self.sem_fonte or not self.evidence_id or not self.evidence_version
+        ):
+            raise ValueError("Fonte primária exige identidade/versionamento e não pode ser saída de agente")
+        return self
 
 
 class Afirmacao(_StrictModel):
@@ -166,6 +180,8 @@ class Afirmacao(_StrictModel):
     texto: str = Field(..., min_length=1)
     categoria: str | None = Field(default=None, description="passivo | acao | hipotese | lacuna")
     fontes: list[SourceRef] = Field(default_factory=list)
+    evidence_id: str | None = None
+    evidence_version: int | None = Field(default=None, ge=1)
 
 
 class CitationRef(_StrictModel):

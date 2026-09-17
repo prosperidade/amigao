@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Testes da migração do DiagnosticoAgent para DiagnosticoPreliminarContent —
 Sprint A2-diagnostico-A.
 
@@ -91,7 +92,7 @@ class TestPathIA:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(llm_payload)
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert result.success is True
         assert result.requires_review is True
@@ -143,7 +144,7 @@ class TestPathIA:
                 "acoes_remediacao": [],
                 "risco_estimado": "baixo",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         sources = result.data["sources"]
         types = [s["type"] for s in sources]
@@ -165,7 +166,7 @@ class TestPathIA:
                 "acoes_remediacao": [],
                 "risco_estimado": "medio",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         sources = result.data["sources"]
         legislation_refs = [s["ref"] for s in sources if s["type"] == "legislation"]
@@ -183,7 +184,7 @@ class TestPathIA:
                 "acoes_remediacao": [],
                 "risco_estimado": "extremo",  # fora do enum
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
         assert result.data["risco_estimado"] == "medio"
         assert result.data["riscos"][0]["severidade"] == "medio"
 
@@ -198,7 +199,7 @@ class TestPathIA:
                 "passivos_identificados": [],
                 "acoes_remediacao": [],
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
         assert result.success is True
         assert result.data["content"] != ""  # placeholder
         # mas dual-emit preserva o vazio original
@@ -222,7 +223,7 @@ class TestPathRulesBased:
                 return_value=process_data,
             ))
             stack.enter_context(patch("app.core.config.settings", mock_settings))
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
         assert result.success is True
         return result.data
 
@@ -358,7 +359,7 @@ class TestSerializability:
                 "risco_estimado": "alto",
                 "observacoes": "obs",
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         text = json.dumps(data)
         rebuilt = json.loads(text)
         assert rebuilt == data
@@ -377,7 +378,7 @@ class TestLacunasLogInfo:
                 "acoes_remediacao": [],
                 "risco_estimado": "baixo",
             })
-            agent.run()
+            agent._run_legacy_unconnected()
         msgs = [r.message for r in caplog.records if r.name == "app.agents.diagnostico"]
         assert any("lacunas_empty" in m for m in msgs)
 
@@ -415,7 +416,7 @@ class TestAutoInfracaoNoContexto:
                 "acoes_remediacao": [],
                 "risco_estimado": "baixo",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         afirmacoes = result.data["afirmacoes"]
         auto_af = [a for a in afirmacoes if "123456-D" in a["texto"]]
@@ -441,7 +442,7 @@ class TestAutoInfracaoNoContexto:
                 "situacao_geral": "ok", "passivos_identificados": [],
                 "acoes_remediacao": [], "risco_estimado": "baixo",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         auto_af = [a for a in result.data["afirmacoes"] if "123456-D" in a["texto"]][0]
         legis_fontes = [f for f in auto_af["fontes"] if "9.605" in (f.get("descricao") or "")]
@@ -467,7 +468,7 @@ class TestAutoInfracaoNoContexto:
                 "situacao_geral": "ok", "passivos_identificados": [],
                 "acoes_remediacao": [], "risco_estimado": "baixo",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         afirmacoes = result.data["afirmacoes"]
         divergencia = [a for a in afirmacoes if "titular atual" in a["texto"]]
@@ -491,6 +492,6 @@ class TestAutoInfracaoNoContexto:
                 "acoes_remediacao": [],
                 "risco_estimado": "baixo",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert all("auto de infra" not in a["texto"].lower() for a in result.data["afirmacoes"])

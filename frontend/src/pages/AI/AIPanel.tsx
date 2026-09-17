@@ -19,6 +19,7 @@ import type {
 } from '@/types/agent';
 import { AGENT_LABELS, CHAIN_LABELS, CONFIDENCE_STYLES, STATUS_LABELS, CONFIDENCE_LABELS } from '@/types/agent';
 import AgentResultRenderer from '@/components/AgentResultRenderer';
+import EvidencePanel from './EvidencePanel';
 
 interface AIPanelProps {
   processId: number;
@@ -124,6 +125,7 @@ export default function AIPanel({ processId, processDemandType, processDescripti
 
   return (
     <div className="space-y-5">
+      <EvidencePanel processId={processId} />
 
       {/* Executar agente individual */}
       <div className="rounded-xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5">

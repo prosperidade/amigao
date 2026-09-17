@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Ficha 01 / FASE 2 — o ExtratorAgent grava staging SEM alterar extracted_fields.
 
 Mocka o LLM legado (``extract_document_fields``) e o LLM estruturado
@@ -93,7 +94,7 @@ def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session):
         return_value=(dict(_STRUCTURED), None),
     ):
         agent = AgentRegistry.create("extrator", ctx)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
     # (1) extracted_fields permanece com o shape/conteúdo legado.
@@ -165,7 +166,7 @@ def test_planta_nao_grava_staging_cadastral_e_deixa_nota_visivel(seeded, db_sess
         return_value=({}, None),
     ):
         agent = AgentRegistry.create("extrator", ctx)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
 
@@ -237,7 +238,7 @@ def test_auto_infracao_nao_gera_staging_cadastral_e_grava_fato_no_job(seeded, db
         return_value=dict(_AUTO_INFRACAO_FATO),
     ):
         agent = AgentRegistry.create("extrator", ctx)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
     assert result.data.get("auto_infracao_fato", {}).get("numero_auto") == "123456-D"

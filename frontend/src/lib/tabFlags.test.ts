@@ -12,8 +12,8 @@ import {
 // sentiu falta dos botões de Proposta/Contrato no workspace. Segue gated por
 // etapa (min_stage_index=5) — visível de novo, mas só a partir do momento
 // comercial. As 5 abas do Sprint 6 seguem ocultas (vivas por baixo).
-const AbasVisiveis = ['diagnosis', 'documents', 'alertas', 'dossier', 'acoes', 'saidas', 'commercial'];
-const AbasOcultas = ['tasks', 'messages', 'ai', 'timeline', 'decisions'];
+const AbasVisiveis = ['diagnosis', 'documents', 'alertas', 'dossier', 'acoes', 'saidas', 'commercial', 'ai'];
+const AbasOcultas = ['tasks', 'messages', 'timeline', 'decisions'];
 
 describe('isTabVisible', () => {
   it('as 6 abas do MVP + a Comercial ficam visíveis', () => {
@@ -50,7 +50,7 @@ describe('resolveActiveTab (guarda de deep-link / estado herdado)', () => {
 
   it('aba OCULTA cai suave na Visão geral (redirect)', () => {
     expect(resolveActiveTab('tasks')).toBe(FALLBACK_TAB);
-    expect(resolveActiveTab('ai')).toBe(FALLBACK_TAB);
+    expect(resolveActiveTab('messages')).toBe(FALLBACK_TAB);
   });
 
   it('deep-link desconhecido/lixo → Visão geral (sem área em branco)', () => {
@@ -82,7 +82,7 @@ describe('resolveTabVisibility (merge default + override por-tenant/env)', () =>
   it('valores não-booleanos no override são ignorados', () => {
     const merged = resolveTabVisibility(TAB_VISIBILITY_DEFAULTS, { acoes: 'sim', ai: 1, tasks: null });
     expect(merged.acoes).toBe(true);  // default preservado
-    expect(merged.ai).toBe(false);
+    expect(merged.ai).toBe(true);
     expect(merged.tasks).toBe(false);
   });
 });

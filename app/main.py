@@ -23,6 +23,7 @@ from app.api.v1 import (
     decisions,
     documents,
     dossier,
+    evidence,
     intake,
     intake_feedback,
     knowledge,
@@ -189,6 +190,7 @@ app.include_router(messaging.router, prefix=f"{settings.API_V1_STR}/messaging", 
 app.include_router(proposals.router, prefix=f"{settings.API_V1_STR}/proposals", tags=["Propostas Comerciais"])
 app.include_router(contracts.router, prefix=f"{settings.API_V1_STR}/contracts", tags=["Contratos"])
 app.include_router(ai.router, prefix=f"{settings.API_V1_STR}", tags=["IA"])
+app.include_router(evidence.router, prefix=f"{settings.API_V1_STR}/evidence", tags=["Evidências e revisão"])
 app.include_router(agents.router, prefix=f"{settings.API_V1_STR}/agents", tags=["Agentes IA"])
 app.include_router(dashboard.router, prefix=f"{settings.API_V1_STR}/dashboard", tags=["Dashboard"])
 app.include_router(legislation.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Base Legislativa"])

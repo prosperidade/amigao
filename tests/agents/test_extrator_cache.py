@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Sprint -1 D — ExtratorAgent lê e cacheia Document.extracted_text."""
 
 from __future__ import annotations
@@ -95,7 +96,7 @@ def test_extrator_caches_text_when_passed_in_metadata(seeded, db_session):
         return_value=({"numero_matricula": "15234", "area_hectares": 432.5}, None),
     ):
         agent = AgentRegistry.create("extrator", ctx)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
 
@@ -126,7 +127,7 @@ def test_extrator_reads_extracted_text_when_metadata_omits_text(seeded, db_sessi
         return_value=({"numero_matricula": "15234"}, None),
     ) as mock_extract:
         agent = AgentRegistry.create("extrator", ctx)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
     # Confirma que extract_document_fields recebeu o texto cacheado
@@ -149,7 +150,7 @@ def test_extrator_raises_when_no_text_and_no_cache(seeded, db_session):
     )
 
     agent = AgentRegistry.create("extrator", ctx)
-    result = agent.run()
+    result = agent._run_legacy_unconnected()
 
     # Agent deve ter falhado de forma graceful (BaseAgent captura exceções)
     assert result.success is False
@@ -172,7 +173,7 @@ def test_extrator_skipped_reason_aponta_caminhos_acionaveis(seeded, db_session):
     )
 
     agent = AgentRegistry.create("extrator", ctx)
-    result = agent.run()
+    result = agent._run_legacy_unconnected()
 
     assert result.success is True  # skipped não é falha
     data = result.data or {}

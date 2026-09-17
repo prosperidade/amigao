@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, event, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -32,3 +32,10 @@ class AuditLog(Base):
 
     tenant = relationship("Tenant")
     user = relationship("User")
+
+
+@event.listens_for(AuditLog, "before_insert")
+def serialize_tenant_audit_insert(mapper, connection, target):
+    # Acquire before PostgreSQL assigns the id. Otherwise commit/lock order and
+    # id order can diverge and produce a broken chain under concurrent writers.
+    connection.execute(text("SELECT pg_advisory_xact_lock(69069, :tenant)"), {"tenant": target.tenant_id})

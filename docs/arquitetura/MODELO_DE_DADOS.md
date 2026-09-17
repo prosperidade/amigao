@@ -1,5 +1,24 @@
 # Modelo de Dados
 
+## Adição proposta — Incremento 1 / ADR-069 (2026-09-17)
+
+Migration aditiva `069ce001`, pai `c7e1a94d2f60`: `case_snapshots` (conteúdo/hash
+único por caso), `evidence_versions` (quatro tipos, identidade+versão+hash),
+`evidence_reviews` (eventos autorados com revisão otimista),
+`evidence_invalidations` (atualidade separada da aprovação) e `agent_executions`
+(snapshot, passos, dependências, cursor, revisão, idempotência).
+
+Todas têm tenant e processo. Fontes, jobs e decisões usam FKs RESTRICT para
+retenção. JSON tipado contém atributos variáveis; identidade/revisão/retomada
+são entidades persistentes. Staging legado é capturado sob demanda, com seus IDs
+e desconhecidos explícitos; nenhum job `completed` vira aprovação em backfill.
+`SourceRef`/`Afirmacao` apontam para as versões, sem escrita canônica duplicada.
+Detalhes e limites no [ADR-069](../adr/069-contrato-contexto-revisao.md).
+
+API e worker devem atualizar juntos após a migration; worker antigo não pode
+continuar a consumir dicts durante a transição. Drenar/parar consumidores antigos
+na implantação futura. Nenhuma implantação é realizada por este incremento.
+
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada migration que altere entidade-chave
 **Última revisão:** 2026-06-04 (Ficha 01 / FASE 1 — Matrícula + staging)

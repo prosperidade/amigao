@@ -147,7 +147,6 @@ class AuditorImovelAgent(BaseAgent):
         """
         from app.models.extracted_field_staging import (  # noqa: PLC0415
             ExtractedFieldStaging,
-            ExtractedFieldStatus,
         )
         from app.services.inconsistency_matrix import build_matrix  # noqa: PLC0415
 
@@ -162,13 +161,6 @@ class AuditorImovelAgent(BaseAgent):
                 .all()
             )
             result = build_matrix(rows)
-            for staging_row, novo_status in result.status_updates:
-                try:
-                    staging_row.status = ExtractedFieldStatus(novo_status)
-                except ValueError:
-                    continue
-            if result.status_updates:
-                self.ctx.session.flush()
             return result.matriz
         except Exception as exc:  # pragma: no cover - blindagem
             logger.warning("auditor_imovel: matriz de inconsistências falhou (ignorada): %s", exc)
@@ -395,5 +387,5 @@ class AuditorImovelAgent(BaseAgent):
             self.ctx.session.flush()
             by_key[key] = issue  # evita duplicar dentro da mesma execução
             ids.append(issue.id)
-        self.ctx.session.commit()
+        self.ctx.session.flush()
         return ids

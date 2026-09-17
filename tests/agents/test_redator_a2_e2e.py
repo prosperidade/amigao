@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Bateria E2E do RedatorAgent — Sprint A2-redator-C1.
 
 Pipeline completo (`run()` → AgentResult → JSON dump) por template
@@ -202,7 +203,7 @@ def test_redator_e2e_pipeline_per_template(template_name: str):
         _enter_default_patches(stack)
         complete = stack.enter_context(patch("app.agents.base.complete"))
         complete.return_value = _make_ai_response(scenario.llm_output)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     # 1. AgentResult OK
     assert result.success is True, f"falhou em template={scenario.template}: {result.error}"
@@ -266,7 +267,7 @@ def test_resposta_notificacao_falls_back_when_metadata_missing_in_pipeline():
         _enter_default_patches(stack)
         complete = stack.enter_context(patch("app.agents.base.complete"))
         complete.return_value = _make_ai_response("Texto livre sem padrão de prazo ou ato.")
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
     data = result.data

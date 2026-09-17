@@ -1,5 +1,12 @@
 # Arquitetura Geral
 
+**Fundação em validação — ADR-069 / PR #172:** `services/evidence.py` concentra
+contexto/revisão/invalidação; `services/connected_agents.py` concentra execução e
+dependências; `services/agent_capabilities.py` declara política/cobertura. API,
+worker e adaptadores de agentes compartilham esses serviços. Cinco tabelas
+aditivas guardam snapshots, versões, decisões, invalidações e execuções. A UI
+consulta as mesmas entidades. Nenhum motor de domínio novo foi acrescentado.
+
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada sprint que altere desenho
 **Última revisão:** 2026-05-15

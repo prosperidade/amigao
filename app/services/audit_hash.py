@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Optional
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
@@ -46,9 +47,14 @@ def get_last_hash_for_tenant(db: Session, tenant_id: int) -> Optional[str]:
 
 def stamp_audit_hash(db: Session, audit: AuditLog) -> None:
     """Calcula e atribui hash_sha256 e hash_previous ao registro."""
-    previous = get_last_hash_for_tenant(db, audit.tenant_id)
-    audit.hash_previous = previous
-    audit.hash_sha256 = compute_audit_hash(audit, previous)
+    # Lock before autoflush/id allocation, including the first row of a tenant.
+    # Every writer stamps through this function; lock lives until caller commit.
+    with db.no_autoflush:
+        db.execute(text("SELECT pg_advisory_xact_lock(69069, :tenant)"), {"tenant": audit.tenant_id})
+        previous = get_last_hash_for_tenant(db, audit.tenant_id)
+        audit.hash_previous = previous
+        audit.hash_sha256 = compute_audit_hash(audit, previous)
+    db.flush()
 
 
 # ---------------------------------------------------------------------------

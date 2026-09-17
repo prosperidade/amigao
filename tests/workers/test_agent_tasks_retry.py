@@ -14,7 +14,7 @@ NÃO chama retry (retorna failed); transitório chama.
 import pytest
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
-import app.agents as agents
+import app.services.connected_agents as connected
 from app.workers.agent_tasks import _DETERMINISTIC_ERRORS, run_agent, run_agent_chain
 
 
@@ -56,7 +56,7 @@ class _FakeAgent:
 
 def _patch_run_agent(monkeypatch, exc):
     calls = {"retry": 0}
-    monkeypatch.setattr(agents.AgentRegistry, "create", lambda name, ctx: _FakeAgent(exc))
+    monkeypatch.setattr(connected, "start_execution", _raise(exc))
 
     def _fake_retry(*_a, **_k):
         calls["retry"] += 1
@@ -111,7 +111,7 @@ def _patch_chain_retry(monkeypatch):
 
 def test_run_agent_chain_no_retry_on_deterministic(monkeypatch):
     monkeypatch.setattr(
-        agents.OrchestratorAgent, "execute_chain",
+        connected, "start_execution",
         _raise(ProgrammingError("INSERT ...", {}, _orig('relation "x" does not exist'))),
     )
     calls = _patch_chain_retry(monkeypatch)
@@ -123,7 +123,7 @@ def test_run_agent_chain_no_retry_on_deterministic(monkeypatch):
 
 def test_run_agent_chain_retries_on_transient(monkeypatch):
     monkeypatch.setattr(
-        agents.OrchestratorAgent, "execute_chain",
+        connected, "start_execution",
         _raise(OperationalError("SELECT 1", {}, _orig("deadlock detected"))),
     )
     calls = _patch_chain_retry(monkeypatch)

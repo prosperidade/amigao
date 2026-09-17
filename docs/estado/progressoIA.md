@@ -1,5 +1,19 @@
 # Progresso IA — Amigao do Meio Ambiente
 
+## 2026-09-17 — Incremento 1, contrato e revisão (PR #172 em validação)
+
+Documentos-base `9e02b98`, triagem `a4a2633`, indexação `a42a1cd` publicados;
+#171 fechado sem merge. O código passa a usar execução persistida por caso,
+revisão otimista, versões imutáveis e gate no envelope seguinte. Correção fica
+pendente; nova evidência invalida dependentes sem retrocesso automático. UI
+permite consultar fontes/histórico e solicitar retorno à coleta/reavaliação.
+
+O recorte de regressão distinguiu mudança exigida pela v1.1 de defeito: o consumo
+de `chain_data` sem revisão deixou de ser comportamento aceito; algoritmos legados
+continuam com asserts isolados, sem serem apresentados como prova da porta nova.
+Transporte de teste é Celery eager; persistência/autenticação são reais e LLM
+controlado. Estado e pendências de gates em `ESTADO_ATUAL`; arquitetura no ADR-069.
+
 Registro cronologico de tudo que envolve IA no sistema: agentes, prompts, RAG, gateway, custos, avaliacao.
 
 ---

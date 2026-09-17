@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Integração do citation_evaluator no RedatorAgent — Sprint A1 Tarefa B."""
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ def test_no_legal_context_skips_validation():
         _enter_default_patches(stack)
         mock_complete = stack.enter_context(patch("app.agents.base.complete"))
         mock_complete.return_value = _make_ai_response(output)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
     assert "citation_issues" not in result.data
@@ -74,7 +75,7 @@ def test_all_citations_valid_marks_review_with_no_issues():
         _enter_default_patches(stack)
         mock_complete = stack.enter_context(patch("app.agents.base.complete"))
         mock_complete.return_value = _make_ai_response(output)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
     assert result.requires_review is True
@@ -94,7 +95,7 @@ def test_invalid_citation_populates_issues_and_keeps_review_true():
         _enter_default_patches(stack)
         mock_complete = stack.enter_context(patch("app.agents.base.complete"))
         mock_complete.return_value = _make_ai_response(output)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.requires_review is True
     assert result.data["citation_valid"] is False
@@ -113,7 +114,7 @@ def test_no_citations_in_output_returns_no_issues():
         _enter_default_patches(stack)
         mock_complete = stack.enter_context(patch("app.agents.base.complete"))
         mock_complete.return_value = _make_ai_response(output)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     # legal_data tem contexto, mas output não cita nada → skip silencioso
     assert "citation_issues" not in result.data
@@ -131,7 +132,7 @@ def test_normas_estaduais_count_as_legitimate_context():
         _enter_default_patches(stack)
         mock_complete = stack.enter_context(patch("app.agents.base.complete"))
         mock_complete.return_value = _make_ai_response(output)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.data["citation_valid"] is True
     assert result.data["citation_total"] == 2

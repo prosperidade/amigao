@@ -1,5 +1,24 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 2026-09-17 — Incremento 1 em validação no PR #172, sem merge/deploy.**
+Plano v1.1 e mergulho publicados intactos em commits documentais isolados;
+triagem do #171 indexada e PR antigo fechado sem merge. Fundação adiciona
+contexto autorizado único, quatro objetos, revisão por versão, invalidação,
+manifesto e retomada. ADR-069 e adendo ADR-011 documentam a substituição do
+consumo bruto. Duas skills existentes em v1.3.0; quatro métodos-base ausentes
+reportam capacidade insuficiente, sem inventar skills. Cinco agentes congelados
+também no worker e scheduler.
+
+Provas locais até este pulso: 13 testes iniciais de contrato/percurso passaram;
+recorte ampliado de agentes teve **237 passados e 3 falhas**, classificadas e em
+correção (expectativa antiga SIGEF→crítico e mapa de etapa apontando para intake
+congelado). Build/lint frontend e regressão do resumo passaram. Gate de navegador,
+novos casos de retenção/ausência e CI final ainda pendentes. Banco DEV
+`127.0.0.1:15432/amigao_db` estava indisponível; nenhuma migration aplicada nele.
+Não há prova com modelo real nem homologação dos documentos originais neste lote.
+Este pulso não declara REVIEW-001 fechado nem aptidão a merge; atualizar com o
+resultado dos gates no fechamento do PR.
+
 **Pulso 2026-09-10 (RECONCILIAÇÃO POR DECISÕES — ACEITE REAL PÓS-DEPLOY, PR #160
 MERGEADO, `3391402`):** merge autorizado pelo André ("pode mergear 160"). Deploy
 confirmado por prova comportamental (`/health` 200; rota nova sem auth → 401,

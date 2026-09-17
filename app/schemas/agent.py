@@ -15,6 +15,7 @@ class AgentRunRequest(BaseModel):
     model_config = ConfigDict(strict=False)
 
     agent_name: str = Field(..., description="Nome do agente (ex: atendimento, diagnostico)")
+    idempotency_key: str | None = Field(default=None, max_length=120)
     process_id: Optional[int] = Field(None, description="ID do processo (quando aplicavel)")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Dados especificos do agente")
 
@@ -41,6 +42,7 @@ class ChainRunRequest(BaseModel):
     model_config = ConfigDict(strict=False)
 
     chain_name: str = Field(..., description="Nome da chain (ex: diagnostico_completo, intake)")
+    idempotency_key: str | None = Field(default=None, max_length=120)
     process_id: Optional[int] = Field(None, description="ID do processo")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Dados iniciais da chain")
     stop_on_review: bool = Field(True, description="Parar chain quando agente requer revisao humana")

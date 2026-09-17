@@ -1,5 +1,25 @@
 # Testing
 
+## Gate Incremento 1 (ADR-069)
+
+Recorte: `python -m pytest tests/e2e/test_evidence_execution.py
+tests/services/test_evidence_contract.py tests/agents/test_orchestrator_chain.py
+tests/workers/test_agent_tasks_retry.py -q --no-cov`. Usa PostgreSQL descartável
+do fixture do projeto, autenticação real e resposta externa do LLM controlada.
+
+Navegador: construir `frontend` com `npm ci` / `npm run build`, instalar Chromium
+com `npx playwright install chromium` e executar
+`EVIDENCE_BROWSER_GATE=1 python -m pytest tests/e2e/test_evidence_browser.py -q --no-cov`
+(PowerShell: `$env:EVIDENCE_BROWSER_GATE='1'` antes do comando). A CI prepara o
+build/Chromium e exige esse gate dentro da suíte. O teste sobe servidor HTTP
+loopback, usa login da UI e sessões PostgreSQL com commit; Celery é eager.
+Não usa conta, documento ou chave de provider real.
+
+Testes antigos em `tests/agents` que chamam `_run_legacy_unconnected` preservam
+algoritmos/projeções históricas isolados; não contam como execução do contrato
+novo. CI completa e migrations continuam obrigatórias; recorte local não as
+substitui. Sem modelo real, não há conclusão sobre qualidade técnica do LLM.
+
 **Documento:** Operação · estratégia de testes
 **Estado:** vivo
 **Última revisão:** 2026-05-17

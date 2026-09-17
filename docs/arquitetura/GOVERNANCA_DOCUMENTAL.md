@@ -1,5 +1,9 @@
 # Governança documental do Regente
 
+Índice atualizado em 2026-09-17: [ADR-069](../adr/069-contrato-contexto-revisao.md)
+é proposta em validação no PR #172; ADR-011 recebeu adendo sem reescrita histórica.
+Plano v1.1, mergulho e triagem do #171 permanecem indexados em `docs/README.md`.
+
 Padrão de organização da documentação do projeto. Existe porque documento acumulado sem rumo
 vira ruído: ninguém sabe o que é fonte de verdade, o que já cumpriu função, o que pode descartar.
 Este é o mapa — e é norma, não sugestão.

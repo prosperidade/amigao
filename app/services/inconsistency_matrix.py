@@ -918,12 +918,18 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
                 _destino("divergente", subtipo="transcricao"), subtipo="transcricao"))
             for r in denom_rows:
                 status_updates.append((r, "divergente_transcricao"))
-        else:
+        elif len({r.document_id for r in denom_rows if r.document_id is not None}) > 1:
             linhas.append(MatrixRow(
                 "denominacao_imovel", "Denominação do imóvel", denom_fontes,
                 MatrixSituacao.consistente.value, "Denominação confere.", _destino("consistente")))
             for r in denom_rows:
                 status_updates.append((r, "consistente"))
+        else:
+            linhas.append(MatrixRow(
+                "denominacao_imovel", "Denominação do imóvel", denom_fontes,
+                MatrixSituacao.atencao.value,
+                "Fonte única ou independência não demonstrada: denominação ainda sem confronto documental.",
+                _destino("atencao")))
 
     # --- codigo_incra_sncr ----------------------------------------------
     incra_fontes: dict[str, Any] = {}
@@ -956,12 +962,13 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
     if not tem_contexto_imovel:
         pass
     elif not cert_real:
-        fontes_sig = {"sigef": (sigef_codigo or (sigef_area if sigef_area else "ausente")),
+        fontes_sig = {"sigef": (sigef_codigo or (sigef_area if sigef_area else "não determinado")),
                       "rat": "pendência geo" if rat_geo_pendencia else "—"}
         linhas.append(MatrixRow(
             "sigef_georreferenciamento", "Georreferenciamento (SIGEF)", fontes_sig,
-            MatrixSituacao.critico.value, "verificar DCR/SIGEF/SNCR (certificação ausente/pendente)",
-            _destino("critico")))
+            MatrixSituacao.atencao.value,
+            "Certificação não determinada. Verificar fonte, cobertura e aplicabilidade ao ato antes de concluir obrigação, risco ou serviço.",
+            _destino("atencao")))
     elif rat_geo_pendencia:
         # certificação existe (código+status reais) mas o órgão pede apresentação
         linhas.append(MatrixRow(

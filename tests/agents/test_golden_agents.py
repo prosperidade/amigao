@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Golden tests dos agentes LLM — fix/llm-consistencia (2026-06-07).
 
 Cinto de segurança da esteira: respostas LLM GRAVADAS do caso real (Fazenda São
@@ -102,7 +103,7 @@ class TestGoldenFormatoNovo:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _ai_response(json.dumps(payload, ensure_ascii=False))
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert result.success is True
         assert result.requires_review is True
@@ -164,7 +165,7 @@ class TestGoldenTruncamento:
                 ),
                 last_error="finish_reason=length model=gpt-4.1",
             )
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert result.success is False
         assert "truncada" in result.error.lower()
@@ -183,7 +184,7 @@ class TestGoldenFonteInexistente:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _ai_response(json.dumps(payload, ensure_ascii=False))
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert result.success is True
         afirmacoes = result.data["afirmacoes"]

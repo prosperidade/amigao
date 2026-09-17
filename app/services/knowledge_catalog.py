@@ -434,12 +434,8 @@ def search(
 
     _probes = int(getattr(settings, "RAG_IVFFLAT_PROBES", 10) or 0)
     if _probes > 0:
-        try:
-            # Inteiro interpolado (não bind param): `SET LOCAL` não aceita
-            # parâmetro. O valor vem de settings e é forçado a int acima.
-            session.execute(text(f"SET LOCAL ivfflat.probes = {_probes:d}"))
-        except Exception as exc:  # noqa: BLE001 — banco sem pgvector (testes)
-            logger.debug("knowledge.search: ivfflat.probes não aplicável (%s)", exc)
+        # Failure must propagate, not poison the session and masquerade as no evidence.
+        session.execute(text(f"SET LOCAL ivfflat.probes = {_probes:d}"))
 
     rows = session.execute(sql, params).all()
 

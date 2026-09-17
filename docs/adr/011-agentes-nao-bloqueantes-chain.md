@@ -1,5 +1,12 @@
 # ADR-011 — Agentes não-bloqueantes na chain
 
+> **Adendo de 2026-09-17 — REVIEW-001 / ADR-069:** a regra histórica abaixo é
+> preservada para rastreabilidade, mas deixa de autorizar o consumo de conclusão
+> não revisada. Leituras e cálculos independentes continuam; síntese dependente
+> usa somente conclusões aprovadas e atuais no envelope versionado. Rejeição
+> resolve a revisão sem liberar seu conteúdo. `stop_on_review=False` não remove
+> esse gate. Ver [ADR-069](069-contrato-contexto-revisao.md).
+
 - **Status:** Aceita
 - **Data:** 2026-05-24
 - **Implementada em:** Onda B, commit `6b25602` (`feat/onda-bc-pipeline-ativacao`)
