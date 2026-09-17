@@ -1,286 +1,63 @@
-"""Testes do OrchestratorAgent — Onda B Fase 2.
+"""ADR-011 addendum / ADR-069 replaces raw chain_data and blanket non-blocking review.
 
-Cobre:
-- Composição correta da chain `diagnostico_completo` pós-Fase 2
-  (`extrator → auditor_imovel → legislacao → diagnostico`).
-- Mecanismo `NON_BLOCKING_REVIEW_AGENTS`: agentes que sinalizam
-  `requires_review=True` mas não interrompem a chain. Sem isso, qualquer chain
-  incluindo o `auditor_imovel` quebraria antes do `diagnostico` rodar.
-- Preservação do comportamento bloqueante para agentes que NÃO estão na lista
-  (regressão: peças formais como `redator` continuam parando a chain).
+Real committed PostgreSQL and login exercise dependency scheduling; only the LLM
+response is controlled. Legacy non-blocking assertions were incompatible with the
+approved v1.1 plan, rather than an infrastructure failure.
 """
-
-from __future__ import annotations
-
-from unittest.mock import MagicMock, patch
-
-from app.agents.base import AgentContext, AgentRegistry, AgentResult, BaseAgent
-from app.agents.orchestrator import (
-    CHAINS,
-    NON_BLOCKING_FAILURE_BY_CHAIN,
-    NON_BLOCKING_REVIEW_AGENTS,
-    NON_BLOCKING_REVIEW_BY_CHAIN,
-    OrchestratorAgent,
-)
-
-
-def _ctx() -> AgentContext:
-    return AgentContext(
-        tenant_id=1, user_id=1, process_id=42,
-        session=MagicMock(), metadata={}, chain_data={},
-    )
-
-
-def _ok(name: str, *, requires_review: bool = False, data: dict | None = None) -> AgentResult:
-    return AgentResult(
-        success=True,
-        data=data or {"agent": name},
-        confidence="high",
-        ai_job_id=None,
-        suggestions=[],
-        requires_review=requires_review,
-        agent_name=name,
-        duration_ms=10,
-    )
-
-
-def _fail(name: str, *, error: str = "boom") -> AgentResult:
-    return AgentResult(
-        success=False,
-        data={},
-        confidence="low",
-        ai_job_id=None,
-        suggestions=[],
-        requires_review=False,
-        agent_name=name,
-        duration_ms=10,
-        error=error,
-    )
-
-
-class TestChainDiagnosticoCompletoComposicao:
-    """Composição da chain diagnostico_completo pós-Onda B."""
-
-    def test_chain_segue_ordem_extrator_auditor_legislacao_diagnostico(self):
-        assert CHAINS["diagnostico_completo"] == [
-            "extrator",
-            "auditor_imovel",
-            "legislacao",
-            "diagnostico",
-        ]
-
-    def test_auditor_imovel_esta_entre_extrator_e_legislacao(self):
-        """Posição garante que auditor recebe documentos extraídos e que
-        legislacao/diagnostico podem consumir findings via chain_data."""
-        chain = CHAINS["diagnostico_completo"]
-        i_extrator = chain.index("extrator")
-        i_auditor = chain.index("auditor_imovel")
-        i_legislacao = chain.index("legislacao")
-        i_diagnostico = chain.index("diagnostico")
-        assert i_extrator < i_auditor < i_legislacao < i_diagnostico
-
-
-class TestNonBlockingReviewAgents:
-    """Mecanismo `requires_review=True` não-bloqueante."""
-
-    def test_auditor_imovel_esta_marcado_como_non_blocking(self):
-        assert "auditor_imovel" in NON_BLOCKING_REVIEW_AGENTS
-        assert "legislacao" in NON_BLOCKING_REVIEW_BY_CHAIN["diagnostico_completo"]
-        assert "legislacao" in NON_BLOCKING_FAILURE_BY_CHAIN["diagnostico_completo"]
-
-    def test_chain_continua_quando_agente_non_blocking_pede_review(self):
-        """Simula auditor pedindo review; chain segue pra legislacao e diagnostico."""
-        ctx = _ctx()
-        executed: list[str] = []
-
-        class FakeAgent(BaseAgent):
-            name: str = ""
-
-            def __init__(self, ctx, name):
-                super().__init__(ctx)
-                self.name = name
-
-            def validate_preconditions(self):
-                pass
-
-            def execute(self):
-                return {"agent": self.name}
-
-            def _fallback_prompts(self):
-                return {}
-
-            def run(self) -> AgentResult:
-                executed.append(self.name)
-                # auditor_imovel pede review; outros não
-                review = self.name == "auditor_imovel"
-                return _ok(self.name, requires_review=review)
-
-        def fake_create(name, ctx):
-            return FakeAgent(ctx, name)
-
-        with patch.object(AgentRegistry, "create", side_effect=fake_create):
-            results = OrchestratorAgent.execute_chain("diagnostico_completo", ctx)
-
-        # Todos os 4 agentes da chain rodaram
-        assert executed == ["extrator", "auditor_imovel", "legislacao", "diagnostico"]
-        assert len(results) == 4
-        # Auditor pediu review mas a chain continuou
-        assert results[1].requires_review is True
-        # Resultados subsequentes não pediram review
-        assert results[2].requires_review is False
-        assert results[3].requires_review is False
-
-    def test_chain_continua_quando_legislacao_pede_review_no_diagnostico_completo(self):
-        """Legislação é insumo intermediário nesta chain; diagnóstico ainda roda."""
-        ctx = _ctx()
-        executed: list[str] = []
-
-        class FakeAgent(BaseAgent):
-            name: str = ""
-
-            def __init__(self, ctx, name):
-                super().__init__(ctx)
-                self.name = name
-
-            def validate_preconditions(self):
-                pass
-
-            def execute(self):
-                return {"agent": self.name}
-
-            def _fallback_prompts(self):
-                return {}
-
-            def run(self) -> AgentResult:
-                executed.append(self.name)
-                # legislacao pede review (não está em NON_BLOCKING) → chain deve parar
-                review = self.name == "legislacao"
-                return _ok(self.name, requires_review=review)
-
-        def fake_create(name, ctx):
-            return FakeAgent(ctx, name)
-
-        with patch.object(AgentRegistry, "create", side_effect=fake_create):
-            results = OrchestratorAgent.execute_chain("diagnostico_completo", ctx)
-
-        assert executed == ["extrator", "auditor_imovel", "legislacao", "diagnostico"]
-        assert len(results) == 4
-        assert results[2].requires_review is True
-
-    def test_chain_continua_quando_legislacao_falha_no_diagnostico_completo(self):
-        """Timeout/provider da legislação não pode impedir a entrega do diagnóstico."""
-        ctx = _ctx()
-        executed: list[str] = []
-
-        class FakeAgent(BaseAgent):
-            name: str = ""
-
-            def __init__(self, ctx, name):
-                super().__init__(ctx)
-                self.name = name
-
-            def validate_preconditions(self):
-                pass
-
-            def execute(self):
-                return {"agent": self.name}
-
-            def _fallback_prompts(self):
-                return {}
-
-            def run(self) -> AgentResult:
-                executed.append(self.name)
-                if self.name == "legislacao":
-                    return _fail(self.name, error="Timeout")
-                snapshot = dict(self.ctx.chain_data)
-                return _ok(self.name, data={"agent": self.name, "saw": list(snapshot.keys())})
-
-        def fake_create(name, ctx):
-            return FakeAgent(ctx, name)
-
-        with patch.object(AgentRegistry, "create", side_effect=fake_create):
-            results = OrchestratorAgent.execute_chain("diagnostico_completo", ctx)
-
-        assert executed == ["extrator", "auditor_imovel", "legislacao", "diagnostico"]
-        assert len(results) == 4
-        assert results[2].success is False
-        assert ctx.chain_data["legislacao"] == {
-            "success": False,
-            "error": "Timeout",
-            "agent_name": "legislacao",
-        }
-        assert "legislacao" in results[3].data["saw"]
-
-    def test_chain_para_quando_agente_blocking_pede_review(self):
-        """Regressão: agentes fora da exceção continuam parando sua chain."""
-        ctx = _ctx()
-        executed: list[str] = []
-
-        class FakeAgent(BaseAgent):
-            name: str = ""
-
-            def __init__(self, ctx, name):
-                super().__init__(ctx)
-                self.name = name
-
-            def validate_preconditions(self):
-                pass
-
-            def execute(self):
-                return {"agent": self.name}
-
-            def _fallback_prompts(self):
-                return {}
-
-            def run(self) -> AgentResult:
-                executed.append(self.name)
-                return _ok(self.name, requires_review=True)
-
-        def fake_create(name, ctx):
-            return FakeAgent(ctx, name)
-
-        with patch.object(AgentRegistry, "create", side_effect=fake_create):
-            results = OrchestratorAgent.execute_chain("gerar_proposta", ctx)
-
-        assert executed == ["diagnostico"]
-        assert len(results) == 1
-
-    def test_chain_data_acumula_output_de_agentes_anteriores(self):
-        """Confirma que chain_data["auditor_imovel"] fica disponível para os
-        próximos agentes — base do contrato downstream (legislacao/diagnostico
-        podem consumir findings via chain_data)."""
-        ctx = _ctx()
-
-        class FakeAgent(BaseAgent):
-            name: str = ""
-
-            def __init__(self, ctx, name):
-                super().__init__(ctx)
-                self.name = name
-
-            def validate_preconditions(self):
-                pass
-
-            def execute(self):
-                return {"agent": self.name}
-
-            def _fallback_prompts(self):
-                return {}
-
-            def run(self) -> AgentResult:
-                snapshot = dict(self.ctx.chain_data)
-                review = self.name == "auditor_imovel"
-                data = {"agent": self.name, "saw": list(snapshot.keys())}
-                return _ok(self.name, requires_review=review, data=data)
-
-        def fake_create(name, ctx):
-            return FakeAgent(ctx, name)
-
-        with patch.object(AgentRegistry, "create", side_effect=fake_create):
-            results = OrchestratorAgent.execute_chain("diagnostico_completo", ctx)
-
-        # legislacao deve ter visto chain_data com extrator + auditor_imovel
-        assert "extrator" in results[2].data["saw"]
-        assert "auditor_imovel" in results[2].data["saw"]
-        # diagnostico vê todos os 3 anteriores
-        assert set(results[3].data["saw"]) == {"extrator", "auditor_imovel", "legislacao"}
+import json
+
+from fastapi.testclient import TestClient
+from tests.e2e.test_evidence_execution import committed_case as case_fixture
+from tests.e2e.test_evidence_execution import login
+
+from app.core.ai_gateway import AIResponse
+from app.main import app
+from app.services.connected_agents import CHAINS
+
+committed_case = case_fixture
+
+def test_chain_keeps_independent_reading_and_stops_dependent_synthesis(committed_case):
+    _, case = committed_case
+    assert CHAINS["diagnostico_completo"] == ["extrator", "auditor_imovel", "legislacao", "diagnostico"]
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        response = client.post("/api/v1/agents/chain", headers=headers,
+            json={"chain_name": "diagnostico_completo", "process_id": case["case"], "stop_on_review": False})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        statuses = {s["agent"]: s["status"] for s in result["steps"]}
+        assert statuses == {"extrator": "capacidade_insuficiente", "auditor_imovel": "completed",
+                            "legislacao": "capacidade_insuficiente", "diagnostico": "awaiting_review"}
+        assert result["completed"] is False
+
+
+def test_review_gate_cannot_be_bypassed_with_stop_false_or_chain_data(committed_case, monkeypatch):
+    _, case = committed_case
+    calls = []
+    def respond(prompt, **kwargs):
+        envelope = json.loads(prompt)
+        calls.append(envelope)
+        source = envelope["sources"][0]
+        obj = {"id": "proposal", "version": 1, "kind": "conclusao", "origin": "diagnostico",
+               "statement": "Controlled hypothesis", "conclusion_class": "hipotese",
+               "premises": [{"id": source["id"], "version": source["version"]}]}
+        return AIResponse(content=json.dumps({"objects": [obj]}), model_used="controlled", provider="test",
+                          tokens_in=1, tokens_out=1, cost_usd=0, duration_ms=1)
+    monkeypatch.setattr("app.core.ai_gateway.complete", respond)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        body = {"chain_name": "gerar_proposta", "process_id": case["case"], "stop_on_review": False,
+                "metadata": {"chain_data": {"diagnostico": "UNREVIEWED BYPASS TEXT"}}}
+        result = client.post("/api/v1/agents/chain", headers=headers, json=body).json()
+        assert result["status"] == "awaiting_review"
+        assert [s["status"] for s in result["steps"]] == ["completed", "awaiting_review", "awaiting_review"]
+        assert "UNREVIEWED BYPASS TEXT" not in json.dumps(calls)
+        ref = result["steps"][0]["outputs"][0]
+        review = client.post(f"/api/v1/evidence/cases/{case['case']}/objects/{ref['id']}/review", headers=headers,
+            json={"expected_version": 1, "expected_revision": 0, "action": "rejeitar", "justification": "Unsupported"})
+        assert review.status_code == 200, review.text
+        resumed = client.post(f"/api/v1/evidence/executions/{result['id']}/resume", headers=headers,
+                             json={"expected_revision": result["revision"]}).json()
+        assert resumed["steps"][1]["status"] == "capacidade_insuficiente"
+        assert resumed["completed"] is False
+        assert len(calls) == 1  # completed independent step is never repeated

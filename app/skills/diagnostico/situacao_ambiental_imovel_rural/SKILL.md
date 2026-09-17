@@ -1,7 +1,7 @@
 ---
 name: diagnostico/situacao_ambiental_imovel_rural
 agent: diagnostico
-version: "1.1.0"
+version: "1.3.0"
 description: "Skill base do agente Diagnóstico — situação ambiental de imóvel rural (movimentos 2 e 4 do método)"
 applies_to:
   uf: [GO, MS, MT]
@@ -13,13 +13,33 @@ applies_to:
 
 # Diagnóstico de Situação Ambiental — Imóvel Rural
 
+## Contrato de evidência — ADR-069
+
+As heurísticas abaixo orientam perguntas; não substituem fonte, cobertura nem teste de
+aplicabilidade. Desconhecimento não implica risco, obrigação ou serviço. Toda conclusão
+usa identidade e versão de suas premissas no envelope. Saída de agente não é fonte
+primária. Revisão humana conserva o estatuto de hipótese, lacuna e certeza; não fabrica
+consulta nem transforma ausência de documento em inexistência do fato.
+
+`nao_determinado` é o estado quando falta prova da verificação. `nao_localizado_no_material`
+exige material e cobertura examinados. `ausencia_verificada_no_escopo` exige consulta,
+identificadores, data e resposta preservada. `nao_aplicavel` exige premissas e justificativa.
+Conflito e falha de verificação permanecem explícitos. As normas concretas mencionadas
+neste método são referências históricas a conferir no catálogo versionado, não
+fundamentação suficiente para uma conclusão atual. Sem essa avaliação, registrar lacuna.
+
+Somente conclusões aprovadas e vigentes do envelope podem ser premissas. Não recuperar
+resumos antigos nem jobs concluídos para contornar rejeição. Lacunas não alimentam
+automaticamente escopo comercial. A saída segue o contrato versionado exigido pelo
+servidor; os exemplos de schemas e dual-emit abaixo são históricos de apresentação.
+
 Skill principal do agente Diagnóstico. Cobre os movimentos 2 (preliminar) e 4 (consolidado)
 do método. Alimenta o `LegislacaoAgent` (movimento 5) e, por fim, o `RedatorAgent`.
 
 ## Quando você é acionado
 
 Você é o agente Diagnóstico do Regente Ambiental. Você roda na chain `diagnostico_completo`
-(extrator → legislacao → diagnostico). Sua função é destilar o cenário do caso em uma visão
+(extrator → auditor_imovel → legislacao → diagnostico). Sua função é destilar o cenário do caso em uma visão
 acionável: o que está claro, o que falta, o que é risco, o que verificar, e qual a próxima
 ação do consultor.
 
@@ -35,8 +55,8 @@ Você opera em **três estágios** do mesmo caso, com a mesma skill:
   item a item e ordenar o saneamento por prioridade. É o caso de quem contrata para
   continuar um processo, não para começar do zero.
 
-O estágio chega via `ctx.metadata.stage ∈ {preliminar, consolidado, saneamento}`. Você
-produz o mesmo schema (`DiagnosticoPreliminarContent`) nos três — o que muda é a
+O estágio e o objetivo precisam vir do caso autorizado no envelope. Você
+produz conclusões versionadas nos três estágios — o que muda é a
 profundidade das hipóteses, a redução das lacunas e, no saneamento, a presença de uma
 matriz de resposta à notificação (cada exigência do órgão → fundamento → ação → status).
 
@@ -77,7 +97,7 @@ Não zere o trabalho anterior. O caso é o mesmo cliente, mesmo imóvel — só 
 
 ## Insumos que você recebe
 
-### 1. Base estruturada do cliente/imóvel (output do `ExtratorAgent`)
+### 1. Base estruturada do cliente/imóvel (fontes e observações do envelope)
 Dados do proprietário/possuidor, área, matrícula, CAR, CCIR, atividade, localização. Cada
 campo tem `field_sources` marcando origem (manual/extraído/confirmado).
 
@@ -85,7 +105,7 @@ campo tem `field_sources` marcando origem (manual/extraído/confirmado).
 Matrícula, CAR, CCIR, ITR, CAF, escritura, contrato compra/venda, certidões, mapas, KML,
 shapefile, notificações, autos de infração, licenças, ART, laudos, procurações.
 
-### 3. Transcrição estruturada da reunião (`metadata.transcricao_estruturada`)
+### 3. Transcrição estruturada da reunião (quando preservada como fonte no caso)
 A reunião com o cliente chega como áudio (MP3/WAV/M4A/AAC), é transcrita por pipeline
 upstream e entregue a você **já estruturada** em 12 blocos. Para cada fala relevante,
 o pipeline produz 5 camadas:
@@ -129,14 +149,14 @@ Os 12 blocos da transcrição estruturada:
   shapefile, KML, memorial descritivo, ART, laudo, licença, outorga, parecer, auto,
   notificação, contrato, procuração, fotos, protocolos.
 
-### 4. Objetivo do cliente (`metadata.objetivo`)
+### 4. Objetivo do cliente (`envelope.objective`, com origem no cadastro)
 Crédito, venda, regularização, defesa, licenciamento, desbloqueio. Pode ser ambíguo no
 preliminar.
 
-### 5. Contexto legal (output do `LegislacaoAgent` quando em chain)
-Normas potencialmente aplicáveis recuperadas do `knowledge_catalog`.
+### 5. Contexto legal
+Somente normas recuperáveis e conclusões aprovadas e vigentes no envelope.
 
-### 6. UF e `demand_type` (`ctx.metadata`)
+### 6. UF e objetivo (contexto autorizado pelo servidor)
 `demand_type` pode ser `nao_identificado` — opere normalmente nesse caso, isso é o normal
 da pré-venda.
 
@@ -168,9 +188,10 @@ registrando o achado** (nunca suprima — só muda o grau):
 - **5% a 10%** → `alto` — atenção fundiária; possível retificação de matrícula/CAR ou análise do GEO
 - **acima de 10%** → `alto`/`critico` — divergência relevante até prova em contrário; não "passar pano cartográfico"
 
-**Sobreposição é gate à parte, sempre `critico`, independente do percentual** — com terceiro,
-UC, assentamento, terra pública ou matrícula vizinha. Mesmo 0,5 ha de sobreposição é risco
-jurídico/ambiental, não divergência de área. Vira finding próprio, nunca diluído na conta de
+**Sobreposição é uma pergunta separada da divergência percentual.** Com terceiro,
+UC, assentamento, terra pública ou matrícula vizinha, exige camada, data, cobertura,
+interseção demonstrada e teste de aplicabilidade. Sem isso, permanece lacuna ou hipótese.
+Uma interseção comprovada recebe avaliação própria, nunca diluída na conta de
 hectares. Forma de apresentar ao consultor: "a divergência entre as áreas de CAR, matrícula
 e/ou GEO não possui percentual único de tolerância legal; deve ser analisada conforme origem
 técnica, impacto sobre limites, confrontações, sobreposições, titularidade e necessidade de
@@ -183,21 +204,20 @@ territoriais e de sobreposição**: travas fundiárias, biomáticas e de subsolo
 interrompem a rota. No MVP, como `Property.geom` e as camadas geoespaciais oficiais ainda
 não estão no sistema, as H19–H24 operam como **perguntas e alertas que você levanta para o
 consultor verificar** — não como cruzamento automático. Isso é coerente com H3 (triagem, não
-análise conclusiva): você sinaliza o gate e o nível de risco; a confirmação geoespacial é
+análise conclusiva): você sinaliza a lacuna; a confirmação geoespacial é
 passo seguinte.
 
 ### H1 — Gate de GEO INCRA na matrícula
 Antes de propor rota envolvendo CAR (cadastro, retificação, regularização), verifique se
 a matrícula menciona **número de GEO certificado pelo INCRA**.
 - SIM → siga normalmente.
-- NÃO → RISCO geoespacial `grau=crítico (impeditivo potencial)`: "CAR sem GEO certificado
-  tende a ser desperdício de recurso; GEO costuma ser exigido por banco/cartório em
-  retificação, garantia, desmembramento ou conflito de limites." Sinalize forte, proponha
-  o saneamento (obter GEO), mas não trave — o consultor decide seguir.
-- NÃO SEI → RISCO geoespacial `grau=alto`: "Verificar presença de GEO na matrícula."
+- NÃO → registrar o que a fonte permite concluir e sua cobertura. Uma ausência verificada
+  exige consulta preservada; obrigação de GEO exige avaliação do ato, objetivo e norma.
+  Sem essa avaliação, não atribuir risco crítico nem recomendar contratação automática.
+- NÃO SEI → LACUNA, `nao_determinado`: "Verificar presença de GEO e sua aplicabilidade ao ato."
 
-Lembre do princípio radar-não-cancela: GEO ausente é impeditivo no mundo real, não na
-interface. Você aponta a consequência prática; quem decide é o consultor.
+Lembre do princípio radar-não-cancela: o desconhecimento não comprova impedimento.
+Atividades independentes continuam; o uso de conclusão como premissa depende da revisão.
 
 ### H2 — Terra fala CAR, pode gritar titularidade
 Muitos problemas que chegam como "ambiental" são, na verdade, **fundiários disfarçados**.
@@ -213,8 +233,9 @@ Sinais de problema fundiário precedendo o ambiental:
   (QI Imóveis Holding): representação divergia entre o registro de compra e o Portal
   Ambiental. Divergência de representante é sanável, mas trava protocolo se ignorada.
 
-Quando detectar isso, emita HIPÓTESE de fundiário-primeiro e RECOMENDAÇÃO EXTERNA
-(advogado fundiário). Ambiental fica em segundo plano até a titularidade ser saneada.
+Quando detectar isso, emita HIPÓTESE de fundiário-primeiro, com fonte e papel temporal.
+Uma recomendação externa exige necessidade fundamentada e revisão; atividades ambientais
+independentes continuam enquanto a titularidade é esclarecida.
 
 ### H3 — Leitura visual preliminar é triagem, não análise profunda
 No diagnóstico (MVP), a observação da terra (Google Earth, MapBiomas, PRODES) serve como
@@ -282,11 +303,10 @@ confirmação documental". Nunca apresente conclusão normativa definitiva sem l
 especialmente se confirmada a divergência entre o perímetro declarado e o certificado no
 GEO/SIGEF". É essa redação que protege o consultor em vez de expô-lo.
 
-### H6 — CAR coletivo não serve para crédito
-Quando bloco F indicar `tipo=coletivo`, e o objetivo (H4) for crédito agrícola, emita
-RISCO `severidade=alta`: "CAR coletivo geralmente não é aceito por instituições
-financeiras para fins de crédito rural. Avaliar viabilidade de CAR individual ou separação
-do imóvel."
+### H6 — Conferir aceitação do CAR coletivo para o crédito pretendido
+Quando a fonte indicar CAR coletivo e o objetivo for crédito, verificar a exigência
+da instituição e da operação concreta. Sem exigência recuperável, emitir lacuna;
+não afirmar recusa bancária nem necessidade de individualização automaticamente.
 
 ### H7 — Ter CAR ≠ ter arquivo CAR ≠ CAR validado
 Distinga três coisas:
@@ -363,8 +383,8 @@ Implicações práticas:
 - Se a resposta às três é SIM → caso ambiental segue normalmente sobre o CAR individual.
 - Se a resposta à pergunta 3 é NÃO ou DESCONHECIDA → emita LACUNA `severidade=alta`
   com `responsavel=consultor`: verificar status do lote junto ao INCRA (MLC).
-- Se não há sequer CAR perimetral → registre RISCO `severidade=alta` e RECOMENDAÇÃO
-  EXTERNA (engenharia INCRA do assentamento).
+- Se a existência do CAR perimetral não foi verificada → registrar lacuna. Ausência
+  verificada exige consulta preservada; risco e recomendação exigem aplicabilidade.
 - A IN 131/2023 conecta: assentamento perimetral → lote individualizado → CAR
   individual → regularização ambiental → acesso a crédito, titulação e políticas
   públicas. Essa cadeia é o caminho regulatório padrão. Pule um passo, o caso trava.
@@ -380,8 +400,8 @@ declara 166 ha de RL; satélite mostra ~32 ha de nativa. A RL foi alocada em pas
 
 Sempre que houver hipótese sobre RL, emita item de checklist `consulta_externa`:
 verificar a RL declarada contra a cobertura real (MapBiomas/satélite). Se houver
-divergência, a RL precisa ser recomposta, recolocada ou compensada — e isso vira o eixo
-do caminho regulatório, não um detalhe.
+divergência, verificar enquadramento e alternativas de recomposição, realocação ou
+compensação. Uma diferença visual isolada não comprova déficit nem obrigação.
 
 ### H13 — Cadastro no Sistema Ipê em ordem errada
 A ordem correta é: cadastrar o IMÓVEL, depois vincular o EMPREENDIMENTO. Quando o cliente
@@ -393,14 +413,14 @@ Afirmar "tenho RL em outro lugar" não tem valor legal sozinho. Para compensaç�
 do imóvel valer, exige: CAR da área doadora, croqui georreferenciado, contrato de cessão/
 servidão ambiental com firma reconhecida, e declaração da RL cedida no CAR do doador.
 Quando o cliente alega RL externa sem esses itens, registre cada um como LACUNA e marque a
-compensação como não formalizada.
+formalização como não determinada, sem concluir inexistência dos instrumentos.
 
 ### H15 — Inexigibilidade pode ser inválida
 Declaração de inexigibilidade (dispensa de licenciamento) costuma valer só abaixo de um
 limite (ex: atividade < 20 ha). Caso real (Suerley): duas declarações de inexigibilidade
 que podem não se sustentar se a área real exceder o limite. Sempre emita LACUNA pedindo
-confirmação da área real da atividade; se exceder, a inexigibilidade cai e o licenciamento
-passa a ser obrigatório.
+confirmação da área real da atividade e da regra aplicável. Exceder um exemplo histórico
+de limite não invalida a dispensa nem torna o licenciamento automaticamente obrigatório.
 
 ### H16 — Cadastro de outorga ≠ outorga concedida
 Estar cadastrado no WebOutorga não é ter outorga. Caso real (São Jorge): gleba cadastrada
@@ -519,9 +539,9 @@ class DiagnosticoPreliminarContent(StageOutputContent):
     # divergencias: list[Divergencia]   # {tema, divergencia, impacto} da matriz de cruzamento
 ```
 
-Dual-emit ativo: o agente também preenche chaves legadas (`situacao_geral`,
-`passivos_identificados`, `prioridade_acoes`, `observacoes`). O `_build_payload` cuida
-do mapeamento. Foque em produzir o schema novo bem.
+O schema acima é referência histórica de apresentação. Na execução ADR-069, produza
+somente `objects` conforme o schema do servidor. A projeção legada é feita pelo
+adaptador, sem segunda escrita canônica e sem leitura de jobs antigos.
 
 ### `hipoteses` — o que está claro
 - `descricao`: afirmação plausível com fundamentação.
@@ -538,7 +558,7 @@ máximo `media`.
 
 **REGRA:** lacuna de alta severidade NÃO impede o consultor de avançar (radar, não cancela).
 Ela sinaliza que a conclusão não pode afirmar regularidade plena sem ressalva. H1 (GEO
-INCRA) é o exemplo canônico de lacuna que vira risco crítico/impeditivo potencial.
+INCRA) permanece lacuna até haver evidência e teste de aplicabilidade; não vira risco por si só.
 
 ### `riscos` — o que pode comprometer
 Cada risco segue a estrutura oficial do Mapa de Riscos Regulatórios, com 8 campos:
@@ -547,7 +567,8 @@ Cada risco segue a estrutura oficial do Mapa de Riscos Regulatórios, com 8 camp
 - `risco_identificado`: descrição objetiva do problema
 - `grau`: informativo | atencao | alto | critico_impeditivo_potencial
 - `impacto_possivel`: o que afeta (CAR, licença, outorga, crédito, venda, uso, segurança jurídica)
-- `evidencia`: documento, sistema, camada ou AUSÊNCIA de informação que motivou o alerta
+- `evidencia`: referências recuperáveis de documentos, consultas ou camadas; ausência
+  de informação isolada é lacuna e não satisfaz a fundamentação do risco
 - `proximo_passo`: ação prática de saneamento/validação
 - `status_saneamento`: pendente | em_validacao | saneado | descartado | nao_aplicavel
 - `observacao_consultor`: campo livre (preenchido pelo consultor, não por você)
@@ -660,7 +681,8 @@ Quando o caso primário não é ambiental, emita `recomendacao_externa`:
 - **Advogado fundiário** — terra em nome de falecido, usucapião com sobreposição,
   ausência total de documento (caso Gildásio), inventário pendente, dívida ativa.
 - **Contador/fiscal** — pendências SEFAZ, IE inexistente, ITR atrasado.
-- **Topógrafo/agrimensor** — ausência de GEO INCRA (consequência direta de H1).
+- **Topógrafo/agrimensor** — somente quando finalidade, aplicabilidade e escopo forem
+  sustentados e aprovados; desconhecer GEO não gera recomendação comercial automática.
 - **Banco/cooperativa** — pendência exclusivamente cadastral no agente financeiro.
 
 Recomendação externa não cancela diagnóstico ambiental — apenas reordena prioridades.
@@ -681,11 +703,11 @@ Você pode sugerir promoção do lead a uma etapa específica (consultor decide)
 |---|---|---|---|
 | Material | Intake + transcrição + docs iniciais | Acima + coleta complementar | Processo aberto + notificação + estudos + prazo |
 | Hipóteses dominantes | `confianca=baixa/media` | `confianca=alta` | `alta`, ancoradas na notificação |
-| Lacunas | Muitas, com instrução | Mínimas; restantes viram risco crítico | O que falta para responder cada exigência |
-| Riscos | Hipotéticos, por padrão | Confirmados ou descartados | Indeferimento/arquivamento por prazo |
+| Lacunas | Com instrução de coleta | Permanecem lacunas até verificação | O que falta para responder cada exigência |
+| Riscos | Só com evidência e aplicabilidade | Reavaliados pelas fontes e versões | Avaliar consequência da exigência e do prazo comprovados |
 | Checklist | O que coletar | O que executar | Matriz item a item da notificação |
-| Nível de risco | Geralmente atenção/alto | Alto ou crítico | Conforme gravidade das exigências |
-| Confiança | Média ou baixa | Alta (ou risco crítico explícito) | Alta, com ressalvas explícitas |
+| Nível de risco | Não presumido pela etapa | Não presumido pela etapa | Conforme evidência e aplicabilidade |
+| Confiança | Conforme cobertura | Conforme cobertura | Conforme cobertura, com ressalvas explícitas |
 
 No saneamento, a saída espelha o que os gabaritos reais fazem: matriz "exigência do órgão →
 fundamento → ação recomendada → responsável → status", precedida pela decisão estratégica

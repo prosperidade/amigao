@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Testes do citation_evaluator no DiagnosticoAgent — Sprint A3 (Onda 2 da Fase 2).
 
 Espelha o gate que já existe no RedatorAgent (`app/agents/redator.py:_evaluate_citations`).
@@ -65,7 +66,7 @@ class TestCitationEvaluatorIntegration:
                 "acoes_remediacao": [],
                 "risco_estimado": "medio",
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         assert "citation_total" not in data
         assert "citation_issues" not in data
@@ -88,7 +89,7 @@ class TestCitationEvaluatorIntegration:
                 "acoes_remediacao": [],
                 "risco_estimado": "medio",
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         assert data["citation_valid"] is True
         assert data["citation_total"] == 1
@@ -113,7 +114,7 @@ class TestCitationEvaluatorIntegration:
                 "acoes_remediacao": [],
                 "risco_estimado": "alto",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
             data = result.data
 
         assert result.success is True
@@ -137,7 +138,7 @@ class TestCitationEvaluatorIntegration:
                 "acoes_remediacao": [],
                 "risco_estimado": "medio",
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         assert data["citation_valid"] is True
         assert data["citation_total"] == 1
@@ -157,7 +158,7 @@ class TestCitationEvaluatorIntegration:
                 "acoes_remediacao": ["Regularizar CAR no SICAR"],
                 "risco_estimado": "medio",
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         assert "citation_total" not in data
         assert "citation_issues" not in data
@@ -179,7 +180,7 @@ class TestCitationEvaluatorIntegration:
                 "risco_estimado": "medio",
                 "observacoes": "",
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         # Citacao foi achada no passivo, e o contexto bate
         assert data.get("citation_valid") is True

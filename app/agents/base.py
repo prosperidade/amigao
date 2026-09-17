@@ -132,7 +132,21 @@ class BaseAgent(ABC):
     # --- Template method ---------------------------------------------------
 
     def run(self) -> AgentResult:
+        from app.services.agent_capabilities import ACTIVE_AGENTS
+        from app.services.connected_agents import legacy_step_result, resume_execution, start_execution
+        if self.name not in ACTIVE_AGENTS:
+            return AgentResult(False, {"status": "agente_desativado"}, "low", None, [], False, self.name, 0,
+                               "AGENTE DESATIVADO")
+        execution = start_execution(self.ctx.session, self.ctx.tenant_id, self.ctx.user_id,
+                                    self.ctx.process_id, self.name)
+        execution = resume_execution(self.ctx.session, self.ctx.tenant_id, self.ctx.user_id, execution.id)
+        step = execution.steps[0]
+        return AgentResult(**legacy_step_result(self.ctx.session, execution, step))
+
+    def _run_legacy_unconnected(self) -> AgentResult:
         """
+        Historical algorithm/projection harness, not an authorized execution entry.
+        Production API, workers, orchestrator and BaseAgent.run use ADR-069.
         Ciclo de vida completo do agente:
         1. Verifica limite de custo do tenant
         2. Valida pre-condicoes

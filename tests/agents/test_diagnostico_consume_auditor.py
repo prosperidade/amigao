@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Testes do consumo de ``chain_data["auditor_imovel"]`` pelo DiagnosticoAgent.
 
 PROMPT_4 Onda A — Diagnóstico passa a consumir os findings do auditor como
@@ -145,7 +146,7 @@ class TestSemAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         assert data["divergencias"] == []
         # Só há o risco do LLM, no severity legado
@@ -163,7 +164,7 @@ class TestSemAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         assert data["divergencias"] == []
         # findings_raw=None → idem
         agent2 = DiagnosticoAgent(_ctx(chain_data={"auditor_imovel": {"findings_raw": None}}))
@@ -171,7 +172,7 @@ class TestSemAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data2 = agent2.run().data
+            data2 = agent2._run_legacy_unconnected().data
         assert data2["divergencias"] == []
 
 
@@ -189,7 +190,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         # 1 divergência
         assert len(data["divergencias"]) == 1
@@ -222,7 +223,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         risco_auditor = data["riscos"][0]
         # NÃO colapsa em "alto" — grau crítico preservado integralmente
@@ -242,7 +243,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         risco_auditor = data["riscos"][0]
         assert risco_auditor["grau"] == "informativo"
@@ -264,7 +265,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         # Pior é "alto" entre os 3
         assert data["nivel_risco_geral"] == "alto"
 
@@ -280,7 +281,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         assert data["nivel_risco_geral"] == "critico"
 
     def test_riscos_do_auditor_vem_antes_do_risco_do_llm(self):
@@ -299,7 +300,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         riscos = data["riscos"]
         assert len(riscos) == 3
@@ -325,7 +326,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         categorias = [r["categoria"] for r in data["riscos"][:4]]
         assert categorias == [
@@ -354,7 +355,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         # Divergência ainda emitida (radar não cancela)
         assert len(data["divergencias"]) == 1
@@ -377,7 +378,7 @@ class TestComAuditor:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(_default_llm_payload())
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         risco_auditor = data["riscos"][0]
         # JSON serializado, com keys sort_keys=True (determinístico)
@@ -415,7 +416,7 @@ class TestPathRulesBased:
                 new_callable=PropertyMock,
                 return_value=False,
             ))
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         # Mesmo sem LLM, divergencia e risco do auditor aparecem
         assert len(data["divergencias"]) == 1
@@ -447,7 +448,7 @@ class TestSemDuplicacao:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(llm)
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         # Exatamente 1 divergencia — a do auditor; LLM não duplica
         assert len(data["divergencias"]) == 1

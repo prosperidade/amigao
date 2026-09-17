@@ -45,8 +45,7 @@ export const TAB_VISIBILITY_DEFAULTS: Record<string, boolean> = {
   messages: false,   // Comunicação
   timeline: false,   // Histórico — o sistema SEGUE registrando (audit log intacto)
   decisions: false,  // Decisões
-  ai: false,         // IA — aba quebrada (não dispara a cadeia); ocultar resolve
-                     //   a dor de hoje, o conserto é dívida.
+  ai: true,          // ADR-069: revisão versionada e retomada; catálogo limita a seis agentes.
 };
 
 /**

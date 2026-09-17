@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Bateria E2E paramétrica do DiagnosticoAgent — Sprint A2-diagnostico-C1.
 
 Pipeline completo (`run()` → AgentResult → JSON dump round-trip) por
@@ -191,7 +192,7 @@ def test_diagnostico_e2e_pipeline(scenario: Scenario):
         if scenario.ai_on:
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(scenario.llm_payload or {})
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True, f"falhou em {scenario.name}: {result.error}"
     assert result.requires_review is True
@@ -248,7 +249,7 @@ def test_rules_based_uses_manual_rules_engine_source():
 
     with ExitStack() as stack:
         _enter_default_patches(stack, process_data=scenario.process_data, ai_on=False)
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     sources = result.data["sources"]
     manual_sources = [s for s in sources if s["type"] == "manual"]
@@ -273,7 +274,7 @@ def test_no_evidence_fallback_logs_warning(caplog):
             "acoes_remediacao": [],
             "risco_estimado": "medio",
         })
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     msgs = [r.message for r in caplog.records if r.name == "app.agents.diagnostico"]
     assert any("sources_fallback" in m for m in msgs)
@@ -299,7 +300,7 @@ def test_metadata_carries_prioridades_and_observacoes():
             "observacoes": "obs_text",
             "risco_estimado": "baixo",
         })
-        data = agent.run().data
+        data = agent._run_legacy_unconnected().data
 
     # Tarefa A Q3: metadata recebe prioridade_acoes + observacoes
     assert data["metadata"]["prioridade_acoes"] == ["acao_A_primeiro"]

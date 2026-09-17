@@ -64,6 +64,7 @@ coverage/
 
 # Test coverage artifacts
 .coverage
+artifacts/gate-incremento1.json
 
 # Sprint 0 — outputs gerados pelos scripts de ingestão (text preview é grande)
 ops/legislation_preview/

@@ -1,5 +1,13 @@
 # Governança de IA
 
+**Política proposta — ADR-069 / PR #172:** seis agentes ativos (extrator, auditor,
+legislação, diagnóstico, redator, orçamento); os outros cinco congelados também
+na fila/beat. Duas skills reais reconciliadas, sem novas skills. Método obrigatório
+ausente é capacidade insuficiente. Saída automatizada propõe; não sobrescreve
+aceite. Apenas conclusões aprovadas e vigentes podem fundamentar síntese. Manifesto
+guarda contexto, prompts, skills e tentativas sem credenciais. Histórico legado
+não é autorização de consumo. Consulte o ADR para cobertura e limites atuais.
+
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada nova política, agente, ou provider
 **Última revisão:** 2026-05-15

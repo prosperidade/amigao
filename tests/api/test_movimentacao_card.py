@@ -67,6 +67,16 @@ def _checklists(db_session, process_id: int) -> list[MacroetapaChecklist]:
     )
 
 
+def _complete_manual_e1(client, process, headers, db_session):
+    """ADR-069: atendimento congelado; o consultor marca a entrada manualmente."""
+    checklist = next(c for c in _checklists(db_session, process.id)
+                     if c.macroetapa == "entrada_demanda")
+    for action in checklist.actions:
+        response = client.patch(f"/api/v1/processes/{process.id}/macroetapa/entrada_demanda/actions",
+            json={"action_id": action["id"], "completed": True}, headers=headers)
+        assert response.status_code == 200, response.text
+
+
 # ---------------------------------------------------------------------------
 # 1. Inicialização do checklist (nascimento do caso)
 # ---------------------------------------------------------------------------
@@ -109,7 +119,7 @@ def test_legacy_process_backfilled_on_status_read(client: TestClient, db_session
 # 2. Elo evento→card: rodar agentes marca o checklist → pronto para avançar
 # ---------------------------------------------------------------------------
 
-def test_mark_stage_agents_done_completes_checklist_and_unlocks_gate(client: TestClient, db_session):
+def test_manual_entry_completes_checklist_and_unlocks_gate(client: TestClient, db_session):
     tenant, _, process = _seed(db_session)
     initialize_macroetapa_checklists(db_session, process, tenant.id)
     db_session.commit()
@@ -119,10 +129,10 @@ def test_mark_stage_agents_done_completes_checklist_and_unlocks_gate(client: Tes
     before = client.get(f"/api/v1/processes/{process.id}/can-advance", headers=headers).json()
     assert before["can_advance"] is False
 
-    # Simula a conclusão dos agentes da etapa (o que o worker faz no sucesso).
-    cl = mark_stage_agents_done(db_session, process, tenant_id=tenant.id, chain_name="intake")
-    db_session.commit()
-    assert cl is not None
+    # Mensagem antiga de intake não pode marcar a etapa; o gesto é humano.
+    assert mark_stage_agents_done(db_session, process, tenant_id=tenant.id, chain_name="intake") is None
+    _complete_manual_e1(client, process, headers, db_session)
+    cl = next(c for c in _checklists(db_session, process.id) if c.macroetapa == "entrada_demanda")
     assert cl.completion_pct == 100.0
     assert all(a["completed"] for a in cl.actions)
 
@@ -139,7 +149,7 @@ def test_mark_stage_agents_done_ignores_foreign_chain(db_session):
     initialize_macroetapa_checklists(db_session, process, tenant.id)
     db_session.commit()
 
-    # entrada_demanda → chain "intake"; "analise_regulatoria" é de outra etapa.
+    # entrada_demanda é manual; nenhuma chain pode marcar a etapa.
     res = mark_stage_agents_done(db_session, process, tenant_id=tenant.id, chain_name="analise_regulatoria")
     assert res is None
     e1 = next(c for c in _checklists(db_session, process.id)
@@ -152,7 +162,7 @@ def test_mark_stage_agents_done_ignores_foreign_chain(db_session):
 # ---------------------------------------------------------------------------
 
 def test_run_stage_agents_dispatches_current_chain(client: TestClient, db_session, monkeypatch):
-    tenant, _, process = _seed(db_session)
+    tenant, _, process = _seed(db_session, macroetapa="diagnostico_preliminar")
     initialize_macroetapa_checklists(db_session, process, tenant.id)
     db_session.commit()
     headers = _login(client, "consultor@example.com", "senha123")
@@ -165,11 +175,11 @@ def test_run_stage_agents_dispatches_current_chain(client: TestClient, db_sessio
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["dispatched"] is True
-    assert body["chain_name"] == "intake"
-    assert body["macroetapa"] == "entrada_demanda"
+    assert body["chain_name"] == "diagnostico_completo"
+    assert body["macroetapa"] == "diagnostico_preliminar"
 
     fake_delay.assert_called_once()
-    assert fake_delay.call_args.kwargs["chain_name"] == "intake"
+    assert fake_delay.call_args.kwargs["chain_name"] == "diagnostico_completo"
     assert fake_delay.call_args.kwargs["process_id"] == process.id
 
     # Audit do disparo registrado.
@@ -181,10 +191,8 @@ def test_run_stage_agents_dispatches_current_chain(client: TestClient, db_sessio
     assert len(audits) == 1
 
 
-def test_run_stage_agents_passa_description_da_demanda(client: TestClient, db_session, monkeypatch):
-    """Forense caso Isis: a chain 'intake' (atendimento) exige 'description' em
-    metadata — o endpoint deriva do processo e passa, senão o agente falhava
-    silenciosamente ("Campo 'description' obrigatorio")."""
+def test_run_stage_agents_nao_dispara_intake_mesmo_com_descricao(client: TestClient, db_session, monkeypatch):
+    """ADR-069: texto disponível não reativa atendimento congelado."""
     tenant, _, process = _seed(db_session)
     process.description = "Cliente quer regularizar CAR da Fazenda São Jorge"
     initialize_macroetapa_checklists(db_session, process, tenant.id)
@@ -197,10 +205,9 @@ def test_run_stage_agents_passa_description_da_demanda(client: TestClient, db_se
 
     r = client.post(f"/api/v1/processes/{process.id}/macroetapa/run-agents", headers=headers)
     assert r.status_code == 200, r.text
-    assert r.json()["dispatched"] is True
-    md = fake_delay.call_args.kwargs["metadata"]
-    assert md["description"] == "Cliente quer regularizar CAR da Fazenda São Jorge"
-    assert md["macroetapa"] == "entrada_demanda"
+    assert r.json()["dispatched"] is False
+    assert r.json()["chain_name"] is None
+    fake_delay.assert_not_called()
 
 
 def test_run_stage_agents_intake_sem_descricao_explica_em_vez_de_falhar(
@@ -233,8 +240,8 @@ def test_run_stage_agents_intake_sem_descricao_explica_em_vez_de_falhar(
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["dispatched"] is False
-    assert body["chain_name"] == "intake"
-    assert "descrição" in body["detail"].lower()
+    assert body["chain_name"] is None
+    assert "manualmente" in body["detail"].lower()
     fake_delay.assert_not_called()
 
 
@@ -260,12 +267,12 @@ def test_run_stage_agents_manual_stage_not_dispatched(client: TestClient, db_ses
 # 4. Avanço confirmado pelo consultor — card anda (E1→E2), sem disparar chain
 # ---------------------------------------------------------------------------
 
-def test_card_advances_e1_to_e2_after_agents(client: TestClient, db_session, monkeypatch):
+def test_card_advances_e1_to_e2_after_manual_actions(client: TestClient, db_session, monkeypatch):
     tenant, _, process = _seed(db_session)
     initialize_macroetapa_checklists(db_session, process, tenant.id)
-    mark_stage_agents_done(db_session, process, tenant_id=tenant.id, chain_name="intake")
     db_session.commit()
     headers = _login(client, "consultor@example.com", "senha123")
+    _complete_manual_e1(client, process, headers, db_session)
 
     # De-inversão (ADR-017): avançar NÃO dispara a chain de agentes.
     import app.workers.agent_tasks as at

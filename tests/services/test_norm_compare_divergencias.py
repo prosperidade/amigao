@@ -63,16 +63,16 @@ def test_grupo_municipio_diferente_de_verdade_conflita():
 
 # ── build_matrix (denominação) ────────────────────────────────────────────
 
-def _mrow(source_doc_type, field_name, value, *, matricula_hint=None):
+def _mrow(source_doc_type, field_name, value, *, matricula_hint=None, document_id=None):
     return SimpleNamespace(source_doc_type=source_doc_type, field_name=field_name,
                            field_value={"value": value}, matricula_hint=matricula_hint,
-                           status="pendente")
+                           status="pendente", document_id=document_id)
 
 
 def test_matriz_denominacao_grafia_equivalente_fica_consistente():
     rows = [
-        _mrow("matricula", "denominacao", "Fazenda São Jorge", matricula_hint="4698"),
-        _mrow("ccir", "denominacao", "FAZENDA SAO JORGE"),
+        _mrow("matricula", "denominacao", "Fazenda São Jorge", matricula_hint="4698", document_id=1),
+        _mrow("ccir", "denominacao", "FAZENDA SAO JORGE", document_id=2),
     ]
     linhas = {ln["item"]: ln for ln in build_matrix(rows).matriz["linhas"]}
     assert linhas["denominacao_imovel"]["situacao"] == "consistente"

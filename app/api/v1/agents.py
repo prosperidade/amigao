@@ -15,24 +15,17 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.agents import AgentContext, AgentRegistry, OrchestratorAgent
-from app.agents.orchestrator import CHAINS
+from app.agents import AgentContext, AgentRegistry
 from app.api.deps import get_current_internal_user, get_db
-from app.core.config import settings
-from app.models.process import Process
 from app.models.user import User
 from app.schemas.agent import (
     AgentInfo,
     AgentRunRequest,
-    AgentRunResponse,
-    AsyncTaskResponse,
     ChainRunRequest,
-    ChainRunResponse,
 )
-from app.services.tenant_guard import exigir_do_tenant
 
 DbDep = Annotated[Session, Depends(get_db)]
 UserDep = Annotated[User, Depends(get_current_internal_user)]
@@ -41,215 +34,66 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _derive_uf(db: Session, tenant_id: int, process_id: int | None) -> str | None:
-    """Fase 0 (gap-analysis Ficha 07, item 7 / dívida 44b): a skill jurídica de
-    UF (`applies_to: {uf: [...]}`) só é injetada no diagnóstico quando
-    `ctx.metadata["uf"]` está presente — sem isso, o diagnóstico roda SEM a
-    skill base, silenciosamente. Deriva do `Property.state` do processo, já
-    que nenhum caller externo confiável seta esse metadado hoje."""
-    if process_id is None:
-        return None
-    from app.models.process import Process  # noqa: PLC0415
-    from app.models.property import Property  # noqa: PLC0415
+def _build_context(db, user, process_id, metadata):
+    from app.services.evidence import build_envelope
+    envelope = build_envelope(db, user.tenant_id, user.id, process_id)
+    return AgentContext(tenant_id=user.tenant_id, user_id=user.id, process_id=process_id,
+                        session=db, metadata={"uf": envelope.case.get("uf"), "demand_type": envelope.objective})
 
-    row = (
-        db.query(Property.state)
-        .join(Process, Process.property_id == Property.id)
-        .filter(Process.id == process_id, Process.tenant_id == tenant_id)
-        .first()
+
+def _start(db, user, body, name, asynchronous):
+    from app.services.connected_agents import (
+        CHAINS,
+        execution_data,
+        legacy_step_result,
+        resume_execution,
+        start_execution,
     )
-    return (row[0] or None) if row else None
-
-
-def _build_context(
-    db: DbDep,
-    user: UserDep,
-    process_id: int | None,
-    metadata: dict,
-) -> AgentContext:
-    metadata = dict(metadata or {})
-    if "uf" not in metadata:
-        uf = _derive_uf(db, user.tenant_id, process_id)
-        if uf:
-            metadata["uf"] = uf
-    return AgentContext(
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        process_id=process_id,
-        session=db,
-        metadata=metadata,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Execucao sincrona
-# ---------------------------------------------------------------------------
-
-@router.post("/run", response_model=AgentRunResponse)
-def run_agent_sync(
-    body: AgentRunRequest,
-    db: DbDep,
-    current_user: UserDep,
-) -> AgentRunResponse:
-    """Executa um agente individual de forma sincrona."""
-    if not settings.ai_configured:
-        # Alguns agentes (vigia, financeiro) funcionam sem IA
-        pass
-
-    ctx = _build_context(db, current_user, body.process_id, body.metadata)
-
-    try:
-        agent = AgentRegistry.create(body.agent_name, ctx)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    result = agent.run()
+    execution = start_execution(db, user.tenant_id, user.id, body.process_id, name, body.idempotency_key)
+    if asynchronous:
+        db.commit()
+        from app.workers.agent_tasks import resume_connected_execution
+        task = resume_connected_execution.delay(execution_id=execution.id, tenant_id=user.tenant_id, user_id=user.id)
+        return {**execution_data(execution), "task_id": task.id}
+    execution = resume_execution(db, user.tenant_id, user.id, execution.id)
     db.commit()
-
-    return AgentRunResponse(
-        success=result.success,
-        data=result.data,
-        confidence=result.confidence,
-        ai_job_id=result.ai_job_id,
-        suggestions=result.suggestions,
-        requires_review=result.requires_review,
-        agent_name=result.agent_name,
-        duration_ms=result.duration_ms,
-        error=result.error,
-    )
+    data = execution_data(execution)
+    if name not in CHAINS:
+        return {**legacy_step_result(db, execution, execution.steps[0]), **data}
+    return {**data, "chain_name": name, "stopped_for_review": execution.status == "awaiting_review",
+            "total_duration_ms": 0, "results": [legacy_step_result(db, execution, s) for s in execution.steps]}
 
 
-@router.post("/chain", response_model=ChainRunResponse)
-def run_chain_sync(
-    body: ChainRunRequest,
-    db: DbDep,
-    current_user: UserDep,
-) -> ChainRunResponse:
-    """Executa uma chain de agentes de forma sincrona."""
-    ctx = _build_context(db, current_user, body.process_id, body.metadata)
-
-    try:
-        results = OrchestratorAgent.execute_chain(
-            body.chain_name,
-            ctx,
-            stop_on_review=body.stop_on_review,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    db.commit()
-
-    steps = [
-        AgentRunResponse(
-            success=r.success,
-            data=r.data,
-            confidence=r.confidence,
-            ai_job_id=r.ai_job_id,
-            suggestions=r.suggestions,
-            requires_review=r.requires_review,
-            agent_name=r.agent_name,
-            duration_ms=r.duration_ms,
-            error=r.error,
-        )
-        for r in results
-    ]
-
-    chain_agents = CHAINS.get(body.chain_name, [])
-    completed = len(results) == len(chain_agents) and all(r.success for r in results)
-    stopped_for_review = any(r.requires_review for r in results)
-
-    return ChainRunResponse(
-        chain_name=body.chain_name,
-        steps=steps,
-        completed=completed,
-        stopped_for_review=stopped_for_review,
-        total_duration_ms=sum(r.duration_ms for r in results),
-    )
+@router.post("/run")
+def run_agent_sync(body: AgentRunRequest, db: DbDep, current_user: UserDep):
+    return _start(db, current_user, body, body.agent_name, False)
 
 
-# ---------------------------------------------------------------------------
-# Execucao assincrona (Celery)
-# ---------------------------------------------------------------------------
-
-@router.post("/run-async", response_model=AsyncTaskResponse, status_code=202)
-def run_agent_async(
-    body: AgentRunRequest,
-    db: DbDep,
-    current_user: UserDep,
-) -> AsyncTaskResponse:
-    """Enfileira execucao de agente via Celery."""
-    # Validar que o agente existe
-    if not AgentRegistry.get(body.agent_name):
-        raise HTTPException(status_code=400, detail=f"Agente '{body.agent_name}' nao encontrado")
-
-    # Barreira primária: validar a posse ANTES de enfileirar. A task revalida
-    # (defesa em profundidade), mas um job que já entrou na fila com id alheio
-    # consome orçamento de IA do tenant errado antes de qualquer checagem.
-    exigir_do_tenant(db, Process, body.process_id, current_user.tenant_id, rotulo="Caso")
-
-    from app.workers.agent_tasks import run_agent  # noqa: PLC0415
-
-    task = run_agent.delay(
-        agent_name=body.agent_name,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
-        process_id=body.process_id,
-        metadata=body.metadata,
-    )
-
-    return AsyncTaskResponse(
-        task_id=task.id,
-        status="queued",
-        agent_name=body.agent_name,
-        process_id=body.process_id,
-    )
+@router.post("/chain")
+def run_chain_sync(body: ChainRunRequest, db: DbDep, current_user: UserDep):
+    return _start(db, current_user, body, body.chain_name, False)
 
 
-@router.post("/chain-async", response_model=AsyncTaskResponse, status_code=202)
-def run_chain_async(
-    body: ChainRunRequest,
-    db: DbDep,
-    current_user: UserDep,
-) -> AsyncTaskResponse:
-    """Enfileira execucao de chain via Celery."""
-    if body.chain_name not in CHAINS:
-        raise HTTPException(status_code=400, detail=f"Chain '{body.chain_name}' nao encontrada")
-
-    exigir_do_tenant(db, Process, body.process_id, current_user.tenant_id, rotulo="Caso")
-
-    from app.workers.agent_tasks import run_agent_chain  # noqa: PLC0415
-
-    task = run_agent_chain.delay(
-        chain_name=body.chain_name,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
-        process_id=body.process_id,
-        metadata=body.metadata,
-        stop_on_review=body.stop_on_review,
-    )
-
-    return AsyncTaskResponse(
-        task_id=task.id,
-        status="queued",
-        chain_name=body.chain_name,
-        process_id=body.process_id,
-    )
+@router.post("/run-async", status_code=202)
+def run_agent_async(body: AgentRunRequest, db: DbDep, current_user: UserDep):
+    return _start(db, current_user, body, body.agent_name, True)
 
 
-# ---------------------------------------------------------------------------
-# Discovery
-# ---------------------------------------------------------------------------
+@router.post("/chain-async", status_code=202)
+def run_chain_async(body: ChainRunRequest, db: DbDep, current_user: UserDep):
+    return _start(db, current_user, body, body.chain_name, True)
+
 
 @router.get("/registry", response_model=list[AgentInfo])
-def list_agents(current_user: UserDep) -> list[AgentInfo]:
-    """Lista todos os agentes registrados."""
-    return [AgentInfo(**a) for a in AgentRegistry.list_agents()]
+def list_agents(current_user: UserDep):
+    from app.services.agent_capabilities import ACTIVE_AGENTS
+    return [AgentInfo(**a) for a in AgentRegistry.list_agents() if a["name"] in ACTIVE_AGENTS]
 
 
 @router.get("/chains")
-def list_chains(current_user: UserDep) -> dict[str, list[str]]:
-    """Lista todas as chains disponiveis."""
-    return OrchestratorAgent.list_chains()
+def list_chains(current_user: UserDep):
+    from app.services.connected_agents import CHAINS
+    return CHAINS.copy()
 
 
 # ---------------------------------------------------------------------------

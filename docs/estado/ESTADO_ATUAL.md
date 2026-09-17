@@ -1,5 +1,44 @@
 # Estado Atual — Regente Ambiental
 
+**Revisão pré-merge de 17/09/2026:** documentos independentes no PR #173; #172
+retargetado para a branch documental, sem merge. Os nove itens do §8 agora têm
+um teste autenticado único, com [relatório por prova](../auditoria/GATE_INCREMENTO1_PR172.md).
+O cenário encontrou e corrigiu recomendação rejeitada que vazava via derivação
+da matriz; a projeção `069.2` guarda a interpretação na conclusão revisável.
+G1–G9 passaram localmente; conferir no #172 a CI do novo SHA e seu artefato
+`gate-incremento1`. A CI anterior de 2.046 testes não era esse gate conjunto.
+
+**Pulso 2026-09-17 — Incremento 1 em validação no PR #172, sem merge/deploy de produção.**
+Plano v1.1 e mergulho publicados intactos em commits documentais isolados;
+triagem do #171 indexada e PR antigo fechado sem merge. Fundação adiciona
+contexto autorizado único, quatro objetos, revisão por versão, invalidação,
+manifesto e retomada. ADR-069 e adendo ADR-011 documentam a substituição do
+consumo bruto. Duas skills existentes em v1.3.0; quatro métodos-base ausentes
+reportam capacidade insuficiente, sem inventar skills. Cinco agentes congelados
+também no worker e scheduler.
+
+Provas locais: **25 testes** passaram no recorte de isolamento, matriz, ramo de
+etapa e RAG; **7 testes** passaram com o fallback de RAG exercitando erro SQL real.
+Outro recorte teve **63 passados e 2 falhas**: expectativa antiga de aviso do
+atendimento e disputa entre atualização do painel e gesto humano. Após correção,
+**9 testes passaram**, incluindo navegador e retomadas simultâneas. O navegador
+exercitou rejeição, F5, correção, nova sessão, histórico, retomada e capacidade
+insuficiente na tela. PostgreSQL/autenticação reais; LLM controlado e Celery eager,
+sem prova de broker remoto. Build/lint frontend e regressão do resumo passaram.
+
+As primeiras execuções completas expuseram regressões, corrigidas na branch:
+fixtures com commit agora têm schema isolado; entrada manual não exige intake;
+fonte única não comprova confronto; fallback de parâmetro opcional do RAG usa
+savepoint; gestos toleram contenção breve do polling, mantendo conflito de execução.
+**Gate de integração:** consultar os checks do SHA atual e o relatório final no
+[PR #172](https://github.com/prosperidade/amigao/pull/172). Não usar o resultado de
+um SHA anterior como aprovação do atual. Migrations passaram o ciclo completo
+upgrade/downgrade/upgrade em banco descartável nas execuções anteriores. Banco DEV
+`127.0.0.1:15432/amigao_db` estava indisponível; nenhuma migration aplicada nele.
+Não há prova com modelo real nem homologação dos documentos originais neste lote.
+Este pulso não declara REVIEW-001 homologado em produção nem aptidão a merge
+independentemente dos checks e da autorização explícita do responsável.
+
 **Pulso 2026-09-10 (RECONCILIAÇÃO POR DECISÕES — ACEITE REAL PÓS-DEPLOY, PR #160
 MERGEADO, `3391402`):** merge autorizado pelo André ("pode mergear 160"). Deploy
 confirmado por prova comportamental (`/health` 200; rota nova sem auth → 401,

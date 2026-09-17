@@ -1,5 +1,9 @@
 # Documentação · Regente Ambiental
 
+Incremento 1 em validação: [ADR-069 — contrato, contexto e revisão](adr/069-contrato-contexto-revisao.md)
+e [pulso atual](estado/ESTADO_ATUAL.md). A referência de execução continua sendo
+o [Plano Diretor v1.1](arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md), §8.
+
 Esta pasta tem 5 camadas. Cada documento tem propósito único — se você encontrar conteúdo duplicado, é bug. Reporta.
 
 ## Estrutura

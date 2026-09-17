@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Testes do AuditorImovelAgent — Sprint A2 (Onda 2 da Fase 2).
 
 Foco em integração agente↔tools determinísticas. A matemática profunda fica
@@ -76,7 +77,7 @@ class TestExecuteSemLLM:
                 "car_area_ha": 80,
                 "geom": None,
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert result.success is True
         assert result.requires_review is True
@@ -94,7 +95,7 @@ class TestExecuteSemLLM:
         agent = AuditorImovelAgent(_ctx())
         with ExitStack() as stack:
             _enter_default_patches(stack)
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         assert data["method"] == "deterministic_tools"
         assert data["requires_review"] is True
 
@@ -109,7 +110,7 @@ class TestExecuteSemLLM:
                 "car_area_ha": 100,  # iguais — sem area_divergente
                 "geom": None,
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert result.success is True
         data = result.data
@@ -124,7 +125,7 @@ class TestExecuteSemLLM:
                 "matricula_text": "Matrícula sem certificação espacial.",
                 "geom": object(),
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         raw_codigos = [f["codigo_alerta"] for f in data["findings_raw"]]
         assert "GEO_AUSENTE" in raw_codigos
         # grade=critico (4 níveis — sem severity 3-níveis)
@@ -141,7 +142,7 @@ class TestExecuteSemLLM:
                 "matricula_text": "sem geo",
                 "geom": None,
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         # content sumariza N divergencias
         assert "divergência" in data["content"].lower()
         # divergências, findings_raw, issue_ids são populados
@@ -215,7 +216,7 @@ class TestExecuteRedirecionaMatrizParaAchado:
                      "situacao": "divergente", "fontes": {"matricula": "X", "ccir": "Y"}},
                 ]},
             ))
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         raw_codigos = [f["codigo_alerta"] for f in data["findings_raw"]]
         assert "IDENT_NOME_IMOVEL_DIVERGENTE" in raw_codigos
 

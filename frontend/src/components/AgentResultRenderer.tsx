@@ -339,15 +339,22 @@ function AuditorResult({ r }: { r: Record<string, unknown> }) {
     ? (r.matriz_inconsistencias as Record<string, unknown>)
     : null;
   const linhas = matriz ? objArr(matriz.linhas) : [];
+  const pontosRevisao = linhas.filter(l => str(l.situacao) !== 'consistente').length;
+  const resumo = matriz
+    ? `Matriz documental: ${linhas.length} item(ns), ${pontosRevisao} ponto(s) para revisão. Achados das regras de auditoria: ${divergencias.length}. Ausência de achados não comprova regularidade.`
+    : str(r.content);
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         {r.requires_review === true && <ReviewBadge />}
       </div>
 
-      {str(r.content) && (
+      {r.method === 'deterministic_tools' && (
+        <p className="text-xs text-gray-500 dark:text-slate-400">Auditoria por regras determinísticas</p>
+      )}
+      {resumo && (
         <p className="text-sm text-gray-700 dark:text-slate-200 leading-relaxed bg-gray-50 dark:bg-white/5 p-3 rounded-lg">
-          {str(r.content)}
+          {resumo}
         </p>
       )}
 
@@ -372,8 +379,10 @@ function AuditorResult({ r }: { r: Record<string, unknown> }) {
           </div>
         </Section>
       ) : (
-        <p className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-          <CheckCircle2 className="w-4 h-4" /> Nenhuma divergência documental encontrada.
+        <p className="text-sm text-gray-600 dark:text-slate-300">
+          {linhas.some(l => str(l.situacao) !== 'consistente')
+            ? 'Há pontos para revisão na matriz abaixo.'
+            : 'Não foram emitidos achados adicionais. Isso não comprova regularidade documental.'}
         </p>
       )}
 

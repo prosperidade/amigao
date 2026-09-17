@@ -723,137 +723,15 @@ class DiagnosticoAgent(BaseAgent):
         return out
 
     def _load_persisted_extraction(self, process_data: dict[str, Any]) -> dict[str, Any] | None:
-        """Busca os campos extraídos persistidos nos ``AIJob`` do extrator quando
-        a chain não os trouxe. Mescla o job mais recente de CADA documento
-        (most-recent-wins) e devolve no mesmo shape de ``chain_data['extrator']``.
-
-        Cobre ambos os shapes de job: ``entity_type='process'`` (ExtratorAgent,
-        agent_name='extrator') e ``entity_type='document'`` (document_extractor,
-        agent_name=None). Por isso filtra por ``job_type`` + entidade, não por
-        agent_name. Ordena por ``id`` desc (monotônico → mais recente primeiro).
-        """
-        from sqlalchemy import and_, or_  # noqa: PLC0415
-
-        from app.models.ai_job import AIJob, AIJobStatus, AIJobType  # noqa: PLC0415
-
-        pid = self.ctx.process_id
-        doc_ids = [
-            d.get("id")
-            for d in process_data.get("documents", [])
-            if isinstance(d, dict) and d.get("id") is not None
-        ]
-
-        entity_conds = [and_(AIJob.entity_type == "process", AIJob.entity_id == pid)]
-        if doc_ids:
-            entity_conds.append(
-                and_(AIJob.entity_type == "document", AIJob.entity_id.in_(doc_ids))
-            )
-
-        jobs = (
-            self.ctx.session.query(AIJob)
-            .filter(
-                AIJob.tenant_id == self.ctx.tenant_id,
-                AIJob.job_type == AIJobType.extract_document,
-                AIJob.status == AIJobStatus.completed,
-            )
-            .filter(or_(*entity_conds))
-            .order_by(AIJob.id.desc())
-            .all()
-        )
-        if not jobs:
-            return None
-
-        aggregated: dict[str, Any] = {}
-        seen_docs: set[Any] = set()
-        for job in jobs:
-            result = job.result if isinstance(job.result, dict) else {}
-            # Identifica o documento dessa extração para dedupe "mais recente vence".
-            doc_key = result.get("document_id")
-            if doc_key is None and job.entity_type == "document":
-                doc_key = job.entity_id
-            if doc_key is not None:
-                if doc_key in seen_docs:
-                    continue
-                seen_docs.add(doc_key)
-            for key, value in self._fields_from_job_result(result).items():
-                if key not in aggregated and value not in (None, "", {}, []):
-                    aggregated[key] = value
-
-        if not aggregated:
-            return None
-
-        logger.info(
-            "diagnostico.extracted_fields_fallback process=%s docs=%d fields=%d "
-            "— chain_data vazio, campos recuperados de AIJob persistido",
-            pid, len(seen_docs), len(aggregated),
-        )
-        return {
-            "extracted_fields": aggregated,
-            "doc_type": "multiplos",
-            "_source": "persisted_aijob",
-            "documents_count": len(seen_docs),
-        }
+        """Legacy jobs are history, never approved premises (ADR-069)."""
+        return None
 
     def _load_persisted_legislacao(self) -> dict[str, Any] | None:
-        """Busca o ``result`` do AIJob mais recente da legislacao do MESMO
-        processo (status completed) quando a chain não trouxe ``legislacao``.
-        Filtra por ``agent_name='legislacao'`` (job_type é consulta_regulatoria)."""
-        from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
-
-        job = (
-            self.ctx.session.query(AIJob)
-            .filter(
-                AIJob.tenant_id == self.ctx.tenant_id,
-                AIJob.entity_type == "process",
-                AIJob.entity_id == self.ctx.process_id,
-                AIJob.agent_name == "legislacao",
-                AIJob.status == AIJobStatus.completed,
-            )
-            .order_by(AIJob.id.desc())
-            .first()
-        )
-        if job is not None and isinstance(job.result, dict) and job.result:
-            logger.info(
-                "diagnostico.legal_context_fallback process=%s job=%s "
-                "— chain_data vazio, enquadramento recuperado de AIJob persistido",
-                self.ctx.process_id, job.id,
-            )
-            return job.result
+        """Legacy jobs are history, never approved premises (ADR-069)."""
         return None
 
     def _load_persisted_atendimento(self) -> dict[str, Any] | None:
-        """Busca o ``result`` do AIJob mais recente do atendimento (classificacao
-        da demanda) do MESMO processo (status completed).
-
-        Item E (fix/teste-isis-rodada2): o atendimento NAO participa da chain
-        ``diagnostico_completo`` (roda no create-case), entao o relato/demanda do
-        consultor — inclusive o que so existe na abertura do caso e nao em
-        documento (ex.: embargo relatado sem doc) — nunca chegava ao diagnostico.
-        Diferente de extrator/legislacao (que preferem ``chain_data``), o
-        atendimento e SEMPRE recuperado do AIJob persistido e entra como fonte
-        ADICIONAL — nao concorre com extrator/legislacao.
-        """
-        from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
-
-        job = (
-            self.ctx.session.query(AIJob)
-            .filter(
-                AIJob.tenant_id == self.ctx.tenant_id,
-                AIJob.entity_type == "process",
-                AIJob.entity_id == self.ctx.process_id,
-                AIJob.agent_name == "atendimento",
-                AIJob.status == AIJobStatus.completed,
-            )
-            .order_by(AIJob.id.desc())
-            .first()
-        )
-        if job is not None and isinstance(job.result, dict) and job.result:
-            logger.info(
-                "diagnostico.atendimento_context process=%s job=%s "
-                "— relato/demanda do consultor injetado como fonte adicional",
-                self.ctx.process_id, job.id,
-            )
-            return job.result
+        """Legacy jobs are history, never approved premises (ADR-069)."""
         return None
 
     def _resolve_auditor_payload(self) -> dict[str, Any]:
@@ -865,30 +743,7 @@ class DiagnosticoAgent(BaseAgent):
         return payload if isinstance(payload, dict) else {}
 
     def _load_persisted_auditor(self) -> dict[str, Any] | None:
-        """Busca o ``result`` do AIJob mais recente do auditor_imovel do MESMO
-        processo (status completed) — traz a matriz de inconsistências e os
-        findings quando a chain não os trouxe. Fonte ADICIONAL."""
-        from app.models.ai_job import AIJob, AIJobStatus  # noqa: PLC0415
-
-        job = (
-            self.ctx.session.query(AIJob)
-            .filter(
-                AIJob.tenant_id == self.ctx.tenant_id,
-                AIJob.entity_type == "process",
-                AIJob.entity_id == self.ctx.process_id,
-                AIJob.agent_name == "auditor_imovel",
-                AIJob.status == AIJobStatus.completed,
-            )
-            .order_by(AIJob.id.desc())
-            .first()
-        )
-        if job is not None and isinstance(job.result, dict) and job.result:
-            logger.info(
-                "diagnostico.auditor_context process=%s job=%s "
-                "— matriz/findings do auditor recuperados de AIJob persistido",
-                self.ctx.process_id, job.id,
-            )
-            return job.result
+        """Legacy jobs are history, never approved premises (ADR-069)."""
         return None
 
     def _property_from_extracted(self, extracted_data: Any) -> dict[str, Any] | None:

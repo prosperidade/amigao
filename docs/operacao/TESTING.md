@@ -1,5 +1,33 @@
 # Testing
 
+## Gate Incremento 1 (ADR-069)
+
+O gate de §8 é **um único teste**, `test_incremento1_gate_nove_provas_no_mesmo_percurso`
+em `tests/e2e/test_evidence_browser.py`, com nove fases no mesmo caso autenticado.
+Consultar o [relatório por prova e fronteiras](../auditoria/GATE_INCREMENTO1_PR172.md).
+O resultado gera `artifacts/gate-incremento1.json`, publicado na CI como artefato
+`gate-incremento1`. Os demais testes abaixo são regressões complementares.
+
+Recorte: `python -m pytest tests/e2e/test_evidence_execution.py
+tests/services/test_evidence_contract.py tests/agents/test_orchestrator_chain.py
+tests/workers/test_agent_tasks_retry.py -q --no-cov`. Usa PostgreSQL descartável
+do fixture do projeto, autenticação real e resposta externa do LLM controlada.
+
+Navegador: construir `frontend` com `npm ci` / `npm run build`, instalar Chromium
+com `npx playwright install chromium` e executar
+`EVIDENCE_BROWSER_GATE=1 python -m pytest tests/e2e/test_evidence_browser.py -q --no-cov`
+(PowerShell: `$env:EVIDENCE_BROWSER_GATE='1'` antes do comando). A CI prepara o
+build/Chromium e exige esse gate dentro da suíte. O teste sobe servidor HTTP
+loopback, usa login da UI e sessões PostgreSQL com commit; Celery é eager.
+Cada fixture com commit usa schema descartável próprio, removido ao terminar;
+isso impede contaminação da suíte legada baseada em rollback.
+Não usa conta, documento ou chave de provider real.
+
+Testes antigos em `tests/agents` que chamam `_run_legacy_unconnected` preservam
+algoritmos/projeções históricas isolados; não contam como execução do contrato
+novo. CI completa e migrations continuam obrigatórias; recorte local não as
+substitui. Sem modelo real, não há conclusão sobre qualidade técnica do LLM.
+
 **Documento:** Operação · estratégia de testes
 **Estado:** vivo
 **Última revisão:** 2026-05-17

@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Contenção 4 (ADR-064, achado N3) — o AIJob do extrator para de ser cego.
 
 Medido em produção em 09/09: os `ai_jobs` 1467–1471 e 1473 do extrator têm
@@ -87,7 +88,7 @@ def test_ai_job_do_extrator_guarda_modelo_tokens_custo_e_bruto(seeded, db_sessio
             return json.loads(_RESP_STAGING.content), None
 
         mock_staging.side_effect = _fake
-        result = AgentRegistry.create("extrator", ctx).run()
+        result = AgentRegistry.create("extrator", ctx)._run_legacy_unconnected()
 
     assert result.success is True
 

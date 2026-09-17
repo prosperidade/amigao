@@ -1,5 +1,13 @@
 # Fluxos End-to-End
 
+**Adendo Incremento 1 (PR #172):** UI → execução autorizada → snapshot/envelope →
+job com manifesto → conclusões propostas → revisão por versão → retomada de
+dependências. Não há passagem paralela do resultado bruto entre agentes. A aba IA
+volta à superfície para revisão/retomada; catálogo lista apenas seis agentes.
+Prova autenticada de API em `tests/e2e/test_evidence_execution.py` e gesto no build
+real em `tests/e2e/test_evidence_browser.py`; fixtures sintéticas não homologam
+qualidade de diagnóstico nem originais. Detalhes no ADR-069.
+
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar quando o fluxo principal mudar
 **Última revisão:** 2026-05-15

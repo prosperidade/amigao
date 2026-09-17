@@ -1,5 +1,12 @@
 # Máquinas de Estado
 
+**Adendo ADR-069 (proposto no PR #172):** revisão da conclusão e atualidade são
+eixos separados. Correção → nova versão pendente. Aprovação registra premissas
+exatas. Premissa alterada → dependente desatualizado, aprovação preservada e
+pendência de coleta. Retorno de macroetapa depende de gesto do consultor; evidência
+nova não retrocede automaticamente. Execução completa exige todos os passos e
+revisões obrigatórios resolvidos. Falha/capacidade insuficiente não são sucesso.
+
 **Documento:** Arquitetura · referência viva
 **Estado:** validado contra código (15/05/2026)
 **Última revisão:** 2026-05-15

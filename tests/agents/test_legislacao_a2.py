@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Testes da migração do LegislacaoAgent para EnquadramentoRegulatorioContent —
 Sprint A2-legislacao.
 
@@ -140,7 +141,7 @@ class TestPathIA:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(llm_payload)
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         assert result.success is True
         assert result.requires_review is True
@@ -203,7 +204,7 @@ class TestPathIA:
                 "riscos": [],
                 "confianca": "media",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
 
         sources = result.data["sources"]
         legislation_refs = [s["ref"] for s in sources if s["type"] == "legislation"]
@@ -227,7 +228,7 @@ class TestPathIA:
                 "legislacao_aplicavel": [],
                 "confianca": "media",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
         # Schema valida — severidade vira "medio" no schema (dump usa schema antes do dual-emit)
         # Mas dual-emit sobrescreve com lista crua. Garantir que o schema interno não estourou.
         # confidence presente confirma que o Content foi construído.
@@ -249,7 +250,7 @@ class TestPathIA:
                 "riscos": [],
                 "confianca": "baixa",
             })
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
         assert result.success is True
         assert result.data["caminho_regulatorio"] != ""  # placeholder
         assert result.data["content"] != ""  # placeholder
@@ -270,7 +271,7 @@ class TestPathIA:
                     "riscos": [],
                     "confianca": confianca_in,
                 })
-                result = agent.run()
+                result = agent._run_legacy_unconnected()
             assert result.data["confidence"] == pytest.approx(confidence_expected), \
                 f"confianca={confianca_in!r} expected confidence={confidence_expected}"
 
@@ -293,7 +294,7 @@ class TestPathRulesBased:
             stack.enter_context(patch("app.agents.base.get_active_prompt", return_value=None))
             stack.enter_context(patch("app.core.config.settings", mock_settings))
             stack.enter_context(patch.object(LegislacaoAgent, "_load_process_context", return_value={}))
-            result = agent.run()
+            result = agent._run_legacy_unconnected()
         assert result.success is True
         return result.data
 
@@ -538,7 +539,7 @@ class TestSerializability:
                 "recomendacoes": ["Rec 1"],
                 "prazos_estimados": {"total_dias": 30},
             })
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         text = json.dumps(data)
         rebuilt = json.loads(text)
         assert rebuilt == data

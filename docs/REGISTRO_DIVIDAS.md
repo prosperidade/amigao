@@ -1,5 +1,19 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 2026-09-17 — Incremento 1, PR #172
+
+- **#231 — cobertura de métodos-base:** extrator, legislação, redator e orçamento
+  permanecem responsabilidades ativas sem skill-base real no catálogo; execução
+  reporta capacidade insuficiente. Nenhuma skill nova criada neste incremento.
+  Resolver conforme cobertura e incrementos seguintes do plano v1.1.
+- **#232 — aceite final da fundação:** gates finais de CI/navegador, avaliação de
+  domínio com originais e revisão da sócia são provas distintas. Resultados e
+  pendências em `estado/ESTADO_ATUAL.md`; não promover teste sintético a aceite
+  técnico do diagnóstico.
+- #215, #217, #220, #227 e #229: implementação em validação; **não fechadas neste
+  pulso**. Retenção do bucket e exactly-once de custo externo não são garantidos
+  por FKs ou locks de banco; fronteiras declaradas no ADR-069.
+
 Reúne num lugar só as dívidas que estavam espalhadas por relatórios do agente, rodapés de skill,
 memórias do desenvolvedor e análises de coordenação. Ordenadas por prioridade de desbloqueio.
 Cada item: o que é, de onde veio, o que destrava, e o estado.
@@ -8,7 +22,8 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 231.** (#225 a #230 abertas pela Frente L —
+> **PRÓXIMO NÚMERO LIVRE: 233.** (#231 e #232 abertas no PR #172;
+> #225 a #230 abertas pela Frente L —
 > `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
 > (`gh pr list` vazio), então 225 estava mesmo livre.)
 > Histórico da contagem anterior: (#223 e #224 abertas pela Frente G/I —

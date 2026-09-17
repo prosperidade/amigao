@@ -98,7 +98,12 @@ def test_busca_sobrevive_a_banco_sem_ivfflat(db_session, monkeypatch):
     def _execute(sentenca, *a, **k):
         texto = str(sentenca)
         if "ivfflat.probes" in texto:
-            raise RuntimeError('unrecognized configuration parameter "ivfflat.probes"')
+            # Real PostgreSQL error: proves the savepoint recovers the transaction,
+            # unlike a Python exception which never aborts a database transaction.
+            from sqlalchemy import text
+            return original(text("""DO $$ BEGIN
+                RAISE EXCEPTION 'unrecognized configuration parameter "ivfflat.probes"'
+                USING ERRCODE = '42704'; END $$;"""))
         return original(sentenca, *a, **k)
 
     monkeypatch.setattr(db_session, "execute", _execute)

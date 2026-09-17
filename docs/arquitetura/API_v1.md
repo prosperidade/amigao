@@ -1,5 +1,21 @@
 # API v1
 
+## Incremento 1 — contrato proposto no PR #172
+
+`POST /agents/run[-async]` e `/agents/chain[-async]` criam execução persistida;
+`idempotency_key` é opcional. Metadata não substitui dados autorizados do caso.
+Resposta inclui id, snapshot, passos, revisão, status e espera. Compatibilidade
+individual mantém `AgentRunResponse`; chain expõe projeções em `results` e passos
+persistidos em `steps`. `completed` não se deduz da lista de resultados.
+
+Sob `/evidence`: `GET /cases/{id}` entrega envelope/revisões/execuções;
+`POST /cases/{id}/objects/{object_id}/review` decide com versões esperadas;
+`GET /cases/{id}/sources/{object_id}/versions/{version}` recupera prova preservada;
+`GET /executions/{id}` e `POST /executions/{id}/resume` consultam/retomam;
+`POST /cases/{id}/return-to-collection` registra gesto explícito. Revisão antiga
+ou retomada concorrente responde 409; recurso de outro tenant responde 404.
+Ver [ADR-069](../adr/069-contrato-contexto-revisao.md).
+
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada novo router ou mudança de contrato
 **Última revisão:** 2026-05-15

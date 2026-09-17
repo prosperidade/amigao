@@ -527,7 +527,7 @@ def mark_stage_agents_done(
         return None
 
     expected_chain = MACROETAPA_AGENT_CHAIN.get(current)
-    if chain_name is not None and expected_chain is not None and chain_name != expected_chain:
+    if expected_chain is None or (chain_name is not None and chain_name != expected_chain):
         return None  # chain avulsa — não é a da etapa corrente
 
     _ensure_checklist(db, process, tenant_id)

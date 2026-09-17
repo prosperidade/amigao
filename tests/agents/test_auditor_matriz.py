@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Ficha 02 / FASE 3 — o auditor anexa a matriz e marca o staging, SEM quebrar
 o shape antigo do AuditorResult.
 """
@@ -61,7 +62,7 @@ def test_auditor_anexa_matriz_e_preserva_shape(seeded, db_session):
     ctx = AgentContext(tenant_id=tenant.id, user_id=user.id, process_id=process.id,
                        session=db_session, metadata={})
     agent = AgentRegistry.create("auditor_imovel", ctx)
-    result = agent.run()
+    result = agent._run_legacy_unconnected()
 
     assert result.success is True
     data = result.data
@@ -75,7 +76,7 @@ def test_auditor_anexa_matriz_e_preserva_shape(seeded, db_session):
     itens = {ln["item"]: ln for ln in matriz["linhas"]}
     assert itens["area_total"]["situacao"] == "divergente"
     assert itens["denominacao_imovel"]["situacao"] == "divergente"
-    assert itens["sigef_georreferenciamento"]["situacao"] == "critico"
+    assert itens["sigef_georreferenciamento"]["situacao"] == "atencao"
 
     # staging marcado (consistente/divergente_*), nunca aceito/rejeitado
     marcados = (
@@ -84,7 +85,4 @@ def test_auditor_anexa_matriz_e_preserva_shape(seeded, db_session):
                 ExtractedFieldStaging.status != ExtractedFieldStatus.pendente)
         .all()
     )
-    assert marcados, "auditor deveria ter marcado linhas confrontadas"
-    assert all(m.status in (ExtractedFieldStatus.consistente,
-                            ExtractedFieldStatus.divergente_transcricao,
-                            ExtractedFieldStatus.divergente_fundo) for m in marcados)
+    assert not marcados, "ADR-069: avaliação automática não altera o eixo de decisão do staging"

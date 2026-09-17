@@ -231,7 +231,7 @@ MACROETAPA_METADATA: dict[Macroetapa, dict] = {
 # ---------------------------------------------------------------------------
 
 MACROETAPA_AGENT_CHAIN: dict[Macroetapa, str | None] = {
-    Macroetapa.entrada_demanda: "intake",
+    Macroetapa.entrada_demanda: None,  # ADR-069: atendimento congelado, inclusive sugestão da etapa
     Macroetapa.diagnostico_preliminar: "diagnostico_completo",
     Macroetapa.coleta_documental: None,  # manual + extrator sob demanda
     Macroetapa.diagnostico_tecnico: "diagnostico_completo",

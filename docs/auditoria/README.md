@@ -4,6 +4,13 @@ Auditorias do Regente Ambiental, em ordem cronológica. Cada item registra **o q
 
 Regra da pasta: auditoria é fotografia de um SHA. Não se edita um relatório depois de fechado — nova leitura vira arquivo novo, e o índice ganha uma linha.
 
+## 17/09/2026 — Gate unificado do Incremento 1 e separação documental
+
+[Nove provas no mesmo percurso autenticado](GATE_INCREMENTO1_PR172.md): documentos
+independentes no #173; código no #172. Gate de navegador/HTTP e asserções do
+contexto efetivo, manifesto e persistência, com LLM controlado e Celery eager
+explicitamente delimitados. Contagem global de testes não substitui o gate.
+
 ## 17/09/2026 — Mergulho estrutural, plano v1.1 e triagem do #171
 
 **Base:** `d2a3de0070a456acb9095d063164135ae26cbe06`; **PR analisado:** `e30a8dd7296743d8ef545ce64962d957c9fd0a12`.

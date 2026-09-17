@@ -1,3 +1,4 @@
+# ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
 """Testes da migração do RedatorAgent para PecaJuridicaContent — Sprint A2-redator-A.
 
 Cobre os 7 templates servidos pelo agente, o fallback de
@@ -79,7 +80,7 @@ def test_each_template_emits_peca_juridica_content_shape(template: str):
         _enter_default_patches(stack)
         complete = stack.enter_context(patch("app.agents.base.complete"))
         complete.return_value = _make_ai_response("Texto da peça com Lei 12.651/2012.")
-        result = agent.run()
+        result = agent._run_legacy_unconnected()
 
     assert result.success is True
     data = result.data
@@ -113,7 +114,7 @@ class TestRespostaNotificacao:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response(content)
-            return agent.run().data
+            return agent._run_legacy_unconnected().data
 
     def test_metadata_provided_uses_subclass(self):
         data = self._run({
@@ -162,7 +163,7 @@ class TestSourceDerivation:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response("texto")
-            return agent.run().data
+            return agent._run_legacy_unconnected().data
 
     def test_source_from_legislacao_aplicavel(self):
         data = self._run_with_legal({"legislacao_aplicavel": ["Lei 12.651/2012", "Lei 9.605/1998"]})
@@ -210,7 +211,7 @@ class TestAddresseeCascade:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response("texto")
-            return agent.run().data
+            return agent._run_legacy_unconnected().data
 
     def test_metadata_addressee_wins(self):
         data = self._run(
@@ -247,7 +248,7 @@ class TestCitationEvaluatorIntegration:
             complete.return_value = _make_ai_response(
                 "Conforme a Lei 12.651/2012 e a Lei 9.605/1998..."
             )
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         # Sprint A2-A: legal_citations = todas as citações detectadas (válidas + inválidas)
         # antes só vinham as inválidas em citation_issues — agora a lista completa
@@ -267,7 +268,7 @@ class TestCitationEvaluatorIntegration:
             complete.return_value = _make_ai_response(
                 "Lei 12.651/2012 e a inventada Lei 99.999/2099..."
             )
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
 
         # legal_citations tem ambas (lista completa)
         assert len(data["legal_citations"]) == 2
@@ -288,7 +289,7 @@ class TestDocumentTypeAlias:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response("memorial")
-            data = agent.run().data
+            data = agent._run_legacy_unconnected().data
         assert data["template"] == "memorial"
         assert data["document_type"] == "memorial"
 
@@ -342,7 +343,7 @@ class TestLogInfoForDedicatedFlows:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response("texto")
-            agent.run()
+            agent._run_legacy_unconnected()
         msgs = [r.message for r in caplog.records if r.name == "app.agents.redator"]
         assert any("fluxo dedicado" in m for m in msgs)
 
@@ -353,7 +354,7 @@ class TestLogInfoForDedicatedFlows:
             _enter_default_patches(stack)
             complete = stack.enter_context(patch("app.agents.base.complete"))
             complete.return_value = _make_ai_response("texto")
-            agent.run()
+            agent._run_legacy_unconnected()
         msgs = [r.message for r in caplog.records if r.name == "app.agents.redator"]
         assert not any("fluxo dedicado" in m for m in msgs)
 
@@ -376,7 +377,7 @@ def test_payload_is_json_serializable():
         _enter_default_patches(stack)
         complete = stack.enter_context(patch("app.agents.base.complete"))
         complete.return_value = _make_ai_response("Lei 12.651/2012 aplica.")
-        data = agent.run().data
+        data = agent._run_legacy_unconnected().data
     # round-trip JSON
     text = json.dumps(data)
     assert json.loads(text) == data

@@ -88,6 +88,12 @@ celery_app.conf.update(
     },
 )
 
+# ADR-069: scheduling and already-queued handlers enforce the same freeze.
+celery_app.conf.beat_schedule = {
+    key: value for key, value in celery_app.conf.beat_schedule.items()
+    if value["task"] not in {"workers.vigia_all_tenants", "workers.acompanhamento_check_all", "workers.vigia_scheduled_check"}
+}
+
 # Auto-descobrir tasks no módulo workers
 celery_app.autodiscover_tasks(["app.workers"])
 
