@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, docs/plano-diretor-v1-1]
 
 jobs:
   # ─────────────────────────────────────────────────
@@ -85,6 +85,7 @@ jobs:
       - name: Run tests
         env:
           EVIDENCE_BROWSER_GATE: "1"
+          GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           SECRET_KEY: "ci-test-secret-key-with-32-chars-minimum"
           # Fernet key descartável só pro CI (ADR-014: CREDENTIAL_ENCRYPTION_KEY é
           # obrigatória, sem fallback). Não protege nada real.
@@ -103,6 +104,14 @@ jobs:
         # (era o TODO deste job). O relatório term-missing continua visível. Quando
         # a cobertura chegar a 70%, trocar por --cov-fail-under=70.
         run: python -m pytest tests/ --tb=short -q --cov=app --cov-report=term-missing --cov-fail-under=0
+
+      - name: Preserve Incremento 1 unified gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-incremento1
+          path: artifacts/gate-incremento1.json
+          if-no-files-found: error
 
   # ─────────────────────────────────────────────────
   # BACKEND: Migration check (upgrade + downgrade)

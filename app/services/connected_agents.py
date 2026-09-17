@@ -124,9 +124,14 @@ def _audit_objects(agent, envelope):
             premises += [{"id": o.id, "version": o.version} for o in envelope.derivations if o.id == "case:material"]
         if not premises:
             continue
+        # Recommendations/classifications are reviewable conclusions, not raw
+        # comparison inputs. Copying the full matrix row here leaked rejected
+        # recommendation text back into the next diagnostic through derivations.
+        comparison = {key: line[key] for key in ("item", "label", "fontes", "fontes_detalhe") if key in line}
+        assessment = {key: line[key] for key in ("situacao", "acao_recomendada", "destino", "profundidade", "subtipo") if key in line}
         derivation = EvidenceObject(id=f"comparison:{uuid4().hex}", version=1, kind="derivacao",
             origin="auditor_imovel", premises=premises,
-            attributes={"method": "inconsistency_matrix", "method_version": "069.1", "normalized": line},
+            attributes={"method": "inconsistency_matrix", "method_version": "069.2", "normalized": comparison},
             limits=["Classificação documental do comparador legado; não é avaliação jurídica ou espacial"])
         objects.append(derivation)
         objects.append(EvidenceObject(id=f"assessment:{uuid4().hex}", version=1, kind="conclusao",
@@ -134,7 +139,7 @@ def _audit_objects(agent, envelope):
             conclusion_class="lacuna" if line.get("situacao") == "atencao" else "divergencia",
             premises=[{"id": derivation.id, "version": 1}],
             limits=["Comparação documental; não comprova irregularidade, obrigação ou serviço"],
-            attributes={"method": "inconsistency_matrix", "method_version": "069.1"}))
+            attributes={"method": "inconsistency_matrix", "method_version": "069.2", "normalized": assessment}))
     return objects
 
 

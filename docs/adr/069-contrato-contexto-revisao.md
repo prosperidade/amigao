@@ -111,6 +111,12 @@ os arquivos legados. Não há expurgo automático novo.
 
 ## Validação e limites
 
+O [gate unificado do §8](../auditoria/GATE_INCREMENTO1_PR172.md) reúne as nove
+provas em um caso autenticado. Ele encontrou e corrigiu uma rota paralela:
+`acao_recomendada` da matriz não pode ficar dentro da derivação autorizada.
+O método de projeção `069.2` conserva na derivação somente identificação e dados
+do confronto; recomendação, classificação e destino ficam na conclusão revisável.
+
 Contrato e percurso autenticado usam PostgreSQL real e sessões com commit. Só a
 resposta do LLM é controlada. Transporte Celery eager prova o corpo do worker,
 não um broker remoto. O gate de navegador usa o build real e login pela UI,

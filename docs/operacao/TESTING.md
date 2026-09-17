@@ -2,6 +2,12 @@
 
 ## Gate Incremento 1 (ADR-069)
 
+O gate de §8 é **um único teste**, `test_incremento1_gate_nove_provas_no_mesmo_percurso`
+em `tests/e2e/test_evidence_browser.py`, com nove fases no mesmo caso autenticado.
+Consultar o [relatório por prova e fronteiras](../auditoria/GATE_INCREMENTO1_PR172.md).
+O resultado gera `artifacts/gate-incremento1.json`, publicado na CI como artefato
+`gate-incremento1`. Os demais testes abaixo são regressões complementares.
+
 Recorte: `python -m pytest tests/e2e/test_evidence_execution.py
 tests/services/test_evidence_contract.py tests/agents/test_orchestrator_chain.py
 tests/workers/test_agent_tasks_retry.py -q --no-cov`. Usa PostgreSQL descartável

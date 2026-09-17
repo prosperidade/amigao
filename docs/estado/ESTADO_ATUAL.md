@@ -1,5 +1,13 @@
 # Estado Atual — Regente Ambiental
 
+**Revisão pré-merge de 17/09/2026:** documentos independentes no PR #173; #172
+retargetado para a branch documental, sem merge. Os nove itens do §8 agora têm
+um teste autenticado único, com [relatório por prova](../auditoria/GATE_INCREMENTO1_PR172.md).
+O cenário encontrou e corrigiu recomendação rejeitada que vazava via derivação
+da matriz; a projeção `069.2` guarda a interpretação na conclusão revisável.
+G1–G9 passaram localmente; conferir no #172 a CI do novo SHA e seu artefato
+`gate-incremento1`. A CI anterior de 2.046 testes não era esse gate conjunto.
+
 **Pulso 2026-09-17 — Incremento 1 em validação no PR #172, sem merge/deploy de produção.**
 Plano v1.1 e mergulho publicados intactos em commits documentais isolados;
 triagem do #171 indexada e PR antigo fechado sem merge. Fundação adiciona
