@@ -7,13 +7,17 @@ metadado explicitamente. `_build_context` agora deriva `uf` do
 Teste com UF≠GO (Acre, corpus já ingerido — Sprint corpus Acre 2026-07-04).
 """
 
-from app.api.v1.agents import _build_context, _derive_uf
+import pytest
+from fastapi import HTTPException
+
+from app.api.v1.agents import _build_context
 from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.process import Process, ProcessStatus
 from app.models.property import Property
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.services.evidence import build_envelope
 
 
 def _setup(db_session, *, state: str | None):
@@ -39,28 +43,32 @@ def _setup(db_session, *, state: str | None):
 
 class TestDerivaUf:
     def test_deriva_uf_ac_do_imovel_do_processo(self, db_session) -> None:
-        tenant, _user, proc = _setup(db_session, state="AC")
+        tenant, user, proc = _setup(db_session, state="AC")
         db_session.commit()
-        assert _derive_uf(db_session, tenant.id, proc.id) == "AC"
+        assert build_envelope(db_session, tenant.id, user.id, proc.id).case["uf"] == "AC"
 
-    def test_sem_process_id_retorna_none(self, db_session) -> None:
-        tenant, _user, _proc = _setup(db_session, state="AC")
+    def test_sem_process_id_nao_constroi_contexto_autorizado(self, db_session) -> None:
+        tenant, user, _proc = _setup(db_session, state="AC")
         db_session.commit()
-        assert _derive_uf(db_session, tenant.id, None) is None
+        with pytest.raises(HTTPException) as error:
+            build_envelope(db_session, tenant.id, user.id, None)
+        assert error.value.status_code == 404
 
     def test_property_sem_state_retorna_none(self, db_session) -> None:
-        tenant, _user, proc = _setup(db_session, state=None)
+        tenant, user, proc = _setup(db_session, state=None)
         db_session.commit()
-        assert _derive_uf(db_session, tenant.id, proc.id) is None
+        assert build_envelope(db_session, tenant.id, user.id, proc.id).case["uf"] is None
 
     def test_isolamento_por_tenant(self, db_session) -> None:
         """Um processo de outro tenant não vaza o UF."""
-        tenant, _user, proc = _setup(db_session, state="AC")
+        tenant, user, proc = _setup(db_session, state="AC")
         db_session.commit()
         outro_tenant = Tenant(name="Outro Tenant")
         db_session.add(outro_tenant)
         db_session.commit()
-        assert _derive_uf(db_session, outro_tenant.id, proc.id) is None
+        with pytest.raises(HTTPException) as error:
+            build_envelope(db_session, outro_tenant.id, user.id, proc.id)
+        assert error.value.status_code == 404
 
 
 class TestBuildContextPropagaUf:
@@ -70,16 +78,15 @@ class TestBuildContextPropagaUf:
         ctx = _build_context(db_session, user, proc.id, {})
         assert ctx.metadata["uf"] == "AC"
 
-    def test_metadata_com_uf_explicito_nao_e_sobrescrito(self, db_session) -> None:
-        """O caller que já manda `uf` (ex.: intake com wizard de estado
-        diferente do cadastro) tem prioridade sobre a derivação automática."""
+    def test_metadata_nao_sobrescreve_uf_autorizada_do_caso(self, db_session) -> None:
+        """ADR-069: payload não é autoridade sobre cadastro/documentos do caso."""
         tenant, user, proc = _setup(db_session, state="AC")
         db_session.commit()
         ctx = _build_context(db_session, user, proc.id, {"uf": "GO"})
-        assert ctx.metadata["uf"] == "GO"
+        assert ctx.metadata["uf"] == "AC"
 
     def test_sem_property_state_metadata_fica_sem_uf(self, db_session) -> None:
         tenant, user, proc = _setup(db_session, state=None)
         db_session.commit()
         ctx = _build_context(db_session, user, proc.id, {})
-        assert "uf" not in ctx.metadata
+        assert ctx.metadata["uf"] is None

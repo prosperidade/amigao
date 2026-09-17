@@ -77,7 +77,7 @@ def test_browser_review_reload_new_session_and_resume(committed_case, monkeypatc
         assert len(received) == 2
         assert "Hipótese controlada do navegador" not in json.dumps(received[1], ensure_ascii=False)
         with factory() as db:
-            assert db.query(AIJob).filter(AIJob.tenant_id == case["tenant"], AIJob.entity_id == case["case"]).count() == 2
+            assert db.query(AIJob).filter(AIJob.tenant_id == case["tenant"], AIJob.entity_id == case["case"]).count() == 3
     finally:
         server.should_exit = True
         thread.join(timeout=15)

@@ -94,6 +94,12 @@ def persist_object(db, tenant_id, process_id, obj: EvidenceObject, *, agent=None
         if ref in verification_refs:
             if premise.kind != "fonte_primaria" or premise.content.get("origin") != "consulta":
                 raise HTTPException(422, "Verificação exige registro de consulta primária")
+            if ref == obj.knowledge.verification.source:
+                record = premise.source_record or {}
+                verification = obj.knowledge.verification
+                if (record.get("scope") != verification.scope or record.get("identifiers") != verification.identifiers
+                    or record.get("consulted_at") != verification.consulted_at.isoformat()):
+                    raise HTTPException(422, "Escopo, identificadores e data não correspondem à consulta preservada")
             if ref == obj.knowledge.verification.preserved_response and not (premise.source_record or {}).get("response"):
                 raise HTTPException(422, "Resposta da consulta não foi preservada")
     if obj.kind == "conclusao":
@@ -229,6 +235,10 @@ def capture_snapshot(db, tenant_id, user_id, process_id, *, reference_date=None)
     cadastro = _capture(db, tenant_id, process_id, "case:declarations", "fonte_primaria",
                         {"origin": "cadastro_legado", "legacy_unverified": True}, source_record=case_data)
     sources.append({"id": cadastro.object_id, "version": cadastro.version})
+    captured_sources = {ref["id"] for ref in sources}
+    for row in latest_objects(db, tenant_id, process_id).values():
+        if row.kind == "fonte_primaria" and row.object_id not in captured_sources and row.content.get("origin") in {"consulta", "cadastro_humano"}:
+            sources.append({"id": row.object_id, "version": row.version})
     _capture(db, tenant_id, process_id, "case:material", "derivacao", {
         "origin": "document_inventory", "premises": sources,
         "attributes": {"method": "authorized_document_inventory", "method_version": "069.1",

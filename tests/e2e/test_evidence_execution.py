@@ -71,6 +71,7 @@ def login(client, email):
 def test_authenticated_review_correction_reload_resume_and_context(committed_case, monkeypatch):
     factory, case = committed_case
     received = []
+    empty_mode = False
     def llm(prompt, **kwargs):
         envelope = json.loads(prompt)
         received.append(envelope)
@@ -78,6 +79,8 @@ def test_authenticated_review_correction_reload_resume_and_context(committed_cas
         output = {"objects": [{"id": "proposed", "version": 1, "kind": "conclusao", "origin": "diagnostico",
             "statement": "Conclusão controlada para revisão", "conclusion_class": "hipotese",
             "premises": [{"id": source["id"], "version": source["version"]}]}]}
+        if empty_mode:
+            output = {"objects": []}
         return AIResponse(content=json.dumps(output), model_used="controlled", provider="test",
                           tokens_in=1, tokens_out=1, cost_usd=0, duration_ms=1)
     monkeypatch.setattr("app.core.ai_gateway.complete", llm)
@@ -130,6 +133,25 @@ def test_authenticated_review_correction_reload_resume_and_context(committed_cas
         assert len(reviews) == 2 and all(r.author_id == case["user"] for r in reviews)
         assert db.query(EvidenceVersion).filter(EvidenceVersion.process_id == case["case"],
             EvidenceVersion.object_id == obj["id"]).count() == 2
+    # Same authenticated scenario: both transports consume the same post-review
+    # snapshot and actual reconciled skill. Empty output keeps that input stable.
+    from app.core.celery_app import celery_app
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    for key, value in {"task_always_eager": True, "task_eager_propagates": True,
+                       "task_store_eager_result": False, "broker_url": "memory://",
+                       "result_backend": "cache+memory://"}.items():
+        monkeypatch.setitem(celery_app.conf, key, value)
+    empty_mode = True
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        body = {"agent_name": "diagnostico", "process_id": case["case"]}
+        assert client.post("/api/v1/agents/run", headers=headers, json=body).status_code == 200
+        assert client.post("/api/v1/agents/run-async", headers=headers, json=body).status_code == 202
+    assert len(received) == 4 and received[-1] == received[-2]
+    assert received[-1]["manifest"]["applied"][0]["version"] == "1.3.0"
+    with factory() as db:
+        jobs = db.query(AIJob).filter(AIJob.tenant_id == case["tenant"]).order_by(AIJob.id.desc()).limit(2).all()
+        assert jobs[0].input_payload["context_hash"] == jobs[1].input_payload["context_hash"]
 
 
 def test_sync_and_worker_share_context_and_skill_manifest(committed_case, monkeypatch):
@@ -375,3 +397,46 @@ def test_current_snapshot_keeps_corrected_observation_and_audit_chain(committed_
         current = next(o for o in envelope.observations if o.id == obj.id)
         assert current.version == 2 and current.attributes.literal == 20
         assert verify_audit_chain(db, case["tenant"]) == []
+
+
+def test_legacy_completed_job_is_never_an_approved_premise(committed_case):
+    from app.models.ai_job import AIJobStatus, AIJobType
+    factory, case = committed_case
+    with factory() as db:
+        db.add(AIJob(tenant_id=case["tenant"], created_by_user_id=case["user"], entity_type="process",
+            entity_id=case["case"], agent_name="diagnostico", job_type=AIJobType.diagnostico_propriedade,
+            status=AIJobStatus.completed, raw_output="LEGACY_UNREVIEWED_SENTINEL",
+            result={"situacao_geral": "LEGACY_UNREVIEWED_SENTINEL", "requires_review": False}))
+        db.commit()
+        envelope = build_envelope(db, case["tenant"], case["user"], case["case"])
+        assert envelope.conclusions == []
+        assert "LEGACY_UNREVIEWED_SENTINEL" not in envelope.model_dump_json()
+
+
+def test_verified_query_preserves_scope_and_is_invalidated_by_query_revision(committed_case):
+    from datetime import UTC, datetime
+
+    from fastapi import HTTPException
+    factory, case = committed_case
+    now = datetime.now(UTC)
+    with factory() as db:
+        query = EvidenceObject(id="query-test", version=1, kind="fonte_primaria", origin="consulta",
+                               attributes={"literal": "Resposta controlada negativa no escopo"})
+        record = {"scope": "fixture-scope", "identifiers": ["fixture-id"], "consulted_at": now.isoformat(), "response": {"matches": []}}
+        persist_object(db, case["tenant"], case["case"], query, source_record=record)
+        conclusion = EvidenceObject(id="verified-test", version=1, kind="conclusao", origin="diagnostico",
+            statement="Ausência verificada no escopo sintético", conclusion_class="fato_documental",
+            premises=[{"id": query.id, "version": 1}], knowledge={"state": "ausencia_verificada_no_escopo",
+                "verification": {"source": {"id": query.id, "version": 1}, "preserved_response": {"id": query.id, "version": 1},
+                                 "scope": record["scope"], "identifiers": record["identifiers"], "consulted_at": now}})
+        persist_object(db, case["tenant"], case["case"], conclusion)
+        review_object(db, case["tenant"], case["user"], case["case"], conclusion.id,
+                      ReviewRequest(expected_version=1, expected_revision=0, action="aprovar", justification="Conferi o registro"))
+        assert len(build_envelope(db, case["tenant"], case["user"], case["case"]).conclusions) == 1
+        invalid_data = conclusion.model_dump(mode="json")
+        invalid_data["id"] = "forged-scope"
+        invalid_data["knowledge"]["verification"]["scope"] = "outside-preserved-scope"
+        with pytest.raises(HTTPException, match="422"):
+            persist_object(db, case["tenant"], case["case"], EvidenceObject.model_validate(invalid_data))
+        persist_object(db, case["tenant"], case["case"], query.model_copy(update={"version": 2}), source_record=record)
+        assert build_envelope(db, case["tenant"], case["user"], case["case"]).conclusions == []

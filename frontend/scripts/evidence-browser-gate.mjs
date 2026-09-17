@@ -17,6 +17,9 @@ try {
   const context = await browser.newContext();
   const page = await context.newPage();
   await login(page);
+  for (const name of ['atendimento', 'financeiro', 'marketing', 'acompanhamento', 'vigia']) {
+    await expect(page.locator(`select option[value="${name}"]`)).toHaveCount(0);
+  }
   await page.locator('select').filter({ has: page.locator('option[value=diagnostico]') }).first().selectOption('diagnostico');
   await page.getByRole('button', { name: 'Executar', exact: true }).click();
   const card = page.locator('article').filter({ hasText: 'Hipótese controlada do navegador' }).first();
@@ -46,8 +49,11 @@ try {
   await expect(secondPage.getByText('Substituída por correção', { exact: true }).first()).toBeVisible();
   await secondPage.getByRole('button', { name: 'Retomar execução', exact: true }).first().click();
   await expect(secondPage.locator('article')).toHaveCount(3);
+  await secondPage.locator('select').filter({ has: secondPage.locator('option[value=extrator]') }).first().selectOption('extrator');
+  await secondPage.getByRole('button', { name: 'Executar', exact: true }).click();
+  await expect(secondPage.getByText('CAPACIDADE INSUFICIENTE', { exact: true })).toBeVisible({ timeout: 20000 });
   await secondContext.close();
-  console.log('PASS: DOM reject, reload, correction, fresh login, version history, resume');
+  console.log('PASS: DOM reject, reload, correction, fresh login, version history, resume, missing capability');
 } finally {
   await browser.close();
 }
