@@ -152,7 +152,7 @@ def test_desmarcar_limpa_autoria(client: TestClient, db_session):
 # 2. Guard-rail: declara, nunca trava
 # ---------------------------------------------------------------------------
 
-def test_gate_avisa_que_os_agentes_nao_rodaram(client: TestClient, db_session):
+def test_gate_nao_exige_atendimento_congelado(client: TestClient, db_session):
     tenant, user, process = _seed_e1(db_session)
     headers = _login(client, user.email, "senha123")
 
@@ -160,8 +160,9 @@ def test_gate_avisa_que_os_agentes_nao_rodaram(client: TestClient, db_session):
     assert r.status_code == 200
     gate = r.json()
 
-    assert gate["agentes_executados"] is False
-    assert any("agentes desta etapa não foram executados" in a for a in gate["avisos"])
+    # ADR-069: entrada agora é manual; não criar pendência de agente congelado.
+    assert gate["agentes_executados"] is True
+    assert not any("agentes desta etapa não foram executados" in a for a in gate["avisos"])
 
 
 def test_aviso_nao_e_bloqueio(client: TestClient, db_session):
@@ -180,7 +181,7 @@ def test_aviso_nao_e_bloqueio(client: TestClient, db_session):
     gate = client.get(f"/api/v1/processes/{process.id}/can-advance", headers=headers).json()
 
     assert gate["can_advance"] is True          # não trava
-    assert gate["agentes_executados"] is False  # mas avisa
+    assert gate["agentes_executados"] is True   # nenhuma chain aplicável à E1
     assert gate["avisos"]
 
 
@@ -257,4 +258,5 @@ def test_auditoria_registra_o_que_estava_pendente_no_avanco(
     )
     assert audit is not None
     assert "ressalvas" in (audit.details or "")
-    assert "agentes da etapa não executados" in audit.details
+    assert "agentes da etapa não executados" not in audit.details
+    assert "lacuna(s)" in audit.details  # pendências reais continuam registradas

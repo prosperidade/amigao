@@ -134,11 +134,10 @@ def test_sigef_valida_codigo_e_status_reais():
     assert "029231" in str(lin["fontes"].get("sigef", ""))
 
 
-def test_denominacao_consistente_por_fonte_unica():
+def test_denominacao_fonte_unica_nao_comprova_confronto():
     """Só o SIGEF trouxe denominação (certidão/CCIR/CAR não foram extraídos):
-    a matriz reporta consistente com UMA fonte — gap honesto de fonte ausente,
-    não invenção de divergência."""
+    o contrato 069 reporta atenção, pois uma fonte não comprova confronto."""
     matriz = build_matrix(_caso11_real_rows()).matriz
     lin = _by_item(matriz)["denominacao_imovel"]
-    assert lin["situacao"] == "consistente"
+    assert lin["situacao"] == "atencao"
     assert set(lin["fontes"].keys()) == {"sigef"}

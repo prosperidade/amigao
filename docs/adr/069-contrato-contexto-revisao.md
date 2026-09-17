@@ -118,7 +118,9 @@ suíte completa e upgrade/downgrade das migrations.
 Testes históricos de algoritmos e projeções foram apontados explicitamente ao
 harness legado isolado: não são prova da execução autorizada nova. Expectativas
 de consumo bruto sem revisão em ADR-011 foram substituídas por testes reais de
-dependências. Asserts de domínio dos algoritmos legados não foram afrouxados.
+dependências. Fonte única não comprova confronto; expectativa antiga de
+consistência com uma fonte foi substituída por atenção, conforme a triagem do #171.
+Entrada manual não exige atendimento congelado nem aceita marcação por intake.
 
 Provas usam documentos sintéticos identificados como fixtures. Não reextraem nem
 homologam Jobson, ELODI ou outros originais; não afirmam cobertura jurídica,

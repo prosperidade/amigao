@@ -918,7 +918,7 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
                 _destino("divergente", subtipo="transcricao"), subtipo="transcricao"))
             for r in denom_rows:
                 status_updates.append((r, "divergente_transcricao"))
-        elif len({r.document_id for r in denom_rows if r.document_id is not None}) > 1:
+        elif len({getattr(r, "document_id", None) for r in denom_rows} - {None}) > 1:
             linhas.append(MatrixRow(
                 "denominacao_imovel", "Denominação do imóvel", denom_fontes,
                 MatrixSituacao.consistente.value, "Denominação confere.", _destino("consistente")))

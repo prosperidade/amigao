@@ -13,6 +13,8 @@ com `npx playwright install chromium` e executar
 (PowerShell: `$env:EVIDENCE_BROWSER_GATE='1'` antes do comando). A CI prepara o
 build/Chromium e exige esse gate dentro da suíte. O teste sobe servidor HTTP
 loopback, usa login da UI e sessões PostgreSQL com commit; Celery é eager.
+Cada fixture com commit usa schema descartável próprio, removido ao terminar;
+isso impede contaminação da suíte legada baseada em rollback.
 Não usa conta, documento ou chave de provider real.
 
 Testes antigos em `tests/agents` que chamam `_run_legacy_unconnected` preservam

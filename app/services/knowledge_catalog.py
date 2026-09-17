@@ -434,8 +434,14 @@ def search(
 
     _probes = int(getattr(settings, "RAG_IVFFLAT_PROBES", 10) or 0)
     if _probes > 0:
-        # Failure must propagate, not poison the session and masquerade as no evidence.
-        session.execute(text(f"SET LOCAL ivfflat.probes = {_probes:d}"))
+        # Isolate the optional setting: a SQL error must not poison the caller's
+        # transaction. Other failures still propagate instead of becoming no evidence.
+        try:
+            with session.connection().begin_nested():
+                session.execute(text(f"SET LOCAL ivfflat.probes = {_probes:d}"))
+        except Exception as exc:
+            if 'unrecognized configuration parameter "ivfflat.probes"' not in str(exc):
+                raise
 
     rows = session.execute(sql, params).all()
 

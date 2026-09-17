@@ -22,7 +22,8 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 231.** (#225 a #230 abertas pela Frente L —
+> **PRÓXIMO NÚMERO LIVRE: 233.** (#231 e #232 abertas no PR #172;
+> #225 a #230 abertas pela Frente L —
 > `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
 > (`gh pr list` vazio), então 225 estava mesmo livre.)
 > Histórico da contagem anterior: (#223 e #224 abertas pela Frente G/I —

@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import get_db
@@ -15,6 +16,7 @@ from app.core.ai_gateway import AIResponse
 from app.core.security import get_password_hash
 from app.main import app
 from app.models.ai_job import AIJob
+from app.models.base import Base
 from app.models.client import Client
 from app.models.document import Document
 from app.models.evidence import EvidenceReview, EvidenceVersion
@@ -28,8 +30,16 @@ from app.services.evidence import build_envelope, capture_snapshot, persist_obje
 
 @pytest.fixture
 def committed_case(db_engine):
-    factory = sessionmaker(bind=db_engine)
     suffix = uuid4().hex
+    # Real commits must not leak fixtures into the transaction-based legacy suite.
+    schema = f"evidence_test_{suffix}"
+    with db_engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    isolated = create_engine(db_engine.url,
+        connect_args={"options": f"-csearch_path={schema},public"},
+        execution_options={"schema_translate_map": {None: schema}})
+    Base.metadata.create_all(isolated)
+    factory = sessionmaker(bind=isolated)
     with factory() as db:
         tenant = Tenant(name=f"Contract {suffix}")
         db.add(tenant)
@@ -57,8 +67,13 @@ def committed_case(db_engine):
         with factory() as db:
             yield db
     app.dependency_overrides[get_db] = override_db
-    yield factory, data
-    app.dependency_overrides.clear()
+    try:
+        yield factory, data
+    finally:
+        app.dependency_overrides.clear()
+        isolated.dispose()
+        with db_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
 
 
 def login(client, email):
