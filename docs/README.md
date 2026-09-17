@@ -59,6 +59,8 @@ docs/
 
 ## Por onde começar
 
+Planejamento de execução vigente: [Plano diretor v1.1](arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md), especialmente o §8 para os incrementos. Análise que o sustenta: [Mergulho estrutural de 17/09/2026](arquitetura/MERGULHO_ESTRUTURAL_REGENTE_2026-09-17.md). Destino das correções anteriores: [triagem do PR #171](auditoria/TRIAGEM_PR171_PLANO_V1_1.md).
+
 | Você é... | Leia nesta ordem |
 |---|---|
 | Pessoa nova no projeto | `manifesto/01-VISAO_PRODUTO.md` → `manifesto/02-IDENTIDADE.md` → `manifesto/03-PRINCIPIOS.md` → `arquitetura/ARQUITETURA_GERAL.md` |

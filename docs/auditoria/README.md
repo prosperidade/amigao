@@ -4,6 +4,14 @@ Auditorias do Regente Ambiental, em ordem cronológica. Cada item registra **o q
 
 Regra da pasta: auditoria é fotografia de um SHA. Não se edita um relatório depois de fechado — nova leitura vira arquivo novo, e o índice ganha uma linha.
 
+## 17/09/2026 — Mergulho estrutural, plano v1.1 e triagem do #171
+
+**Base:** `d2a3de0070a456acb9095d063164135ae26cbe06`; **PR analisado:** `e30a8dd7296743d8ef545ce64962d957c9fd0a12`.
+
+[Mergulho estrutural](../arquitetura/MERGULHO_ESTRUTURAL_REGENTE_2026-09-17.md) — análise da cadeia de evidências. [Plano diretor v1.1](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md) — referência de execução, não evidência de implementação. [Triagem do PR #171](TRIAGEM_PR171_PLANO_V1_1.md) — destino de cada alteração e falha da CI comparada com a base. Conclusão: não integrar o PR integralmente; contenções válidas exigem transporte seletivo pelo contrato novo. O #171 foi fechado sem merge e sua branch foi preservada.
+
+Os documentos foram publicados na branch `feat/contrato-evidencia` após autorização explícita de push. O bloqueio de publicação registrado na triagem é histórico e foi superado; isso não significa merge nem implementação do Incremento 1.
+
 ---
 
 ## 0.1 Auditoria documental — inventário de dívidas e pendências
