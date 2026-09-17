@@ -166,6 +166,13 @@ class DiagnosticoAgent(BaseAgent):
 
         # 1. Montar contexto do processo
         process_data = self._load_process_data()
+        # A API síncrona enriquece metadata.uf; o worker/chain assíncrono não.
+        # A skill rural exige a UF e sumia silenciosamente nesse caminho.
+        # Usa o imóvel já carregado, sem nova consulta nem escrita cadastral.
+        if not self.ctx.metadata.get("uf"):
+            uf = (process_data.get("property") or {}).get("state")
+            if isinstance(uf, str) and uf.strip():
+                self.ctx.metadata = {**self.ctx.metadata, "uf": uf.strip().upper()}
 
         # 2. Dados da chain (se veio de extrator ou legislacao)
         extracted_data = self.ctx.chain_data.get("extrator", {})

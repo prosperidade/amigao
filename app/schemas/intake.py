@@ -9,6 +9,7 @@ Mudanças Regente v3 (2026-04):
 import enum
 from typing import Any, Optional
 
+from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.process import EntryType
@@ -57,8 +58,10 @@ class IntakeClientCreate(BaseModel):
     @classmethod
     def _email_nao_vazio(cls, v: str) -> str:
         v = (v or "").strip()
-        if not v or "@" not in v:
-            raise ValueError("E-mail é obrigatório e deve ser válido.")
+        try:
+            validate_email(v, check_deliverability=False)
+        except EmailNotValidError as exc:
+            raise ValueError("E-mail é obrigatório e deve ser válido.") from exc
         return v
 
 

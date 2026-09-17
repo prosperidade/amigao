@@ -918,12 +918,18 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
                 _destino("divergente", subtipo="transcricao"), subtipo="transcricao"))
             for r in denom_rows:
                 status_updates.append((r, "divergente_transcricao"))
-        else:
+        elif len(denom_fontes) > 1:
             linhas.append(MatrixRow(
                 "denominacao_imovel", "Denominação do imóvel", denom_fontes,
                 MatrixSituacao.consistente.value, "Denominação confere.", _destino("consistente")))
             for r in denom_rows:
                 status_updates.append((r, "consistente"))
+        else:
+            linhas.append(MatrixRow(
+                "denominacao_imovel", "Denominação do imóvel", denom_fontes,
+                MatrixSituacao.atencao.value,
+                "Fonte única: denominação informada, ainda sem confronto documental.",
+                _destino("atencao")))
 
     # --- codigo_incra_sncr ----------------------------------------------
     incra_fontes: dict[str, Any] = {}
@@ -960,8 +966,11 @@ def build_matrix(rows: list[Any]) -> MatrixResult:
                       "rat": "pendência geo" if rat_geo_pendencia else "—"}
         linhas.append(MatrixRow(
             "sigef_georreferenciamento", "Georreferenciamento (SIGEF)", fontes_sig,
-            MatrixSituacao.critico.value, "verificar DCR/SIGEF/SNCR (certificação ausente/pendente)",
-            _destino("critico")))
+            MatrixSituacao.atencao.value,
+            ("Certificação não comprovada nos documentos revisados. "
+             "Verificar aplicabilidade ao objetivo e ao ato antes de concluir "
+             "obrigação, risco ou recomendar serviço."),
+            _destino("atencao")))
     elif rat_geo_pendencia:
         # certificação existe (código+status reais) mas o órgão pede apresentação
         linhas.append(MatrixRow(

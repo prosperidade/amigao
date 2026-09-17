@@ -78,10 +78,11 @@ def test_codigo_incra_atencao():
     assert "correspond" in lin["acao_recomendada"].lower()
 
 
-def test_sigef_critico_quando_ausente():
+def test_sigef_ausente_exige_aplicabilidade_antes_de_risco_ou_orcamento():
     lin = _by_item(build_matrix(_sao_jorge_rows()).matriz)["sigef_georreferenciamento"]
-    assert lin["situacao"] == "critico"
-    assert lin["destino"] == ["diagnostico", "orcamento"]
+    assert lin["situacao"] == "atencao"
+    assert lin["destino"] == ["alertas"]
+    assert "aplicabilidade" in lin["acao_recomendada"]
 
 
 def test_car_presenca_inconsistente_itr_sem_car():

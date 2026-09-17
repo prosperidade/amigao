@@ -75,7 +75,7 @@ def test_auditor_anexa_matriz_e_preserva_shape(seeded, db_session):
     itens = {ln["item"]: ln for ln in matriz["linhas"]}
     assert itens["area_total"]["situacao"] == "divergente"
     assert itens["denominacao_imovel"]["situacao"] == "divergente"
-    assert itens["sigef_georreferenciamento"]["situacao"] == "critico"
+    assert itens["sigef_georreferenciamento"]["situacao"] == "atencao"
 
     # staging marcado (consistente/divergente_*), nunca aceito/rejeitado
     marcados = (

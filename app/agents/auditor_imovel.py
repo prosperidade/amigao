@@ -101,15 +101,19 @@ class AuditorImovelAgent(BaseAgent):
             for f in findings
         ]
         # PROMPT_5 Onda A: contagem por grade (4 níveis), não mais severity (3).
-        criticos = [f for f in findings if f.grade == "critico"]
-        altos = [f for f in findings if f.grade == "alto"]
-        atencoes = [f for f in findings if f.grade == "atencao"]
+        resumo_matriz: dict[str, int] = {}
+        for linha in matriz.get("linhas", []):
+            situacao = linha.get("situacao", "atencao")
+            resumo_matriz[situacao] = resumo_matriz.get(situacao, 0) + 1
+        matriz["resumo"] = resumo_matriz
+        pendentes = sum(n for situacao, n in resumo_matriz.items() if situacao != "consistente")
 
         return {
             "content": (
-                f"{len(findings)} divergência(s) detectada(s) "
-                f"({len(criticos)} crítica(s), {len(altos)} alto(s), "
-                f"{len(atencoes)} atenção)."
+                f"Matriz documental: {len(matriz.get('linhas', []))} item(ns), "
+                f"{pendentes} ponto(s) para revisão. "
+                f"Achados das regras de auditoria: {len(findings)}. "
+                "Ausência de achados não comprova regularidade."
             ),
             "requires_review": True,  # princípio 1 do manifesto
             "divergencias": divergencias,
@@ -221,6 +225,9 @@ class AuditorImovelAgent(BaseAgent):
                 continue
             codigo_alerta, familia = par
             fontes = linha.get("fontes") or {}
+            # Uma fonte isolada é observação a conferir, não divergência.
+            if len(fontes) < 2:
+                continue
             docs = sorted({_doc_label(k) for k in fontes}) or None
             valores = "; ".join(f"{_doc_label(k)}={v}" for k, v in fontes.items())
             label = linha.get("label") or item

@@ -114,12 +114,19 @@ class LegislacaoAgent(BaseAgent):
         process_context: dict[str, Any] = {}
         if self.ctx.process_id:
             process_context = self._load_process_context()
-            if not demand_type:
+            if (demand_type or "").strip().lower() in _DEMAND_SENTINELS:
                 demand_type = process_context.get("demand_type", "")
+            if (demand_type or "").strip().lower() in _DEMAND_SENTINELS:
+                # Objetivo informado orienta a pesquisa sem promover a
+                # classificação pendente para decisão oficial do consultor.
+                demand_type = process_context.get("process_type", "")
             if not state:
                 state = process_context.get("state", "")
             if not query:
                 query = f"Qual o caminho regulatorio para {demand_type} no estado {state}?"
+                objetivo = process_context.get("initial_summary") or process_context.get("description")
+                if objetivo:
+                    query += f" Objetivo informado pelo consultor: {objetivo}"
 
         if not settings.ai_configured:
             return self._rules_based_response(demand_type, state)
@@ -548,6 +555,7 @@ class LegislacaoAgent(BaseAgent):
             "process_type": process.process_type,
             "title": process.title,
             "description": process.description or "",
+            "initial_summary": process.initial_summary or "",
             "initial_diagnosis": process.initial_diagnosis or "",
         }
 
