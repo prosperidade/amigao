@@ -1,7 +1,9 @@
 # ADR-070 — Modelo de dados alvo: envelope epistêmico único + entidades de domínio tipadas
 
 - **Data:** 17/09/2026
-- **Estado:** proposta. Análise e desenho; **nenhuma migration escrita, nenhum schema alterado**.
+- **Estado:** aceita no merge do #176 (18/09/2026). Emendada com as decisões do André de
+  17/09 e com as provas de execução (§Decisões do André, §Execução). **Nenhuma migration
+  escrita, nenhum schema alterado.**
 - **Frente:** A — arquitetura de dados versionada (`docs/arquitetura-dados-adr070`)
 - **Base inspecionada:** código em `b6df7e6` (pós-#172 e #173); rebaseado sobre `4def0cf`,
   que só acrescenta os docs do #175; banco dev
@@ -11,29 +13,30 @@
   (#175) decide os nomes; este ADR decide a **forma**.
 - **Roteiro e evidências:** [MIGRACAO_MODELO_DADOS.md](../arquitetura/MIGRACAO_MODELO_DADOS.md).
 
-> **Insumo ausente.** O pedido previa versionar `ARQUITETURA_DADOS_RAG_REGENTE_v1.md`
-> como passo zero. O arquivo não foi entregue e não existe no disco (busca por nome e
-> pelos termos distintivos). O alvo usado aqui é o
-> [Plano v1.1 §6](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md#6-modelo-de-dados) e o
-> [Mergulho §2.3–§2.4 e §5](../arquitetura/MERGULHO_ESTRUTURAL_REGENTE_2026-09-17.md#5-m4--modelo-de-dados-e-migração),
-> que nomeiam as mesmas entidades e os mesmos sete grupos de migração. Quando o
-> documento chegar, a reconciliação é um item de execução (ver fim).
+> **Insumo.** `ARQUITETURA_DADOS_RAG_REGENTE_v1.md` não estava no disco quando este ADR
+> foi escrito; o alvo veio do
+> [Plano v1.1 §6](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md#6-modelo-de-dados) e do
+> [Mergulho §2.3–§2.4 e §5](../arquitetura/MERGULHO_ESTRUTURAL_REGENTE_2026-09-17.md#5-m4--modelo-de-dados-e-migração).
+> **Decisão do André:** o insumo entra em `docs/arquitetura/` quando entregue; **se divergir,
+> este ADR vence** — ele nasceu do confronto com o schema real.
 
-> **Numeração.** O Plano §10.2 reservou 070 para "entrada semântica e cartorário". Este
-> ADR ocupa 070 com o modelo de dados que o Incremento 2 executa; o comportamento do
-> motor cartorário entra como adendo deste ou em número novo — decisão do André.
-> Forma de geometria e de regras é fixada aqui; método de cálculo (071) e linguagem de
-> regra (072) continuam nos ADRs reservados e podem emendar esta forma.
+> **Numeração (decisão do André).** 070 = modelo de dados · **071 = motor cartorário** ·
+> **072 = geometria** (e auditor). Por deslocamento, motor jurídico passa a 073 e métodos/
+> comercial a 074 ([Plano §10.2](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md#102-numeração-e-artefatos)).
+> A forma de geometria e de regras é fixada aqui; método de cálculo (072) e linguagem de
+> regra (073) podem emendá-la.
 
 ## Contexto (medido)
 
-1. O #172 criou o envelope epistêmico: `evidence_versions` guarda fonte primária,
-   observação, derivação e conclusão como `kind` + `content` JSONB, com identidade
-   `(tenant, processo, object_id, version)` ([evidence.py:22–38](../../app/models/evidence.py#L22-L38)).
-   Toda regra de conteúdo vive só no Pydantic/serviço
-   ([schemas/evidence.py:82–126](../../app/schemas/evidence.py#L82-L126)). **O banco não tem
-   nenhuma CHECK nem trigger do app** — só unicidade. Insert direto (script, SQL de
-   correção em produção, agente futuro) passa sem validação.
+1. **O banco não tem NENHUMA CHECK nem trigger do app — em dev e em produção.** Medido:
+   zero `CheckConstraint`/`CREATE TRIGGER` em todo `alembic/versions`; produção (Supabase,
+   18/09) com **0 CHECK e 0 trigger** no schema `public`; dev só com a CHECK e o trigger que
+   o próprio PostGIS instala. O envelope do #172 (`evidence_versions`: `kind` + `content`
+   JSONB, [evidence.py:22–38](../../app/models/evidence.py#L22-L38)) valida conteúdo só no
+   Pydantic/serviço ([schemas/evidence.py:82–126](../../app/schemas/evidence.py#L82-L126)).
+   **Toda regra de conteúdo é contornável por SQL direto** — script de saneamento, correção
+   manual em produção (já usada no wipe dos casos 8/13), backfill, agente novo. Este é o
+   argumento das constraints do §14, não um detalhe.
 2. Texto de OCR é **sobrescrito no lugar** (`extracted_text`, [ocr_tasks.py:363](../../app/workers/ocr_tasks.py#L363));
    âncoras apontam offset do texto *corrente* ([text_anchor.py:56–57](../../app/services/text_anchor.py#L56-L57)).
    `version_number` nunca sai de 1. Não há página.
@@ -45,11 +48,21 @@
    entre atos só existem em memória e em JSON de staging.
 5. `Property.geom` (GEOMETRY, SRID 4674) nunca é gravada; nenhuma função `ST_*` é chamada
    em `app/`. Não há shapely/pyproj/fastkml na imagem.
-6. Corpus: 32.161 chunks de 395 fontes (113 legislação + 282 PDFs SEMAD sem linha de
-   documento). Nível de autoridade determinável dos campos gravados para **19,2% dos
-   chunks**; os 29 compêndios (70,7% dos chunks) exigem re-derivação por ato.
+6. **A zona normativa exige REINGESTÃO, não classificação retroativa.** Corpus: 32.161
+   chunks de 395 fontes (113 legislação + 282 PDFs SEMAD sem linha de documento). Só
+   **19,2% dos chunks** têm nível de autoridade derivável do que está gravado. **70,7%**
+   (22.725 chunks) vêm de **29 compêndios** cuja identidade é o núcleo temático, não o ato:
+   cada chunk precisa de nova identificação de ato — reingestão com fatiamento por ato.
+   Isso muda o tamanho do trabalho do Incremento 4: não é uma coluna nova preenchida por
+   regra, é refazer a entrada de 80,8% do corpus.
 7. Não existe catálogo de regras: `regulatory_issue_catalog` é vocabulário de saída, e
    `regulatory_issues` só grava o que disparou — `indeterminado` vira "não disparou".
+8. **Produção ≠ dev (medido 18/09, leitura read-only):** PostgreSQL **17.6** (dev e CI rodam
+   15); PostGIS **3.3.7 no schema `extensions`** (dev: 3.3.4 em `public`); `vector` 0.8.0;
+   `pgcrypto` presente; alembic em `069ce001` (o Incremento 1 está aplicado em produção,
+   não em dev); `properties.geom` = `extensions.geometry(Geometry,4674)`, 0 preenchidas.
+   O papel `postgres` tem `search_path = "$user", public, extensions`, por isso `ST_*`
+   resolve hoje; funções e triggers novas fixam `search_path` explicitamente.
 
 ## Decisão
 
@@ -67,13 +80,22 @@ continuam em JSON tipado.
 ### 2. Colunas promovidas são GERADAS do conteúdo
 
 Onde houver constraint, FK ou índice sobre um campo do `content`, ele vira coluna
-`GENERATED ALWAYS AS (content->…) STORED`: `kind`, `knowledge_state`, `conclusion_class`,
+`GENERATED ALWAYS AS (content->…) STORED`: `knowledge_state`, `conclusion_class`,
 `predicate`, `documento_versao_id`, `fragmento_id`, `consulta_object_id/version`,
-`finalidade`, `rota_passo_id`. Uma escrita (o conteúdo), nenhuma divergência possível
+`finalidade`, `rota_passo_id`. `kind` já é coluna comum em produção; ganha
+`CHECK (kind = content->>'kind')`. Uma escrita (o conteúdo), nenhuma divergência possível
 entre coluna e JSON. A tabela é nova e pequena; a reescrita do `ADD COLUMN … STORED` é
-irrelevante nela. **A confirmar no Incremento 2 com teste de migration:** FK sobre coluna
-gerada (PostgreSQL aceita sem ações `ON UPDATE CASCADE/SET NULL`). Plano B: coluna comum
-preenchida por trigger `BEFORE INSERT`.
+irrelevante nela.
+
+**Provado (18/09, PostgreSQL 15.4 e 17.6, 23/23 casos):** FK composta sobre colunas
+geradas funciona, inclusive `DEFERRABLE`, e barra referência a outro caso e a outra
+consultoria. Duas restrições do PostgreSQL entram como regra de desenho:
+- FK sobre coluna gerada não aceita `ON UPDATE CASCADE` (erro `42601`) — irrelevante aqui,
+  porque as linhas são imutáveis;
+- **trigger `BEFORE` não enxerga coluna gerada** (erro `42P17` no `WHEN`; a coluna ainda não
+  foi calculada nessa fase). Toda validação que lê coluna gerada é **constraint trigger
+  `AFTER`**. Script e saída: [provas/adr070_prova_constraints.sql](../arquitetura/provas/adr070_prova_constraints.sql),
+  [MIGRACAO §2](../arquitetura/MIGRACAO_MODELO_DADOS.md#2-as-três-constraints-no-postgresql).
 
 ### 3. Imutabilidade garantida pelo banco
 
@@ -140,7 +162,7 @@ tipo, geometria em 4674 + geometria original e SRID de origem, validade).
 `medicao` (objeto = feição **ou** declaração documental, grandeza, valor, unidade,
 método+versão, modelo de cálculo, resultado de validação), append-only.
 `Property.geom` vira projeção de uma feição escolhida por decisão registrada. O método
-de área e a tolerância são do ADR-071 e da Ísis (Q-ISIS-04).
+de área e a tolerância são do ADR-072 e da Ísis (Q-ISIS-04).
 
 ### 10. Regras: identidade, versão, conjunto, avaliação
 
@@ -155,6 +177,13 @@ homologação, ativação por escopo; rollback = reativar a anterior) ·
 `regulatory_issue_catalog` fica como **vocabulário de códigos de saída**, referido por
 `regra_versao.resultado`; nunca é a regra.
 
+**Escopo (decisão do André): global com camada por consultoria.** `regra.tenant_id` nulo =
+base do produto, vale para todos; não nulo = camada daquela consultoria. O conjunto ativo de
+um caso é *base publicada + camada do tenant*, e a avaliação grava as duas versões. **Regra
+de tenant não vaza:** um conjunto só pode incluir regra com `tenant_id` nulo ou igual ao seu
+(FK composta + constraint trigger), e toda leitura filtra por esse par. Se a camada pode
+desativar ou sobrepor regra da base não foi decidido — fica para o ADR-073.
+
 ### 11. Execução e manifesto
 
 `agent_executions` permanece, com o histórico de snapshots como relação
@@ -168,7 +197,10 @@ de regras e templates. AIJob e execução referenciam o hash.
 
 `fonte_normativa` (uma linha por documento/ato **incluindo as 282 fontes SEMAD** que hoje
 só existem como chunks) com `nivel_autoridade` ∈ `norma | interpretacao | exigencia |
-procedimento | precedente | radar` e `status_validacao` (nasce `bruto`). O chunk herda
+procedimento | precedente | radar` e `status_validacao` ∈ **`bruto → proposto → validado`**
+(decisão do André): nasce `bruto`; **só `validado` é citável em peça**; `proposto` aparece em
+ambiente interno com selo; `bruto` é candidato de descoberta, sem selo de citável. Os 29
+compêndios entram por **reingestão** fatiada por ato (Contexto, item 6), não por UPDATE. O chunk herda
 por junção, como a vigência já faz
 ([services/knowledge_catalog.py:351–355](../../app/services/knowledge_catalog.py#L351-L355)).
 Por que documento e não chunk: o reindex do ADR-041 zera colunas de chunk, o ADR-040
@@ -190,13 +222,33 @@ expandir → projetar → contrair.
 | Invariante | No banco | Na aplicação | Por quê |
 |---|---|---|---|
 | `ausencia_verificada_no_escopo` exige consulta | CHECK (estado × referência presente) + FK composta para a consulta no mesmo tenant e caso + trigger: referida é `fonte_primaria` de origem `consulta` | Adequação da consulta à pergunta; limites da base | Adequação é juízo; existência e tipo são fato |
-| `risco` exige premissa `fato_documental` e justificativa | CHECK (justificativa não vazia) + constraint trigger DEFERRABLE: ≥1 aresta para conclusão `fato_documental` | Premissa **aprovada e atual** no consumo; suporte semântico | Aprovação muda no tempo e o radar deixa o risco nascer antes dela — é gate de consumo (ADR-069), não de escrita |
+| `risco` exige premissa de fato e justificativa | CHECK (justificativa não vazia) + constraint trigger DEFERRABLE: ≥1 aresta para **conclusão `fato_documental`** ou para **observação** | No consumo: a conclusão tem de estar **aprovada**, ou a observação **revisada e aceita**; suporte semântico | Dois caminhos (decisão do André). Aprovação/aceite mudam no tempo e o radar deixa o risco nascer antes deles — é gate de consumo (ADR-069), não de escrita. Aceite legado do staging só conta se tiver autor e data gravados, importado como evento de revisão da observação |
 | `escopo_proposto` exige finalidade e passo aprovado | CHECK (finalidade não vazia) + FK `(tenant_id, rota_passo_id)` + trigger: passo `validado`, mesmo caso, não removido, no insert | Passo que deixa de ser válido depois gera invalidação, não bloqueio | `RotaPasso.status` e `deleted_at` são mutáveis; bloquear a edição da Rota seria pior que invalidar |
 
 ### 15. Migração
 
 Expandir/contrair; **nenhum backfill inferido** (papel, página, trecho e data não
 registrados não se adivinham); uma escrita canônica por vez; adaptador serve a UI legada.
+**Colunas legadas saem no Incremento 6, com inventário de leitores
+([INVENTARIO_LEITORES_LEGADO.md](../arquitetura/INVENTARIO_LEITORES_LEGADO.md)); nunca no
+mesmo passo que cria as novas** (decisão do André).
+
+### 16. `has_embargo` congelada
+
+A coluna fica como está: **não se anulam os valores legados** — anular apagaria a distinção,
+ainda recuperável caso a caso, entre default e marcação. Linha nova nasce `NULL`, e
+`NULL` = `nao_determinado`. A coluna **deixa de ser lida**; embargo passa a ser observação ou
+consulta com fonte. Nenhum DDL: no banco a coluna já é nula e sem default; o `False` vinha do
+ORM e dos schemas.
+
+### 17. Retenção: expurgo com recibo (#207)
+
+RESTRICT indefinido trava a operação; RESTRICT continua só como proteção contra apagamento
+acidental. Eliminar prova é um fluxo explícito que grava **`recibo_expurgo`** append-only —
+**o quê** (tipo, id, versão), **quando**, **quem**, **hash** do conteúdo eliminado e a base
+da decisão —, entra na hash chain do tenant, invalida os dependentes com motivo
+"prova expurgada" e só então apaga. Nenhum valor continua afirmado como comprovado depois
+de sua prova sair.
 Roteiro, ordem e janelas em [MIGRACAO_MODELO_DADOS.md](../arquitetura/MIGRACAO_MODELO_DADOS.md).
 
 ## Alternativas descartadas
@@ -224,27 +276,31 @@ Roteiro, ordem e janelas em [MIGRACAO_MODELO_DADOS.md](../arquitetura/MIGRACAO_M
 - Testes que dependem de SQLite quebram com colunas geradas e triggers; a suíte já exige
   PostgreSQL (Testcontainers).
 
-## O que exige decisão do André
+## Decisões do André (17/09/2026)
 
-1. **Insumo:** entregar `ARQUITETURA_DADOS_RAG_REGENTE_v1.md`. Se o §3/§5/§10 divergir
-   deste ADR, qual prevalece.
-2. **Numeração:** cartorário como adendo do 070 ou ADR novo.
-3. **Premissa de risco:** só conclusão `fato_documental` conta, ou observação revisada
-   também. Muda o caminho de escrita do diagnóstico.
-4. **`status_validacao`:** valores (proposta: `bruto → conferido → homologado`, mais
-   `suspenso`) e o que `bruto` pode fazer — candidato na descoberta sim; fonte citável
-   de conclusão só a partir de qual estado.
-5. **Regras:** catálogo global do produto, por consultoria, ou global com sobreposição por
-   tenant.
-6. **`has_embargo` legado:** anular os 11 falsos de dev (e os de produção) ou congelar a
-   coluna e ler só o eixo novo.
-7. **Retenção (#207):** RESTRICT indefinido ou política de expurgo com recibo.
-8. **Janela de contração:** quando remover colunas legadas (irreversível).
-9. **Tipologias SEMAD:** `exigencia` ou `procedimento` para as 223 fichas de tipologia —
-   uma decisão para a classe inteira (com a Ísis).
+| # | Decisão | Efeito neste ADR |
+|---|---|---|
+| 1 | Insumo entra em `docs/arquitetura/`; se divergir, **o ADR-070 vence** | Nota de insumo |
+| 2 | Cartorário = ADR-071; geometria = ADR-072; 070 fica com o modelo | Nota de numeração; Plano §10.2 ajustado |
+| 3 | Premissa de risco: conclusão `fato_documental` **aprovada** ou observação **revisada e aceita** | §14 com os dois caminhos; prova, casos 6 e 7 |
+| 4 | `status_validacao`: `bruto → proposto → validado`; citável em peça só `validado`; `proposto` interno com selo | §12 |
+| 5 | Regras: global com camada por consultoria; regra de tenant não vaza | §10 |
+| 6 | `has_embargo`: congelar; `NULL` = `nao_determinado`; coluna deixa de ser lida; não anular | §16 |
+| 7 | #207: expurgo com recibo (o quê, quando, quem, hash) | §17 |
+| 8 | Colunas legadas saem no Incremento 6, com inventário de leitores; nunca junto da criação das novas | §15 |
+| 9 | 223 fichas de tipologia SEMAD: **pergunta para a Ísis**, junto com a tolerância do KMZ | Pendente com a Ísis |
 
-## O que é execução (sem decisão)
+## Pendente com a Ísis
 
-Medir extensões/versões de produção · teste de FK sobre coluna gerada · versionar o
-insumo quando chegar · inventário por consumidor antes de cada contração · dívidas
-#233–#236.
+- **Q-ISIS-18:** as 223 fichas de tipologia SEMAD são `exigencia` ou `procedimento`? Uma
+  resposta para a classe inteira. Vai junto com **Q-ISIS-04** (tolerância de reprodução da
+  área do KMZ de Jobson). Não se decide sem ela.
+
+## Execução (18/09/2026)
+
+| Item | Resultado |
+|---|---|
+| #236 — extensões de produção | **Medido e fechado.** PostgreSQL 17.6; PostGIS 3.3.7 em `extensions`; `vector` 0.8.0; `pgcrypto` 1.3; `pg_stat_statements`, `uuid-ossp`, `supabase_vault`; `postgis_topology` disponível e não instalado; alembic `069ce001`; 0 CHECK e 0 trigger em `public`. Leitura por SELECT via API de gestão em modo read-only. A divergência de versão com dev/CI vira #237 |
+| FK sobre coluna gerada | **Provado**, 23/23 casos em 15.4 e 17.6; duas restrições registradas no §2 |
+| Inventário de leitores das colunas legadas | [INVENTARIO_LEITORES_LEGADO.md](../arquitetura/INVENTARIO_LEITORES_LEGADO.md): 28 colunas/estruturas, leitores por lógica, API, consulta e tela. Achados #238–#241; `Document.size` sem leitor; `properties.regulatory_issues` e `geom` sem escritor |
+| Versionar o insumo | Aguarda entrega do André |
