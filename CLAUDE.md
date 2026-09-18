@@ -60,7 +60,7 @@ Para o "porquê" completo: `docs/manifesto/01-VISAO_PRODUTO.md`.
 ## Stack
 
 - **Backend:** Python 3.11, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic, Celery
-- **Banco:** PostgreSQL 15 + PostGIS 3.3 + pgvector 0.8, Redis 7
+- **Banco:** PostgreSQL 15 + PostGIS 3.3 + pgvector 0.8 em dev/CI; **produção (Supabase) roda PostgreSQL 17.6, PostGIS 3.3.7 no schema `extensions`, pgvector 0.8.0** (medido em 18/09/2026, dívida #237). Redis 7
 - **Storage:** MinIO (S3-compatible)
 - **Frontend (consultor — ativo):** React 18 + Vite + TypeScript + TailwindCSS + React Query + Zustand
 - **Frontend (cliente — congelado):** Next.js 16 (App Router) + TypeScript + TailwindCSS

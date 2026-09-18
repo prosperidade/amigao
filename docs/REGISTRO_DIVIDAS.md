@@ -15,8 +15,31 @@ Evidência em [MIGRACAO_MODELO_DADOS.md §8](arquitetura/MIGRACAO_MODELO_DADOS.m
 - **#235 — KMZ enviado não conta como georreferenciamento:** upload recebe
   `document_type="geoespacial"`, ausente de `_GEOREF_DOC_TYPES`
   (`api/v1/regulatory.py:681–685`); a nota diz "geom indisponível".
-- **#236 — extensões de produção nunca medidas:** `DEPLOY_REGENTE.md:61–74` pede validar
-  `postgis`/`vector`; nenhum resultado registrado. Passo 0 do roteiro de migração.
+- ~~**#236 — extensões de produção nunca medidas**~~ — **FECHADA 18/09/2026.** Medido por
+  SELECT read-only: PostgreSQL 17.6, PostGIS 3.3.7 em `extensions`, `vector` 0.8.0, alembic
+  `069ce001`, 0 CHECK e 0 trigger em `public`. Registro em
+  [MIGRACAO §6](arquitetura/MIGRACAO_MODELO_DADOS.md#6-geometria--o-levantamento-que-faltava).
+
+## Pulso 2026-09-18 — emenda do ADR-070 (decisões do André + execução)
+
+- **#237 — produção em PostgreSQL 17.6, dev e CI em 15:** migration, trigger e teste provados
+  no 15 não garantem o 17. A prova das constraints do ADR-070 rodou nas duas versões por isso.
+  Alinhar a imagem do dev/CI ou rodar o gate de migration também no 17.
+- **#238 — Hub soma área de matrícula rejeitada:** `GET /properties/{id}/matriculas` não filtra
+  `deactivated_at` (`matricula_repo.py:14–24`) e o `PropertyHub.tsx:848–851` filtra só
+  `vigencia`; o backend (`Property.area_total_matriculas`) exclui a desativada. Dois números
+  para a mesma pergunta. Confirmado lendo o código; não reproduzido na tela.
+- **#239 — representante apagado sai na API de clientes:** `Client.representatives`
+  (`client.py:94–98`) não filtra `deleted_at` e o schema serializa a lista
+  (`schemas/client.py:98`); hub e `/representatives` filtram. O frontend não lê esse campo
+  hoje. Confirmado lendo o código.
+- **#240 — depreciação de `Property.ccir` não cumprida:** o `MODELO_DE_DADOS` o declara
+  não-gravável, mas `POST/PATCH /properties` ainda aceitam o campo (`schemas/property.py:11, 34`)
+  e ele segue na allowlist de consolidação (latente). Fechar a escrita no schema de entrada.
+- **#241 — default `process_type="licenciamento"` vira declaração:** `ProcessBase`
+  (`schemas/process.py:10`) preenche o tipo quando ninguém informou; como `licenciamento` é chave
+  de `_DEMAND_RULES`, o classificador o trata como tipo **declarado** (`intake_classifier.py:506`).
+  Latente enquanto o Atendimento estiver congelado (ADR-069); fecha antes de reativá-lo.
 
 ## Pulso 2026-09-17 — Incremento 1, PR #172
 
@@ -40,7 +63,8 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 237.** (#233 a #236 abertas pela Frente A — ADR-070,
+> **PRÓXIMO NÚMERO LIVRE: 242.** (#237 a #241 abertas na emenda do ADR-070, 18/09.)
+> Anterior: 237. (#233 a #236 abertas pela Frente A — ADR-070,
 > `docs/arquitetura-dados-adr070`, 17/09; conferido `gh pr list`: nenhum PR aberto; #175, mergeado, não usa 23x.)
 > Anterior: 233 (#231 e #232 abertas no PR #172;
 > #225 a #230 abertas pela Frente L —

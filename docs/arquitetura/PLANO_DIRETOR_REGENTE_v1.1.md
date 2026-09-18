@@ -592,7 +592,7 @@ atos e o que cada espécie documental sustenta.
 
 **Critérios que deve atender:** READ-001 a 007 · AUD-004 · ENT-INV-001 · #211 ·
 #212 · #216 · #223 · #224 · #226.
-**ADR-070.** Esforço: grande. **Depende:** matriz cartorária (incremento 0).
+**ADR-070 (modelo de dados) + ADR-071 (cartorário).** Esforço: grande. **Depende:** matriz cartorária (incremento 0).
 
 ### INCREMENTO 3 — Geometria e Auditor unificado
 **Entrega:** ingestão KMZ/KML/shapefile · feições e medições · cálculo em CRS
@@ -612,7 +612,7 @@ Auditor (228+66 linhas) traduzidos em **regras verificáveis**, não em prompt.
 
 **Critérios que deve atender:** AUD-001 a 003 · AUD-005 a 007 · DATA-002 · #208 ·
 #219 · #225 · #228 · #230.
-**ADR-071.** Esforço: médio-grande.
+**ADR-072.** Esforço: médio-grande.
 
 ### INCREMENTO 4 — Motor jurídico, matrizes e fontes
 **Entrega:** importador recorrente das matrizes · linguagem restrita de condições ·
@@ -634,7 +634,7 @@ conflito de esferas. Regra não homologada não publica.
 
 **Critérios que deve atender:** LEG-001 a 007 · DIAG-003 · ADR-042 aceito com as
 correções do mergulho.
-**ADR-072.** Esforço: grande. **Depende:** matrizes + protocolo (incremento 0).
+**ADR-073.** Esforço: grande. **Depende:** matrizes + protocolo (incremento 0).
 
 ### INCREMENTO 5 — Métodos dos seis e fechamento comercial
 **Entrega:** skills reconciliadas e escritas (extrator por família documental,
@@ -652,7 +652,7 @@ por tipo de peça.
 
 **Critérios que deve atender:** DIAG-001 a 009 · ROUTE-001 · o bloqueio comercial
 do `gerar_proposta`.
-**ADR-073.** Esforço: grande. **Depende:** TRs (incremento 0).
+**ADR-074.** Esforço: grande. **Depende:** TRs (incremento 0).
 
 ### INCREMENTO 6 — Migração e invalidação
 **Entrega:** conversão do legado comprovável · revisão dos dados afetados ·
@@ -806,9 +806,11 @@ não exercitadas. Tratar cada uma **dentro** do incremento que a toca, nunca dep
 ### 10.2 Numeração e artefatos
 
 Dívidas: corpus 100-199 · produto 200-299 · infra 300-399. Próximo livre: 231.
-ADRs deste plano: **069** (contrato) · **070** (entrada semântica e cartorário) ·
-**071** (geometria e auditor) · **072** (motor jurídico) · **073** (métodos e
-comercial). ADR-042 é aceito dentro do 072, com as correções do mergulho.
+ADRs deste plano: **069** (contrato) · **070** (modelo de dados) · **071** (motor
+cartorário) · **072** (geometria e auditor) · **073** (motor jurídico) · **074**
+(métodos e comercial). ADR-042 é aceito dentro do 073, com as correções do mergulho.
+*Renumerado em 17/09 por decisão do André (070 modelo, 071 cartorário, 072 geometria);
+073/074 por deslocamento. Ver [ADR-070](../adr/070-modelo-de-dados-alvo.md).*
 
 Cada incremento produz: ADR · atualização do MODELO_DE_DADOS · relatório com a
 prova colada · pulso (ESTADO_ATUAL, progressoIA, REGISTRO_DIVIDAS, index).

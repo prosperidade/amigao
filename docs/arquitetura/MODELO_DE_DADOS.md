@@ -1,6 +1,6 @@
 # Modelo de Dados
 
-## Modelo alvo — ADR-070 (2026-09-17, proposta, sem migration)
+## Modelo alvo — ADR-070 (aceito em 18/09/2026, sem migration)
 
 O desenho-alvo e o caminho até ele estão em dois documentos:
 
@@ -13,6 +13,13 @@ O desenho-alvo e o caminho até ele estão em dois documentos:
 - [MIGRACAO_MODELO_DADOS.md](MIGRACAO_MODELO_DADOS.md): confronto entidade por entidade com
   o schema real, renomeações exigidas pela ontologia, caminho por grupo, ordem de
   migração, geometria e zona normativa.
+
+- [INVENTARIO_LEITORES_LEGADO.md](INVENTARIO_LEITORES_LEGADO.md): quem lê cada coluna que
+  sai no Incremento 6.
+
+**Produção ≠ dev (medido 18/09):** PostgreSQL 17.6 (dev/CI 15), PostGIS 3.3.7 no schema
+`extensions` (dev: `public`), alembic `069ce001` aplicado em produção. Nenhuma CHECK nem
+trigger do app em nenhum dos dois bancos.
 
 Esta página continua descrevendo o schema **implementado**; entidade do ADR-070 só entra
 aqui quando a migration correspondente existir.

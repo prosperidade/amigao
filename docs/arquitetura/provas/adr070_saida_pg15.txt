@@ -1,0 +1,32 @@
+ n  |                                 caso                                  |    esperado     |     obtido      | veredito 
+----+-----------------------------------------------------------------------+-----------------+-----------------+----------
+  1 | ausência com consulta primária no mesmo caso                          | aceito          | aceito          | PASS
+  2 | ausência sem consulta_ref                                             | rejeitado 23514 | rejeitado 23514 | PASS
+  3 | ausência apontando consulta inexistente                               | rejeitado 23503 | rejeitado 23503 | PASS
+  4 | ausência apontando consulta de OUTRA consultoria                      | rejeitado 23503 | rejeitado 23503 | PASS
+  5 | ausência apontando fonte que não é consulta                           | rejeitado 23514 | rejeitado 23514 | PASS
+  6 | risco com conclusão fato_documental e justificativa                   | aceito          | aceito          | PASS
+  7 | risco com observação como premissa (2º caminho)                       | aceito          | aceito          | PASS
+  8 | risco sem justificativa de aplicabilidade                             | rejeitado 23514 | rejeitado 23514 | PASS
+  9 | risco só com derivação como premissa                                  | rejeitado 23514 | rejeitado 23514 | PASS
+ 10 | risco com premissa inexistente                                        | rejeitado       | rejeitado 23514 | PASS
+ 11 | UPDATE em versão gravada                                              | rejeitado P0001 | rejeitado P0001 | PASS
+ 12 | DELETE em versão gravada                                              | rejeitado P0001 | rejeitado P0001 | PASS
+ 13 | escopo com finalidade e passo validado                                | aceito          | aceito          | PASS
+ 14 | escopo sem finalidade                                                 | rejeitado 23514 | rejeitado 23514 | PASS
+ 15 | escopo com passo apenas proposto                                      | rejeitado 23514 | rejeitado 23514 | PASS
+ 16 | escopo com passo de OUTRA consultoria                                 | rejeitado 23503 | rejeitado 23503 | PASS
+ 17 | escopo com passo removido (soft-delete)                               | rejeitado 23514 | rejeitado 23514 | PASS
+ 18 | kind da coluna diferente do conteúdo                                  | rejeitado 23514 | rejeitado 23514 | PASS
+ 19 | FK com ON UPDATE CASCADE sobre coluna gerada (restrição documentada)  | rejeitado       | rejeitado 42601 | PASS
+ 20 | ADD COLUMN gerada STORED em tabela com linhas                         | aceito          | aceito          | PASS
+ 21 | trigger BEFORE com WHEN sobre coluna gerada (restrição do PostgreSQL) | rejeitado       | rejeitado 42P17 | PASS
+ 22 | observação com premissa inexistente (FK da aresta isolada)            | rejeitado 23503 | rejeitado 23503 | PASS
+ 23 | observação com premissa de OUTRO caso                                 | rejeitado 23503 | rejeitado 23503 | PASS
+(23 rows)
+
+            servidor            | pass | total 
+--------------------------------+------+-------
+ 15.4 (Debian 15.4-1.pgdg110+1) |   23 |    23
+(1 row)
+

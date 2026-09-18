@@ -4,15 +4,16 @@
 **Decisões:** [ADR-070](../adr/070-modelo-de-dados-alvo.md) · **Nomes:** [Ontologia v1](ONTOLOGIA_REGENTE_v1.md) (#175)
 **Base:** código em `b6df7e6` (o #175, mergeado depois, só acrescenta docs); banco dev `amigao_db` @ `127.0.0.1:15432`, alembic
 `c7e1a94d2f60` (o `069ce001` do #172 **não** está aplicado em dev). Leituras só com SELECT.
-**Estado:** análise. **Nenhuma migration escrita, nenhum schema alterado.** SQL abaixo é
-esboço para dimensionar, não migration.
+**Estado:** aceito com o ADR-070 (#176); emendado em 18/09 com as decisões do André, a medição
+de produção e a prova das constraints. **Nenhuma migration escrita, nenhum schema alterado.**
+SQL abaixo é esboço ou prova em banco descartável, não migration.
 
 > **Alvo usado.** `ARQUITETURA_DADOS_RAG_REGENTE_v1.md` não foi entregue. Entidades-alvo:
 > [Plano v1.1 §6.2](PLANO_DIRETOR_REGENTE_v1.1.md#62-entidades-novas) + objetos do
 > [Mergulho §2.3](MERGULHO_ESTRUTURAL_REGENTE_2026-09-17.md#23-contrato-alvo-evidência-observação-derivação-e-conclusão).
 > Os sete grupos do §4 são os do [Plano §6.3](PLANO_DIRETOR_REGENTE_v1.1.md#63-migração)
 > / [Mergulho §5.7](MERGULHO_ESTRUTURAL_REGENTE_2026-09-17.md#57-estratégia-de-migração).
-> Divergência com o §3/§5/§10 do documento, quando ele chegar, reabre esta tabela.
+> **Decisão do André:** o insumo entra em `docs/arquitetura/`; se divergir, **o ADR-070 vence**.
 
 Legenda de caminho: `ev.py` = `app/models/evidence.py`; `sev.py` = `app/schemas/evidence.py`;
 `svev.py` = `app/services/evidence.py`; `obs.py` = `app/services/observacao_registral.py`;
@@ -47,7 +48,7 @@ Legenda de caminho: `ev.py` = `app/models/evidence.py`; `sev.py` = `app/schemas/
 
 ---
 
-## 2. As três constraints no PostgreSQL 15
+## 2. As três constraints no PostgreSQL
 
 **Estado de partida:** nenhuma CHECK e nenhum trigger do app em todo o `alembic/versions`
 (dev: só `spatial_ref_sys_srid_check` e o trigger de topologia do PostGIS). Tudo abaixo é novo.
@@ -62,9 +63,9 @@ Legenda de caminho: `ev.py` = `app/models/evidence.py`; `sev.py` = `app/schemas/
 
 | Invariante | Dá em constraint/trigger | Só dá na aplicação | Por quê | Custo |
 |---|---|---|---|---|
-| **`ausencia_verificada_no_escopo` sem `consulta_ref` é rejeitada** | ① `CHECK (knowledge_state IS DISTINCT FROM 'ausencia_verificada_no_escopo' OR consulta_object_id IS NOT NULL)`; ② FK composta `(tenant_id, process_id, consulta_object_id, consulta_version) → evidence_versions(tenant_id, process_id, object_id, version)`, `DEFERRABLE INITIALLY DEFERRED` — mesma consultoria, mesmo caso; ③ trigger `BEFORE INSERT`: a referida é `fonte_primaria` com `origin='consulta'` | Consulta **adequada** à pergunta (base certa, identificadores certos); limites da base; atualidade (muda no tempo → invalidação) | FK prova existência, não atributo da linha referida — daí o trigger; a imutabilidade impede o atributo de mudar depois | Por linha: desprezível. `ADD CONSTRAINT … NOT VALID` + `VALIDATE` (lock `SHARE UPDATE EXCLUSIVE`, sem bloquear escrita). Tabela quase vazia |
-| **`risco` exige ≥1 premissa `fato_documental` e justificativa de aplicabilidade** | ① `CHECK (conclusion_class IS DISTINCT FROM 'risco' OR nullif(btrim(applicability_reason), '') IS NOT NULL)`; ② `CONSTRAINT TRIGGER … AFTER INSERT … DEFERRABLE INITIALLY DEFERRED WHEN (NEW.conclusion_class = 'risco')` que exige `EXISTS` aresta para versão com `conclusion_class = 'fato_documental'` | Premissa **aprovada e atual** — verificação no consumo, na montagem do envelope (ADR-069); suporte semântico do fato ao risco | CHECK não aceita subconsulta; "existe filho que satisfaz" é agregado → constraint trigger adiado para o fim da transação (as arestas nascem depois da linha). Aprovação **não** pode ser regra de escrita: o radar deixa o risco nascer "aguardando revisão" | Uma consulta indexada por conclusão de risco no commit. Divergência a alinhar: o Pydantic hoje isenta `nao_aplicavel` e exige `applicability == 'aplicavel'` ([sev.py:120–123](../../app/schemas/evidence.py#L120-L123)); a CHECK tem de espelhar exatamente a regra da app ou rejeita escrita válida |
-| **`escopo_proposto` exige finalidade e passo de rota aprovado** | ① `CHECK (conclusion_class IS DISTINCT FROM 'escopo_proposto' OR (nullif(btrim(finalidade), '') IS NOT NULL AND rota_passo_id IS NOT NULL))`; ② FK `(tenant_id, rota_passo_id) → rota_passos(tenant_id, id)` (exige `UNIQUE(tenant_id, id)` aditivo em `rota_passos`); ③ trigger `BEFORE INSERT`: passo `validado`, `deleted_at IS NULL`, rota do **mesmo processo** | Passo que perde a aprovação ou é removido depois → **invalidação** do escopo (padrão ADR-068/069), não bloqueio; coerência finalidade × passo | `RotaPasso.status` e `deleted_at` são mutáveis ([rota.py:349](../../app/models/rota.py#L349), [:371](../../app/models/rota.py#L371)); bloquear a edição da Rota por haver escopo seria pior que invalidar. `rota_passos` não tem `process_id` — FK composta não atravessa `rotas`, daí o trigger | `finalidade` e `rota_passo_ref` **não existem** no contrato hoje; entram no `EvidenceObject` antes. Custo por linha desprezível |
+| **`ausencia_verificada_no_escopo` sem `consulta_ref` é rejeitada** | ① `CHECK (knowledge_state IS DISTINCT FROM 'ausencia_verificada_no_escopo' OR consulta_object_id IS NOT NULL)`; ② FK composta `(tenant_id, process_id, consulta_object_id, consulta_version) → evidence_versions(tenant_id, process_id, object_id, version)`, `DEFERRABLE INITIALLY DEFERRED` — mesma consultoria, mesmo caso; ③ constraint trigger `AFTER INSERT`, adiado: a referida é `fonte_primaria` com `origin='consulta'` | Consulta **adequada** à pergunta (base certa, identificadores certos); limites da base; atualidade (muda no tempo → invalidação) | FK prova existência, não atributo da linha referida — daí o trigger; a imutabilidade impede o atributo de mudar depois | Por linha: desprezível. `ADD CONSTRAINT … NOT VALID` + `VALIDATE` (lock `SHARE UPDATE EXCLUSIVE`, sem bloquear escrita). Tabela quase vazia |
+| **`risco` exige ≥1 premissa de fato e justificativa de aplicabilidade** | ① `CHECK (conclusion_class IS DISTINCT FROM 'risco' OR nullif(btrim(applicability_reason), '') IS NOT NULL)`; ② `CONSTRAINT TRIGGER … AFTER INSERT … DEFERRABLE INITIALLY DEFERRED WHEN (NEW.conclusion_class = 'risco')` que exige `EXISTS` aresta para versão com `conclusion_class = 'fato_documental'` **ou** `kind = 'observacao'` (dois caminhos, decisão do André) | No consumo: conclusão **aprovada** ou observação **revisada e aceita**, e atual — montagem do envelope (ADR-069); suporte semântico do fato ao risco | CHECK não aceita subconsulta; "existe filho que satisfaz" é agregado → constraint trigger adiado para o fim da transação (as arestas nascem depois da linha). Aprovação **não** pode ser regra de escrita: o radar deixa o risco nascer "aguardando revisão" | Uma consulta indexada por conclusão de risco no commit. Divergência a alinhar: o Pydantic hoje isenta `nao_aplicavel` e exige `applicability == 'aplicavel'` ([sev.py:120–123](../../app/schemas/evidence.py#L120-L123)); a CHECK tem de espelhar exatamente a regra da app ou rejeita escrita válida |
+| **`escopo_proposto` exige finalidade e passo de rota aprovado** | ① `CHECK (conclusion_class IS DISTINCT FROM 'escopo_proposto' OR (nullif(btrim(finalidade), '') IS NOT NULL AND rota_passo_id IS NOT NULL))`; ② FK `(tenant_id, rota_passo_id) → rota_passos(tenant_id, id)` (exige `UNIQUE(tenant_id, id)` aditivo em `rota_passos`); ③ constraint trigger `AFTER INSERT`: passo `validado`, `deleted_at IS NULL`, rota do **mesmo processo** | Passo que perde a aprovação ou é removido depois → **invalidação** do escopo (padrão ADR-068/069), não bloqueio; coerência finalidade × passo | `RotaPasso.status` e `deleted_at` são mutáveis ([rota.py:349](../../app/models/rota.py#L349), [:371](../../app/models/rota.py#L371)); bloquear a edição da Rota por haver escopo seria pior que invalidar. `rota_passos` não tem `process_id` — FK composta não atravessa `rotas`, daí o trigger | `finalidade` e `rota_passo_ref` **não existem** no contrato hoje; entram no `EvidenceObject` antes. Custo por linha desprezível |
 
 **Esboço (dimensionamento, não migration):**
 
@@ -81,10 +82,38 @@ CREATE CONSTRAINT TRIGGER risco_exige_fato_documental AFTER INSERT ON evidence_v
   WHEN (NEW.conclusion_class = 'risco') EXECUTE FUNCTION exigir_premissa_fato_documental();
 ```
 
-**Ressalvas:** (a) FK sobre coluna gerada — confirmar em teste de migration (plano B: coluna
-comum + trigger). (b) Triggers e colunas geradas são PostgreSQL-only; a suíte já roda em
-PostgreSQL. (c) O `DEFERRABLE` exige que o serviço não faça `SET CONSTRAINTS ALL IMMEDIATE`.
-(d) Nada disso substitui o gate de consumo do ADR-069.
+**Prova (18/09).** [provas/adr070_prova_constraints.sql](provas/adr070_prova_constraints.sql)
+cria o desenho acima em schema descartável e roda 23 casos, cada um em subtransação desfeita,
+forçando as checagens adiadas. Rodou em containers descartáveis `postgis/postgis:15-3.3`
+(PostgreSQL 15.4, a linha do dev e do CI) e `postgres:17.6-alpine` (a versão medida em
+produção). **23/23 nas duas**; saídas em [adr070_saida_pg15.txt](provas/adr070_saida_pg15.txt)
+e [adr070_saida_pg17.txt](provas/adr070_saida_pg17.txt).
+
+| Casos | O que prova | Resultado |
+|---|---|---|
+| 1–5 | Ausência verificada: aceita com consulta primária do mesmo caso; rejeita sem referência (23514), com consulta inexistente (23503), de **outra consultoria** (23503) e com fonte que não é consulta (23514) | PASS |
+| 6–10 | Risco: aceita com conclusão `fato_documental` **e** com observação (os dois caminhos); rejeita sem justificativa, só com derivação e com premissa inexistente | PASS |
+| 11–12 | UPDATE e DELETE em versão gravada rejeitados (P0001) | PASS |
+| 13–17 | Escopo: aceita com finalidade e passo validado; rejeita sem finalidade, com passo só proposto, de outra consultoria (23503) e com passo removido | PASS |
+| 18 | `kind` da coluna diferente do conteúdo rejeitado | PASS |
+| 19 | FK sobre coluna gerada com `ON UPDATE CASCADE` é recusada pelo PostgreSQL (42601) | PASS (restrição) |
+| 20 | `ADD COLUMN … GENERATED STORED` em tabela com linhas funciona | PASS |
+| 21 | Trigger `BEFORE` com `WHEN` sobre coluna gerada é recusado (42P17) | PASS (restrição) |
+| 22–23 | FK da aresta de premissa isolada: premissa inexistente e premissa de **outro caso** rejeitadas (23503) | PASS |
+
+**Dois achados que viraram regra de desenho:**
+1. **Trigger `BEFORE` não enxerga coluna gerada** — na fase BEFORE ela ainda não foi calculada.
+   A primeira versão da prova usava `BEFORE INSERT` para o passo de rota e o PostgreSQL recusou.
+   Toda validação que lê coluna gerada é constraint trigger `AFTER`.
+2. **Ordem de disparo:** no caso 10 o trigger de risco rejeita (23514) antes da FK da aresta
+   (23503). As duas barreiras rejeitam; os casos 22–23 isolam a FK para provar que ela sozinha
+   também segura.
+
+**Ressalvas:** (a) triggers e colunas geradas são PostgreSQL-only; a suíte já roda em
+PostgreSQL. (b) O `DEFERRABLE` exige que o serviço não faça `SET CONSTRAINTS ALL IMMEDIATE`
+antes de gravar as premissas. (c) Funções dos triggers fixam `search_path`: o PostGIS está em
+`public` no dev e em `extensions` na produção. (d) Nada disso substitui o gate de consumo do
+ADR-069.
 
 **Por que no banco e não só no serviço:** o defeito que se quer matar é a escrita que contorna
 o serviço — script de saneamento, SQL de correção direto em produção (já usado no wipe dos
@@ -142,11 +171,11 @@ que o registro já aponta), sempre marcado `legado`/`legacy_unverified`.
 | **1. Documentos e extrações** | `CREATE documento_versao, fragmento, evidence_premissa`; colunas geradas e imutabilidade em `evidence_*`; `extracted_field_staging.observacao_ref` nulo | 1 versão `legado` por documento com o `extracted_text` atual, `checksum_sha256` (recalculado dos bytes do bucket onde faltar), `extracted_at`, método do AIJob quando ligado; fragmento **só** onde a âncora gravada casa com esse texto; staging → observação `legacy_unverified` sob demanda (já existe) | Reextração paga dos originais; o que fazer com documento cujo objeto sumiu do bucket | Página, papel, trecho e data não registrados; texto anterior a re-OCR; origem de cópia de gêmeo | **Não.** Tabelas novas; backfill em lote idempotente fora de pico |
 | **2. Pessoas e atos** | `CREATE pessoa, pessoa_identificador, espolio, participacao, serventia, ato_registral, relacao_ato`; `Client.pessoa_id`, `Matricula.serventia_id` nulos | `pessoa` a partir de `Client` (identidade declarada no cadastro) com `cpf_cnpj`; participação de representação a partir de `ClientRepresentative` + `source_document_id`; `ato_registral` a partir de staging tipado com `ato` literal e matrícula resolvida; `relacao_ato` só onde `altera_ato` resolveu rótulo explícito | Fusão de pessoas duplicadas; serventia de cada `cartorio` texto; menções em `proprietarios` ficam **pendentes de revisão**, nunca viram participação | Papel de quem está em `proprietarios`; literal do tipo de ato descartado; cronologia onde `ordem` era id; baixas sobrescritas | **Não** |
 | **3. Conclusões antigas** | Nenhum novo; `RegulatoryDiagnosis`, `RegulatoryIssue`, `StageOutput` viram leitura legada | Importar como `legacy_unverified` com texto, fonte conhecida e cobertura explícita; revisões legadas como eventos com o autor/data gravados | Nenhuma importação vira aprovada; consultor reabre o que precisar | Snapshot do que o LLM leu; `completed` não é aprovação; fonte inventada `ai_job:N` não vira fonte | **Não** |
-| **4. `has_embargo=False`** | **Nenhum DDL**: a coluna já é nula e sem default no banco (`is_nullable=YES`, default nulo). Remover o default do ORM ([property.py:32](../../app/models/property.py#L32)) e dos schemas ([schemas/property.py:19](../../app/schemas/property.py#L19)); embargo vira observação/consulta | Onde a auditoria registrar que uma pessoa marcou o campo, preservar como **declaração** com autor e data (dev: 0 registros em `audit_logs`) | Anular os falsos legados ou congelar a coluna (dev: 11/11 falsos) | Distinguir "alguém disse não" de "default" quando não há trilha | **Não** |
-| **5. Valores cadastrais** | Proveniência como referência: decisão/evidência que gravou o valor | Ligar o valor atual à linha de staging/decisão que `field_sources` já registra | Identidade corrompida e duplicados históricos | Valor sem `field_sources`: fonte desconhecida, marcada como tal | Expansão **não**; **contração sim** (remover `registry_number`, colunas de área, `proprietarios` exige API + worker + frontend na mesma versão) |
+| **4. `has_embargo=False`** | **Nenhum DDL**: a coluna já é nula e sem default no banco (`is_nullable=YES`, default nulo). Remover o default do ORM ([property.py:32](../../app/models/property.py#L32)) e dos schemas ([schemas/property.py:19](../../app/schemas/property.py#L19)); embargo vira observação/consulta | Nenhum. Onde a auditoria registrar que uma pessoa marcou o campo, preservar como **declaração** com autor e data (dev: 0 registros em `audit_logs`) | **Decidido: congelar.** Valores legados ficam; linha nova nasce `NULL` = `nao_determinado`; a coluna deixa de ser lida (dev: 11/11 falsos) | Distinguir "alguém disse não" de "default" quando não há trilha | **Não** |
+| **5. Valores cadastrais** | Proveniência como referência: decisão/evidência que gravou o valor | Ligar o valor atual à linha de staging/decisão que `field_sources` já registra | Identidade corrompida e duplicados históricos | Valor sem `field_sources`: fonte desconhecida, marcada como tal | Expansão **não**; **contração sim**, no **Incremento 6** (remover `registry_number`, colunas de área, `proprietarios` exige API + worker + frontend na mesma versão) |
 | **6. Regras** | `CREATE regra, regra_versao, conjunto_regras, conjunto_regras_item, avaliacao_regra` vazias | Nenhum a partir do Python; regra Python só vira `regra_versao` se a Ísis homologar a equivalência | Homologação; PENDENTE-1 a 5 do ADR-042; catálogo global ou por tenant | Avaliações passadas: "não disparou" histórico não separa indeterminado | **Não** |
-| **7. Geometria** | `CREATE arquivo_geo, feicao, medicao`; `Property.feicao_escolhida_id` nulo | Ingerir originais que existem no storage (dev: 0 arquivos geo; produção: medir); área textual existente vira medição **declarada** com a fonte registrada | Tolerância (Q-ISIS-04); método (ADR-071); qual feição representa o imóvel | Número de área não reconstrói polígono; área sem fonte | **Não** |
-| *Zona normativa (fora dos sete)* | `ADD COLUMN nivel_autoridade, status_validacao` em nível de documento; linha de documento para as 282 fontes SEMAD | Classificação por regra determinística sobre campo gravado (nome de arquivo, espécie), registrada como derivação com método e **mantida `bruto`**; o que não casa fica `nao_determinado` | Tipologias SEMAD como exigência ou procedimento; 8 manuais; valores de `status_validacao` | Autoridade dos 29 compêndios sem re-derivar o ato | **Não** (fast default, ver §7) |
+| **7. Geometria** | `CREATE arquivo_geo, feicao, medicao`; `Property.feicao_escolhida_id` nulo | Ingerir originais que existem no storage (dev: 0 arquivos geo; produção: medir); área textual existente vira medição **declarada** com a fonte registrada | Tolerância (Q-ISIS-04); método (ADR-072); qual feição representa o imóvel | Número de área não reconstrói polígono; área sem fonte | **Não** |
+| *Zona normativa (fora dos sete)* | `ADD COLUMN nivel_autoridade, status_validacao` em nível de documento; linha de documento para as 282 fontes SEMAD | Classificação por regra determinística sobre campo gravado (nome de arquivo, espécie), registrada como derivação com método e **mantida `bruto`**; o que não casa fica `nao_determinado`. Os 29 compêndios **não** têm backfill: entram por **reingestão** fatiada por ato | Tipologias SEMAD (Q-ISIS-18, com a Ísis); 8 manuais. `status_validacao` **decidido**: `bruto → proposto → validado` | Autoridade dos 29 compêndios sem re-derivar o ato | **Não** (fast default, ver §7) |
 
 ---
 
@@ -158,7 +187,7 @@ reversíveis removendo o que entrou; só o 11 não volta.
 
 | # | Passo | Depende de | Mantém funcionando porque… | Incremento |
 |---|---|---|---|---|
-| 0 | **Medir**: extensões e versões de produção (#236); `069ce001` aplicada em produção?; contagem por tabela em produção; inventário de consumidores de cada coluna a contrair | — | só leitura | antes do 2 |
+| 0 | **Medir** — feito em 18/09: produção PostgreSQL 17.6, PostGIS 3.3.7 em `extensions`, `069ce001` aplicada, 0 CHECK/0 trigger (#236 fechada); inventário de leitores em [INVENTARIO_LEITORES_LEGADO.md](INVENTARIO_LEITORES_LEGADO.md). Falta: contagem por tabela em produção antes do passo 2 | — | só leitura | antes do 2 |
 | 1 | Imutabilidade + colunas geradas + CHECK de `kind` e `action` em `evidence_*`; `execucao_snapshot`; tabela `manifesto` | 0 | tabelas do #172 são novas e pequenas; o serviço já só insere | 2 |
 | 2 | `documento_versao` + `fragmento`; backfill da versão `legado`; OCR/áudio passam a gravar versão e atualizar `extracted_text` como projeção na mesma transação | 1 | `extracted_text` continua existindo para quem lê | 2 |
 | 3 | `evidence_premissa` + invariantes 1 e 2 (`NOT VALID` → `VALIDATE`) | 1, 2 | constraints só afetam escrita nova; validação sem bloquear | 2 |
@@ -169,7 +198,7 @@ reversíveis removendo o que entrou; só o 11 não volta.
 | 8 | `regra`/`regra_versao`/`conjunto_regras`/`avaliacao_regra`; `property_audit` passa a gravar avaliação com os seis estados | 3, 7 | catálogo de alertas continua como vocabulário de saída | 4 |
 | 9 | `finalidade` + `rota_passo_ref` no contrato; invariante 3 | 3 | só `escopo_proposto` novo é afetado | 5 |
 | 10 | Cada consumidor migra para a leitura nova, com prova (teste + gate de navegador onde há UI) | 4–9 | adaptador cobre o resto | 2–5 |
-| 11 | **Contração**: remover escritas e depois colunas legadas (`staging.status` como revisão, `proprietarios`, `registry_number`, áreas achatadas, `has_embargo`) | 10, por coluna | — | **janela**; backup; API + worker + frontend na mesma versão; irreversível |
+| 11 | **Contração**: remover escritas e depois colunas legadas (`staging.status` como revisão, `proprietarios`, `registry_number`, áreas achatadas, `has_embargo`), coluna a coluna, depois de zerar os leitores do [inventário](INVENTARIO_LEITORES_LEGADO.md). **Nunca no mesmo passo que cria as novas** | 10, por coluna | — | **Incremento 6** (decisão do André); **janela**; backup; API + worker + frontend na mesma versão; irreversível |
 
 ---
 
@@ -180,10 +209,14 @@ reversíveis removendo o que entrou; só o 11 não volta.
 imagem `postgis/postgis:15-3.3`, não de migration. As migrations criam só `postgis`
 ([e91d20acba9c:25](../../alembic/versions/e91d20acba9c_sprint_2_models.py#L25)) e `vector`
 ([f9d2e8c1a4b3:29](../../alembic/versions/f9d2e8c1a4b3_sprint_u_knowledge_catalog.py#L29)).
-**Produção: não medido.** O repositório só tem afirmações ([render.yaml:13](../../render.yaml#L13),
-[DEPLOY_REGENTE.md:61–74](../DEPLOY_REGENTE.md#L61-L74) pede para validar e não registra o
-resultado). Inferência indireta: se o preDeploy rodou `e91d20acba9c`, `postgis` existe;
-versão desconhecida (#236).
+**Produção (medido 18/09, SELECT em modo read-only pela API de gestão do Supabase):**
+PostgreSQL **17.6**; `postgis` **3.3.7 no schema `extensions`**; `vector` 0.8.0; `pgcrypto` 1.3;
+`pg_stat_statements` 1.11; `uuid-ossp` 1.1; `supabase_vault` 0.3.1; `postgis_topology`
+disponível e **não** instalado. `properties.geom` resolve como
+`extensions.geometry(Geometry,4674)`, 0 preenchidas. O papel `postgres` tem
+`search_path = "$user", public, extensions` — `ST_*` sem qualificação resolve para o app;
+`geometry_columns` **não** está no `search_path` de outros papéis. #236 fechada; a diferença
+de versão (dev/CI 15, produção 17.6) é a #237.
 
 **O que `geo_files.py` faz com KMZ/KML.** Só identifica: extensão/MIME
 ([:68–77](../../app/services/geo_files.py#L68-L77)) e nomes dentro do ZIP
@@ -195,7 +228,7 @@ versão desconhecida (#236).
 
 | Método | Como | Distorção | Custo | Uso |
 |---|---|---|---|---|
-| **Geodésico no elipsoide** | `ST_Area(geom::geography)` sobre 4674 (GRS80) | nenhuma de projeção; não precisa de zona | zero: PostGIS já instalado | **método v1 canônico** (proposta ao ADR-071) |
+| **Geodésico no elipsoide** | `ST_Area(geom::geography)` sobre 4674 (GRS80) | nenhuma de projeção; não precisa de zona | zero: PostGIS já instalado | **método v1 canônico** (proposta ao ADR-072) |
 | UTM SIRGAS 2000 por centróide | `ST_Transform` para EPSG 31978–31985 (zonas 18S–25S; 31981–31985 conferidas em dev) | fator de escala: da ordem de 0,1% na área, maior perto da borda do fuso; escolha de zona na divisa é regra | zero | alternativo, quando o documento declara UTM (dívida #76: matrícula em UTM × SIGEF geodésico) |
 | Sistema Geodésico Local | projeção topocêntrica por parcela | referência da certificação SIGEF (**confirmar trecho da norma técnica do Incra antes de homologar**) | SRS customizado ou pyproj | alternativo, para reproduzir área certificada |
 | ~~Albers~~ | `102033` em dev é **SAD69**; `5880` é Policônica (não preserva área) | — | — | descartado |
@@ -226,7 +259,11 @@ denominador e não registra qual ([:180–182](../../app/services/property_audit
 em `legislation_documents`) + **282 PDFs SEMAD-GO (1.194 chunks) sem linha de documento**.
 Compêndios (`compendio_regente`) são 29 documentos e 22.725 chunks (70,7%).
 
-**Dá para classificar retroativamente?** Em parte.
+**Dá para classificar retroativamente? Não, para a maior parte: a zona normativa exige
+REINGESTÃO.** Só 19,2% dos chunks têm nível de autoridade derivável do que está gravado; 70,7%
+vêm de 29 compêndios cuja identidade é o núcleo temático, não o ato, e precisam de nova
+identificação de ato por chunk. Isso muda o tamanho do Incremento 4: não é uma coluna
+preenchida por regra, é refazer a entrada de 80,8% do corpus.
 
 | Balde | Documentos | Chunks | Como |
 |---|---|---|---|
@@ -263,7 +300,8 @@ chamar `status`.
 | **#233** | `audit_property` levanta `TypeError` quando uma área do par é 0: `compare_areas` devolve `diff_pct=None` e a descrição faz `None * 100` | [property_audit.py:262–275](../../app/services/property_audit.py#L262-L275) com [:173–178](../../app/services/property_audit.py#L173-L178). Caminho confirmado lendo o código; não reproduzido |
 | **#234** | `ingest_manifesto.py` grava `source_type="lei"` para toda linha do manifesto: decretos, IN e a OJN 06/2009 viram `lei` | [scripts/ingest_manifesto.py:193](../../scripts/ingest_manifesto.py#L193) |
 | **#235** | KMZ/KML enviado recebe `document_type="geoespacial"`, que não está em `_GEOREF_DOC_TYPES`: a nota diz "geom indisponível" em vez de "georreferenciamento presente" | [geo_files.py:30](../../app/services/geo_files.py#L30) × [api/v1/regulatory.py:681–685](../../app/api/v1/regulatory.py#L681-L685) |
-| **#236** | Extensões e versões do banco de produção nunca foram medidas e registradas | [DEPLOY_REGENTE.md:61–74](../DEPLOY_REGENTE.md#L61-L74) pede; nenhum resultado no repositório |
+| ~~#236~~ | Extensões e versões do banco de produção nunca medidas — **fechada em 18/09**, medição no §6 | [DEPLOY_REGENTE.md:61–74](../DEPLOY_REGENTE.md#L61-L74) pedia; resultado agora registrado |
+| **#237** | Produção roda PostgreSQL **17.6**; dev e CI rodam **15**. Testes e provas no 15 não garantem comportamento no 17 | Medição do §6; a prova das constraints rodou nas duas versões justamente por isso |
 
 Também observado, sem dívida nova: tabelas `t_frentel_probe`/`t_frentel_probe2` no banco dev
 sem referência no repositório.
