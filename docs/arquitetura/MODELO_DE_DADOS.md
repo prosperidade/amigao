@@ -1,5 +1,22 @@
 # Modelo de Dados
 
+## Modelo alvo — ADR-070 (2026-09-17, proposta, sem migration)
+
+O desenho-alvo e o caminho até ele estão em dois documentos:
+
+- [ADR-070 — modelo de dados alvo](../adr/070-modelo-de-dados-alvo.md): envelope epistêmico
+  único (`evidence_versions`) para fonte, observação, derivação e conclusão; entidades de
+  domínio tipadas (`documento_versao`, `fragmento`, `pessoa`, `espolio`, `participacao`,
+  `serventia`, `ato_registral`, `relacao_ato`, `arquivo_geo`, `feicao`, `medicao`, `regra`,
+  `conjunto_regras`, `avaliacao_regra`, `manifesto`, `fonte_normativa`); colunas geradas,
+  imutabilidade e três invariantes no banco; alternativas descartadas.
+- [MIGRACAO_MODELO_DADOS.md](MIGRACAO_MODELO_DADOS.md): confronto entidade por entidade com
+  o schema real, renomeações exigidas pela ontologia, caminho por grupo, ordem de
+  migração, geometria e zona normativa.
+
+Esta página continua descrevendo o schema **implementado**; entidade do ADR-070 só entra
+aqui quando a migration correspondente existir.
+
 ## Adição proposta — Incremento 1 / ADR-069 (2026-09-17)
 
 Migration aditiva `069ce001`, pai `c7e1a94d2f60`: `case_snapshots` (conteúdo/hash
@@ -32,7 +49,7 @@ Esquema completo do banco do Regente Ambiental. Toda mudança aqui passa por mig
 
 1. **Multi-tenant por linha.** Toda tabela transacional tem `tenant_id INT NOT NULL REFERENCES tenants(id)`. Exceção: `pre_cadastros` (lead anônimo).
 2. **Arquivo pesado fora do banco.** O banco guarda apenas metadado + referência ao objeto no MinIO.
-3. **Geodados nativos.** `Property.geom` é `geometry(Polygon, 4674)` (SIRGAS 2000), usando PostGIS.
+3. **Geodados nativos.** `Property.geom` é `geometry(Geometry, 4674)` (SIRGAS 2000, tipo genérico — não `Polygon`), usando PostGIS. Nunca é gravada pelo código; ver [ADR-070 §9](../adr/070-modelo-de-dados-alvo.md#9-geometria-arquivo-feição-medição).
 4. **RAG no Postgres.** `knowledge_catalog.embedding` é `vector(768)` (pgvector). Sem serviço vetorial externo. Dim 768 foi escolhida pra compatibilidade histórica (base inicial gerada com Gemini `text-embedding-004`); OpenAI `text-embedding-3-small` é hoje usado com `dimensions=768` explícito.
 5. **JSON onde a estrutura varia.** Campos como `Client.field_sources`, `AIJob.result`, `StageOutput.content_data` usam JSONB.
 6. **Auditoria total.** `AuditLog` registra hash chain SHA-256 para mudanças relevantes.
@@ -470,3 +487,4 @@ fundamentado), [ADR-034](../adr/034-esfera-pelo-orgao-do-passivo.md) (guard de e
 - [`API_v1.md`](./API_v1.md) — como acessar essas entidades pela superfície REST
 - [`MULTITENANT_LGPD.md`](./MULTITENANT_LGPD.md) — política de isolamento e retenção
 - [`BASE_REGULATORIA.md`](./BASE_REGULATORIA.md) — detalhe do RAG sobre `knowledge_catalog`
+- [`MIGRACAO_MODELO_DADOS.md`](./MIGRACAO_MODELO_DADOS.md) — do schema atual ao modelo alvo do ADR-070

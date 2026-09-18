@@ -1,5 +1,23 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 2026-09-17 — Frente A, modelo de dados (ADR-070)
+
+Achados laterais da análise de dados, registrados e não corrigidos nesta frente (docs-only).
+Evidência em [MIGRACAO_MODELO_DADOS.md §8](arquitetura/MIGRACAO_MODELO_DADOS.md#8-achados-laterais-registrados-fora-do-escopo-desta-frente).
+
+- **#233 — auditor quebra com área zero:** `compare_areas` devolve `diff_pct=None` quando um
+  lado é 0 e `audit_property` formata `None * 100` (`property_audit.py:262–275`). Caminho
+  confirmado lendo o código; não reproduzido. Corrigir no Incremento 3 junto com o
+  denominador declarado.
+- **#234 — manifesto grava toda norma como `lei`:** `scripts/ingest_manifesto.py:193` fixa
+  `source_type="lei"`; decretos, IN e a OJN 06/2009 (interpretação) perdem a espécie. Bloqueia
+  a classificação determinística de autoridade dessas linhas.
+- **#235 — KMZ enviado não conta como georreferenciamento:** upload recebe
+  `document_type="geoespacial"`, ausente de `_GEOREF_DOC_TYPES`
+  (`api/v1/regulatory.py:681–685`); a nota diz "geom indisponível".
+- **#236 — extensões de produção nunca medidas:** `DEPLOY_REGENTE.md:61–74` pede validar
+  `postgis`/`vector`; nenhum resultado registrado. Passo 0 do roteiro de migração.
+
 ## Pulso 2026-09-17 — Incremento 1, PR #172
 
 - **#231 — cobertura de métodos-base:** extrator, legislação, redator e orçamento
@@ -22,7 +40,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 233.** (#231 e #232 abertas no PR #172;
+> **PRÓXIMO NÚMERO LIVRE: 237.** (#233 a #236 abertas pela Frente A — ADR-070,
+> `docs/arquitetura-dados-adr070`, 17/09; conferido `gh pr list`: nenhum PR aberto; #175, mergeado, não usa 23x.)
+> Anterior: 233 (#231 e #232 abertas no PR #172;
 > #225 a #230 abertas pela Frente L —
 > `fix/pos-reteste-l`, 12/09. Nenhuma branch aberta na hora de numerar
 > (`gh pr list` vazio), então 225 estava mesmo livre.)
