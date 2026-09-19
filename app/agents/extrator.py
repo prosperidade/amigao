@@ -19,6 +19,10 @@ class ExtratorAgent(BaseAgent):
     job_type = AIJobType.extract_document
     prompt_slugs = ["extract_document_system", "extract_matricula", "extract_car", "extract_ccir"]
 
+    def _fallback_prompts(self) -> dict[str, str]:
+        # BaseAgent requires the hook; the extractor requires its manifest skills.
+        return {}
+
     def validate_preconditions(self) -> None:
         # Quando rodando dentro de chain sem documento, permite pular
         pass

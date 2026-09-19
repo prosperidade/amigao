@@ -640,7 +640,18 @@ def derivar_vigencia(
             try:
                 data_ato = date.fromisoformat(data_literal)
             except ValueError:
-                pass
+                # Registry dates may spell the month and group the year (2.025).
+                # Parse the whole field only; never infer missing day/month/year.
+                meses = {nome: i for i, nome in enumerate(("janeiro", "fevereiro", "março",
+                    "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
+                    "novembro", "dezembro"), 1)}
+                extenso = re.fullmatch(r"\s*(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d\.?\d{3})\s*",
+                    data_literal.lower())
+                if extenso and extenso[2] in meses:
+                    try:
+                        data_ato = date(int(extenso[3].replace(".", "")), meses[extenso[2]], int(extenso[1]))
+                    except ValueError:
+                        pass
         if data_ato is not None and ref is not None and data_ato <= ref:
             obs.atributos["vigencia"] = VIGENCIA_VIGENTE
             continue
