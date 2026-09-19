@@ -136,3 +136,29 @@ class EntradaSemanticaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_ancora_recupera_layout_mas_preserva_literal_e_posicao():
+    from app.services.identidade_observacao import resolver_ancora_literal
+    texto = "Cabeçalho\nÁrea:\n  12,3 ha\nFim"
+    trecho, inicio = resolver_ancora_literal(texto, "Área: 12,3 ha")
+    assert trecho == "Área:\n  12,3 ha"
+    assert texto[inicio:inicio + len(trecho)] == trecho
+
+
+def test_ancora_layout_repetido_exige_posicao():
+    import pytest
+
+    from app.services.identidade_observacao import resolver_ancora_literal
+    texto = "Área:\n12 ha; Área:\n12 ha"
+    with pytest.raises(ValueError, match="repetido"):
+        resolver_ancora_literal(texto, "Área: 12 ha")
+    assert resolver_ancora_literal(texto, "Área: 12 ha", 13)[1] == 13
+
+
+def test_ancora_nao_corrige_numero_ou_pontuacao():
+    import pytest
+
+    from app.services.identidade_observacao import resolver_ancora_literal
+    with pytest.raises(ValueError, match="não existe"):
+        resolver_ancora_literal("Área:\n12,3 ha", "Área: 12.3 ha")

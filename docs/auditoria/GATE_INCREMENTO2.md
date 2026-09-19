@@ -20,7 +20,21 @@ Esse smoke não é prova semântica dos nove documentos.
 Triagem das 20 falhas + 1 erro: [registro por teste](INCREMENTO2_TRIAGEM_CI_bf93cf5.md).
 Na primeira execução de triagem, 2.066 passaram e 11 falharam; G1–G9 passaram e o
 artefato gate-incremento1 foi produzido. Corrigidos depois o hook abstrato removido
-e a leitura da data por extenso. A confirmação do commit final segue no CI.
+e a leitura da data por extenso. CI do commit `92b37d3` concluído:
+https://github.com/prosperidade/amigao/actions/runs/35456567072 — seis jobs aprovados.
+
+| Job | Resultado |
+|---|---|
+| Backend Tests | 2.080 passaram, zero falhas; 25 warnings |
+| Backend Lint | Ruff sem erros; mypy consultivo: 978 erros em 113 arquivos |
+| Frontend | 169 testes em 27 arquivos; lint, typecheck e build aprovados |
+| Migration check | upgrade → downgrade → upgrade aprovados |
+| Client Portal | lint, typecheck e build aprovados |
+| Mobile | lint e typecheck aprovados |
+
+Artefato `gate-incremento1.json` conferido em memória: SHA completo
+`92b37d3e2cb1a90c3c1bf4e3a61825f77d39094f`, G1–G9 presentes. Essa prova usa
+gateway controlado no CI e não substitui o percurso semântico real abaixo.
 
 ## Percurso dev — 19/09/2026, parcial
 
@@ -53,14 +67,30 @@ Esse modo não dispara extração, LLM ou reclassificação.
 **Bloqueio anterior, superado pela autorização acima:** a revisão automática rejeitou o comando do
 percurso completo porque enviaria textos sensíveis de produção a provedor LLM
 externo sem autorização explícita do destino. Nenhuma chamada foi feita por esse
-comando. Preparação para retomada vinculada exclusivamente a OpenAI
-https://api.openai.com/v1, modelo gpt-4o-mini, sem fallback Google/Anthropic;
-aguarda autorização explícita. Não houve contorno da rejeição.
+comando. A autorização posterior especificou OpenAI, `gpt-5.6-luna`, gateway
+sem fallback, em dev. As tentativas posteriores usam essa autorização.
 
 Portanto, continuam **ABERTOS**: LLM → observações persistidas/staging/K/R;
 vendedor/cliente, preservação PJ durante extração, espólio/representação extraídos,
-quatro matrículas com atos/participações persistidos, invalidação pela tela e
-regressão integral do Incremento 1. O navegador só demonstrou associação e recuperação.
+quatro matrículas com atos/participações persistidos e invalidação pela tela.
+A regressão do Incremento 1 passou no CI acima. O navegador com textos reais
+ainda não concluiu o percurso de extração.
+
+### Tentativas LLM reais — auditoria de falhas
+
+Jobs dev 154 e 155: extração disparada pela tela, caso 31; rejeição de âncora
+no primeiro documento (origem 546, dev 54), zero observações persistidas.
+O job 154 expôs uma regressão: a falha de validação descartava a resposta e
+contabilidade antes da atribuição ao job. Corrigido com gravação em `finally`;
+o job 155 preservou modelo, resposta bruta, uma tentativa, 4.428 tokens de entrada,
+3.138 de saída e US$ 0,0038547. Não se reconstituiu artificialmente o job 154.
+
+Comparação em memória identificou três âncoras com diferenças exclusivamente
+de espaços/quebras de linha, cada uma com ocorrência única. O resolvedor agora
+recupera o trecho literal original e sua posição; palavras, números e pontuação
+continuam exigindo correspondência exata. Ambiguidade continua exigindo posição.
+Regressões controladas adicionadas para layout, ambiguidade, número divergente
+e preservação de auditoria após rejeição. Sem texto real nesses testes.
 
 ### Regressão da certidão eletrônica
 

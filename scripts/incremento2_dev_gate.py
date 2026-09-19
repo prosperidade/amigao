@@ -3,6 +3,8 @@
 Sem mocks de LLM, sem arquivos de texto, HAR, screenshots ou traces de payload.
 O canal de preparação é loopback; as ações do caso usam API autenticada na UI.
 """
+# Environment isolation must precede imports that instantiate settings/engines.
+# ruff: noqa: E402
 import hashlib
 import json
 import os
@@ -19,12 +21,14 @@ ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT.parent / ".env")
 os.environ.update(POSTGRES_SERVER="127.0.0.1", POSTGRES_PORT=os.environ["HOST_DB_PORT"], DATABASE_URL="",
     ENVIRONMENT="development",
+    AI_TIMEOUT_SECONDS="180",
     REDIS_URL="redis://127.0.0.1:6379/15", LOG_LEVEL="CRITICAL", ALERT_WEBHOOK_URL="",
     GEMINI_API_KEY="", ANTHROPIC_API_KEY="",
     OPENAI_API_BASE="https://api.openai.com/v1", OPENAI_BASE_URL="https://api.openai.com/v1")
 os.environ.pop("MIGRATE_DATABASE_URL", None)
 
 from sqlalchemy.engine import make_url
+
 from app.core.config import settings
 from app.core.model_matrix import resolve_agent_models
 
@@ -39,10 +43,11 @@ assert (target.host, target.port, target.database, target.username) == ("127.0.0
 import uvicorn
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from app.main import app
+
 from app.core.celery_app import celery_app
 from app.core.security import get_password_hash
 from app.db.session import SessionLocal
+from app.main import app
 from app.models.client import Client
 from app.models.document import Document, DocumentSource, OcrStatus
 from app.models.process import Process

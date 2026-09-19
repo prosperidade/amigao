@@ -61,6 +61,15 @@ try {
       page.waitForResponse(r => r.url().endsWith('/agents/run-async') && r.request().method() === 'POST', { timeout: 1200000 }),
       page.getByRole('button', { name: 'Executar', exact: true }).click(),
     ]);
+    if (response.status() === 409) {
+      const conflict = await response.json();
+      const knownConflicts = [
+        'Execução ou revisão concorrente; recarregue o estado',
+        'Versão imutável já existe com outro conteúdo',
+        'Execução atualizada por outra sessão',
+      ];
+      console.log('EXTRACTION_CONFLICT=' + (knownConflicts.includes(conflict.detail) ? conflict.detail : 'other'));
+    }
     expect(response.status()).toBe(202);
     const run = await response.json();
     const data = await evidence(page, caseId);

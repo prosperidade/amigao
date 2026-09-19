@@ -12,7 +12,12 @@ from app.schemas.entrada_semantica import EntradaExtraida, EspecieDocumental
 from app.schemas.evidence import EvidenceAttributes, EvidenceRef
 from app.services.documento_versao import registrar_fragmento, registrar_leitura
 from app.services.evidence import _capture, authorize, lock_case
-from app.services.identidade_observacao import identidade_observacao, localizar_trecho, normalizar_conteudo
+from app.services.identidade_observacao import (
+    identidade_observacao,
+    localizar_trecho,
+    normalizar_conteudo,
+    resolver_ancora_literal,
+)
 from app.services.taxonomia_documental import SUPORTE, destino_consolidavel, propor_especie
 
 
@@ -394,7 +399,8 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
             declaracao.sujeito = prefix + declaracao.sujeito
         for item in [*parcial.partes, *parcial.todas_participacoes, *parcial.atos,
                      *parcial.observacoes, *parcial.contratos, *parcial.falecimentos_declarados]:
-            item.posicao_inicio = fatia.inicio + localizar_trecho(texto, item.trecho, item.posicao_inicio)
+            item.trecho, posicao = resolver_ancora_literal(texto, item.trecho, item.posicao_inicio)
+            item.posicao_inicio = fatia.inicio + posicao
         for key in colecoes:
             colecoes[key].extend(getattr(parcial, key))
     entrada = EntradaExtraida(**colecoes)

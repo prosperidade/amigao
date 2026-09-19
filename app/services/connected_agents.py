@@ -184,19 +184,30 @@ def run_step(db, execution, step, user_id):
         step["status"] = manifest["status"]
         return
     if step["agent"] == "extrator":
+        from app.core.ai_trace import attempt_sink
         from app.services.entrada_semantica import executar_extracao
         check_tenant_cost_limit(execution.tenant_id, db)
         check_tenant_monthly_budget(execution.tenant_id, db)
         attempts = []
+        provider_attempts = []
         def record(response, label):
             attempts.append({"label": label, "model": response.model_used, "provider": response.provider,
-                "tokens_in": response.tokens_in, "tokens_out": response.tokens_out, "cost_usd": response.cost_usd})
-        result = executar_extracao(ctx, on_response=record, ai_job_id=job.id)
-        job.tokens_in = sum(a["tokens_in"] for a in attempts)
-        job.tokens_out = sum(a["tokens_out"] for a in attempts)
-        job.cost_usd = sum(a["cost_usd"] for a in attempts)
-        job.model_used = ",".join(sorted({a["model"] for a in attempts}))
-        job.input_payload = {**job.input_payload, "attempts": attempts}
+                "tokens_in": response.tokens_in, "tokens_out": response.tokens_out, "cost_usd": response.cost_usd,
+                "raw": response.content, "finish_reason": response.finish_reason})
+        token = attempt_sink.set(provider_attempts)
+        try:
+            result = executar_extracao(ctx, on_response=record, ai_job_id=job.id)
+        finally:
+            # Validation failure must retain the paid response and actual provider attempts.
+            attempt_sink.reset(token)
+            job.tokens_in = sum(a["tokens_in"] for a in attempts)
+            job.tokens_out = sum(a["tokens_out"] for a in attempts)
+            job.cost_usd = sum(a["cost_usd"] for a in attempts)
+            job.model_used = ",".join(sorted({a["model"] for a in attempts})) or None
+            job.provider = ",".join(sorted({a["provider"] for a in attempts})) or None
+            job.raw_output = json.dumps(attempts, ensure_ascii=False) if attempts else None
+            job.input_payload = {**job.input_payload, "attempts": provider_attempts,
+                "extractions": [{k: v for k, v in a.items() if k != "raw"} for a in attempts]}
         job.result = result
         job.status = AIJobStatus.completed
         job.finished_at = datetime.now(UTC)

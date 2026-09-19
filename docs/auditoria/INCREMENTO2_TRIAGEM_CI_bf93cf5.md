@@ -2,7 +2,7 @@
 
 Execução de origem: https://github.com/prosperidade/amigao/actions/runs/35452478844
 
-Resultado original: 2.056 testes passaram, 20 falharam, 1 erro no teardown. Nenhuma suíte executada no agente. As alterações abaixo aguardam confirmação pelo CI; não equivalem a gate semântico fechado.
+Resultado original: 2.056 testes passaram, 20 falharam, 1 erro no teardown. Nenhuma suíte executada no agente. Confirmação no CI `92b37d3`: 2.080 passaram, zero falhas e erros; seis jobs aprovados, G1–G9 conferidos no artefato. Execução: https://github.com/prosperidade/amigao/actions/runs/35456567072. Não equivale a gate semântico fechado.
 
 | Falha (teste) | Classificação | Tratamento e prova mantida |
 | --- | --- | --- |

@@ -30,6 +30,27 @@ def normalizar_conteudo(value):
     return value
 
 
+def resolver_ancora_literal(texto, trecho, inicio=None):
+    """Recover only whitespace layout; persist the exact original source span.
+
+    No case, punctuation, number or word correction. Repeated occurrences still
+    require an explicit position. The raw LLM response remains in the job audit.
+    """
+    if trecho in texto:
+        pos = localizar_trecho(texto, trecho, inicio)
+        return trecho, pos
+    tokens = trecho.split()
+    if not tokens:
+        raise ValueError("Trecho sem conteúdo literal")
+    pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens))
+    match = pattern.match(texto, inicio) if inicio is not None else pattern.search(texto)
+    if match is None:
+        raise ValueError("Trecho extraído não existe no texto versionado")
+    if inicio is None and pattern.search(texto, match.start() + 1) is not None:
+        raise ValueError("Trecho repetido exige posição explícita; primeira ocorrência não vence")
+    return texto[match.start():match.end()], match.start()
+
+
 def identidade_observacao(documento_id, documento_versao, classificacao_versao, tipo, item, inicio, fim):
     # Source positions distinguish genuine repeated assertions. The value is not
     # identity: a corrected reading versions the same observation.
