@@ -70,7 +70,7 @@ def seeded(db_session):
 
 
 def test_ai_job_do_extrator_guarda_modelo_tokens_custo_e_bruto(seeded, db_session):
-    # Inc2 removeu a chamada de preview. Uma chamada gera observao e projeo.
+    # Inc2: uma chamada gera observação e projeção; preview não chama LLM.
     from hashlib import sha256
 
     from app.models.evidence import EvidenceVersion

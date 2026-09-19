@@ -19,12 +19,18 @@ ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT.parent / ".env")
 os.environ.update(POSTGRES_SERVER="127.0.0.1", POSTGRES_PORT=os.environ["HOST_DB_PORT"], DATABASE_URL="",
     REDIS_URL="redis://127.0.0.1:6379/15", LOG_LEVEL="CRITICAL", ALERT_WEBHOOK_URL="",
-    GEMINI_API_KEY="", ANTHROPIC_API_KEY="", AI_DEFAULT_MODEL="gpt-4o-mini",
+    GEMINI_API_KEY="", ANTHROPIC_API_KEY="",
     OPENAI_API_BASE="https://api.openai.com/v1", OPENAI_BASE_URL="https://api.openai.com/v1")
 os.environ.pop("MIGRATE_DATABASE_URL", None)
 
 from sqlalchemy.engine import make_url
 from app.core.config import settings
+from app.core.model_matrix import resolve_agent_models
+
+# Do not override the model decision delivered by main. Fail before opening the server.
+models = resolve_agent_models("extrator", settings)
+assert len(models) == 1 and models[0][0] == "gpt-5.6-luna", (
+    "Gate aguarda gpt-5.6-luna na configuração aprovada, sem fallback")
 
 target = make_url(settings.SQLALCHEMY_DATABASE_URI)
 assert (target.host, target.port, target.database, target.username) == ("127.0.0.1", 15432, "amigao_db", "postgres")

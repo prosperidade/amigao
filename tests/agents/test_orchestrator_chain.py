@@ -29,7 +29,7 @@ def test_chain_keeps_independent_reading_and_stops_dependent_synthesis(committed
         assert statuses == {"extrator": "failed", "auditor_imovel": "completed",
                             "legislacao": "capacidade_insuficiente", "diagnostico": "awaiting_review"}
         assert result["completed"] is False
-        # Inc2 tem mtodo; o texto controlado sem espcie exige classificao, no LLM.
+        # Inc2 tem método; texto controlado sem espécie exige classificação antes do LLM.
         assert "Espécie não determinada" in result["steps"][0]["error"]
 
 

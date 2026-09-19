@@ -80,7 +80,7 @@ def seeded(db_session):
 
 
 def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session):
-    # Inc2: staging referencia observao; preview achatado deixou de ser contrato.
+    # Inc2: staging referencia observação; preview achatado deixou de ser contrato.
     import json
     from hashlib import sha256
 
@@ -139,7 +139,7 @@ def test_planta_com_ccir_na_legenda_nao_vira_ccir(seeded, db_session):
 
 
 def test_planta_nao_grava_staging_cadastral_e_deixa_nota_visivel(seeded, db_session):
-    # Inc2: preservar observao durvel sem impor destino cadastral nem segunda extrao.
+    # Inc2: preservar observação durável sem destino cadastral ou segunda extração.
     import json
     from hashlib import sha256
 
@@ -201,7 +201,7 @@ _AUTO_INFRACAO_FATO = {
 
 
 def test_auto_infracao_nao_gera_staging_cadastral_e_grava_fato_no_job(seeded, db_session):
-    # Inc2: preservar observao durvel sem impor destino cadastral nem segunda extrao.
+    # Inc2: preservar observação durável sem destino cadastral ou segunda extração.
     import json
     from hashlib import sha256
 
