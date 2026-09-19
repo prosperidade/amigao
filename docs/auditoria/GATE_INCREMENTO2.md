@@ -225,3 +225,15 @@ Hashes calculados no SELECT e conferidos independentemente com hashlib local:
   o LLM extrator, persistir_entrada, revisão, consolidação ou navegador autenticado.
   Não provam cadeia dominial, transmissão parcial, quatro confrontos de área,
   idempotência persistida ou regressão do Incremento 1. Esses gates continuam abertos.
+
+## 19/09/2026 - Decisao posterior: fallback Gemini 3.7 Flash
+
+Andre autorizou fallback do extrator: gpt-5.6-luna -> gemini/gemini-3.7-flash,
+via ai_gateway. AI_EXTRATOR_FALLBACK_MODEL configura o segundo modelo;
+allow_fallback=True substitui a restricao anterior. Sem terceiro provedor.
+O helper dev preserva GEMINI_API_KEY e restringe a cadeia aos dois modelos.
+Erros de validacao semantica continuam falhas visiveis, sem troca de modelo.
+Identificador conferido na documentacao oficial:
+https://ai.google.dev/gemini-api/docs/models/gemini-3.7-flash
+Regressao da matriz adicionada para o CI. Nenhuma suite local ou nova chamada
+com textos reais nesta alteracao; o gate semantico permanece aberto.

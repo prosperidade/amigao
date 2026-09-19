@@ -12,9 +12,12 @@
 
 **Incremento 2 — decisão do André, 19/09/2026:** o extrator semântico usa
 `AI_EXTRATOR_MODEL=gpt-5.6-luna`, exclusivamente via `ai_gateway.complete`,
-com `allow_fallback=False`. Não substituir por `AI_DEFAULT_MODEL`, outro
-provider ou preferências pessoais no gate. Chave/modelo indisponível deve
-produzir falha visível. André autorizou implementar essa configuração nesta
+com `allow_fallback=True` e fallback exclusivo
+`AI_EXTRATOR_FALLBACK_MODEL=gemini/gemini-3.7-flash`, conforme nova decisão
+do André. Esta decisão substitui a instrução anterior de não usar fallback.
+Não adicionar terceiro provedor. Falhas de validação semântica não acionam
+fallback; tentativas e modelo efetivo permanecem auditáveis.
+André autorizou implementar essa configuração nesta
 worktree; não depende mais de PR separado do Claude Code.
 
 O percurso dos nove textos reais é autorizado somente em dev. Produção:

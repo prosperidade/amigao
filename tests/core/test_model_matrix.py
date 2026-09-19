@@ -96,3 +96,13 @@ def test_unknown_agent_uses_default_row():
     )
     names = [m for m, _ in models]
     assert names and names[0]  # resolveu algo do default
+
+
+def test_extrator_only_uses_luna_and_approved_gemini_fallback():
+    settings = _settings(openai="test-o", gemini="test-g", anthropic="test-a")
+    settings.AI_EXTRATOR_MODEL = "gpt-5.6-luna"
+    settings.AI_EXTRATOR_FALLBACK_MODEL = "gemini/gemini-3.7-flash"
+    assert resolve_agent_models("extrator", settings) == [
+        ("gpt-5.6-luna", "test-o"), ("gemini/gemini-3.7-flash", "test-g")]
+    settings.OPENAI_API_KEY = ""
+    assert resolve_agent_models("extrator", settings) == [("gemini/gemini-3.7-flash", "test-g")]

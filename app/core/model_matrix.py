@@ -94,7 +94,7 @@ def build_agent_model_matrix(settings) -> dict[str, list[tuple[str, str]]]:
             ("anthropic", claude_mid),
         ],
         "extrator": [("openai", getattr(settings, "AI_EXTRATOR_MODEL", openai_cheap)),
-                     ("google", gemini_flash), ("anthropic", claude_cheap)],
+                     ("google", getattr(settings, "AI_EXTRATOR_FALLBACK_MODEL", "gemini/gemini-3.7-flash"))],
         "atendimento": cheap,
         "vigia": cheap,
         "auditor_imovel": cheap,

@@ -1,5 +1,9 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso: fallback do extrator autorizado para Gemini 3.7 Flash.**
+Primario gpt-5.6-luna; fallback exclusivo gemini/gemini-3.7-flash via gateway.
+Substitui a decisao anterior sem fallback. Gate real continua aberto.
+
 **Pulso 19/09/2026 — modelo autorizado e implementado na worktree.**
 André transferiu a alteração do modelo para esta frente: AI_EXTRATOR_MODEL=gpt-5.6-luna,
 via ai_gateway, sem fallback, gate somente em dev. Smoke real com prompt sintético

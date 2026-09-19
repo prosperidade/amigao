@@ -23,7 +23,7 @@ os.environ.update(POSTGRES_SERVER="127.0.0.1", POSTGRES_PORT=os.environ["HOST_DB
     ENVIRONMENT="development",
     AI_TIMEOUT_SECONDS="180",
     REDIS_URL="redis://127.0.0.1:6379/15", LOG_LEVEL="CRITICAL", ALERT_WEBHOOK_URL="",
-    GEMINI_API_KEY="", ANTHROPIC_API_KEY="",
+    ANTHROPIC_API_KEY="",
     OPENAI_API_BASE="https://api.openai.com/v1", OPENAI_BASE_URL="https://api.openai.com/v1")
 os.environ.pop("MIGRATE_DATABASE_URL", None)
 
@@ -34,8 +34,10 @@ from app.core.model_matrix import resolve_agent_models
 
 # Preserve André's model decision. Fail before opening the server.
 models = resolve_agent_models("extrator", settings)
-assert len(models) == 1 and models[0][0] == "gpt-5.6-luna", (
-    "Gate exige gpt-5.6-luna na configuração aprovada, sem fallback")
+assert models and models[0][0] == "gpt-5.6-luna" and models[0][1], (
+    "Gate requires configured Luna primary with credentials")
+assert all(name in {"gpt-5.6-luna", "gemini/gemini-3.7-flash"} for name, _ in models), (
+    "Gate allows only the approved Gemini 3.7 Flash fallback")
 
 target = make_url(settings.SQLALCHEMY_DATABASE_URI)
 assert (target.host, target.port, target.database, target.username) == ("127.0.0.1", 15432, "amigao_db", "postgres")
