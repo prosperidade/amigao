@@ -1,0 +1,6 @@
+coletaneas: 32 | caracteres: 28156032
+paginas impressas: 4249 | URLs de origem distintas (soma por coletanea): 429 | com sumario: 2
+atos distintos ESTRITO: 177 {'AC': 56, 'MT': 39, 'MS': 39, 'GO': 43} | sem ano: 22 | em mais de uma coletanea: 38
+atos distintos LARGO (sem emenda constitucional): 368 | sem ano: 75 | linhas de emenda constitucional: 217
+por tipo (estrito): {'DECRETO': 79, 'PORTARIA': 12, 'LEI': 65, 'LEI COMPLEMENTAR': 7, 'INSTRUCAO NORMATIVA': 1, 'RESOLUCAO': 12, 'PARECER': 1}
+texto em blocos: 27321652 | repetido com norma avulsa: 1.7% | repetido entre coletaneas: 15.6% | removivel: 17.3%

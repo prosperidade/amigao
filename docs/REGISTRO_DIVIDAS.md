@@ -20,6 +20,34 @@ Evidência em [MIGRACAO_MODELO_DADOS.md §8](arquitetura/MIGRACAO_MODELO_DADOS.m
   `069ce001`, 0 CHECK e 0 trigger em `public`. Registro em
   [MIGRACAO §6](arquitetura/MIGRACAO_MODELO_DADOS.md#6-geometria--o-levantamento-que-faltava).
 
+## Pulso 2026-09-18 — Frente B, zona normativa (ADR-075)
+
+Evidência em [ZONA_NORMATIVA_RAG.md](arquitetura/ZONA_NORMATIVA_RAG.md). Nenhuma corrigida nesta
+frente (docs-only).
+
+- **#242 — recuperação legada da Legislação relaxa e engole erro:** cascata que tira UF e
+  demanda (`legislacao.py:346–357`), sentinela `nao_identificado` sem filtro e
+  `min_similarity=0.0`, demanda e UF embutidas no texto da pergunta, `except Exception: return []`
+  que engole a recusa do ADR-040 (`:370–375`), nenhum sinal de modo degradado. Caminho parado
+  desde o ADR-069. **Não reativar a Legislação sem o contrato do ADR-075.**
+- **#243 — trava de citação ATIVA deixa passar e rejeita errado:** `persist_object`
+  (`evidence.py:113–117`) só confere o que a regex reconhece (`LC 140/2011`,
+  `Res. CONAMA 237/1997`, `Lei GO 18.104/2013` e norma sem ano passam sem checagem); cada texto
+  de norma só indexa a **primeira** citação (`citation_evaluator.py:296–299`), o que rejeita quem
+  cita a segunda; dispositivo nunca conferido; `art. 61-A` não capturado.
+- **#244 — corpus de dev ≠ produção:** dev 32.161 chunks / 113 documentos / 395 fontes;
+  produção 28.891 / 64 / 346 (medido 18/09). Medição feita em dev não representa produção.
+- **#245 — `rota_shadow` lê chunk sem tenant:** `_carregar_chunks` faz `WHERE kc.id = ANY(:ids)`
+  sem predicado de tenant (`rota_shadow.py:199–238`) e carimba `confianca: "alta"` em todo trecho.
+  Latente (depende da Legislação parada).
+- **#246 — não há avaliação de recuperação que rode:** as três buscas de fumaça só existem em
+  relatório; `medir_defesa_federal.py` exige impressão digital 31.744/102 e recusa o corpus atual;
+  alvo por regex no texto dá falso positivo (`art61a`); nenhum recall em CI.
+- **#247 — `search()` devolve menos e sem identidade:** `min_similarity` aplicado depois do
+  `LIMIT` (`knowledge_catalog.py:479–481`); ivfflat com filtro pode devolver menos que o pedido;
+  sem deduplicação; não devolve `dispositivo`; o parâmetro `embedding_model`, se passado, compara
+  vetor do provedor global com outro espaço. Ativo via `GET /knowledge/search`.
+
 ## Pulso 2026-09-18 — emenda do ADR-070 (decisões do André + execução)
 
 - **#237 — produção em PostgreSQL 17.6, dev e CI em 15:** migration, trigger e teste provados
@@ -63,7 +91,8 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 242.** (#237 a #241 abertas na emenda do ADR-070, 18/09.)
+> **PRÓXIMO NÚMERO LIVRE: 248.** (#242 a #247 abertas pela Frente B — ADR-075, 18/09.)
+> Anterior: 242 (#237 a #241 abertas na emenda do ADR-070, 18/09.)
 > Anterior: 237. (#233 a #236 abertas pela Frente A — ADR-070,
 > `docs/arquitetura-dados-adr070`, 17/09; conferido `gh pr list`: nenhum PR aberto; #175, mergeado, não usa 23x.)
 > Anterior: 233 (#231 e #232 abertas no PR #172;
