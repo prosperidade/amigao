@@ -1,7 +1,8 @@
 # ADR-075 — Zona normativa: hierarquia de fontes, coletânea como proveniência e recuperação que não relaxa
 
 - **Data:** 18/09/2026
-- **Estado:** proposta. Análise e desenho; **nenhuma ingestão, nenhuma reindexação, nenhum schema alterado**.
+- **Estado:** aceita com as decisões do André de 18/09 (§Decisões do André). **Nenhuma ingestão,
+  nenhuma reindexação, nenhum schema alterado.**
 - **Frente:** B — zona normativa e RAG (`docs/zona-normativa-adr075`)
 - **Base inspecionada:** `origin/main` @ `175ecfa`; banco dev `amigao_db` @ `127.0.0.1:15432` e
   produção (Supabase), ambos só por SELECT.
@@ -12,10 +13,10 @@
   Regras executáveis ficam no ADR-073.
 - **Evidência e medições:** [ZONA_NORMATIVA_RAG.md](../arquitetura/ZONA_NORMATIVA_RAG.md).
 
-> **Insumo.** `ARQUITETURA_DADOS_RAG_REGENTE_v1.md` (§4–§6) não foi entregue. Onde o pedido
-> citou o §4.5, as quatro tabelas foram desenhadas a partir da descrição do pedido e do
-> inventário do #175. Regra: se o insumo divergir do código ou do ADR-070, **o código vence**
-> e a divergência é reportada.
+> **Insumo.** [`ARQUITETURA_DADOS_RAG_REGENTE_v1.md`](../arquitetura/ARQUITETURA_DADOS_RAG_REGENTE_v1.md)
+> chegou depois deste ADR escrito e está versionado sem edição. Confronto em
+> [ZONA_NORMATIVA_RAG §8](../arquitetura/ZONA_NORMATIVA_RAG.md#8-confronto-com-o-insumo):
+> onde divergem, **este ADR vence** — nasceu de medição — e a divergência fica registrada.
 
 ## Contexto (medido)
 
@@ -192,22 +193,22 @@ homologação + vetores das perguntas em cache (§9 do documento de desenho).
   fontes (as 282 da SEMAD ganham linha) e ~27.900 chunks (−17,3% de texto repetido).
 - A trava de citação ativa no `persist_object` tem lacunas hoje (#243).
 
-## Decisões do André
+## Decisões do André (18/09/2026)
 
-1. Emenda ao ADR-038 §6: interpretação anexada à norma, sem disputar vaga (§3).
-2. Alçada `validar_fonte_normativa`: só a Ísis, ou papel de curadoria delegável.
-3. `precedente` privado do tenant por padrão; publicação global só com anonimização e decisão.
-4. Onde roda a avaliação de qualidade (§9): por PR com filtro de caminho, noturna ou manual;
-   onde fica o snapshot do corpus.
-5. Qual corpus é o canônico da reconstrução — dev (113) ou produção (64) — e a regra de que a
-   reconstrução passa **só** pelo manifesto (ADR-038) nos dois.
-6. Gate de reativação da Legislação: sondas verdes antes de ligar.
+| # | Decisão | Efeito |
+|---|---|---|
+| 1 | Emenda ao ADR-038 §6 **aprovada**: interpretação oficial anexada à norma que interpreta | §3 vale |
+| 2 | Validar fonte normativa é **papel de curadoria, delegável**. A Ísis é a titular hoje; o papel aceita outros curadores por área (advogado ambiental entra sem mudar arquitetura). A trilha grava quem assinou | §4: alçada `validar_fonte_normativa` por área, não pessoa |
+| 3 | `precedente` **privado da consultoria** por padrão; promoção a global é decisão do tenant, nunca automática | §6 |
+| 4 | Avaliação da busca: **por PR que toque recuperação, corpus, chunking ou embedding + rodada noturna completa** | §9 |
+| 5 | Reconstrução parte do **dev (113 documentos)** — **mas medir antes** por que produção tem 64: listar o que existe em um e não no outro. Se produção tiver documento que o dev não tem, a reconstrução perde material. **Reportar antes de qualquer reingestão** | execução pendente |
+| 6 | **Sondas verdes são condição para religar a Legislação.** Martelo batido | #242 fecha só com as sondas |
 
 ## Pendente com a Ísis
 
-- **Q-ISIS-19:** as coletâneas têm índice ou a lista dos atos que você compilou? Medido: só 2
-  das 32 têm sumário no início. A lista encurta a revisão de fronteiras.
-- **Q-ISIS-18** (já aberta): tipologias SEMAD como `exigencia` ou `procedimento`.
+Vão **juntas**, no mesmo envio: **Q-ISIS-18** (tipologias SEMAD como `exigencia` ou
+`procedimento`), **Q-ISIS-19** (as coletâneas têm índice ou lista dos atos? medido: só 2 das
+32 têm sumário) e **Q-ISIS-04** (tolerância de reprodução da área do KMZ).
 
 ## Execução (sem decisão)
 

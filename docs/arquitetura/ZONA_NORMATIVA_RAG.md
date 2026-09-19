@@ -321,9 +321,89 @@ groundedness 100% (toda citação resolve para trecho recuperado e elegível; am
 suporte semântico); **zero citação órfã**; controle negativo 100% vazio com a razão esperada.
 A Ísis valida os alvos antes da sonda valer.
 
-**Onde roda:**
+**Onde roda (decisão do André, 18/09):**
 
-| Camada | O quê | Onde |
+| Camada | O quê | Quando |
 |---|---|---|
 | Contrato | filtro antes do ranking, nunca relaxa, vazio com razão, uma vaga por dispositivo, citação por ID bloqueia órfã | todo PR, vetores sintéticos, sem API |
-| Qualidade | recall@5, groundedness, controle negativo | corpus de homologação restaurado de snapshot + vetores das perguntas em cache (50 × 768 floats); sem chamada paga no CI. Cadência: decisão do André |
+| Qualidade | recall@5, groundedness, controle negativo | **PR que toque recuperação, corpus, chunking ou embedding** + **rodada noturna completa**; corpus de homologação restaurado de snapshot + vetores das perguntas em cache |
+
+As sondas nascem `proposto` e o curador valida o alvo (mesmo ciclo do corpus).
+
+---
+
+## 8. Confronto com o insumo
+
+[`ARQUITETURA_DADOS_RAG_REGENTE_v1.md`](ARQUITETURA_DADOS_RAG_REGENTE_v1.md) (§4–§6) × ADR-075.
+Onde divergem, o ADR vence — nasceu de medição —; a divergência fica registrada, não apagada.
+
+### 8.1 Converge
+
+- Seis níveis (norma · interpretação oficial · exigência · procedimento · precedente · radar);
+  radar nunca citável.
+- Conflito: autoridade e competência antes de similaridade; vigente antes de histórico sem
+  apagar; divergência material **suspende a afirmação** e abre revisão.
+- `bruto → proposto → validado`; peça assinada só cita `validado`; `proposto` interno com selo.
+- Nova versão nunca sobrescreve (`substitui_versao`).
+- Filtro obrigatório antes do ranking; vazio com a razão; **nunca relaxa**; híbrida tsvector +
+  pgvector com RRF.
+- Citação por claim (norma + versão + dispositivo + localizador), verificada **por id** antes de
+  emitir; órfã bloqueia.
+- As quatro naturezas com tabela própria; `interpretacao.ressalvas` com o Parecer 84.
+- Espaço vetorial travado (ADR-040); lições de chunking do ADR-041, com a tese refutada.
+- Sondas 30–50, recall@5 ≥ 0,9, groundedness 100%, zero órfã, controle negativo.
+
+### 8.2 O documento tem e o ADR não — incorporar
+
+| Item do documento | Incorporação |
+|---|---|
+| Tabela `validacao_norma` (alvo, validador, decisão, nota, data) | é a tabela do evento append-only do §4 do ADR |
+| `dispositivo` com **caminho completo** (`Lei 12.651/2012, art. 61-A, §4º`) e ordem | entra no esquema; é a chave que a citação por id usa |
+| Corpus é **leitura** para o tenant; escrita só com papel administrativo (D6 do Codex) | vale com a decisão 2: escrita e validação por papel de curadoria |
+| Dado de caso **nunca** entra no corpus nem em embedding global | fronteira dura; o `precedente` privado é o caso concreto dela |
+| "Ato superior não resolve automaticamente detalhe local" na regra de conflito | entra no §2 do ADR |
+| `hash_documento` + `storage_path` na norma (original no R2) | proveniência guarda hash e objeto do original, não só do texto |
+| Zero tolerância a "fonte normativa adulterada" | conferência periódica do hash contra o original |
+| Caso Jobson: consulta de novo CAR devolveu licenciamento, fiscalização e TFAGO | evidência adicional do defeito da cascata (afirmação do documento, não medida nesta frente) |
+
+### 8.3 O ADR tem e o documento não — o que a medição achou
+
+- **32 coletâneas**, não "113 documentos": 29 compêndios + 3 de GO gravadas como `manual`, 77,1%
+  dos chunks; são **páginas impressas do navegador** — desmembramento determinístico, coletânea
+  como **proveniência**; 177 a 368 atos dentro; só 2 com sumário.
+- **17,3% do texto é repetição** (15,6% entre coletâneas, 1,7% com norma avulsa); 7 das 8 vagas
+  de GO eram pares duplicados; uma fonte ocupa uma vaga por dispositivo.
+- **Dev ≠ produção**: 32.161 / 113 × 28.891 / 64.
+- **A Legislação já está desligada** desde o ADR-069; só `GET /knowledge/search` consulta o corpus;
+  o contrato entra antes de religar, e sondas verdes são condição (decisão 6).
+- **A trava de citação ativa tem lacunas** (#243): o que a regex não reconhece passa; a segunda
+  norma de uma fonte é recusada. Correção em PR próprio.
+- O `citation_evaluator` **não consulta o banco**; `min_similarity` real é 0,0; as buscas de fumaça
+  não têm script; a medição existente recusa o corpus atual.
+- Busca **exata** sobre o elegível (ivfflat + filtro devolve menos que o pedido, #247);
+  `unaccent` não instalado em produção.
+
+### 8.4 Divergências — o ADR vence
+
+| # | Documento | ADR-075 | Por quê |
+|---|---|---|---|
+| D1 | `status_validacao` também em `norma_chunk` | só na versão da fonte; o trecho herda | reindex (ADR-041) zeraria; provider (ADR-040) duplicaria; UPDATE reescreve o ivfflat |
+| D2 | Migração do corpus = "classificar por nível e estado" (§10) | **reingestão** de 80,7% (32 coletâneas + 5 manuais + 18 SEMAD) | só 19,3% é classificável pelo gravado |
+| D3 | OJN 06/2009 chamada de "parecer doutrinário" (§1, princípio 6) | **interpretação oficial** (nível 2), anexada à norma | é da PFE-IBAMA, vincula os procuradores (ADR-038 §6); o defeito era disputar vaga |
+| D4 | `validado` = "assinado pela Ísis" | papel de curadoria delegável; a trilha grava quem | decisão 2 |
+| D5 | "Roda em CI" | por PR que toque recuperação/corpus/chunking/embedding + noturna | decisão 4 |
+| D6 | `nivel_autoridade ≤ o permitido para o uso` (ordem numérica) | conjunto de níveis permitido por uso; interpretação anexada | ordem única esconderia a OJN quando ela é o que importa |
+| D7 | `precedente` na zona normativa, "global entre tenants" (§2) | privado da consultoria; promoção é decisão do tenant | decisão 3 |
+| D8 | Coletânea como `norma` (esquema sem proveniência) | coletânea é **documento de origem**; cada ato é fonte com proveniência | medição do §3 |
+
+### 8.5 Fora da zona normativa (anotado, não tratado aqui)
+
+- §3 do documento propõe tabelas separadas para observação, derivação e conclusão; o ADR-070
+  escolheu envelope único — **o ADR-070 vence** (decisão do André de 17/09).
+- §3.2 exige premissa só `fato_documental` para risco; decisão do André: `fato_documental`
+  aprovada **ou** observação revisada e aceita (ADR-070 §14). `lacuna` não satisfaz — converge.
+- §3.4 trata `espolio` como papel; Ontologia e ADR-070 §7: espólio é entidade, não papel.
+- §8 traz **legal hold** para caso com peça protocolada — o ADR-070 §17 (expurgo com recibo) não
+  tem; vale incorporar.
+- §9 afirma **produção sem backup** (`backups: []`, PITR desligado). **Não verificado nesta
+  frente**; se confirmado, é risco operacional acima de qualquer item deste documento.
