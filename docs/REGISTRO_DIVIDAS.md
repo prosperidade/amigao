@@ -35,6 +35,11 @@ frente (docs-only).
   `Res. CONAMA 237/1997`, `Lei GO 18.104/2013` e norma sem ano passam sem checagem); cada texto
   de norma só indexa a **primeira** citação (`citation_evaluator.py:296–299`), o que rejeita quem
   cita a segunda; dispositivo nunca conferido; `art. 61-A` não capturado.
+  **PARCIALMENTE FECHADA em 19/09 (`fix/trava-citacao-243`):** as três formas passam a ser
+  reconhecidas e conferidas (com fonte passam, sem fonte recusam), a segunda norma da fonte não é
+  mais recusada, `MPV`, sigla com hífen (`SEMAD-GO`) e zero à esquerda (`02` = `2`) entram;
+  `comp 780/2017` deixa de virar medida provisória. **Seguem abertos:** citação **sem ano** não é
+  extraída (passa sem conferência); dispositivo não é conferido; `art. 61-A` não é capturado.
 - **#244 — corpus de dev ≠ produção:** dev 32.161 chunks / 113 documentos / 395 fontes;
   produção 28.891 / 64 / 346 (medido 18/09). Medição feita em dev não representa produção.
 - **#245 — `rota_shadow` lê chunk sem tenant:** `_carregar_chunks` faz `WHERE kc.id = ANY(:ids)`
