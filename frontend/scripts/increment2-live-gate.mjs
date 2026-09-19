@@ -65,6 +65,11 @@ try {
     const run = await response.json();
     const data = await evidence(page, caseId);
     const execution = data.executions.find(e => e.id === run.id);
+    // A success receipt must never be produced from an empty or failed extraction.
+    expect(execution?.status).toBe('completed');
+    const observations = data.objects.filter(r => r.object.kind === 'observacao');
+    expect(observations.length).toBeGreaterThan(0);
+    const identities = observations.map(r => `${r.object.id}:${r.object.version}`).sort();
     receipt.executions.push({ case: caseId, id: run.id, status: execution?.status,
       steps: execution?.steps.map(s => ({ agent: s.agent, status: s.status, error: s.error ? 'present' : null })),
       observations: data.objects.filter(r => r.object.kind === 'observacao').length });
@@ -73,6 +78,8 @@ try {
     await expect(page.getByText('Observações documentais', { exact: true })).toBeVisible();
     const after = await evidence(page, caseId);
     expect(after.objects.length).toBe(data.objects.length);
+    expect(after.objects.filter(r => r.object.kind === 'observacao')
+      .map(r => `${r.object.id}:${r.object.version}`).sort()).toEqual(identities);
     receipt.reload.push(caseId);
     await ctx.close();
     const fresh = await browser.newContext();
@@ -80,6 +87,8 @@ try {
     await login(freshPage, caseId);
     const restored = await evidence(freshPage, caseId);
     expect(restored.objects.length).toBe(data.objects.length);
+    expect(restored.objects.filter(r => r.object.kind === 'observacao')
+      .map(r => `${r.object.id}:${r.object.version}`).sort()).toEqual(identities);
     receipt.new_session.push(caseId);
     await fresh.close();
   }
@@ -99,6 +108,8 @@ try {
   await page.reload();
   const after = await evidence(page, doc.case);
   const dependents = after.objects.filter(r => r.object.attributes.document_id === doc.id);
+  expect(dependents.length).toBeGreaterThan(0);
+  expect(dependents.every(r => r.stale)).toBe(true);
   receipt.reclassification = { document: doc.id, dependents: dependents.length,
     stale: dependents.filter(r => r.stale).length, before_objects: before.objects.length };
   }

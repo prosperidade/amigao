@@ -1,13 +1,6 @@
 # ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
-"""Contenção 4 (ADR-064, achado N3) — o AIJob do extrator para de ser cego.
-
-Medido em produção em 09/09: os `ai_jobs` 1467–1471 e 1473 do extrator têm
-`model_used`, `provider`, `tokens_in/out`, `cost_usd` e `raw_output` TODOS nulos.
-O extrator nunca usou `call_llm` — ele delega a chamada a `document_extractor` e
-a `ficha01_extraction`, que falam com o gateway direto. O que o LLM devolveu
-deixava de existir depois da chamada, e foi por isso que a origem dos erros da
-ELODI só pôde ser tratada como hipótese até a reprodução manual.
-"""
+"""Inc2 / ADR-064: toda chamada do parser unico permanece auditavel no AIJob.
+A chamada de preview foi removida; tokens, custo e bruto continuam obrigatorios."""
 
 from __future__ import annotations
 

@@ -601,30 +601,12 @@ def _ultima_data(bruto: Any) -> Optional[date]:
 def derivar_vigencia(
     observacoes: list[Observacao], data_referencia: Optional[date] = None
 ) -> None:
-    """Preenche `atributos["vigencia"]` de cada observação — por REGRA, nunca
-    pelo LLM. Modifica em lugar; roda depois de :func:`aplicar_alteracoes`
-    (precisa de `baixado_por`/`retificado_por` já resolvidos).
+    """Deriva estado temporal do material, nunca do silencio ou do relogio local.
 
-    Ordem de decisão, a mesma tabela do ADR-066:
-
-    1. **Alterado** — outro ato desta matrícula cita este em `altera_ato`.
-       `baixa` ⇒ `baixado`; `aditivo` ⇒ `retificado`. Referência textual,
-       igual a :func:`aplicar_alteracoes` — não é inferência.
-    2. **Prazo com termo** — só `arrendamento`/`usufruto` (:data:`_TIPOS_COM_TERMO`).
-       Termo final < `data_referencia` ⇒ `expirado`; senão `vigente`. A
-       comparação é com a data de referência do CASO, não com `date.today()`
-       — quem chama decide "vigente quando" (default: hoje, quando ninguém
-       tem uma data de caso à mão).
-    3. **Ato de origem com data** (`data_ato` presente, sem alteração
-       encontrada) ⇒ `vigente`.
-    4. **Nenhuma das anteriores** ⇒ `indeterminado`. Nunca `vigente` por
-       default — silêncio não é vigência (a mesma regra do ADR-065 para
-       "partes[0] não é o credor": o sistema só afirma o que o documento
-       sustenta).
-
-    Só tipos em :data:`TIPOS_COM_VIGENCIA` recebem o campo — `compra_venda`,
-    `baixa`, `aditivo` etc. são eventos, não estados; `vigencia` neles não
-    responderia pergunta nenhuma.
+    Baixa/aditivo explicitos preservam o vinculo ao ato. Prazo final e data
+    de origem so autorizam comparacao com data_referencia informada.
+    Sem referencia, o estado e indeterminado. VIGENCIA_VIGENTE significa
+    vigente_segundo_o_material; nao certifica estado registral atual.
     """
     ref = data_referencia
     for obs in observacoes:
@@ -716,17 +698,11 @@ def cadeia_titularidade(observacoes: list[Observacao]) -> list[dict[str, Any]]:
 
 
 def titular_atual(observacoes: list[Observacao]) -> Optional[dict[str, Any]]:
-    """O titular do ato de transferência de domínio mais recente.
+    """Adaptador legado sem premissas suficientes para titularidade atual.
 
-    "Sem ato posterior que o transfira" (ADR-066) é automático para o ÚLTIMO
-    ato: por definição não há nenhum depois dele nesta matrícula. Os
-    adquirentes de atos ANTERIORES aparecem em :func:`cadeia_titularidade`
-    como titulares passados (e, no caso comum, como transmitentes do ato
-    seguinte — mas isso não é verificado aqui: cada ato fala por si).
-
-    None quando nenhum ato de transferência desta matrícula nomeia
-    adquirente — a matrícula pode não ter tido transferência registrada, ou o
-    texto não distinguiu os dois lados.
+    A assinatura nao traz cobertura, identidade completa ou saldo/fracoes.
+    Retorna None; cadeia_titularidade preserva as participacoes historicas.
+    O motor cartorario exige premissas qualificadas para avaliar cadeia.
     """
     # The legacy signature carries neither coverage nor fractions/initial balance.
     # Keep the historical participation list via cadeia_titularidade; current

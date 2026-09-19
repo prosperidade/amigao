@@ -1,11 +1,6 @@
 # ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
-"""Ficha 01 / FASE 2 — o ExtratorAgent grava staging SEM alterar extracted_fields.
-
-Mocka o LLM legado (``extract_document_fields``) e o LLM estruturado
-(``ficha01_extraction._extract_structured``) — o ``extract_and_stage`` real roda e
-persiste as linhas. Prova: (1) o shape de ``extracted_fields`` continua igual;
-(2) o staging é populado com os campos certos por tipo + matricula_hint.
-"""
+"""Inc2: parser unico persiste observacoes; staging referencia a evidencia.
+Gateway controlado verifica roteamento e persistencia, nao semantica real."""
 
 from __future__ import annotations
 
