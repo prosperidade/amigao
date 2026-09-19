@@ -13,6 +13,9 @@
 Você está autorizado a executar SEM pedir confirmação:
 - Criar/checkout de branch e worktree isolada
 - Ler código, banco (read-only), logs, git history
+- Ler a produção (Supabase) EXCLUSIVAMENTE pelo MCP somente-leitura
+  `supabase-prod-ro` do `.mcp.json` (`read_only=true`: a trava está no
+  Postgres, não no prompt). Ver `docs/adr/076-producao-le-por-canal-somente-leitura.md`.
 - Escrever/editar código, migrations, skills, testes na sua branch
 - Rodar migrations (`alembic upgrade`) EXCLUSIVAMENTE no banco de
   desenvolvimento deste projeto: `amigao_db` na porta que o `.env` deste
@@ -35,6 +38,11 @@ disso é livre — não pergunte, execute e reporte ao final.
 
 Exceções que ainda pedem confirmação (segurança, não fluxo):
 - Apagar dados/tabelas em produção
+- Qualquer ESCRITA em produção (SQL que altera dado, migration, edge
+  function, branch, pausar/restaurar projeto): autorização explícita do André
+  **por operação** — vale para o SQL/migration mostrado, não para a sessão nem
+  para a próxima. O canal da escrita autorizada é o conector completo
+  `claude.ai Supabase`; ele não é o caminho de leitura do dia a dia (ADR-076).
 - Mexer em secrets/credenciais reais
 - Qualquer ação destrutiva irreversível fora do DEV
 - Deploy que afete o canal de produção
