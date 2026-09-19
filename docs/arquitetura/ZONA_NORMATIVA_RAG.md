@@ -31,7 +31,7 @@ e [saída](provas/adr075_medicao_coletaneas.txt).
 |---|---|
 | Só em produção | **0 documentos** — reconstruir a partir do dev não perde material |
 | Só no dev | **49 documentos, todos federais** (ids 102–210): manifesto curado do ADR-038 e normativas de 06/08 — 33 leis, 9 IN, 3 decretos, 3 resoluções, 1 portaria, 2.709 chunks. Inclui **Decreto 6.514/2008**, **Constituição Federal** e **OJN 06/2009**: a produção nem tem o alvo da busca de defesa |
-| Comuns (64) | batem por identidade; 7 com texto levemente diferente (±300 caracteres: Lei 9.605/1998, Lei 12.651/2012, LC 140/2011…); 50 com contagem de chunks diferente (fatiamentos de épocas diferentes) |
+| Comuns (64) | batem por identidade; **7 com hash diferente = os 7 federais do reparo de charset da #95** (Lei 12.651/2012, 9.605/1998, 9.985/2000, 6.938/1981, LC 140/2011, Decretos 7.830/2012 e 8.235/2014): o dev rebaixou do Planalto com o charset certo (~4% de `U+FFFD` → 0%); a produção guarda a ingestão de abril, **com o mojibake** (a confirmar pelo canal somente-leitura); 50 com contagem de chunks diferente (a reindexação da fase 4 do ADR-041 rodou só no dev) |
 | Fontes SEMAD | 282 × 282, mesmas referências e mesma contagem |
 
 Leitura de produção feita por SELECT em modo somente-leitura, antes da regra do ADR-076; as
