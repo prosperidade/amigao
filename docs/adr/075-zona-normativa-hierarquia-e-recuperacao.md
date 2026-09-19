@@ -214,3 +214,38 @@ Vão **juntas**, no mesmo envio: **Q-ISIS-18** (tipologias SEMAD como `exigencia
 
 Parser de desmembramento em dry-run com relatório por coletânea · função única de identidade
 normalizada · autoria das sondas com a Ísis validando os alvos · dívidas #242–#247.
+
+## Adendo de 19/09/2026 — cinco itens incorporados do insumo
+
+Aprovados pelo André a partir do confronto com
+[`ARQUITETURA_DADOS_RAG_REGENTE_v1.md`](../arquitetura/ARQUITETURA_DADOS_RAG_REGENTE_v1.md)
+([ZONA_NORMATIVA_RAG §8.2](../arquitetura/ZONA_NORMATIVA_RAG.md#82-o-documento-tem-e-o-adr-não--incorporar)).
+Complementam as decisões acima; **as 8 divergências do §8.4 não são reabertas**.
+
+**A1. `validacao_norma` e `dispositivo` como tabelas.**
+- `validacao_norma (id, fonte_versao_id, acao, validador, papel_na_curadoria, area, decisao,
+  nota, hash_texto, registrado_em)` — é o evento append-only do §4, com o papel de curadoria
+  delegável (decisão 2): grava quem assinou e em que área. Entra na hash chain do catálogo global.
+- `dispositivo (id, fonte_versao_id, caminho, ordem, texto, hash)` — `caminho` completo e
+  legível (`Lei 12.651/2012, art. 61-A, §4º`), único por versão. É a chave que a citação por ID
+  do §8 confere; o trecho (chunk) aponta para o dispositivo, não o contrário.
+
+**A2. Corpus é leitura para o tenant.** Escrever no catálogo normativo — ingerir, corrigir,
+classificar, mudar status — exige o papel de curadoria (decisão 2), verificado no serviço e no
+endpoint. Hoje qualquer usuário interno escreve (D6 da auditoria Codex); o adendo fecha essa
+porta no desenho, a implementação vem com o Incremento 4.
+
+**A3. Dado de caso nunca entra no corpus normativo nem em embedding global.** Fronteira dura
+entre a zona do caso (por tenant) e a zona normativa (global). O `precedente` privado da
+consultoria (decisão 3) é a aplicação concreta: indeferimento de cliente não vira trecho global;
+promoção só por decisão do tenant, com anonimização.
+
+**A4. "Ato superior não resolve automaticamente detalhe local."** Entra na regra de conflito do
+§2: hierarquia normativa não decide sozinha o conflito entre norma geral e norma local de
+competência própria; o caso sem regra homologada de conflito de esferas (ADR-073) vira
+afirmação `conflitante` com tarefa de revisão, como a divergência material.
+
+**A5. Hash e original no R2, com conferência de adulteração.** Cada `fonte_normativa_versao`
+guarda o **hash dos bytes originais** e a chave do objeto no R2, além do hash do texto extraído.
+Uma conferência periódica recalcula o hash do original e compara: divergência bloqueia a versão
+para citação e abre tarefa de revisão. "Fonte normativa adulterada" é zero tolerância.

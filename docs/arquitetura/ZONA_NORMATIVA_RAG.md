@@ -369,6 +369,10 @@ Onde divergem, o ADR vence — nasceu de medição —; a divergência fica regi
 
 ### 8.2 O documento tem e o ADR não — incorporar
 
+**Incorporado em 19/09:** os cinco itens aprovados pelo André estão no
+[Adendo do ADR-075](../adr/075-zona-normativa-hierarquia-e-recuperacao.md#adendo-de-19092026--cinco-itens-incorporados-do-insumo)
+(A1 a A5).
+
 | Item do documento | Incorporação |
 |---|---|
 | Tabela `validacao_norma` (alvo, validador, decisão, nota, data) | é a tabela do evento append-only do §4 do ADR |
@@ -417,7 +421,6 @@ Onde divergem, o ADR vence — nasceu de medição —; a divergência fica regi
 - §3.2 exige premissa só `fato_documental` para risco; decisão do André: `fato_documental`
   aprovada **ou** observação revisada e aceita (ADR-070 §14). `lacuna` não satisfaz — converge.
 - §3.4 trata `espolio` como papel; Ontologia e ADR-070 §7: espólio é entidade, não papel.
-- §8 traz **legal hold** para caso com peça protocolada — o ADR-070 §17 (expurgo com recibo) não
-  tem; vale incorporar.
-- §9 afirma **produção sem backup** (`backups: []`, PITR desligado). **Não verificado nesta
-  frente**; se confirmado, é risco operacional acima de qualquer item deste documento.
+- §8 traz **legal hold** para caso com peça protocolada — **incorporado ao ADR-070 §17 em 19/09**.
+- §9 afirma **produção sem backup** (`backups: []`, PITR desligado). **Confirmado pelo André;
+  decisão já tomada** — não é reaberto aqui.
