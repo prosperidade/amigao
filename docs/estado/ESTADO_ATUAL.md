@@ -5,8 +5,12 @@ André transferiu a alteração do modelo para esta frente: AI_EXTRATOR_MODEL=gp
 via ai_gateway, sem fallback, gate somente em dev. Smoke real com prompt sintético
 passou em uma tentativa (13/8 tokens); temperatura 1 exigida pela API. Decisão em
 CLAUDE.md, .env.example e ADR-071. Triagem 20+1 publicada no PR #183; G1–G9
-restaurados na primeira execução de triagem, com artefato. CI do código corrigido
-segue em execução. Extração dos nove textos ainda não comprovada.
+restaurados e conferidos no artefato do CI `92b37d3`: seis jobs aprovados,
+2.080 testes backend e 169 frontend; Ruff aprovado, mypy consultivo com 978 erros.
+Jobs reais dev 154–156 falharam na validação de âncoras, zero observações.
+Auditoria da resposta/custo em falha e recuperação literal de layout corrigidas;
+o job 156 recusou trecho repetido sem posição, mantendo a proteção.
+Extração dos nove textos ainda não comprovada. Novas regressões seguem ao CI.
 
 **Pulso 19/09/2026 — migrations e associação dev comprovadas; extração bloqueada.**
 amigao_db 127.0.0.1:15432 em 071es004. Nove documentos preparados no DB dev,

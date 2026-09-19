@@ -92,6 +92,13 @@ continuam exigindo correspondência exata. Ambiguidade continua exigindo posiç�
 Regressões controladas adicionadas para layout, ambiguidade, número divergente
 e preservação de auditoria após rejeição. Sem texto real nesses testes.
 
+Job dev 156: nova chamada real pelo navegador após a correção de layout;
+rejeição por trecho repetido sem posição explícita, zero observações. Modelo
+gpt-5.6-luna, 4.428 tokens de entrada, 2.123 de saída, US$ 0,0026367.
+Não foi escolhida a primeira ocorrência. O percurso não alcançou os nove textos;
+esta pendência impede fechar o gate. Uma tentativa anterior recebeu 409 sem
+criar job; a repetição retornou 202 e expôs a falha de extração acima.
+
 ### Regressão da certidão eletrônica
 
 Antes: o classificador reconhecia o título sem qualificador eletrônico;

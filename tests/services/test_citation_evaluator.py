@@ -191,3 +191,59 @@ class TestValidateCitations:
         # SearchResult enriquece chunk_id; string apenas confirma match
         assert cits[0].chunk_id == 42
         assert cits[1].chunk_id is None
+
+
+# ---------------------------------------------------------------------------
+# Dívida #243 — a trava do persist_object (ADR-069) usa este módulo. Forma não
+# reconhecida passava sem conferência; texto com duas normas indexava só uma.
+# ---------------------------------------------------------------------------
+
+_TRES_FORMAS = "Aplicam-se a LC 140/2011, a Res. CONAMA 237/1997 e a Lei GO 18.104/2013."
+_FONTE_DAS_TRES = (
+    "LEI COMPLEMENTAR Nº 140, DE 8 DE DEZEMBRO DE 2011. ... Resolução CONAMA nº 237, "
+    "de 19 de dezembro de 1997 ... LEI Nº 18.104, DE 18 DE JULHO DE 2013."
+)
+
+
+class TestTravaDivida243:
+    @pytest.mark.parametrize(
+        "text,kind,numero,ano,jurisdicao",
+        [
+            ("LC 140/2011", "lei_complementar", "140", 2011, None),
+            ("Res. CONAMA 237/1997", "resolucao_conama", "237", 1997, None),
+            ("Lei GO 18.104/2013", "lei", "18.104", 2013, "estadual"),
+            ("Decreto Estadual 9.308/2018", "decreto", "9.308", 2018, "estadual"),
+            ("Lei Federal 12.651/2012", "lei", "12.651", 2012, "federal"),
+            ("IN SEMAD-GO 01/2024", "instrucao_normativa", "01", 2024, None),
+            ("MPV 780/2017", "medida_provisoria", "780", 2017, None),
+        ],
+    )
+    def test_formas_abreviadas_e_com_esfera_sao_reconhecidas(self, text, kind, numero, ano, jurisdicao) -> None:
+        cits = extract_citations(text)
+        assert [(c.kind, c.numero, c.ano, c.jurisdicao) for c in cits] == [(kind, numero, ano, jurisdicao)]
+
+    def test_as_tres_formas_passam_com_fonte_no_contexto(self) -> None:
+        cits = extract_citations(_TRES_FORMAS)
+        assert len(cits) == 3
+        assert validate_citations(cits, [_FONTE_DAS_TRES]).valid is True
+
+    def test_as_tres_formas_nao_passam_mais_sem_fonte(self) -> None:
+        """Antes: nenhuma era extraída, então total=0 e valid=True — passavam sem conferência."""
+        result = validate_citations(extract_citations(_TRES_FORMAS), ["Lei 9.605/1998"])
+        assert result.valid is False
+        assert {c.raw for c in result.invalid} == {"LC 140/2011", "Res. CONAMA 237/1997", "Lei GO 18.104/2013"}
+
+    def test_segunda_norma_de_um_texto_com_duas_nao_e_rejeitada(self) -> None:
+        """Antes só entrava a primeira pela ORDEM DOS PADRÕES: o Decreto, e a Lei era recusada."""
+        contexto = ["Lei 12.651/2012, regulamentada pelo Decreto 6.514/2008."]
+        for citada in ("Nos termos da Lei 12.651/2012.", "Conforme o Decreto 6.514/2008."):
+            assert validate_citations(extract_citations(citada), contexto).valid is True
+
+    def test_zero_a_esquerda_nao_separa_a_mesma_norma(self) -> None:
+        assert validate_citations(extract_citations("IN MMA 02/2014"), ["IN MMA 2/2014"]).valid is True
+
+    @pytest.mark.parametrize("texto", ["Lei no 12.651/2012", "calc 140/2011 unidades", "comp 780/2017"])
+    def test_qualificador_e_siglas_nao_inventam_citacao(self, texto) -> None:
+        cits = extract_citations(texto)
+        assert all(c.jurisdicao is None for c in cits)
+        assert [c.kind for c in cits] in ([], ["lei"])

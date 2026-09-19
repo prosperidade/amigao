@@ -17,6 +17,15 @@
 > normalização de ligaduras. As 11 nascem já com `dispositivo`, `hierarquia` e
 > `referencias` preenchidos — ver `docs/relatorios/RELATORIO_INGESTAO_NORMATIVAS_FEDERAIS.md`.
 
+> **18/09 — ADR-075 (proposta).** Hierarquia de seis níveis, validação
+> `bruto → proposto → validado`, coletânea como proveniência e recuperação com filtro
+> obrigatório que **nunca relaxa**: [ADR-075](../adr/075-zona-normativa-hierarquia-e-recuperacao.md)
+> e [ZONA_NORMATIVA_RAG.md](ZONA_NORMATIVA_RAG.md). Medido em 18/09: produção tem **28.891
+> chunks / 64 documentos** (dev: 32.161 / 113); **32 coletâneas** (29 `compendio_regente` + 3
+> de GO gravadas como `manual`) são 77,1% dos chunks. A recuperação da Legislação está
+> **parada** desde o ADR-069; esta página descreve o contrato **legado**, que o ADR-075
+> substitui antes de ela voltar.
+
 ---
 
 A base de conhecimento regulatório do Regente Ambiental — como ela é curada, indexada, consultada e mantida atualizada. Esta base é o que dá fundamento legal a tudo que os agentes IA produzem.
@@ -243,12 +252,18 @@ Backend:
 
 ## Citation evaluator (visão de consumo)
 
-Após o agente Redator gerar peça, o `citation_evaluator`:
+**Corrigido em 18/09 (o texto anterior dizia que ele consultava o `knowledge_catalog`):** o
+`citation_evaluator` **não consulta o banco**
+([citation_evaluator.py:14–15](../../app/services/citation_evaluator.py#L14-L15)).
 
-1. Extrai todas as citações do texto (regex multi-formato cobre `Lei N/AAAA`, `Decreto N/AAAA`, `Resolução CONAMA N/AAAA`, etc.)
-2. Para cada citação, faz lookup em `knowledge_catalog` por `identifier`
-3. Citação que não bate com nenhum chunk → suspeita
-4. Citação que bate → vincula `chunk_id` no `CitationRef`
+1. Extrai citações do texto por regex (exige ano; formas como `LC 140/2011`, `Res. CONAMA 237/1997`
+   e `Lei GO 18.104/2013` **não** são reconhecidas).
+2. Compara com a **primeira** citação de cada item de contexto recebido
+   ([:296–299](../../app/services/citation_evaluator.py#L296-L299)), por (tipo, número, ano).
+3. Não confere dispositivo.
+4. Único uso que bloqueia hoje: `persist_object` do ADR-069
+   ([evidence.py:113–117](../../app/services/evidence.py#L113-L117)). Lacunas na dívida #243;
+   substituição na [ZONA_NORMATIVA_RAG §6](ZONA_NORMATIVA_RAG.md#6-citação-por-claim-e-anti-invenção).
 
 Detalhes em [`GOVERNANCA_IA.md`](./GOVERNANCA_IA.md).
 
@@ -274,7 +289,7 @@ Permite, para qualquer citação: encontrar o chunk → encontrar o documento �
 3. **Sem ingestão de ofícios curados da sócia.** Existe script (`ingest_pasta_socia.py`), mas nenhum ofício ingerido ainda. Skills do Redator desbloqueiam esse caminho.
 4. **Sem ingestão de jurisprudência.** Roadmap longo prazo.
 5. **Re-indexação manual.** Não há gatilho automático quando provider de embedding muda.
-6. **`min_similarity = 0.7` é heurístico.** Avaliar se está pegando relevância demais ou de menos.
+6. **~~`min_similarity = 0.7`~~ — corrigido em 18/09:** o default de `search()` é `0.0` e a Legislação passa `0.0` ([legislacao.py:334](../../app/agents/legislacao.py#L334)); só o enquadramento de auto usa `0.55`. Não há piso de similaridade na recuperação. Ver ADR-075 §7.
 
 ## Próximas leituras
 
