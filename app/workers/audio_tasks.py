@@ -182,6 +182,7 @@ def transcribe_audio_document(
         # 3) Cache twin — o mesmo áudio subido no rascunho e de novo no caso não
         # paga transcrição duas vezes.
         twin = None
+        literal_twin = None
         if not force:
             twin = (
                 db.query(Document)

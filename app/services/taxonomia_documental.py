@@ -44,6 +44,8 @@ def propor_especie(texto, tipo_original=None):
             "titular falecido", "cadastro de pessoas fisicas", "situacao cadastral no cpf")):
         return EspecieDocumental.comprovante_situacao_cadastral_cpf
     markers = [
+        ("planta topografica", "arquivo_geoespacial"),
+        ("auto de infracao", "peca_orgao"),
         ("escritura publica", "escritura_publica"),
         ("contrato de prestacao de servicos", "contrato_servico_documental"),
         ("contrato de servicos", "contrato_servico_documental"),

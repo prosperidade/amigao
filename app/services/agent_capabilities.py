@@ -36,7 +36,8 @@ def capability_manifest(agent_name, metadata):
                 manifest["missing"].append({"skill": name, "reason": "metodo_obrigatorio_ausente"})
                 continue
             manifest["applied"].append({"name": name, "version": meta.version,
-                "hash": canonical_hash(Path(meta.path).read_text(encoding="utf-8")),
+                "hash": canonical_hash(skill.body),
+                "source_hash": canonical_hash(Path(meta.path).read_text(encoding="utf-8")),
                 "content": skill.body, "attachments": [],
                 "mode": "deterministic_contract" if family == "cartorario" else "system_prompt"})
         manifest["status"] = "capacidade_insuficiente" if manifest["missing"] else "available"
@@ -63,7 +64,8 @@ def capability_manifest(agent_name, metadata):
                         content = path.read_text(encoding="utf-8")
                         attachments.append({"name": path.name, "hash": canonical_hash(content), "content": content})
                 manifest["applied"].append({"name": required, "version": meta.version,
-                    "hash": canonical_hash(Path(meta.path).read_text(encoding="utf-8")), "content": skill.body, "attachments": attachments,
+                    "hash": canonical_hash(skill.body),
+                    "source_hash": canonical_hash(Path(meta.path).read_text(encoding="utf-8")), "content": skill.body, "attachments": attachments,
                     "mode": "deterministic_contract" if agent_name == "auditor_imovel" else "system_prompt"})
                 if agent_name == "auditor_imovel":
                     code = Path(__file__).with_name("inconsistency_matrix.py").read_text(encoding="utf-8")

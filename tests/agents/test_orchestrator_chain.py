@@ -26,9 +26,11 @@ def test_chain_keeps_independent_reading_and_stops_dependent_synthesis(committed
         assert response.status_code == 200, response.text
         result = response.json()
         statuses = {s["agent"]: s["status"] for s in result["steps"]}
-        assert statuses == {"extrator": "capacidade_insuficiente", "auditor_imovel": "completed",
+        assert statuses == {"extrator": "failed", "auditor_imovel": "completed",
                             "legislacao": "capacidade_insuficiente", "diagnostico": "awaiting_review"}
         assert result["completed"] is False
+        # Inc2 tem mtodo; o texto controlado sem espcie exige classificao, no LLM.
+        assert "Espécie não determinada" in result["steps"][0]["error"]
 
 
 def test_review_gate_cannot_be_bypassed_with_stop_false_or_chain_data(committed_case, monkeypatch):

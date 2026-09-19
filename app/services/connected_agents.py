@@ -191,7 +191,7 @@ def run_step(db, execution, step, user_id):
         def record(response, label):
             attempts.append({"label": label, "model": response.model_used, "provider": response.provider,
                 "tokens_in": response.tokens_in, "tokens_out": response.tokens_out, "cost_usd": response.cost_usd})
-        result = executar_extracao(ctx, on_response=record)
+        result = executar_extracao(ctx, on_response=record, ai_job_id=job.id)
         job.tokens_in = sum(a["tokens_in"] for a in attempts)
         job.tokens_out = sum(a["tokens_out"] for a in attempts)
         job.cost_usd = sum(a["cost_usd"] for a in attempts)

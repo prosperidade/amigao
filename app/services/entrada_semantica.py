@@ -407,8 +407,10 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
     return rows
 
 
-def executar_extracao(ctx, *, on_response=None):
+def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
     from app.services.agent_capabilities import capability_manifest
+    if ctx.process_id is None:
+        return {"skipped": True, "reason": "Informe process_id e document_id; use POST /processes/{id}/extract"}
     authorize(ctx.session, ctx.tenant_id, ctx.user_id, ctx.process_id)
     manifest = capability_manifest("extrator", ctx.metadata)
     if manifest["status"] != "available":
@@ -419,10 +421,25 @@ def executar_extracao(ctx, *, on_response=None):
         query = query.filter(Document.id == ctx.metadata["document_id"])
     rows, documentos_sem_texto = [], []
     for doc in query.order_by(Document.id).all():
+        if not (doc.extracted_text or "").strip() and ctx.metadata.get("document_id") == doc.id and ctx.metadata.get("text"):
+            from datetime import UTC, datetime
+            # Compatibility input is persisted once; the observation parser reads only the document.
+            doc.extracted_text = ctx.metadata["text"]
+            doc.extracted_at = datetime.now(UTC)
+            ctx.session.flush()
         if not (doc.extracted_text or "").strip():
             documentos_sem_texto.append({"documento_id": doc.id, "motivo": "texto_ausente"})
             continue
         rows.extend(extrair_documento(ctx.session, doc, manifest=manifest, on_response=on_response))
+    if not rows and documentos_sem_texto:
+        raise ValueError("OCR: texto extraido ausente; reprocessar os documentos antes de extrair")
+    if ai_job_id is not None and rows:
+        for staging in ctx.session.query(ExtractedFieldStaging).filter(
+                ExtractedFieldStaging.tenant_id == ctx.tenant_id,
+                ExtractedFieldStaging.observacao_ref.in_([r.id for r in rows]),
+                ExtractedFieldStaging.ai_job_id.is_(None)):
+            staging.ai_job_id = ai_job_id
+        ctx.session.flush()
     from app.services.ficha01_extraction import data_referencia_do_processo
     reference = data_referencia_do_processo(ctx.session, ctx.tenant_id, ctx.process_id)
     preview = projetar_preview(rows, data_referencia=reference)
