@@ -427,3 +427,30 @@ def test_agent_name_single_provider_does_not_error(fake_litellm):
     assert result.model_used.startswith("claude")
     _, kwargs = fake_litellm.completion.call_args
     assert kwargs["api_key"] == "sk-ant-only"
+
+
+def test_extrator_luna_failure_never_calls_another_provider(fake_litellm):
+    fake_litellm.completion.side_effect = RuntimeError("controlled provider failure")
+    config = _build_settings_for_complete(gemini="google-key", anthropic="anthropic-key", AI_MAX_RETRIES=0)
+    with patch("app.core.config.settings", config), pytest.raises(AIGatewayError):
+        complete("controlled", model="gpt-5.6-luna", agent_name="extrator", allow_fallback=False)
+    assert fake_litellm.completion.call_count == 1
+    assert fake_litellm.completion.call_args.kwargs["model"] == "gpt-5.6-luna"
+
+
+def test_extrator_luna_missing_key_fails_before_provider(fake_litellm):
+    config = _build_settings_for_complete(gemini="google-key")
+    config.OPENAI_API_KEY = ""
+    with patch("app.core.config.settings", config), pytest.raises(AIGatewayError):
+        complete("controlled", model="gpt-5.6-luna", agent_name="extrator", allow_fallback=False)
+    fake_litellm.completion.assert_not_called()
+
+
+def test_extrator_luna_uses_supported_temperature(fake_litellm):
+    fake_litellm.completion.return_value = _litellm_response_fr('{"ok":true}', 10, 5, "stop")
+    fake_litellm.completion_cost.return_value = 0.0001
+    with patch("app.core.config.settings", _build_settings_for_complete()):
+        result = complete("controlled", model="gpt-5.6-luna", agent_name="extrator",
+                          allow_fallback=False, temperature=0)
+    assert result.model_used == "gpt-5.6-luna"
+    assert fake_litellm.completion.call_args.kwargs["temperature"] == 1

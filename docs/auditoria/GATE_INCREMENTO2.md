@@ -3,6 +3,25 @@
 18/09/2026 · branch `feat/entrada-semantica-cartorario` · implementação em andamento.
 **Gate aberto. Associação autenticada comprovada; extração LLM e persistência semântica ainda não comprovadas.**
 
+## 19/09/2026 — autorização e modelo atualizados
+
+André autorizou enviar os nove textos pelo ai_gateway, sem fallback, somente em
+dev, com `gpt-5.6-luna`; em seguida autorizou implementar a configuração nesta
+worktree, substituindo a dependência de PR separado do Claude Code.
+`AI_EXTRATOR_MODEL` é independente do default dos demais agentes; o parser exige
+`allow_fallback=False`. Ausência da chave primária falha antes de chamar outro
+provider. `CLAUDE.md` e `.env.example` registram a decisão.
+
+GET `/v1/models/gpt-5.6-luna`: HTTP 200. Smoke sintético pelo gateway: uma tentativa,
+13 tokens de entrada, 8 de saída, US$ 0,0000122, modelo confirmado. A API recusou
+temperatura 0; adaptação explícita para temperatura 1, registrada na tentativa.
+Esse smoke não é prova semântica dos nove documentos.
+
+Triagem das 20 falhas + 1 erro: [registro por teste](INCREMENTO2_TRIAGEM_CI_bf93cf5.md).
+Na primeira execução de triagem, 2.066 passaram e 11 falharam; G1–G9 passaram e o
+artefato gate-incremento1 foi produzido. Corrigidos depois o hook abstrato removido
+e a leitura da data por extenso. A confirmação do commit final segue no CI.
+
 ## Percurso dev — 19/09/2026, parcial
 
 Alvo confirmado antes da aplicação: **127.0.0.1:15432/amigao_db**, usuário
@@ -31,7 +50,7 @@ Playwright pelo modo INC2_ASSOCIATION_ONLY: **9 associações pela tela, 2 recar
 interceptação ou mock de API. A associação é prova; não foi apresentada como upload.
 Esse modo não dispara extração, LLM ou reclassificação.
 
-**Bloqueio da extração real:** a revisão automática rejeitou o comando do
+**Bloqueio anterior, superado pela autorização acima:** a revisão automática rejeitou o comando do
 percurso completo porque enviaria textos sensíveis de produção a provedor LLM
 externo sem autorização explícita do destino. Nenhuma chamada foi feita por esse
 comando. Preparação para retomada vinculada exclusivamente a OpenAI

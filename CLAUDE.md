@@ -10,6 +10,20 @@
 
 ## AUTONOMIA DO AGENTE — não pedir autorização pra isto
 
+**Incremento 2 — decisão do André, 19/09/2026:** o extrator semântico usa
+`AI_EXTRATOR_MODEL=gpt-5.6-luna`, exclusivamente via `ai_gateway.complete`,
+com `allow_fallback=False`. Não substituir por `AI_DEFAULT_MODEL`, outro
+provider ou preferências pessoais no gate. Chave/modelo indisponível deve
+produzir falha visível. André autorizou implementar essa configuração nesta
+worktree; não depende mais de PR separado do Claude Code.
+
+O percurso dos nove textos reais é autorizado somente em dev. Produção:
+somente SELECT pelo MCP `supabase-prod-ro`; texto somente em memória e no
+banco de dev, nunca em arquivos/fixtures. Registrar IDs, hashes e tamanhos.
+Nesta frente, suíte e lint completos rodam no CI; no agente, apenas recortes.
+As nove provas do Incremento 1 continuam obrigatórias. Parar no PR rascunho;
+merge e publicação não estão autorizados.
+
 Você está autorizado a executar SEM pedir confirmação:
 - Criar/checkout de branch e worktree isolada
 - Ler código, banco (read-only), logs, git history

@@ -1,5 +1,13 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 19/09/2026 — modelo autorizado e implementado na worktree.**
+André transferiu a alteração do modelo para esta frente: AI_EXTRATOR_MODEL=gpt-5.6-luna,
+via ai_gateway, sem fallback, gate somente em dev. Smoke real com prompt sintético
+passou em uma tentativa (13/8 tokens); temperatura 1 exigida pela API. Decisão em
+CLAUDE.md, .env.example e ADR-071. Triagem 20+1 publicada no PR #183; G1–G9
+restaurados na primeira execução de triagem, com artefato. CI do código corrigido
+segue em execução. Extração dos nove textos ainda não comprovada.
+
 **Pulso 19/09/2026 — migrations e associação dev comprovadas; extração bloqueada.**
 amigao_db 127.0.0.1:15432 em 071es004. Nove documentos preparados no DB dev,
 associados pela tela após login real, mantidos em 2 recargas e 2 novas sessões.

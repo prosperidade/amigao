@@ -368,7 +368,8 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
         response = complete(texto, system=system + f"\nEspécie: {especie}. Fatia {fatia.indice}; "
             "copie trechos literalmente desta fatia. Deixe posicao_inicio nula quando não puder calcular. "
             "Não preencha campos de famílias ausentes. Não devolva Markdown.",
-            agent_name="extrator", max_tokens=12000, temperature=0)
+            agent_name="extrator", model=settings.AI_EXTRATOR_MODEL, allow_fallback=False,
+            max_tokens=12000, temperature=0)
         if on_response:
             on_response(response, f"doc{doc.id}:{fatia.rotulo}")
         raw = response.content.strip()

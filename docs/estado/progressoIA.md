@@ -1,5 +1,15 @@
 # Progresso IA — Amigao do Meio Ambiente
 
+## 2026-09-19 — gpt-5.6-luna autorizado e configurado nesta frente
+
+Decisão do André implementada sem depender de outro PR: AI_EXTRATOR_MODEL=gpt-5.6-luna,
+ai_gateway com allow_fallback=False, somente dev para o gate real. Smoke sintético
+confirmou modelo e uma tentativa (13 tokens entrada, 8 saída, US$ 0,0000122).
+Temperatura 1 adaptada explicitamente após recusa de temperatura 0 pela API.
+Registros: CLAUDE.md, .env.example, ADR-071 e GATE_INCREMENTO2.md. A autorização
+supera o bloqueio de provedor descrito no pulso anterior. A triagem 20+1 está no
+PR #183; o artefato G1–G9 voltou a ser produzido. Sem suíte local.
+
 ## 2026-09-19 — migrations e percurso parcial em dev
 
 Quatro migrations aplicadas em ordem no amigao_db confirmado, até 071es004.

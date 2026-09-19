@@ -210,6 +210,8 @@ class Settings(BaseSettings):
     # re-embedar TODOS os chunks (vetores entre provedores são incompatíveis).
     EMBEDDING_PROVIDER: str = ""
     AI_DEFAULT_MODEL: str = "gpt-4o-mini"
+    # André, 19/09/2026: extração semântica do Inc2, pelo gateway e sem fallback.
+    AI_EXTRATOR_MODEL: str = "gpt-5.6-luna"
     AI_FALLBACK_MODEL: str = "gemini/gemini-2.5-flash"
     # Modelo dedicado do agente de diagnóstico (André 2026-06-02). O diagnóstico
     # é a peça mais complexa do funil (cruza extrator + auditor + legislação),

@@ -30,7 +30,7 @@ Resultado original: 2.056 testes passaram, 20 falharam, 1 erro no teardown. Nenh
 
 ## Autorização e dependência do modelo
 
-André autorizou os nove textos reais via ai_gateway, sem fallback, exclusivamente em dev, modelo gpt-5.6-luna. Execução aguarda a configuração aprovada chegar à main pelo PR do Claude Code. Não substituir por outro modelo nem alterar localmente essa decisão. Produção permanece somente SELECT MCP; nenhum texto real em arquivo.
+André autorizou os nove textos reais via ai_gateway, sem fallback, exclusivamente em dev, modelo gpt-5.6-luna. Em seguida autorizou implementar a configuração nesta worktree e registrá-la em CLAUDE.md, substituindo a dependência de PR do Claude Code. Produção permanece somente SELECT MCP; nenhum texto real em arquivo.
 
 ## Limite desta triagem
 

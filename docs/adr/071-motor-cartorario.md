@@ -43,3 +43,14 @@ motor jurídico, demais skills e saneamento de legado ficam nos incrementos pró
 Condição de conclusão: [gate autenticado](../auditoria/GATE_INCREMENTO2.md), com
 texto real, todos os itens e regressão do Incremento 1. Implementação parcial,
 controle sintético e sintaxe válida não substituem esse gate.
+## Adendo de execução — 19/09/2026
+
+Decisão do André: extração LLM por `ai_gateway`, `AI_EXTRATOR_MODEL=gpt-5.6-luna`,
+sem fallback (`allow_fallback=False`). Configuração implementada nesta worktree
+por autorização posterior, sem aguardar PR separado. Validação real somente em
+dev; nenhuma inferência, migration ou escrita em produção. A API aceita o modelo
+para a chave atual; exige temperatura padrão 1. O motor cartorário continua
+determinístico e não chama LLM. Essa decisão de execução não resolve pendências
+de domínio ou fecha o gate semântico.
+
+Referência do modelo: [documentação oficial GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
