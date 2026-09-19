@@ -629,6 +629,13 @@ function extratorFieldValue(value: unknown): string | null {
 }
 
 function ExtratorResult({ r }: { r: Record<string, unknown> }) {
+  if (Array.isArray(r.observacoes)) {
+    return <div className="space-y-2">
+      <p>{r.observacoes.length} observações documentais extraídas.</p>
+      <p>Consulte as fontes e a revisão em Observações documentais. Esta apresentação é uma projeção das observações.</p>
+      {r.requires_review === true && <ReviewBadge />}
+    </div>;
+  }
   const fields = r.extracted_fields as Record<string, unknown> | undefined;
   return (
     <div className="space-y-3">

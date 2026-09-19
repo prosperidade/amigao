@@ -1,5 +1,34 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 19/09/2026 — bloqueio de envio ao provedor
+
+Migrations aplicadas apenas em dev e nove associações autenticadas comprovadas.
+LLM/persistência semântica ainda não executados: revisão automática exige
+autorização explícita do destino externo dos textos sensíveis. Retomada preparada
+para OpenAI/gpt-4o-mini, sem fallback. Zero observações/jobs do extrator no tenant
+de dev do gate. Esta pendência não fecha gate nem é substituída pela associação.
+
+## Pulso 19/09/2026 — canal de leitura liberado
+
+Bloqueio OAuth do supabase-prod-ro resolvido. SELECT de nove documentos executado;
+hashes e tamanhos conferidos em memória e registrados no gate. Marcador ausente
+de certidão eletrônica corrigido e verificado nos quatro documentos ELODI.
+Permanecem as dívidas de integração/gate autenticado, catálogo cartorário e
+PENDENTE-ISIS da Receita. O recorte não fechou essas dívidas.
+
+## Pulso 18/09/2026 — Incremento 2, implementação parcial
+
+- Gate real aberto: MCP não exposto nesta sessão; nenhuma fixture de texto real
+  fornecida. Controles sintéticos não provam semântica. Quatro matrículas ELODI
+  obrigatórias, distintas por número e serventia.
+- PENDENTE-ISIS: suficiência da declaração TITULAR FALECIDO da Receita ou exigência
+  de certidão de óbito. Adendo de vocabulário registrado como proposta na Ontologia.
+- Contrato e Receita têm novos caminhos no código; faltam execução real,
+  integração integral dos consumidores/revisão e regressão autenticada.
+- Catálogo executável das 174 regras e validação completa das migrations pendentes.
+  Geometria (072), jurídico (073), demais skills (074) e saneamento de legado
+  (Incremento 6) registrados, sem execução nesta rodada.
+
 ## Pulso 2026-09-17 — Frente A, modelo de dados (ADR-070)
 
 Achados laterais da análise de dados, registrados e não corrigidos nesta frente (docs-only).

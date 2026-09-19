@@ -1,13 +1,6 @@
 # ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
-"""Contenção 4 (ADR-064, achado N3) — o AIJob do extrator para de ser cego.
-
-Medido em produção em 09/09: os `ai_jobs` 1467–1471 e 1473 do extrator têm
-`model_used`, `provider`, `tokens_in/out`, `cost_usd` e `raw_output` TODOS nulos.
-O extrator nunca usou `call_llm` — ele delega a chamada a `document_extractor` e
-a `ficha01_extraction`, que falam com o gateway direto. O que o LLM devolveu
-deixava de existir depois da chamada, e foi por isso que a origem dos erros da
-ELODI só pôde ser tratada como hipótese até a reprodução manual.
-"""
+"""Inc2 / ADR-064: toda chamada do parser unico permanece auditavel no AIJob.
+A chamada de preview foi removida; tokens, custo e bruto continuam obrigatorios."""
 
 from __future__ import annotations
 
@@ -70,52 +63,31 @@ def seeded(db_session):
 
 
 def test_ai_job_do_extrator_guarda_modelo_tokens_custo_e_bruto(seeded, db_session):
+    # Inc2: uma chamada gera observação e projeção; preview não chama LLM.
+    from hashlib import sha256
+
+    from app.models.evidence import EvidenceVersion
     tenant, user, process, doc = seeded
-    ctx = AgentContext(
-        tenant_id=tenant.id, user_id=user.id, process_id=process.id,
-        session=db_session, metadata={"document_id": doc.id, "doc_type": "matricula"},
-    )
-
-    with patch("app.core.ai_gateway.complete", return_value=_RESP_PREVIEW), \
-         patch("app.services.ficha01_extraction.complete", create=True), \
-         patch("app.services.document_extractor.complete", create=True), \
-         patch("app.services.ficha01_extraction._extract_structured") as mock_staging:
-        # `_extract_structured` devolve (parsed, janela) e chama o callback de
-        # auditoria — é o contrato que a contenção 4 depende.
-        def _fake(text, doc_type, *, on_llm_response=None):
-            if on_llm_response is not None:
-                on_llm_response(_RESP_STAGING, f"staging:{doc_type}:chunk0[0:{len(text)}]")
-            return json.loads(_RESP_STAGING.content), None
-
-        mock_staging.side_effect = _fake
+    doc.checksum_sha256 = sha256(b"controlled original PDF bytes").hexdigest()
+    payload = {"observacoes": [{"predicado": "area_documental_ha", "valor": 212.3553,
+        "unidade": "ha", "trecho": "Área de 212,3553ha."}]}
+    response = AIResponse(content=json.dumps(payload), model_used="controlled-model",
+        provider="test", tokens_in=1100, tokens_out=60, cost_usd=0.0003, duration_ms=900)
+    ctx = AgentContext(tenant_id=tenant.id, user_id=user.id, process_id=process.id,
+        session=db_session, metadata={"document_id": doc.id})
+    with patch("app.core.ai_gateway.complete", return_value=response) as gateway:
         result = AgentRegistry.create("extrator", ctx)._run_legacy_unconnected()
-
-    assert result.success is True
-
-    job = (
-        db_session.query(AIJob)
-        .filter(AIJob.tenant_id == tenant.id)
-        .order_by(AIJob.id.desc())
-        .first()
-    )
-    assert job is not None
-    # Antes desta frente, TODOS os cinco eram nulos.
-    assert job.model_used == "gpt-4o-mini"
-    assert job.provider == "gpt"
-    assert job.tokens_in == _RESP_PREVIEW.tokens_in + _RESP_STAGING.tokens_in
-    assert job.tokens_out == _RESP_PREVIEW.tokens_out + _RESP_STAGING.tokens_out
-    assert job.cost_usd == pytest.approx(
-        _RESP_PREVIEW.cost_usd + _RESP_STAGING.cost_usd
-    )
-
-    blocos = json.loads(job.raw_output)
-    assert len(blocos) == 2, "cada chamada ao LLM tem que estar no bruto"
-    rotulos = [b["rotulo"] for b in blocos]
-    assert any(r.startswith("doc") and "preview" in r for r in rotulos)
-    assert any("staging:matricula:chunk0" in r for r in rotulos)
-    # O JSON devolvido pelo LLM é reconferível a partir do próprio job.
-    staging = next(b for b in blocos if "staging" in b["rotulo"])
-    assert json.loads(staging["content"])["nirf_cib"] == "6.816.752-0"
+    assert result.success, result.error
+    assert gateway.call_count == 1
+    job = db_session.query(AIJob).filter_by(tenant_id=tenant.id).order_by(AIJob.id.desc()).first()
+    assert job.model_used == response.model_used and job.provider == response.provider
+    assert (job.tokens_in, job.tokens_out) == (1100, 60)
+    assert job.cost_usd == pytest.approx(0.0003)
+    blocks = json.loads(job.raw_output)
+    assert len(blocks) == 1 and blocks[0]["rotulo"].startswith(f"doc{doc.id}:")
+    assert json.loads(blocks[0]["content"]) == payload
+    assert db_session.query(EvidenceVersion).filter_by(tenant_id=tenant.id, kind="observacao").count() == 1
+    assert "extracted_fields" not in result.data
 
 
 def test_agregacao_respeita_o_tamanho_das_colunas(db_session):

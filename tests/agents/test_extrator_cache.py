@@ -92,8 +92,8 @@ def test_extrator_caches_text_when_passed_in_metadata(seeded, db_session):
 
     # Mock extract_document_fields pra não chamar LLM de verdade
     with patch(
-        "app.services.document_extractor.extract_document_fields",
-        return_value=({"numero_matricula": "15234", "area_hectares": 432.5}, None),
+        "app.services.entrada_semantica.extrair_documento",
+        return_value=[],
     ):
         agent = AgentRegistry.create("extrator", ctx)
         result = agent._run_legacy_unconnected()
@@ -123,16 +123,17 @@ def test_extrator_reads_extracted_text_when_metadata_omits_text(seeded, db_sessi
     )
 
     with patch(
-        "app.services.document_extractor.extract_document_fields",
-        return_value=({"numero_matricula": "15234"}, None),
+        "app.services.entrada_semantica.extrair_documento",
+        return_value=[],
     ) as mock_extract:
         agent = AgentRegistry.create("extrator", ctx)
         result = agent._run_legacy_unconnected()
 
     assert result.success is True
-    # Confirma que extract_document_fields recebeu o texto cacheado
-    called_kwargs = mock_extract.call_args.kwargs
-    assert called_kwargs["text"] == "Texto já extraído em OCR anterior"
+    # O parser único recebe o documento persistido; não há chamada de preview.
+    called_doc = mock_extract.call_args.args[1]
+    assert called_doc.id == doc.id
+    assert called_doc.extracted_text == "Texto já extraído em OCR anterior"
 
 
 def test_extrator_raises_when_no_text_and_no_cache(seeded, db_session):

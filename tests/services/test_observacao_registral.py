@@ -435,9 +435,13 @@ class TestVigenciaGravames:
         vigentes = [o for o in self._obs() if o.tipo == TIPO_HIPOTECA and o.vigencia == VIGENCIA_VIGENTE]
         assert vigentes == []
 
-    def test_a_alienacao_fiduciaria_sem_baixa_fica_vigente(self):
+    def test_alienacao_sem_referencia_tem_estado_indeterminado(self):
         alienacao = next(o for o in self._obs() if o.tipo == TIPO_ALIENACAO_FIDUCIARIA)
-        assert alienacao.vigencia == VIGENCIA_VIGENTE
+        assert alienacao.vigencia == VIGENCIA_INDETERMINADO
+        # Inc2: origem datada exige tambem referencia explicita.
+        obs = self._obs()
+        derivar_vigencia(obs, data_referencia=date(2026, 9, 19))
+        assert next(o for o in obs if o.tipo == TIPO_ALIENACAO_FIDUCIARIA).vigencia == VIGENCIA_VIGENTE
 
 
 class TestVigenciaArrendamento:
@@ -581,8 +585,9 @@ class TestRlVigente:
                            "área total de 492,9252ha"},
         ]
         obs = observacoes_de(atos)
-        rl = rl_vigente(obs)
-        assert rl is not None
+        # Sem data nao se promove a RL; a observacao e o destino permanecem.
+        assert rl_vigente(obs) is None
+        rl = next(o for o in obs if o.tipo == TIPO_RESERVA_LEGAL)
         assert rl.ato == "AV.02"
         assert rl.atributos["area_ha"] == "492,9252"
 
@@ -625,11 +630,13 @@ class TestTitularidade:
          "transmitentes": ["ALEXANDRE AUGUSTO CLEMENTE", "KARINA SANTAROSA CLEMENTE"]},
     ]
 
-    def test_titular_atual_e_o_adquirente_do_ato_mais_recente(self):
-        atual = titular_atual(observacoes_de(self.ATOS))
-        assert atual is not None
-        assert atual["titulares"] == ["ELODI AGROPECUÁRIA"]
-        assert atual["ato"] == "R-13"
+    def test_ultimo_adquirente_nao_prova_cadeia_completa(self):
+        obs = observacoes_de(self.ATOS)
+        assert titular_atual(obs) is None
+        # Inc2: participacoes continuam consultaveis sem promover titular atual.
+        assert any(p["ato"] == "R-13" and p["papel_no_ato"] == "adquirente"
+                   for p in cadeia_titularidade(obs))
+
 
     def test_cadeia_lista_os_quatro_titulares_com_o_ato_que_os_inscreveu(self):
         cadeia = cadeia_titularidade(observacoes_de(self.ATOS))
@@ -649,16 +656,18 @@ class TestTitularidade:
         obs = observacoes_de([{"ato": "AV.02", "tipo": "reserva_legal", "area_ha": "492,9252"}])
         assert titular_atual(obs) is None
 
-    def test_sucessao_transfere_titularidade_para_o_espolio(self):
+    def test_sucessao_preserva_espolio_sem_inferir_titular_atual(self):
         obs = observacoes_de([
             {"ato": "R-20", "tipo": TIPO_SUCESSAO, "data_ato": "10/04/2024",
              "adquirentes": ["ESPÓLIO DE MARIA DA SILVA"],
              "transmitentes": ["MARIA DA SILVA"]},
         ])
-        atual = titular_atual(obs)
-        assert atual is not None
-        assert atual["titulares"] == ["ESPÓLIO DE MARIA DA SILVA"]
-        assert atual["ato"] == "R-20"
+        assert titular_atual(obs) is None
+        cadeia = cadeia_titularidade(obs)
+        assert len(cadeia) == 2
+        assert {p["papel_no_ato"] for p in cadeia} == {"adquirente", "transmitente"}
+        assert all(p["ato"] == "R-20" for p in cadeia)
+
 
 
 class TestAtributosTemporaisNaLinhaDeStaging:
@@ -753,16 +762,15 @@ class TestFrenteJVigenciaEDestino:
         derivar_vigencia(obs, data_referencia=date(2030, 1, 1))
         assert obs[0].vigencia == VIGENCIA_EXPIRADO
 
-    def test_gravame_com_data_sem_referencia_continua_vigente(self):
-        """Gravame não tem termo (ADR-066 passo 2 só vale para arrendamento/
-        usufruto): a ausência de data de referência não o rebaixa."""
+    def test_gravame_sem_referencia_nao_afirma_vigencia(self):
+        """Inc2: referencia ausente preserva fato, sem afirmar estado temporal."""
         obs = observacoes_de([
             {"ato": "R.15", "tipo": "alienacao_fiduciaria", "data_ato": "20/12/2019",
              "partes": ["ITAÚ UNIBANCO S.A."]},
         ])
         aplicar_alteracoes(obs)
         derivar_vigencia(obs, data_referencia=None)
-        assert obs[0].vigencia == VIGENCIA_VIGENTE
+        assert obs[0].vigencia == VIGENCIA_INDETERMINADO
 
     def test_vocabulario_de_sucessao_normaliza_rotulos_humanos(self):
         assert normalizar_tipo("Sucessão") == TIPO_SUCESSAO
@@ -783,5 +791,5 @@ class TestFrenteJVigenciaEDestino:
         ])
         cadeia = cadeia_titularidade(obs)
         assert [linha["ato"] for linha in cadeia if linha["papel_no_ato"] == "adquirente"] == ["R-05", "R-09", "R-12"]
-        atual = titular_atual(obs)
-        assert atual is not None and atual["titulares"] == ["MARIA DA SILVA"] and atual["ato"] == "R-12"
+        assert titular_atual(obs) is None
+        assert any(p["ato"] == "R-12" and p["papel_no_ato"] == "transmitente" for p in cadeia)

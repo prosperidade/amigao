@@ -1,5 +1,9 @@
 # Governança documental do Regente
 
+Índice 18/09/2026: [ADR-071](../adr/071-motor-cartorario.md) em implementação;
+[gate do Incremento 2](../auditoria/GATE_INCREMENTO2.md) aberto; adendo proposto
+na [Ontologia](ONTOLOGIA_REGENTE_v1.md), com suficiência da Receita PENDENTE-ISIS.
+
 Índice atualizado em 2026-09-17: [ADR-069](../adr/069-contrato-contexto-revisao.md)
 é proposta em validação no PR #172; ADR-011 recebeu adendo sem reescrita histórica.
 Plano v1.1, mergulho e triagem do #171 permanecem indexados em `docs/README.md`.

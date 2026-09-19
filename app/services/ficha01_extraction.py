@@ -85,12 +85,11 @@ CANONICAL_DOC_TYPES: list[str] = [
     "memorial_descritivo",
     "auto_infracao",
     "certidao_embargo",
-    # `contrato` (26/07, caso 15): peça contratual do caso — NÃO alimenta staging
-    # cadastral (sem `_FIELD_SPECS`). Existe para que um contrato pare de ser
-    # classificado como certificação/ficha e ter seus termos lidos como dados do
-    # imóvel — foi assim que "Plano de Recuperação de Área Degradada (PRAD)"
-    # virou denominação de imóvel no processo 15.
+    # Alias legado; contratos usam agora o schema semântico e staging sem destino cadastral.
     "contrato",
+    "contrato_particular",
+    "contrato_servico_documental",
+    "comprovante_situacao_cadastral_cpf",
     "outro",
 ]
 
@@ -1441,6 +1440,30 @@ def extract_and_stage(
     )
 
     dt = (doc_type or "outro").lower()
+    from app.services.taxonomia_documental import propor_especie
+    especie = propor_especie(text, dt)
+    if dt in {"contrato", "contrato_particular", "contrato_servico_documental", "comprovante_situacao_cadastral_cpf"} or especie in {
+            "contrato_particular", "contrato_servico_documental", "comprovante_situacao_cadastral_cpf"}:
+        from app.models.document import Document
+        from app.services.agent_capabilities import capability_manifest
+        from app.services.entrada_semantica import extrair_documento
+        doc = db_session.query(Document).filter_by(id=document_id, tenant_id=tenant_id,
+            process_id=process_id, deleted_at=None).first() if document_id and process_id else None
+        if doc is None:
+            return StagingResult(doc_type=str(especie), rows_written=0,
+                skipped_reason="entrada semântica exige documento e caso no tenant autorizado")
+        if text != doc.extracted_text:
+            return StagingResult(doc_type=str(especie), rows_written=0,
+                skipped_reason="texto difere da fonte preservada; registrar versão antes de extrair")
+        manifest = capability_manifest("extrator", {"document_type": str(especie)})
+        if manifest["status"] != "available":
+            return StagingResult(doc_type=str(especie), rows_written=0,
+                skipped_reason="capacidade insuficiente: método obrigatório indisponível")
+        before = db_session.query(ExtractedFieldStaging.id).filter_by(tenant_id=tenant_id, document_id=document_id).count()
+        refs = extrair_documento(db_session, doc, manifest=manifest, on_response=on_llm_response)
+        after = db_session.query(ExtractedFieldStaging.id).filter_by(tenant_id=tenant_id, document_id=document_id).count()
+        return StagingResult(doc_type=str(especie), rows_written=after - before,
+            skipped_reason=None if refs else "extração sem observações")
     if dt not in _STAGING_PROMPTS:
         return StagingResult(doc_type=dt, rows_written=0, skipped_reason="tipo sem schema de staging")
 

@@ -1,5 +1,23 @@
 # Modelo de Dados
 
+## Incremento 2 — rascunho em worktree, 18/09/2026
+
+`071es001`–`071es004` seguem a expansão dos passos 1–4 do roteiro, após `069ce001`:
+evidência imutável/manifesto/snapshot, versões/fragmentos, premissas e entidades
+semânticas. Não aplicados nesta rodada; não representam estado de produção.
+O levantamento do passo 0 e a validação de aplicação continuam obrigatórios.
+
+Observações alimentam staging por `observacao_ref`, inclusive sem destino cadastral
+nos contratos e declarações da Receita. `pessoa.estado` pode registrar
+`falecimento_declarado`, com `estado_fundamento_id`; não existe default vivo.
+K/R são os da evidência, não sinônimos desse estado. `espolio` exige fundamento
+próprio e vínculo à pessoa falecida. Sem coluna de falecimento no Client.
+
+Expansão: tabelas/colunas novas. Planejamento de janela: generated columns,
+índices, FKs/checks/triggers e validação dos registros preexistentes. Sem saneamento
+inferido nem contração. [ADR-071](../adr/071-motor-cartorario.md) e
+[gate aberto](../auditoria/GATE_INCREMENTO2.md) delimitam implementação e prova.
+
 ## Modelo alvo — ADR-070 (aceito em 18/09/2026, sem migration)
 
 O desenho-alvo e o caminho até ele estão em dois documentos:

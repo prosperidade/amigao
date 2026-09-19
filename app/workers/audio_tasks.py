@@ -182,6 +182,7 @@ def transcribe_audio_document(
         # 3) Cache twin — o mesmo áudio subido no rascunho e de novo no caso não
         # paga transcrição duas vezes.
         twin = None
+        literal_twin = None
         if not force:
             twin = (
                 db.query(Document)
@@ -196,7 +197,17 @@ def transcribe_audio_document(
                 .first()
             )
         if twin and (twin.extracted_text or "").strip():
-            doc.extracted_text = twin.extracted_text
+            # An old twin may contain a generated summary mixed with the literal.
+            # Reuse only a version whose transcription origin is explicit.
+            from app.models.entrada_semantica import DocumentoVersao
+            literal_twin = db.query(DocumentoVersao).filter_by(tenant_id=tenant_id,
+                documento_id=twin.id, origem="transcricao").order_by(DocumentoVersao.numero.desc()).first()
+            if literal_twin is None:
+                twin = None
+        if twin and literal_twin:
+            from app.services.documento_versao import registrar_leitura
+            registrar_leitura(db, doc, literal_twin.texto, metodo="cache_twin",
+                origem="transcricao", documento_origem_id=twin.id, sha256_original=checksum)
             doc.extracted_at = datetime.now(UTC)
             doc.ocr_status = OcrStatus.done
             doc.ocr_error = None
@@ -334,7 +345,11 @@ def transcribe_audio_document(
         db.add(ai_job)
 
         if texto_final:
-            doc.extracted_text = texto_final
+            from app.services.documento_versao import registrar_leitura
+            registrar_leitura(db, doc, result.text, metodo=result.method,
+                origem="transcricao", sha256_original=checksum)
+            # Generated summary remains in the job, never in the primary literal.
+            ai_job.result = {**ai_job.result, "resumo_e_transcricao": texto_final}
             doc.extracted_at = finished_at
             doc.ocr_status = OcrStatus.done
             doc.ocr_error = None

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import SemanticDocumentsPanel from './SemanticDocumentsPanel';
 
 interface EvidenceObject {
   id: string;
   version: number;
   kind: string;
   statement: string | null;
-  attributes: { predicate?: string; literal?: unknown };
+  attributes: { predicate?: string; literal?: unknown; role?: string; document_id?: number };
   knowledge: { state: string; justification?: string };
   premises: { id: string; version: number }[];
 }
@@ -51,6 +52,10 @@ function ReviewCard({ row, latest, processId }: { row: EvidenceRow; latest: bool
   });
   return <article className="rounded-lg border p-3 space-y-2">
     <p>{row.object.statement || row.object.attributes.predicate} <span className="text-xs">— versão {row.object.version}</span></p>
+    {row.object.kind === 'observacao' && <>
+      <p>Documento {row.object.attributes.document_id} — declaração extraída{row.object.attributes.role ? ` — ${row.object.attributes.role}` : ''}</p>
+      <p className="text-sm whitespace-pre-wrap">{String(row.object.attributes.literal ?? '')}</p>
+    </>}
     <p className="text-sm">{row.stale ? 'Desatualizada — pendência de coleta dependente' : labels[row.review?.action || 'pending']}</p>
     {row.review && <p className="text-xs">Decisão de {new Date(row.review.at).toLocaleString('pt-BR')} — {row.review.justification}</p>}
     {!!row.history?.length && <details><summary className="text-sm">Histórico de decisões</summary>
@@ -119,9 +124,14 @@ export default function EvidencePanel({ processId }: { processId: number }) {
   for (const row of query.data.objects) latest.set(row.object.id, Math.max(latest.get(row.object.id) || 0, row.object.version));
   const conclusions = query.data.objects.filter(r => r.object.kind === 'conclusao');
   return <section className="rounded-xl border p-5 space-y-3">
+    <SemanticDocumentsPanel processId={processId} />
     <h4 className="font-semibold">Revisão das conclusões e retomada</h4>
     <p className="text-sm">A correção cria nova versão pendente. Só conclusões aprovadas e vigentes entram na análise seguinte.</p>
     <label className="text-sm"><input type="checkbox" checked={history} onChange={e => setHistory(e.target.checked)} /> Mostrar versões anteriores</label>
+    <details><summary>Observações documentais</summary>
+      {query.data.objects.filter(r => r.object.kind === 'observacao' && (history || latest.get(r.object.id) === r.object.version)).map(row =>
+        <ReviewCard key={`${row.object.id}:${row.object.version}`} row={row} latest={latest.get(row.object.id) === row.object.version} processId={processId} />)}
+    </details>
     {conclusions.filter(r => history || latest.get(r.object.id) === r.object.version).map(row =>
       <ReviewCard key={`${row.object.id}:${row.object.version}`} row={row} latest={latest.get(row.object.id) === row.object.version} processId={processId} />)}
     {conclusions.some(r => r.stale) && <button className="rounded border px-3 py-2" disabled={collect.isPending} onClick={() => collect.mutate()}>

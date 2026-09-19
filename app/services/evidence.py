@@ -188,23 +188,19 @@ def capture_snapshot(db, tenant_id, user_id, process_id, *, reference_date=None)
         origin = getattr(doc.source, "value", doc.source)
         if origin == "generated_ai":
             continue  # Generated reports cannot become a hidden route around review.
-        row = _capture(db, tenant_id, process_id, f"document:{doc.id}", "fonte_primaria", {
-            "origin": "documento", "attributes": {
-                "document_id": doc.id, "document_version": doc.version_number,
-                "original_hash": doc.checksum_sha256,
-                "literal": doc.extracted_text,
-                "text_hash": canonical_hash(doc.extracted_text) if doc.extracted_text else None,
-                "method": "document_record",
-            },
-            "legacy_unverified": not bool(doc.checksum_sha256),
-        }, source_record={"text": doc.extracted_text, "storage_key": doc.storage_key,
-                          "document_type": doc.document_type, "name": doc.original_file_name})
+        from app.services.entrada_semantica import fonte_documental
+        row = fonte_documental(db, doc)
         sources.append({"id": row.object_id, "version": row.version})
         docs_by_id[doc.id] = row
     observations = []
     for staging in db.query(ExtractedFieldStaging).filter(
         ExtractedFieldStaging.tenant_id == tenant_id, ExtractedFieldStaging.process_id == process_id,
     ).order_by(ExtractedFieldStaging.id).all():
+        if staging.observacao_ref is not None:
+            row = db.query(EvidenceVersion).filter_by(id=staging.observacao_ref,
+                tenant_id=tenant_id, process_id=process_id).one()
+            observations.append({"id": row.object_id, "version": row.version})
+            continue
         source = docs_by_id.get(staging.document_id)
         if not source:
             continue

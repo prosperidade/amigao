@@ -18,6 +18,30 @@ def capability_manifest(agent_name, metadata):
                 "rules": [], "templates": [], "implementation": []}
     if agent_name not in ACTIVE_AGENTS:
         return {**manifest, "status": "agente_desativado"}
+    if agent_name == "extrator":
+        manifest["domain_pending"] = [{"status": "PENDENTE-ISIS",
+            "subject": "Suficiência da Receita para o gate de falecimento; eventual certidão de óbito"}]
+        ontology = Path(__file__).resolve().parents[2] / "docs/arquitetura/ONTOLOGIA_REGENTE_v1.md"
+        if ontology.is_file():
+            manifest["implementation"].append({"method": "ontologia_entrada_semantica",
+                "status": "proposta_com_adendo", "hash": canonical_hash(ontology.read_text(encoding="utf-8"))})
+        else:
+            manifest["missing"].append({"method": "ontologia_entrada_semantica", "reason": "vocabulario_obrigatorio_ausente"})
+        catalog = discover_skills()
+        for family in ("registral", "cadastral", "pessoal", "geoespacial", "contratual", "cartorario"):
+            name = f"extrator/{family}"
+            meta = catalog.get(name)
+            skill = load_skill(name) if meta else None
+            if skill is None or meta.version != "1.0.0":
+                manifest["missing"].append({"skill": name, "reason": "metodo_obrigatorio_ausente"})
+                continue
+            manifest["applied"].append({"name": name, "version": meta.version,
+                "hash": canonical_hash(skill.body),
+                "source_hash": canonical_hash(Path(meta.path).read_text(encoding="utf-8")),
+                "content": skill.body, "attachments": [],
+                "mode": "deterministic_contract" if family == "cartorario" else "system_prompt"})
+        manifest["status"] = "capacidade_insuficiente" if manifest["missing"] else "available"
+        return manifest
     required = REQUIRED_SKILLS.get(agent_name)
     if not required:
         manifest["missing"].append({"agent": agent_name, "reason": "Método-base ainda não disponível; placeholder não é capacidade"})
@@ -40,7 +64,8 @@ def capability_manifest(agent_name, metadata):
                         content = path.read_text(encoding="utf-8")
                         attachments.append({"name": path.name, "hash": canonical_hash(content), "content": content})
                 manifest["applied"].append({"name": required, "version": meta.version,
-                    "hash": canonical_hash(skill.body), "content": skill.body, "attachments": attachments,
+                    "hash": canonical_hash(skill.body),
+                    "source_hash": canonical_hash(Path(meta.path).read_text(encoding="utf-8")), "content": skill.body, "attachments": attachments,
                     "mode": "deterministic_contract" if agent_name == "auditor_imovel" else "system_prompt"})
                 if agent_name == "auditor_imovel":
                     code = Path(__file__).with_name("inconsistency_matrix.py").read_text(encoding="utf-8")

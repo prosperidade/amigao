@@ -266,6 +266,7 @@ def complete(
     max_cost_override_usd: Optional[float] = None,
     user_preferences: Optional[dict] = None,
     agent_name: Optional[str] = None,
+    allow_fallback: bool = True,
 ) -> AIResponse:
     """
     Envia um prompt para o LLM e retorna AIResponse.
@@ -316,6 +317,11 @@ def complete(
         models = [(model, "")]
     else:
         models = _build_model_list(settings)
+    if not allow_fallback:
+        # A pinned workload must fail rather than silently use an equivalent provider.
+        if not models or (model and models[0][0] != model) or not models[0][1]:
+            raise AIGatewayError(message="Modelo obrigatório indisponível; fallback desabilitado")
+        models = models[:1]
     user_scoped = user_resolved is not None
     _max_tokens = max_tokens or settings.AI_MAX_TOKENS
     # Teto absoluto para o retry de truncamento (nunca abaixo do pedido).
@@ -352,7 +358,8 @@ def complete(
                             model=_model,
                             messages=messages,
                             max_tokens=mt,
-                            temperature=_temperature,
+                            # Luna rejects non-default sampling temperature (API smoke, 19/09/2026).
+                            temperature=1 if _model.removeprefix("openai/") == "gpt-5.6-luna" else _temperature,
                             timeout=_timeout,
                             api_key=_api_key or None,
                         )

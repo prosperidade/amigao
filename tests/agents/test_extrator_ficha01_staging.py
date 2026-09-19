@@ -1,11 +1,6 @@
 # ADR-069: isolated legacy algorithm/projection tests; authenticated execution is tested in tests/e2e/test_evidence_execution.py.
-"""Ficha 01 / FASE 2 — o ExtratorAgent grava staging SEM alterar extracted_fields.
-
-Mocka o LLM legado (``extract_document_fields``) e o LLM estruturado
-(``ficha01_extraction._extract_structured``) — o ``extract_and_stage`` real roda e
-persiste as linhas. Prova: (1) o shape de ``extracted_fields`` continua igual;
-(2) o staging é populado com os campos certos por tipo + matricula_hint.
-"""
+"""Inc2: parser unico persiste observacoes; staging referencia a evidencia.
+Gateway controlado verifica roteamento e persistencia, nao semantica real."""
 
 from __future__ import annotations
 
@@ -80,44 +75,33 @@ def seeded(db_session):
 
 
 def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session):
+    # Inc2: staging referencia observação; preview achatado deixou de ser contrato.
+    import json
+    from hashlib import sha256
+
+    from app.core.ai_gateway import AIResponse
+    from app.models.evidence import EvidenceVersion
     tenant, user, process, doc = seeded
-    ctx = AgentContext(
-        tenant_id=tenant.id, user_id=user.id, process_id=process.id,
-        session=db_session, metadata={"document_id": doc.id, "doc_type": "car"},
-    )
-
-    with patch(
-        "app.services.document_extractor.extract_document_fields",
-        return_value=(dict(_LEGACY_FIELDS), None),
-    ), patch(
-        "app.services.ficha01_extraction._extract_structured",
-        return_value=(dict(_STRUCTURED), None),
-    ):
-        agent = AgentRegistry.create("extrator", ctx)
-        result = agent._run_legacy_unconnected()
-
-    assert result.success is True
-    # (1) extracted_fields permanece com o shape/conteúdo legado.
-    assert result.data["extracted_fields"] == _LEGACY_FIELDS
-    assert result.data["doc_type"] == "car"
-
-    # (2) staging populado para o processo/documento.
-    rows = (
-        db_session.query(ExtractedFieldStaging)
-        .filter(
-            ExtractedFieldStaging.tenant_id == tenant.id,
-            ExtractedFieldStaging.process_id == process.id,
-        )
-        .all()
-    )
-    assert rows, "staging deveria ter sido populado"
-    assert all(r.source_doc_type == "car" for r in rows)
-    assert all(r.document_id == doc.id for r in rows)
-    # ai_job_id rastreável (job da execução corrente).
-    assert all(r.ai_job_id is not None for r in rows)
-    listadas = [r for r in rows if r.field_name == "matricula_listada"]
-    # caso #12 item B: hint normalizado (ponto de milhar removido).
-    assert {r.matricula_hint for r in listadas} == {"4698", "6776"}
+    doc.checksum_sha256 = sha256(b"controlled CAR PDF bytes").hexdigest()
+    payload = {"observacoes": [{"predicado": "car_area_ha", "valor": 1010.5583,
+        "unidade": "ha", "trecho": "Área declarada: 1010,5583 ha"}]}
+    response = AIResponse(content=json.dumps(payload), model_used="controlled", provider="test",
+        tokens_in=10, tokens_out=10, cost_usd=0, duration_ms=1)
+    ctx = AgentContext(tenant_id=tenant.id, user_id=user.id, process_id=process.id,
+        session=db_session, metadata={"document_id": doc.id})
+    with patch("app.core.ai_gateway.complete", return_value=response) as gateway:
+        result = AgentRegistry.create("extrator", ctx)._run_legacy_unconnected()
+    assert result.success, result.error
+    assert gateway.call_count == 1
+    assert "extracted_fields" not in result.data
+    rows = db_session.query(ExtractedFieldStaging).filter_by(document_id=doc.id).all()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.ai_job_id is not None
+    observation = db_session.get(EvidenceVersion, row.observacao_ref)
+    assert observation.kind == "observacao"
+    assert observation.content["attributes"]["normalized"]["valor"] == row.field_value["value"]
+    assert (row.source_doc_type, row.target_entity, row.target_field) == ("car", "property", "area_grafica_ha")
 
 
 # ---------------------------------------------------------------------------
@@ -150,37 +134,30 @@ def test_planta_com_ccir_na_legenda_nao_vira_ccir(seeded, db_session):
 
 
 def test_planta_nao_grava_staging_cadastral_e_deixa_nota_visivel(seeded, db_session):
-    """Itens 2+3 (N1): planta não alimenta staging cadastral nem cria
-    matrícula; a razão do skip vira nota visível em `Document.extraction_status`."""
+    # Inc2: preservar observação durável sem destino cadastral ou segunda extração.
+    import json
+    from hashlib import sha256
+
+    from app.core.ai_gateway import AIResponse
+    from app.models.evidence import EvidenceVersion
     tenant, user, process, doc = seeded
     doc.document_type = "outro"
     doc.extracted_text = _PLANTA_COM_CCIR_NA_LEGENDA
-    db_session.flush()
-
-    ctx = AgentContext(
-        tenant_id=tenant.id, user_id=user.id, process_id=process.id,
-        session=db_session, metadata={"document_id": doc.id, "doc_type": "outro"},
-    )
-    with patch(
-        "app.services.document_extractor.extract_document_fields",
-        return_value=({}, None),
-    ):
-        agent = AgentRegistry.create("extrator", ctx)
-        result = agent._run_legacy_unconnected()
-
-    assert result.success is True
-
-    rows = (
-        db_session.query(ExtractedFieldStaging)
-        .filter(ExtractedFieldStaging.document_id == doc.id)
-        .all()
-    )
-    assert rows == [], "planta não deve gerar NENHUMA linha de staging cadastral"
-
-    db_session.refresh(doc)
-    assert doc.extraction_status is not None
-    assert "planta_topografica" in doc.extraction_status
-    assert "revisar" in doc.extraction_status
+    doc.checksum_sha256 = sha256(b"controlled document bytes").hexdigest()
+    payload = {"observacoes": [{"predicado": "descricao_peca", "valor": "material recebido",
+        "trecho": _PLANTA_COM_CCIR_NA_LEGENDA.strip().splitlines()[0]}]}
+    response = AIResponse(content=json.dumps(payload), model_used="controlled", provider="test",
+        tokens_in=10, tokens_out=10, cost_usd=0, duration_ms=1)
+    ctx = AgentContext(tenant_id=tenant.id, user_id=user.id, process_id=process.id,
+        session=db_session, metadata={"document_id": doc.id})
+    with patch("app.core.ai_gateway.complete", return_value=response):
+        result = AgentRegistry.create("extrator", ctx)._run_legacy_unconnected()
+    assert result.success, result.error
+    assert db_session.query(ExtractedFieldStaging).filter_by(document_id=doc.id).count() == 0
+    observation = db_session.query(EvidenceVersion).filter_by(tenant_id=tenant.id, kind="observacao").one()
+    assert observation.source_record["especie_documental"] == "arquivo_geoespacial"
+    assert observation.content["attributes"]["predicate"] == "descricao_peca"
+    assert "revisão" in doc.extraction_status
 
 
 # ---------------------------------------------------------------------------
@@ -219,43 +196,27 @@ _AUTO_INFRACAO_FATO = {
 
 
 def test_auto_infracao_nao_gera_staging_cadastral_e_grava_fato_no_job(seeded, db_session):
-    """Item 7 (N2): auto de infração NÃO passa pelo staging cadastral (sem
-    hint de matrícula) — o fato vai pro AIJob.result do extrator."""
+    # Inc2: preservar observação durável sem destino cadastral ou segunda extração.
+    import json
+    from hashlib import sha256
+
+    from app.core.ai_gateway import AIResponse
+    from app.models.evidence import EvidenceVersion
     tenant, user, process, doc = seeded
     doc.document_type = "outro"
     doc.extracted_text = _AUTO_INFRACAO_TEXT
-    db_session.flush()
-
-    ctx = AgentContext(
-        tenant_id=tenant.id, user_id=user.id, process_id=process.id,
-        session=db_session, metadata={"document_id": doc.id, "doc_type": "outro"},
-    )
-    with patch(
-        "app.services.document_extractor.extract_document_fields",
-        return_value=({}, None),
-    ), patch(
-        "app.services.auto_infracao_extraction.extract_auto_infracao_fato",
-        return_value=dict(_AUTO_INFRACAO_FATO),
-    ):
-        agent = AgentRegistry.create("extrator", ctx)
-        result = agent._run_legacy_unconnected()
-
-    assert result.success is True
-    assert result.data.get("auto_infracao_fato", {}).get("numero_auto") == "123456-D"
-
-    rows = (
-        db_session.query(ExtractedFieldStaging)
-        .filter(ExtractedFieldStaging.document_id == doc.id)
-        .all()
-    )
-    assert rows == [], "auto de infração NÃO deve gerar staging cadastral"
-    assert all(r.matricula_hint is None for r in rows)
-
-    from app.models.ai_job import AIJob
-
-    job = db_session.query(AIJob).filter(AIJob.id == result.ai_job_id).first()
-    assert job is not None
-    assert job.result["auto_infracao_fato"]["orgao_autuante"] == "IBAMA"
-
-    db_session.refresh(doc)
-    assert doc.extraction_status is None  # processado com sucesso, sem nota pendente
+    doc.checksum_sha256 = sha256(b"controlled document bytes").hexdigest()
+    payload = {"observacoes": [{"predicado": "auto_infracao", "valor": "material recebido",
+        "trecho": _AUTO_INFRACAO_TEXT.strip().splitlines()[0]}]}
+    response = AIResponse(content=json.dumps(payload), model_used="controlled", provider="test",
+        tokens_in=10, tokens_out=10, cost_usd=0, duration_ms=1)
+    ctx = AgentContext(tenant_id=tenant.id, user_id=user.id, process_id=process.id,
+        session=db_session, metadata={"document_id": doc.id})
+    with patch("app.core.ai_gateway.complete", return_value=response):
+        result = AgentRegistry.create("extrator", ctx)._run_legacy_unconnected()
+    assert result.success, result.error
+    assert db_session.query(ExtractedFieldStaging).filter_by(document_id=doc.id).count() == 0
+    observation = db_session.query(EvidenceVersion).filter_by(tenant_id=tenant.id, kind="observacao").one()
+    assert observation.source_record["especie_documental"] == "peca_orgao"
+    assert observation.content["attributes"]["predicate"] == "auto_infracao"
+    assert "revisão" in doc.extraction_status

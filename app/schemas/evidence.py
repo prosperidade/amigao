@@ -47,6 +47,8 @@ class EvidenceAttributes(Contract):
     """Applicable fields are explicit; null means unknown, not not-applicable."""
 
     document_id: int | None = None
+    documento_versao_id: int | None = Field(default=None, ge=1)
+    fragmento_id: int | None = Field(default=None, ge=1)
     document_version: int | None = Field(default=None, ge=1)
     original_hash: str | None = None
     text_hash: str | None = None
@@ -117,7 +119,7 @@ class EvidenceObject(Contract):
             raise ValueError("Derivação exige entradas e versão do método")
         if self.kind == "conclusao" and (not self.statement or not self.conclusion_class):
             raise ValueError("Conclusão exige texto e classe")
-        if self.conclusion_class == "risco" and self.knowledge.state != "nao_aplicavel" and (
+        if self.conclusion_class == "risco" and (
             not self.premises or self.applicability != "aplicavel" or not self.applicability_reason
         ):
             raise ValueError("Risco exige premissas e teste de aplicabilidade")
