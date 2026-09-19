@@ -5,9 +5,12 @@ módulo extrai todas as citações de norma do texto, cruza com o contexto
 legislativo já carregado pelo agente (sem fazer nova busca RAG) e, quando
 houver citação inválida, força ``requires_review=True`` no output.
 
-Não bloqueia o output — só **marca**. A peça gerada continua sendo entregue
-ao consultor; o badge de revisão obrigatória deixa explícito que tem citação
-não confirmada.
+No Redator, não bloqueia o output — só **marca**. A peça gerada continua sendo
+entregue ao consultor; o badge de revisão obrigatória deixa explícito que tem
+citação não confirmada. No contrato do ADR-069, ``persist_object`` usa este
+módulo como **trava**: citação sem norma no contexto recusa a conclusão (422).
+Por isso forma não reconhecida é defeito nos dois sentidos — o que a regex não
+extrai passa sem conferência (dívida #243).
 
 Decisões da Fase 0 aplicadas:
 * `CitationRef` (Tarefa C) é o tipo canônico — não há `Citation` paralelo.
@@ -81,12 +84,19 @@ _ARTIGO_PREFIX = (
     r"\s*(?:d[ao]s?\s+)?)?"
 )
 
+# Esfera entre a espécie e o número: "Lei GO 18.104/2013", "Decreto Estadual 9.308/2018".
+# UF só da lista fechada e em MAIÚSCULAS — "Lei no 12.651" não pode virar UF "no".
+_UFS = "AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO"
+_QUALIFICADOR = rf"(?:(?P<qualificador>(?-i:{_UFS})|Estadual|Federal|Municipal)\s+)?"
+# Sigla de órgão, com UF após hífen: "SEMAD-GO", "IBAMA".
+_SIGLA = r"[A-Z]{2,12}(?:-[A-Z]{2})?"
+
 _PATTERNS: list[tuple[str, re.Pattern[str], CitationKind]] = [
     # Lei Complementar — DEVE vir antes de "Lei" para não ser engolida
     (
         "lei_complementar",
         re.compile(
-            rf"{_ARTIGO_PREFIX}Lei\s+Complementar\s+{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
+            rf"{_ARTIGO_PREFIX}(?:Lei\s+Complementar|\b(?-i:LC))\s+{_QUALIFICADOR}{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
             re.IGNORECASE,
         ),
         "lei_complementar",
@@ -103,7 +113,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], CitationKind]] = [
     (
         "decreto",
         re.compile(
-            rf"{_ARTIGO_PREFIX}Decreto\s+{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
+            rf"{_ARTIGO_PREFIX}Decreto\s+{_QUALIFICADOR}{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
             re.IGNORECASE,
         ),
         "decreto",
@@ -111,7 +121,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], CitationKind]] = [
     (
         "lei",
         re.compile(
-            rf"{_ARTIGO_PREFIX}Lei\s+{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
+            rf"{_ARTIGO_PREFIX}Lei\s+{_QUALIFICADOR}{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
             re.IGNORECASE,
         ),
         "lei",
@@ -120,7 +130,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], CitationKind]] = [
     (
         "resolucao_generica",
         re.compile(
-            rf"{_ARTIGO_PREFIX}Resoluç[ãa]o\s+(?P<sigla>[A-Z]{{2,12}})\s+{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
+            rf"{_ARTIGO_PREFIX}(?:Resoluç[ãa]o\s+|\bRes\.\s*)(?P<sigla>{_SIGLA})\s+{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
             re.IGNORECASE,
         ),
         "outro",
@@ -129,7 +139,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], CitationKind]] = [
     (
         "instrucao_normativa",
         re.compile(
-            rf"{_ARTIGO_PREFIX}(?:IN|Instruç[ãa]o\s+Normativa)\s+(?P<sigla>[A-Z]{{2,12}})?\s*{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
+            rf"{_ARTIGO_PREFIX}(?:IN|Instruç[ãa]o\s+Normativa)\s+(?P<sigla>{_SIGLA})?\s*{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
             re.IGNORECASE,
         ),
         "instrucao_normativa",
@@ -137,7 +147,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], CitationKind]] = [
     (
         "portaria",
         re.compile(
-            rf"{_ARTIGO_PREFIX}Portaria\s+(?:[A-Z]{{2,12}}\s+)?{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
+            rf"{_ARTIGO_PREFIX}Portaria\s+(?:{_SIGLA}\s+)?{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
             re.IGNORECASE,
         ),
         "portaria",
@@ -145,7 +155,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], CitationKind]] = [
     (
         "medida_provisoria",
         re.compile(
-            rf"{_ARTIGO_PREFIX}(?:MP|Medida\s+Provis[óo]ria)\s+{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
+            rf"{_ARTIGO_PREFIX}(?:\b(?-i:MPV?)|Medida\s+Provis[óo]ria)\s+{_NUM}{_NUMBER}{_DATE_OR_YEAR}",
             re.IGNORECASE,
         ),
         "medida_provisoria",
@@ -172,8 +182,19 @@ def _normalize_numero(numero_text: str) -> str:
 
 
 def _digits_only(numero: str) -> str:
-    """Para comparação: '12.651' == '12651' == '12-651'. Letras (sufixos) preservadas."""
-    return re.sub(r"[^0-9A-Za-z]", "", numero).upper()
+    """Para comparação: '12.651' == '12651' == '12-651'; '02' == '2'. Letras (sufixos) preservadas."""
+    return re.sub(r"[^0-9A-Za-z]", "", numero).upper().lstrip("0") or "0"
+
+
+_JURISDICAO_DO_QUALIFICADOR: dict[str, CitationJurisdicao] = {
+    "estadual": "estadual", "federal": "federal", "municipal": "municipal",
+}
+
+
+def _jurisdicao(qualificador: str | None) -> CitationJurisdicao | None:
+    if not qualificador:
+        return None
+    return _JURISDICAO_DO_QUALIFICADOR.get(qualificador.lower(), "estadual")  # sigla de UF
 
 
 def _key(kind: str, numero: str, ano: int) -> tuple[str, str, int]:
@@ -244,6 +265,7 @@ def extract_citations(text: str) -> list[CitationRef]:
                 ano=ano,
                 raw=match.group(0).strip(),
                 artigo=artigo.strip() if artigo else None,
+                jurisdicao=_jurisdicao(match.groupdict().get("qualificador")),
             )
             key = _key(kind, citation.numero, ano)
             if key in seen:
@@ -260,7 +282,7 @@ def extract_citations(text: str) -> list[CitationRef]:
 # validate_citations
 # ---------------------------------------------------------------------------
 
-def _resolve_known(item: Any) -> tuple[CitationRef, int | None, CitationJurisdicao | None] | None:
+def _resolve_known(item: Any) -> list[tuple[CitationRef, int | None, CitationJurisdicao | None]]:
     """Normaliza um elemento do legislation_context.
 
     Aceita (em ordem de preferência):
@@ -269,11 +291,13 @@ def _resolve_known(item: Any) -> tuple[CitationRef, int | None, CitationJurisdic
       e populamos ``chunk_id`` + ``jurisdicao`` a partir dele).
     * ``str`` no formato livre tipo "Lei 12.651/2012" — extraímos.
 
-    Retorna tupla (CitationRef, chunk_id, jurisdicao) ou ``None`` quando não foi possível
-    interpretar o item. Nunca lança.
+    Devolve **todas** as normas do item: um texto de fonte com duas normas conta
+    as duas. Antes só a primeira entrava — e "primeira" era pela ordem dos padrões,
+    não do texto —, o que recusava quem citasse a outra (dívida #243).
+    Lista vazia quando não foi possível interpretar o item. Nunca lança.
     """
     if isinstance(item, CitationRef):
-        return item, item.chunk_id, item.jurisdicao
+        return [(item, item.chunk_id, item.jurisdicao)]
 
     text: str | None = None
     chunk_id: int | None = None
@@ -291,13 +315,9 @@ def _resolve_known(item: Any) -> tuple[CitationRef, int | None, CitationJurisdic
         text = item
 
     if not text:
-        return None
+        return []
 
-    extracted = extract_citations(text)
-    if not extracted:
-        return None
-    cit = extracted[0]
-    return cit, chunk_id, jurisdicao
+    return [(cit, chunk_id, jurisdicao or cit.jurisdicao) for cit in extract_citations(text)]
 
 
 def validate_citations(
@@ -322,15 +342,12 @@ def validate_citations(
     # Indexar conhecidos por chave (kind, numero_dígito, ano)
     index: dict[tuple[str, str, int], tuple[int | None, CitationJurisdicao | None]] = {}
     for raw in legislation_context:
-        resolved = _resolve_known(raw)
-        if resolved is None:
-            continue
-        ref, chunk_id, jurisdicao = resolved
-        key = _key(ref.kind, ref.numero, ref.ano)
-        prev = index.get(key)
-        # mantém quando já tinha info; substitui só se a nova info for mais rica
-        if prev is None or (prev[0] is None and chunk_id is not None):
-            index[key] = (chunk_id, jurisdicao)
+        for ref, chunk_id, jurisdicao in _resolve_known(raw):
+            key = _key(ref.kind, ref.numero, ref.ano)
+            prev = index.get(key)
+            # mantém quando já tinha info; substitui só se a nova info for mais rica
+            if prev is None or (prev[0] is None and chunk_id is not None):
+                index[key] = (chunk_id, jurisdicao)
 
     invalid: list[CitationRef] = []
     matched = 0

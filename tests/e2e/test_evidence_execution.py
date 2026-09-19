@@ -455,3 +455,33 @@ def test_verified_query_preserves_scope_and_is_invalidated_by_query_revision(com
             persist_object(db, case["tenant"], case["case"], EvidenceObject.model_validate(invalid_data))
         persist_object(db, case["tenant"], case["case"], query.model_copy(update={"version": 2}), source_record=record)
         assert build_envelope(db, case["tenant"], case["user"], case["case"]).conclusions == []
+
+
+def test_citation_gate_recognizes_short_forms_and_every_norm_of_the_source(committed_case):
+    """Dívida #243, no caminho ativo: persist_object deixava passar forma que a regex não
+    reconhecia e recusava quem citava uma norma que não fosse a primeira da fonte."""
+    from fastapi import HTTPException
+
+    factory, case = committed_case
+    with factory() as db:
+        db.get(Document, case["doc"]).extracted_text = (
+            "LEI Nº 12.651, DE 25 DE MAIO DE 2012, regulamentada pelo Decreto 6.514/2008. "
+            "LEI COMPLEMENTAR Nº 140, DE 8 DE DEZEMBRO DE 2011. Resolução CONAMA nº 237, "
+            "de 19 de dezembro de 1997. LEI Nº 18.104, DE 18 DE JULHO DE 2013.")
+        db.flush()
+        source = capture_snapshot(db, case["tenant"], case["user"], case["case"]).content["sources"][0]
+
+        def conclusion(identity, statement):
+            return EvidenceObject(id=identity, version=1, kind="conclusao", origin="diagnostico",
+                statement=statement, conclusion_class="hipotese", premises=[source], norms=[source])
+
+        persist_object(db, case["tenant"], case["case"], conclusion(
+            "short-forms", "Aplicam-se a LC 140/2011, a Res. CONAMA 237/1997 e a Lei GO 18.104/2013."))
+        persist_object(db, case["tenant"], case["case"], conclusion(
+            "not-the-first-norm", "Nos termos da Lei 12.651/2012 e do Decreto 6.514/2008."))
+        with pytest.raises(HTTPException) as orphan:
+            persist_object(db, case["tenant"], case["case"], conclusion("orphan-short-form", "Conforme a LC 999/2011."))
+        assert orphan.value.status_code == 422
+        stored = {row.object_id for row in db.query(EvidenceVersion).filter(
+            EvidenceVersion.process_id == case["case"], EvidenceVersion.kind == "conclusao")}
+        assert stored == {"short-forms", "not-the-first-norm"}
