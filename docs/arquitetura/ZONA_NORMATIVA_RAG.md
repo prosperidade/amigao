@@ -8,8 +8,9 @@
 **Medições reproduzíveis:** [provas/adr075_medir_coletaneas.py](provas/adr075_medir_coletaneas.py)
 e [saída](provas/adr075_medicao_coletaneas.txt).
 
-> O insumo `ARQUITETURA_DADOS_RAG_REGENTE_v1.md` não foi entregue. Onde o código diverge de
-> qualquer documento, vale o código, e a divergência está anotada.
+> O insumo [`ARQUITETURA_DADOS_RAG_REGENTE_v1.md`](ARQUITETURA_DADOS_RAG_REGENTE_v1.md) chegou depois
+> deste desenho; o confronto está no [§8](#8-confronto-com-o-insumo). Onde divergem, vale o ADR-075
+> (nasceu de medição) e a divergência fica anotada.
 
 ---
 
@@ -22,6 +23,19 @@ e [saída](provas/adr075_medicao_coletaneas.txt).
 | Documentos de legislação | 113 | 64 |
 | Coletâneas (`compendio_regente`) | 29 | 29 |
 | Espaço vetorial | 100% `text-embedding-3-small` 768d | idem |
+
+**Dev × produção (decisão 5 do ADR-075, medido em 18/09).** Comparação por identidade
+(identificador normalizado) e por hash do texto:
+
+| | Resultado |
+|---|---|
+| Só em produção | **0 documentos** — reconstruir a partir do dev não perde material |
+| Só no dev | **49 documentos, todos federais** (ids 102–210): manifesto curado do ADR-038 e normativas de 06/08 — 33 leis, 9 IN, 3 decretos, 3 resoluções, 1 portaria, 2.709 chunks. Inclui **Decreto 6.514/2008**, **Constituição Federal** e **OJN 06/2009**: a produção nem tem o alvo da busca de defesa |
+| Comuns (64) | batem por identidade; **7 com hash diferente = os 7 federais do reparo de charset da #95** (Lei 12.651/2012, 9.605/1998, 9.985/2000, 6.938/1981, LC 140/2011, Decretos 7.830/2012 e 8.235/2014): o dev rebaixou do Planalto com o charset certo (~4% de `U+FFFD` → 0%); a produção guarda a ingestão de abril, **com o mojibake** (a confirmar pelo canal somente-leitura); 50 com contagem de chunks diferente (a reindexação da fase 4 do ADR-041 rodou só no dev) |
+| Fontes SEMAD | 282 × 282, mesmas referências e mesma contagem |
+
+Leitura de produção feita por SELECT em modo somente-leitura, antes da regra do ADR-076; as
+próximas passam pelo MCP `supabase-prod-ro`.
 
 **Quem consome a busca hoje:**
 

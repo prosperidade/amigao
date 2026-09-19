@@ -40,7 +40,11 @@ frente (docs-only).
   mais recusada, `MPV`, sigla com hífen (`SEMAD-GO`) e zero à esquerda (`02` = `2`) entram;
   `comp 780/2017` deixa de virar medida provisória. **Seguem abertos:** citação **sem ano** não é
   extraída (passa sem conferência); dispositivo não é conferido; `art. 61-A` não é capturado.
-- **#244 — corpus de dev ≠ produção:** dev 32.161 chunks / 113 documentos / 395 fontes;
+- **#244 — corpus de dev ≠ produção:** **medido em 18/09 (decisão 5):** produção não tem nada que o dev
+  não tenha; o dev tem 49 documentos federais a mais (ids 102–210, incluindo Decreto 6.514/2008 e
+  OJN 06/2009) — ver ZONA_NORMATIVA_RAG §0. **O reparo de charset da #95 (7 federais do Planalto) e a
+  reindexação da fase 4 rodaram só no dev:** a produção deve guardar o Código Florestal, a Lei 9.605 e
+  outras 5 com ~4% de `U+FFFD` (confirmar pelo `supabase-prod-ro`). Números: dev 32.161 chunks / 113 documentos / 395 fontes;
   produção 28.891 / 64 / 346 (medido 18/09). Medição feita em dev não representa produção.
 - **#245 — `rota_shadow` lê chunk sem tenant:** `_carregar_chunks` faz `WHERE kc.id = ANY(:ids)`
   sem predicado de tenant (`rota_shadow.py:199–238`) e carimba `confianca: "alta"` em todo trecho.
