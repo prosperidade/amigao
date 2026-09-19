@@ -249,6 +249,14 @@ acidental. Eliminar prova é um fluxo explícito que grava **`recibo_expurgo`** 
 da decisão —, entra na hash chain do tenant, invalida os dependentes com motivo
 "prova expurgada" e só então apaga. Nenhum valor continua afirmado como comprovado depois
 de sua prova sair.
+
+**Legal hold (adendo de 19/09, incorporado do insumo).** Caso com peça **protocolada** entra em
+retenção legal: nenhum expurgo alcança documento, evidência ou conclusão de que a peça depende
+enquanto o hold estiver ativo. O hold é registro próprio, append-only — `legal_hold (id, tenant,
+caso, motivo, peca_ref, protocolo_ref, iniciado_por, iniciado_em, liberado_por, liberado_em,
+justificativa_liberacao)` —, entra na hash chain do tenant, e o fluxo de expurgo o consulta
+antes de gravar o `recibo_expurgo`: com hold ativo, recusa e diz por quê. Liberar o hold é
+decisão humana registrada, nunca vencimento silencioso.
 Roteiro, ordem e janelas em [MIGRACAO_MODELO_DADOS.md](../arquitetura/MIGRACAO_MODELO_DADOS.md).
 
 ## Alternativas descartadas
