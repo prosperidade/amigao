@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Column, Computed, DateTime, ForeignKey, Integer, String, UniqueConstraint
 
 from app.models.base import Base
 from app.models.types import PortableJSON
@@ -29,6 +29,9 @@ class EvidenceVersion(Base):
     kind = Column(String(30), nullable=False)
     content = Column(PortableJSON, nullable=False)
     content_hash = Column(String(64), nullable=False)
+    knowledge_state = Column(String, Computed("content->'knowledge'->>'state'", persisted=True))
+    conclusion_class = Column(String, Computed("content->>'conclusion_class'", persisted=True))
+    predicate = Column(String, Computed("content->'attributes'->>'predicate'", persisted=True))
     agent_name = Column(String(50), nullable=True)
     job_id = Column(Integer, ForeignKey("ai_jobs.id", ondelete="RESTRICT"), nullable=True)
     # Durable copies of source text and storage identity survive soft archival.
@@ -81,3 +84,34 @@ class AgentExecution(Base):
     revision = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     __table_args__ = (UniqueConstraint("tenant_id", "process_id", "idempotency_key"),)
+
+
+class Manifesto(Base):
+    __tablename__ = "manifesto"
+    id = Column(String(64), primary_key=True)
+    content = Column(PortableJSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+
+
+class ExecucaoSnapshot(Base):
+    __tablename__ = "execucao_snapshot"
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, nullable=False)
+    process_id = Column(Integer, nullable=False)
+    execucao_id = Column(String(32), ForeignKey("agent_executions.id", ondelete="RESTRICT"), nullable=False)
+    snapshot_id = Column(String(32), ForeignKey("case_snapshots.id", ondelete="RESTRICT"), nullable=False)
+    a_partir_passo = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    __table_args__ = (UniqueConstraint("execucao_id", "snapshot_id", "a_partir_passo"),)
+
+
+class RetornoColeta(Base):
+    """Collection acknowledgement is an event; it does not rewrite invalidation."""
+    __tablename__ = "retorno_coleta"
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, nullable=False)
+    process_id = Column(Integer, nullable=False)
+    invalidacao_id = Column(Integer, ForeignKey("evidence_invalidations.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    author_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    previous_stage = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))

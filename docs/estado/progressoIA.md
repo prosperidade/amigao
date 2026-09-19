@@ -1,5 +1,40 @@
 # Progresso IA — Amigao do Meio Ambiente
 
+## 2026-09-19 — migrations e percurso parcial em dev
+
+Quatro migrations aplicadas em ordem no amigao_db confirmado, até 071es004.
+Preparação recebe MCP em memória e persiste Document somente no DB dev;
+associação autenticada pela tela passou para nove documentos, com recarga e nova
+sessão nos dois casos. Nenhuma observação/jobs LLM criada: execução completa
+rejeitada pela revisão automática por falta de autorização explícita do provedor
+destinatário dos textos sensíveis. Caminho de associação isolado não envia ao LLM.
+Retomada preparada para OpenAI/gpt-4o-mini sem fallback. Teste focal de título:
+1 passou; TypeScript/build concluídos. Gate semântico ainda aberto.
+
+## 2026-09-19 — SELECT real e verificação em memória
+
+Supabase read_only autenticado após OAuth. Nove textos dos docs 546–551 e 557–559
+lidos por SELECT, transmitidos ao processo local em memória e verificados por
+SHA-256/contagem. Metadados no GATE_INCREMENTO2, sem fixtures/textos em arquivos.
+Corrigido marcador de certidão eletrônica, detectado pelo material real. Recorte
+exercita taxonomia, identidade matrícula+CNS, schema cadastral e qualificação da
+representação. Não é execução do extrator LLM nem prova de persistência/revisão
+autenticada. Gate completo e decisão de suficiência da Receita seguem abertos.
+
+## 2026-09-18 — Incremento 2, entradas antes do gate
+
+Família contratual com schema próprio (partes por papel contratual, objeto,
+representação declarada, referência judicial) usa parser/persistidor compartilhado
+pelo extrator e adaptador de staging. Receita ganha espécie/predicado do adendo
+proposto da Ontologia, com ano/consulta/fonte e estado da pessoa fundado em evidência;
+sem promover K/R, preencher Client ou criar espólio automaticamente. As duas
+entradas recusam sucesso vazio quando faltam os objetos esperados.
+
+Skills declaradas no manifesto; método ausente bloqueia capacidade. Alterações
+verificadas somente por sintaxe/lint após a instrução de não rodar suíte. Não há
+leitura MCP, fixture real, gate autenticado ou PR concluído. Suficiência da Receita
+PENDENTE-ISIS. [Matriz de prova](../auditoria/GATE_INCREMENTO2.md).
+
 ## 2026-09-17 — Incremento 1, contrato e revisão (PR #172 em validação)
 
 Documentos-base `9e02b98`, triagem `a4a2633`, indexação `a42a1cd` publicados;

@@ -190,7 +190,7 @@ MOTIVO_AREA_DE_OUTRO_OBJETO = (
 
 # Frente F (ADR-066) — vocabulário fechado do campo DERIVADO `vigencia`.
 # Nunca escrito pelo LLM; só por :func:`derivar_vigencia`.
-VIGENCIA_VIGENTE = "vigente"
+VIGENCIA_VIGENTE = "vigente_segundo_o_material"
 VIGENCIA_BAIXADO = "baixado"
 VIGENCIA_RETIFICADO = "retificado"
 VIGENCIA_EXPIRADO = "expirado"
@@ -468,7 +468,13 @@ def aplicar_alteracoes(observacoes: list[Observacao]) -> None:
     Ato que não encontra o alvo citado não some nem vira erro: continua uma
     observação visível, só sem o grafo fechado do outro lado.
     """
-    por_chave = {o.chave: o for o in observacoes if o.chave}
+    por_chave = {}
+    ambiguas = set()
+    for o in observacoes:
+        if o.chave in por_chave:
+            ambiguas.add(o.chave)
+        elif o.chave:
+            por_chave[o.chave] = o
     for obs in observacoes:
         if obs.tipo not in (TIPO_BAIXA, TIPO_ADITIVO):
             continue
@@ -481,6 +487,11 @@ def aplicar_alteracoes(observacoes: list[Observacao]) -> None:
         campo = "baixado_por" if obs.tipo == TIPO_BAIXA else "retificado_por"
         for chave in citados:
             alvo = por_chave.get(chave)
+            if chave in ambiguas:
+                continue
+            if alvo and any(obs.atributos.get(k) is not None and alvo.atributos.get(k) != obs.atributos[k]
+                            for k in ("documento_id", "matricula", "serventia")):
+                continue
             if alvo is None or alvo is obs or alvo.tipo in (TIPO_BAIXA, TIPO_ADITIVO):
                 continue
             if alvo.tipo not in TIPOS_COM_VIGENCIA:
@@ -492,6 +503,9 @@ def aplicar_alteracoes(observacoes: list[Observacao]) -> None:
                 # baixado por AV.14", sugerindo a venda anulada. Só tipos com
                 # estado de vigência são alvo válido de baixa/retificação.
                 continue
+            historico = alvo.atributos.setdefault(f"{campo}_eventos", [])
+            if (obs.ato or chave) not in historico:
+                historico.append(obs.ato or chave)
             alvo.atributos[campo] = obs.ato or chave
             logger.info(
                 "observacao_registral: %s (%s) %s por %s",
@@ -638,7 +652,14 @@ def derivar_vigencia(
                         VIGENCIA_EXPIRADO if termo_final < ref else VIGENCIA_VIGENTE
                     )
                 continue
-        if obs.atributos.get("data_ato"):
+        data_literal = obs.atributos.get("data_ato")
+        data_ato = _ultima_data(data_literal)
+        if data_ato is None and isinstance(data_literal, str):
+            try:
+                data_ato = date.fromisoformat(data_literal)
+            except ValueError:
+                pass
+        if data_ato is not None and ref is not None and data_ato <= ref:
             obs.atributos["vigencia"] = VIGENCIA_VIGENTE
             continue
         obs.atributos["vigencia"] = VIGENCIA_INDETERMINADO
@@ -662,7 +683,7 @@ def rl_vigente(observacoes: list[Observacao]) -> Optional[Observacao]:
     candidatas = [
         obs for obs in observacoes
         if obs.tipo == TIPO_RESERVA_LEGAL
-        and obs.vigencia not in (VIGENCIA_BAIXADO, VIGENCIA_RETIFICADO, VIGENCIA_EXPIRADO)
+        and obs.vigencia == VIGENCIA_VIGENTE
     ]
     if not candidatas:
         return None
@@ -707,18 +728,10 @@ def titular_atual(observacoes: list[Observacao]) -> Optional[dict[str, Any]]:
     adquirente — a matrícula pode não ter tido transferência registrada, ou o
     texto não distinguiu os dois lados.
     """
-    transferencias = [
-        o for o in observacoes
-        if o.tipo in TIPOS_TRANSFERENCIA_TITULARIDADE and o.atributos.get("adquirentes")
-    ]
-    if not transferencias:
-        return None
-    ultimo = max(transferencias, key=lambda o: o.ordem)
-    return {
-        "titulares": ultimo.atributos["adquirentes"],
-        "ato": ultimo.ato,
-        "data_ato": ultimo.atributos.get("data_ato"),
-    }
+    # The legacy signature carries neither coverage nor fractions/initial balance.
+    # Keep the historical participation list via cadeia_titularidade; current
+    # ownership requires avaliar_material's qualified chain premises.
+    return None
 
 
 def area_de_outro_objeto(

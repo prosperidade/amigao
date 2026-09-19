@@ -15,6 +15,7 @@ from app.models.contract import Contract
 from app.models.contract_template import ContractTemplate
 from app.models.credential import Credential, PortalType
 from app.models.document import Document
+from app.models.entrada_semantica import DocumentoVersao, Fragmento
 from app.models.evidence import AgentExecution, CaseSnapshot, EvidenceInvalidation, EvidenceReview, EvidenceVersion
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
 from app.models.intake_classification_feedback import IntakeClassificationFeedback

@@ -49,6 +49,7 @@ class ExtractedFieldStaging(Base):
     __tablename__ = "extracted_field_staging"
 
     id = Column(Integer, primary_key=True, index=True)
+    observacao_ref = Column(Integer, ForeignKey("evidence_versions.id", ondelete="RESTRICT"), nullable=True)
     tenant_id = Column(
         Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True
     )

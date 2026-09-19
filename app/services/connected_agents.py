@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from pydantic import TypeAdapter
 
 from app.models.ai_job import AIJob, AIJobStatus
-from app.models.evidence import AgentExecution, CaseSnapshot
+from app.models.evidence import AgentExecution, CaseSnapshot, ExecucaoSnapshot, Manifesto
 from app.schemas.evidence import EvidenceObject, canonical_hash
 from app.services.agent_capabilities import ACTIVE_AGENTS, capability_manifest
 from app.services.evidence import (
@@ -56,7 +56,17 @@ def start_execution(db, tenant_id, user_id, process_id, name, key=None):
         chain_name=name, steps=[{"agent": n, "status": "pending", "depends_on": DEPENDENCIES.get(n, [])} for n in names])
     db.add(execution)
     db.flush()
+    registrar_snapshot(db, execution, snapshot.id)
     return execution
+
+
+def registrar_snapshot(db, execution, snapshot_id):
+    existing = db.query(ExecucaoSnapshot).filter_by(execucao_id=execution.id,
+        snapshot_id=snapshot_id, a_partir_passo=execution.cursor).first()
+    if existing is None:
+        db.add(ExecucaoSnapshot(tenant_id=execution.tenant_id, process_id=execution.process_id,
+            execucao_id=execution.id, snapshot_id=snapshot_id, a_partir_passo=execution.cursor))
+        db.flush()
 
 
 def get_execution(db, tenant_id, user_id, execution_id):
@@ -150,6 +160,9 @@ def run_step(db, execution, step, user_id):
     envelope = build_envelope(db, execution.tenant_id, user_id, execution.process_id, execution.snapshot_id)
     metadata = {"uf": envelope.case.get("uf"), "demand_type": envelope.objective}
     manifest = capability_manifest(step["agent"], metadata)
+    manifest_hash = canonical_hash(manifest)
+    from sqlalchemy.dialects.postgresql import insert
+    db.execute(insert(Manifesto).values(id=manifest_hash, content=manifest).on_conflict_do_nothing(index_elements=["id"]))
     envelope.manifest = manifest
     ctx = AgentContext(tenant_id=execution.tenant_id, user_id=user_id,
         process_id=execution.process_id, session=db, metadata=metadata)
@@ -159,7 +172,7 @@ def run_step(db, execution, step, user_id):
         job_type=agent.job_type, status=AIJobStatus.running, chain_trace_id=execution.id,
         started_at=datetime.now(UTC), input_payload={"contract_version": "069.1",
             "context": envelope.model_dump(mode="json"), "context_hash": envelope.semantic_hash,
-            "manifest": manifest, "attempts": []})
+            "manifest": manifest, "manifesto_hash": manifest_hash, "attempts": []})
     db.add(job)
     db.flush()
     step["job_id"] = job.id
@@ -169,6 +182,26 @@ def run_step(db, execution, step, user_id):
         job.result = {"status": manifest["status"], "manifest": manifest}
         job.finished_at = datetime.now(UTC)
         step["status"] = manifest["status"]
+        return
+    if step["agent"] == "extrator":
+        from app.services.entrada_semantica import executar_extracao
+        check_tenant_cost_limit(execution.tenant_id, db)
+        check_tenant_monthly_budget(execution.tenant_id, db)
+        attempts = []
+        def record(response, label):
+            attempts.append({"label": label, "model": response.model_used, "provider": response.provider,
+                "tokens_in": response.tokens_in, "tokens_out": response.tokens_out, "cost_usd": response.cost_usd})
+        result = executar_extracao(ctx, on_response=record)
+        job.tokens_in = sum(a["tokens_in"] for a in attempts)
+        job.tokens_out = sum(a["tokens_out"] for a in attempts)
+        job.cost_usd = sum(a["cost_usd"] for a in attempts)
+        job.model_used = ",".join(sorted({a["model"] for a in attempts}))
+        job.input_payload = {**job.input_payload, "attempts": attempts}
+        job.result = result
+        job.status = AIJobStatus.completed
+        job.finished_at = datetime.now(UTC)
+        step.update(status="completed", outputs=[])
+        db.flush()
         return
     if step["agent"] == "auditor_imovel":
         objects = _audit_objects(agent, envelope)
@@ -260,6 +293,7 @@ def resume_execution(db, tenant_id, user_id, execution_id, expected_revision=Non
     # Jobs retain their immutable original snapshot. Only unexecuted steps use the
     # next snapshot, so a corrected observation cannot be reintroduced on resume.
     execution.snapshot_id = current_snapshot.id
+    registrar_snapshot(db, execution, current_snapshot.id)
     if execution.status == "completed" and all(_outputs_resolved(db, execution, s) for s in execution.steps):
         return execution
     steps = [dict(s) for s in execution.steps]

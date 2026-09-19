@@ -1,5 +1,33 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 19/09/2026 — migrations e associação dev comprovadas; extração bloqueada.**
+amigao_db 127.0.0.1:15432 em 071es004. Nove documentos preparados no DB dev,
+associados pela tela após login real, mantidos em 2 recargas e 2 novas sessões.
+Observações e jobs do extrator no tenant do gate: **0**, conferidos por SELECT dev.
+Revisão automática bloqueou o percurso que enviaria textos sensíveis ao LLM sem
+autorização explícita do provedor. Não houve contorno; retomada preparada para
+OpenAI/gpt-4o-mini, sem outros provedores. Gate segue aberto. Regressão focal:
+1 teste passou; TypeScript e build concluídos. Suíte reservada ao CI do PR rascunho.
+
+**Pulso 19/09/2026 — MCP autenticado, recorte com texto real em memória.**
+SELECT dos docs 546–551 e 557–559 concluído via supabase-prod-ro. Nove hashes e
+tamanhos conferidos localmente e registrados no gate; nenhum texto salvo em
+arquivo/fixture/banco local. Recorte de taxonomia encontrou e corrigiu marcador
+de certidão eletrônica; quatro identidades número+CNS separadas. Schema da Receita
+e limites de representação exercitados. Sem LLM/persistência/navegador neste
+recorte; gate integral aberto, suficiência da Receita PENDENTE-ISIS. Sem suíte,
+escrita/migration de produção ou merge.
+
+**Pulso 18/09/2026 — Incremento 2 em `wt-entrada-semantica`, sem PR/merge.**
+Blocos de entrada contratual e Receita implementados no código em elaboração:
+schema + skill + observação durável + staging referenciado, sem escrita no Client.
+Adendo proposto da Ontologia nomeia espécie CPF/Receita e falecimento declarado;
+suficiência da Receita no gate é PENDENTE-ISIS. Quatro matrículas ELODI são objetos
+distintos por número e serventia. [Gate](../auditoria/GATE_INCREMENTO2.md) todo aberto:
+MCP não exposto, zero leitura de produção, nenhuma fixture real recebida.
+Após orientação de não rodar suíte, somente sintaxe/lint focal; sem testes,
+migrations ou chamadas LLM nesta rodada. Motor e integração permanecem incompletos.
+
 **Revisão pré-merge de 17/09/2026:** documentos independentes no PR #173; #172
 retargetado para a branch documental, sem merge. Os nove itens do §8 agora têm
 um teste autenticado único, com [relatório por prova](../auditoria/GATE_INCREMENTO1_PR172.md).

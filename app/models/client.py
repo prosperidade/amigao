@@ -45,6 +45,7 @@ class Client(Base):
     __tablename__ = "clients"
 
     id = Column(Integer, primary_key=True, index=True)
+    pessoa_id = Column(Integer, ForeignKey("pessoa.id", ondelete="RESTRICT"), nullable=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
 
     client_type = Column(Enum(ClientType), default=ClientType.pf, nullable=False)

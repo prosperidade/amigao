@@ -239,7 +239,9 @@ def ocr_then_extract(
                 .first()
             )
         if twin and (twin.extracted_text or "").strip():
-            doc.extracted_text = twin.extracted_text
+            from app.services.documento_versao import registrar_leitura
+            registrar_leitura(db, doc, twin.extracted_text, metodo="cache_twin",
+                origem="copia_gemeo", documento_origem_id=twin.id, sha256_original=checksum)
             doc.extracted_at = datetime.now(UTC)
             doc.ocr_status = OcrStatus.done
             doc.confidence_score = twin.confidence_score
@@ -360,7 +362,9 @@ def ocr_then_extract(
         db.add(ai_job)
 
         if result.text:
-            doc.extracted_text = result.text
+            from app.services.documento_versao import registrar_leitura
+            registrar_leitura(db, doc, result.text, metodo=result.method,
+                modelo=result.model_used, sha256_original=checksum)
             doc.extracted_at = finished_at
             doc.ocr_status = OcrStatus.done
             doc.ocr_error = None  # sucesso limpa erro anterior (ex.: reprocesso)

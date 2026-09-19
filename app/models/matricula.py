@@ -46,6 +46,7 @@ class Matricula(Base):
 
     # Identificação registral
     numero_matricula = Column(String, nullable=True, index=True)
+    serventia_id = Column(Integer, ForeignKey("serventia.id", ondelete="RESTRICT"), nullable=True)
     cartorio = Column(String, nullable=True)
     registro_livro_folha_ficha = Column(String, nullable=True)
 
