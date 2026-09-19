@@ -3,10 +3,14 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from app.services.identidade_observacao import identidade_observacao, localizar_trecho, normalizar_conteudo
 from app.schemas.entrada_semantica import FalecimentoDeclarado, ParteExtraida, ParticipacaoExtraida
+from app.services.identidade_observacao import identidade_observacao, localizar_trecho, normalizar_conteudo
 from app.services.motor_cartorario import (
-    AtoMaterial, IdentidadeAto, avaliar_material, avaliar_matriculas, qualificar_representacao,
+    AtoMaterial,
+    IdentidadeAto,
+    avaliar_material,
+    avaliar_matriculas,
+    qualificar_representacao,
 )
 from app.services.property_audit import audit_property
 from app.services.taxonomia_documental import destino_consolidavel, propor_especie

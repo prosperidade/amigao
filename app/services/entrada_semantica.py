@@ -284,7 +284,10 @@ def projetar_preview(rows, *, data_referencia=None):
 
 def qualificar_observacoes(rows, *, data_referencia):
     from app.services.motor_cartorario import (
-        AtoMaterial, IdentidadeAto, avaliar_matriculas, qualificar_representacao,
+        AtoMaterial,
+        IdentidadeAto,
+        avaliar_matriculas,
+        qualificar_representacao,
     )
     atos, representacoes, lacunas, contextos, partes, fontes, falecimentos = [], [], [], {}, [], {}, []
     for row in rows:
