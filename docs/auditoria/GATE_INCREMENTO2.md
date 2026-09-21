@@ -1,7 +1,9 @@
 # Incremento 2 — estado do gate
 
 18/09/2026 · branch `feat/entrada-semantica-cartorario` · implementação em andamento.
-**Gate aberto. Associação autenticada comprovada; extração LLM e persistência semântica ainda não comprovadas.**
+**Gate aberto.** Em 21/09 a extração com LLM e a persistência semântica foram comprovadas
+pela tela nos nove textos. Continuam abertos falecimento da Receita, espólio e inventariante
+(557/558). Ver [a medição de 21/09](#21092026--medição-real-dos-nove-textos-branch-featinc2-ancoras-offset-188).
 
 ## 19/09/2026 — autorização e modelo atualizados
 
@@ -237,3 +239,98 @@ Identificador conferido na documentacao oficial:
 https://ai.google.dev/gemini-api/docs/models/gemini-3.7-flash
 Regressao da matriz adicionada para o CI. Nenhuma suite local ou nova chamada
 com textos reais nesta alteracao; o gate semantico permanece aberto.
+
+## 21/09/2026 — medição real dos nove textos (branch `feat/inc2-ancoras-offset`, #188)
+
+Claude Code assumiu a branch que o Codex deixou em 25f58a5. Medição final no SHA
+`c1b57aa` (main com #189 integrada). **Os dois casos completaram a extração pela
+tela com o Luna. O gate continua ABERTO** em falecimento da Receita, espólio e
+inventariante (557/558).
+
+### Ambiente
+
+- Banco: **127.0.0.1:15432/amigao_db**, usuário postgres. Nenhuma migration, nenhuma escrita
+  ou leitura de produção nesta sessão.
+- Textos: copiados do tenant dev 4 para tenants novos, em memória, pelo canal de loopback do
+  helper. Os nove SHA-256 e tamanhos conferem com a tabela do SELECT MCP acima. Nenhum texto
+  em arquivo.
+- Modelo: `gpt-5.6-luna` fixo, `AI_EXTRATOR_ALLOW_FALLBACK=false`, `GEMINI_API_KEY` vazia
+  no helper. Todas as fatias saíram do Luna.
+- **Mapa de modelos do LiteLLM:** o LiteLLM baixa esse mapa do GitHub ao ser importado e
+  desiste após 5 s. Aqui o download levava mais de 10 s, e o mapa embutido não conhece o Luna.
+  Os jobs 161 e 162 (tenant 5) falharam com "LLM Provider NOT provided", sem chamar o modelo
+  e sem custo. Nas medições seguintes o mapa upstream (4.337 modelos, sha256 começa em
+  `98b6508c99db84ed`) foi servido em loopback via `LITELLM_MODEL_COST_MAP_URL`. Preço do Luna
+  no mapa: US$ 0,20/M de entrada, 1,20/M de saída, 0,02/M em cache, igual ao cobrado nos jobs
+  155–157. Dívidas #255 e #256.
+
+### Correções que a medição motivou
+
+| Commit | Evidência | Correção |
+|---|---|---|
+| `a06e972` | Job 160 (texto 547) falhou inteiro: "Representado sem parte extraída" | Validação por item (schema, âncora, espécie, suporte literal, referência entre partes) antes da persistência. Item inválido e seus dependentes são rejeitados; o documento segue |
+| `c7c7ec5` | `GET /evidence/cases/33` levava 9–21 s com 192 observações. O roteiro falhou na recarga | Revisões lidas uma vez por caso: `build_envelope` caiu de 592 para 171 queries. Teste exige a mesma contagem com 2 e 22 observações; sem a correção dá 39 vs 119 |
+| `03f2257` | 557: trechos únicos com offsets deslocados em −3 | Literal único é localizado pelo sistema. Offset errado em trecho repetido continua rejeitado |
+| `03f2257` | 558: o CPF do falecido ia para a parte espólio | Regra na skill contratual, a única que o 558 recebe |
+| `03f2257` | Ficha: CPF/CNPJ aparecia "—" para todo cliente desde o MVP1 | `dossier` lia `document_number`, atributo que o Client não tem; agora lê `cpf_cnpj` |
+
+### Percurso autenticado — tenant 7, casos 37 (#23) e 38 (#25)
+
+Pela tela: 9 associações; extração nos dois casos (`completed`). Recarga e nova sessão
+preservaram as mesmas identidades de observação nos dois casos. A reclassificação do 559 pela
+tela invalidou 18 de 18 dependentes. No tenant 6 (commit `c7c7ec5`) o mesmo percurso passou,
+com 19 de 19.
+
+| Origem | Observações | Rejeitadas | Principais motivos de rejeição |
+|---|---:|---:|---|
+| 546 | 11 | 0 | — |
+| 547 | 54 | 18 | identificador sem tipo (4) e 9 dependentes; trecho inexistente (3) |
+| 548 | 74 | 19 | trecho repetido sem posição (12); trecho inexistente (6) |
+| 549 | 36 | 7 | trecho inexistente (3); contrato em certidão (2) |
+| 550 | 27 | 11 | trecho repetido sem posição (6); dependentes (3) |
+| 551 | 4 | 0 | — |
+| 557 | 4 | 1 | falecimento: data da consulta fora do trecho do item |
+| 558 | 14 | 3 | espólio com trecho inexistente, inventariante em cascata; referência judicial fora do trecho do contrato |
+| 559 | 18 | 1 | contrato proposto em escritura |
+
+Todas as observações persistidas têm offset global válido: `extracted_text[início:fim]` é
+igual ao literal. Conhecimento: 242 em `nao_determinado`, zero revisões humanas; a extração não
+promove. Jobs 166 e 167: 123.526 tokens de entrada, 49.916 de saída, US$ 0,0840. Custo real de
+IA desta sessão (jobs 161–167): US$ 0,2306.
+
+### Prova contra a Ficha e a SPEC da Isis (`increment2-semantic-proof.mjs`, somente leitura)
+
+| Caso | Verificação | Tenant 6 | Tenant 7 |
+|---|---|---|---|
+| #23 | 4 matrículas: 3181, 3313, 3673, 4387, cada uma com serventia/CNS | ✅ | ✅ |
+| #23 | PJ ELODI na Ficha | ✅ | ✅ |
+| #23 | CNPJ na Ficha | ❌ (bug do dossiê) | ✅ |
+| #25 | Ivair e Elda como transmitentes da escritura; nenhum dos dois vira cliente | ✅ | ✅ |
+| #25 | Espólio documentado no contrato | ❌ (CPF no espólio) | ❌ (trecho inexistente) |
+| #25 | Inventariante declarado | ❌ | ❌ |
+| #25 | Falecimento declarado pela Receita | ❌ (offsets) | ❌ (data fora do trecho) |
+
+### Matriz obrigatória — estado após esta medição
+
+| Prova | Estado |
+|---|---|
+| Escritura não prova estado atual | COMPROVADO no recorte: toda observação do 559 tem espécie `escritura_publica`; ato de escritura não vira `AtoRegistral` |
+| Transmitente não vira cliente/titular | COMPROVADO para Ivair/Elda (559). Sonia no R-11 não verificada |
+| Quatro matrículas independentes | COMPROVADO |
+| PJ preserva CNPJ | COMPROVADO: cadastro e Ficha |
+| Falecimento da Receita com fonte e tempo qualificado | ABERTO: o item cai por âncora em cada execução (offsets; depois data). Suficiência PENDENTE-ISIS |
+| Espólio, inventário e inventariante declarado | ABERTO: espólio rejeitado em cada execução (CPF próprio; depois trecho inexistente) |
+| Inventariante confirmado só com fundamento | ABERTO; nenhuma observação sai confirmada (código e medição) |
+| Duas fontes de conteúdo idêntico | ABERTO, não medido |
+| Baixa/aditivo preservam ato e vínculo | ABERTO, não medido |
+| Reclassificação invalida e exige revisão | COMPROVADO: 18/18 e 19/19 dependentes desatualizados |
+| Quatro confrontos de área | ABERTO, não medido |
+| Rejeição, correção versionada, recarga e nova sessão | PARCIAL: recarga e nova sessão comprovadas; rejeição e correção pela tela não exercitadas nesta medição |
+
+### O que falta para fechar
+
+O que sobra no 557/558 é o modelo não seguir a regra do trecho literal. O defeito muda a cada
+execução; não é mais falha sistêmica. Próximo passo proposto, que é **decisão de domínio**:
+aceitar o item e rejeitar só o campo opcional sem suporte no trecho (data da consulta, ano,
+referência judicial, identificador), registrando a rejeição do campo. O schema já prevê
+`data_consulta` e `ano` nulos, com a lacuna correspondente.

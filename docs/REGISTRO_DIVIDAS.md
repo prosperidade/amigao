@@ -1,5 +1,40 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 21/09/2026 — medição real do Incremento 2 (#188)
+
+A medição dos nove textos em dev expôs quatro problemas fora do escopo do #188. Ficam
+registrados com a medição que os mostrou; nenhum foi corrigido neste PR.
+
+- **#255 — provider e preço dos modelos novos dependem de download no import (aberta):**
+  - O LiteLLM baixa o mapa de modelos do GitHub ao ser importado, com timeout de 5 s. Se o
+    download falha, usa o mapa embutido na versão instalada (1.85.0), que não tem
+    `gpt-5.6-luna`, `gemini/gemini-3.7-flash` nem `claude-sonnet-5`.
+  - Sem o mapa, `gpt-5.6-luna` não tem provider: os jobs dev 161 e 162 (21/09) falharam com
+    "LLM Provider NOT provided", sem chamar o modelo. O download estava levando mais de 10 s
+    nesta máquina. Com o #190 (todos os agentes no Luna), a cadeia inteira dependeria disso.
+  - **Correção:** não depender de rede no boot. Opções: fixar o mapa
+    (`LITELLM_LOCAL_MODEL_COST_MAP=true` com versão do LiteLLM que traga os modelos), ou
+    prefixar o provider (`openai/gpt-5.6-luna`) e registrar preço por setting.
+- **#256 — preço desconhecido vira custo zero e o teto não atua (aberta):**
+  - `ai_gateway.complete` grava `cost = 0.0` quando `litellm.completion_cost` falha
+    (`app/core/ai_gateway.py`, bloco do custo). Com o #255, uma chamada paga ao Luna sairia
+    registrada como US$ 0 e passaria por `AI_MAX_COST_PER_JOB_USD` e pelos orçamentos do tenant.
+    `ai_trace` já trata o mesmo caso como `None` ("unknown is not zero"): os dois divergem.
+  - **Correção:** preço desconhecido não é zero. Registrar desconhecido e bloquear quando houver
+    teto configurado.
+- **#257 — leitura de evidência do caso ainda lenta com extração real (aberta):**
+  - O #188 tirou o N+1 de revisões (`GET /evidence/cases/{id}`: 9–21 s → ~1,5–3 s no caso dev
+    com 192 observações). Resta `capture_snapshot` relendo todas as versões do caso cinco vezes
+    por requisição, resposta de ~900 KB e um GET que grava snapshot e invalidações.
+  - **Correção:** ler as versões uma vez por requisição; paginar ou resumir `objects`.
+- **#258 — reextração acumula observações de execuções anteriores (aberta; decisão de domínio):**
+  - A identidade da observação inclui posição e predicado. Cada execução do LLM propõe itens
+    um pouco diferentes, e os da execução anterior continuam vivos (não ficam `stale`). No
+    tenant dev 4, o documento de origem 546 somou 33 observações em três execuções; cada
+    execução isolada produz 12 a 13.
+  - **Decisão pendente (André/Isis):** nova extração da mesma versão do documento substitui a
+    anterior (anteriores ficam desatualizadas) ou soma propostas para revisão?
+
 ## Pulso 21/09/2026 — modelos de IA alinhados na documentação
 
 GOVERNANCA_IA.md e ADR-002 (adendo) passam a descrever os modelos que o código da main usa.
@@ -192,8 +227,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 255.** (#254 aberta no alinhamento dos modelos de IA, 21/09;
-> conferido `gh pr list`: só o #188 aberto, que não numera dívida.)
+> **PRÓXIMO NÚMERO LIVRE: 259.** (#255 a #258 abertas pela medição real do Incremento 2, 21/09;
+> conferido `gh pr list`: #188 e #190 abertos, o #190 não numera dívida.)
+> Anterior: 255 (#254 aberta no alinhamento dos modelos de IA, 21/09.)
 > Anterior: 254 (#248 a #253 abertas pela auditoria de disco, 21/09.)
 > Anterior: 248 (#242 a #247 abertas pela Frente B — ADR-075, 18/09.)
 > Anterior: 242 (#237 a #241 abertas na emenda do ADR-070, 18/09.)
