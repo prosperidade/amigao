@@ -176,12 +176,23 @@ def test_offset_global_disambiguates_and_invalid_item_does_not_stop_others():
     assert len(rejected) == 1 and "repetido" in rejected[0]["motivo"]
 
 
-def test_offset_outside_chunk_and_mismatched_end_are_rejected():
+def test_offset_outside_chunk_and_wrong_offset_on_repeated_literal_are_rejected():
     from app.services.entrada_semantica import validar_proposta
     valid, rejected = validar_proposta({"observacoes": [
         {"predicado": "x", "valor": 1, "trecho": "first", "posicao_inicio": 0, "posicao_fim": 5},
-        {"predicado": "y", "valor": 2, "trecho": "last", "posicao_inicio": 6, "posicao_fim": 9}]}, "first last", 6, 10)
+        {"predicado": "y", "valor": 2, "trecho": "last", "posicao_inicio": 6, "posicao_fim": 9}]}, "first last last", 6, 15)
     assert not valid.observacoes and len(rejected) == 2
+    assert rejected[1]["motivo"].startswith("Offsets nao correspondem ao trecho literal; Trecho repetido")
+
+
+def test_wrong_offsets_on_unique_literal_are_replaced_by_its_only_position():
+    from app.services.entrada_semantica import validar_proposta
+    text = "Header. TITULAR FALECIDO em 2022. Fim"
+    valid, rejected = validar_proposta({"observacoes": [
+        {"predicado": "situacao", "valor": "x", "trecho": "TITULAR FALECIDO", "posicao_inicio": 5, "posicao_fim": 21}]},
+        text, 0, len(text))
+    assert not rejected
+    assert (valid.observacoes[0].posicao_inicio, valid.observacoes[0].posicao_fim) == (8, 24)
 
 
 def test_rejected_party_invalidates_only_its_dependent_claim():
