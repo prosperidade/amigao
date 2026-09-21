@@ -5,7 +5,9 @@
 A medição dos nove textos em dev expôs quatro problemas fora do escopo do #188. Ficam
 registrados com a medição que os mostrou; nenhum foi corrigido neste PR.
 
-- **#255 — provider e preço dos modelos novos dependem de download no import (aberta):**
+- **#255 — provider e preço dos modelos novos dependem de download no import (FECHADA, branch
+  `fix/litellm-tabela-local-e-preco`: `app/__init__.py` força o mapa embutido; `litellm_tabela.carregar()`
+  registra `app/core/litellm_modelos.json`; teste exige provider e preço de todo modelo configurado):**
   - O LiteLLM baixa o mapa de modelos do GitHub ao ser importado, com timeout de 5 s. Se o
     download falha, usa o mapa embutido na versão instalada (1.85.0), que não tem
     `gpt-5.6-luna`, `gemini/gemini-3.7-flash` nem `claude-sonnet-5`.
@@ -15,7 +17,8 @@ registrados com a medição que os mostrou; nenhum foi corrigido neste PR.
   - **Correção:** não depender de rede no boot. Opções: fixar o mapa
     (`LITELLM_LOCAL_MODEL_COST_MAP=true` com versão do LiteLLM que traga os modelos), ou
     prefixar o provider (`openai/gpt-5.6-luna`) e registrar preço por setting.
-- **#256 — preço desconhecido vira custo zero e o teto não atua (aberta):**
+- **#256 — preço desconhecido vira custo zero e o teto não atua (FECHADA, mesma branch: o gateway
+  exige preço antes da chamada e falha explícito; custo não calculado é erro; OCR devolve `price_unknown`):**
   - `ai_gateway.complete` grava `cost = 0.0` quando `litellm.completion_cost` falha
     (`app/core/ai_gateway.py`, bloco do custo). Com o #255, uma chamada paga ao Luna sairia
     registrada como US$ 0 e passaria por `AI_MAX_COST_PER_JOB_USD` e pelos orçamentos do tenant.
