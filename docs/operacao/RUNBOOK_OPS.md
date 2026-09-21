@@ -49,7 +49,7 @@ Antes do primeiro deploy em produção:
 ### IA
 
 - [ ] `AI_ENABLED=true`
-- [ ] `OPENAI_API_KEY` (e Gemini se `LEGISLATION_USE_GEMINI_DEFAULT=true`)
+- [ ] `OPENAI_API_KEY` com acesso ao `gpt-5.6-luna`; `GEMINI_API_KEY` (fallback e OCR) e `ANTHROPIC_API_KEY` (3º elo)
 - [ ] `AI_MAX_COST_PER_JOB_USD` calibrado (default $0.10; subir só com motivo)
 - [ ] `AI_BUDGET_USD_MONTHLY_PER_TENANT_DEFAULT` definido
 

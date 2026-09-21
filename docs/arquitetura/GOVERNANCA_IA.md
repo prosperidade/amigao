@@ -10,7 +10,7 @@ não é autorização de consumo. Consulte o ADR para cobertura e limites atuais
 
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada nova política, agente, ou provider
-**Última revisão:** 2026-09-21 (modelos alinhados ao código da main: extrator do #183, Legislação/OCR no Gemini 2.5, diagnóstico no gpt-4.1)
+**Última revisão:** 2026-09-21 (decisão do André: todos os agentes no `gpt-5.6-luna`, cadeia Luna → Gemini 3.7 Flash → Claude Sonnet 5)
 
 ---
 
@@ -38,13 +38,13 @@ Camada única de contato com provedores. **Nenhum serviço chama provider direta
 
 | Provider | Configuração | Default para |
 |---|---|---|
-| OpenAI | `OPENAI_API_KEY` em `.env` | Extrator (`gpt-5.6-luna`), diagnóstico (`gpt-4.1`) e demais agentes (`gpt-4o-mini`) |
-| Gemini (Google) | `GEMINI_API_KEY` em `.env` | Legislação e OCR (`gemini-2.5-flash`/`-pro`); fallback do extrator (`gemini-3.7-flash`) e dos demais |
-| Anthropic Claude | `ANTHROPIC_API_KEY` em `.env` | Fallback de terceira linha (Haiku ou Sonnet, conforme o agente); fora da cadeia do extrator |
+| OpenAI | `OPENAI_API_KEY` em `.env` | Primário de todos os agentes (`gpt-5.6-luna`) |
+| Gemini (Google) | `GEMINI_API_KEY` em `.env` | Segundo elo de todos (`gemini-3.7-flash`); OCR (`gemini-2.5-flash`) |
+| Anthropic Claude | `ANTHROPIC_API_KEY` em `.env` | Terceiro elo (`claude-sonnet-5`), exceto no extrator. Sem a chave, o elo fica fora da cadeia |
 
 ### Fallback automático
 
-Quando o provider primário falha (timeout, rate limit, erro do provider), o LiteLLM tenta o próximo. Ordem padrão: OpenAI → Gemini → Anthropic.
+Quando o provider primário falha (timeout, rate limit, erro do provider, modelo inexistente), o gateway tenta o próximo. Ordem padrão, decidida pelo André em 21/09/2026: `gpt-5.6-luna` → `gemini/gemini-3.7-flash` → `claude-sonnet-5`.
 
 Desde o fix/llm-consistencia (07/06), agente que chama o gateway com `agent_name` segue a
 **matriz agente × provider** (`app/core/model_matrix.py`): o primário vem sempre de setting e
@@ -52,8 +52,8 @@ fica em primeiro; os equivalentes do agente em outros providers entram como fall
 entre providers com chave. Carga fixada (`allow_fallback=False`) falha em vez de trocar de
 provider.
 
-**Exceção do extrator (decisão do André, 19/09/2026, #183):** a cadeia é `gpt-5.6-luna` →
-`gemini/gemini-3.7-flash`, sem terceiro provedor. O fallback cobre só falha de provedor: erro
+**Exceção do extrator (decisão do André, 19/09/2026, #183; CLAUDE.md):** a cadeia é
+`gpt-5.6-luna` → `gemini/gemini-3.7-flash`, sem terceiro provedor. O fallback cobre só falha de provedor: erro
 de validação semântica da saída (`EntradaExtraida`) não troca de modelo. O modelo efetivo de
 cada fatia fica registrado. `AI_EXTRATOR_ALLOW_FALLBACK` (default `true`) liga essa cadeia; com
 `false` o extrator fica só no Luna e indisponibilidade falha visível — é como roda a medição
@@ -81,30 +81,41 @@ LLM (`anthropic`/`google`/`openai`/`deepseek`; chinês default = `deepseek` via
 | Uso | Primário (setting) | Fallback, em ordem | Onde |
 |---|---|---|---|
 | Extrator (entrada semântica) | `gpt-5.6-luna` (`AI_EXTRATOR_MODEL`) | só `gemini/gemini-3.7-flash` (`AI_EXTRATOR_FALLBACK_MODEL`) | `ExtratorAgent` → `entrada_semantica.py` |
-| Diagnóstico | `gpt-4.1` (`AI_DIAGNOSTICO_MODEL`) | `gemini/gemini-2.5-pro` → `claude-sonnet-4-20250514` | `diagnostico.py` |
-| Legislação, contexto ≤ ~800K tokens | `gemini/gemini-2.5-flash` (`GEMINI_LEGAL_MODEL`) | `gpt-4.1-mini` (`AI_LEGAL_MODEL_OPENAI`) → `claude-sonnet-4-20250514` | `legislacao.py` |
-| Legislação, contexto > ~800K tokens | `gemini/gemini-2.5-pro` (`GEMINI_LEGAL_LONG_MODEL`) | mesma cadeia acima | `legislacao.py` |
-| Demais agentes (redator, orçamento, acompanhamento, financeiro, marketing) | `gpt-4o-mini` (`AI_DEFAULT_MODEL`) | `gemini/gemini-2.5-flash` (`AI_FALLBACK_MODEL`) → `claude-haiku-4-5-20251001` | `_build_model_list` no gateway |
+| Diagnóstico | `gpt-5.6-luna` (`AI_DIAGNOSTICO_MODEL`) | `gemini/gemini-3.7-flash` → `claude-sonnet-5` | `diagnostico.py` |
+| Legislação | `gpt-5.6-luna` (`AI_LEGAL_MODEL_OPENAI`) | `gemini/gemini-3.7-flash` (`GEMINI_LEGAL_MODEL`) → `claude-sonnet-5` | `legislacao.py` |
+| Demais agentes (redator, orçamento, acompanhamento, financeiro, marketing) | `gpt-5.6-luna` (`AI_DEFAULT_MODEL`) | `gemini/gemini-3.7-flash` (`AI_FALLBACK_MODEL`) → `claude-sonnet-5` (`AI_ANTHROPIC_FALLBACK_MODEL`) | `_build_model_list` no gateway |
 | OCR de PDF escaneado | `gemini/gemini-2.5-flash` (`GEMINI_OCR_MODEL`) | — | `ocr_pdf.py` |
 | Transcrição de áudio | `whisper-1` (`AUDIO_TRANSCRIPTION_MODEL`) | — | ADR-060 |
 
 Os defaults estão em `app/core/config.py`; qualquer um é trocado por variável de ambiente, sem
 deploy de código. O `render.yaml` declara `AI_DEFAULT_MODEL`, `AI_DIAGNOSTICO_MODEL`,
-`AI_FALLBACK_MODEL` e `AUDIO_TRANSCRIPTION_MODEL` com os mesmos valores da tabela; as demais
-seguem o default do `config.py`. Com chave própria
+`AI_FALLBACK_MODEL` e `AUDIO_TRANSCRIPTION_MODEL` com os
+mesmos valores da tabela; as demais seguem o default do `config.py`. OCR e transcrição não são
+agentes e ficaram fora da troca de 21/09. Com chave própria
 do consultor (white label, acima), vale só o modelo dele. `gpt-4o` só aparece como opção de
 chave própria, não em cadeia da casa.
 
-### Roteamento dinâmico por janela (`LegislacaoAgent`)
+### Modelo do `LegislacaoAgent`
 
-`app/agents/legislacao.py` detecta tamanho do contexto e roteia:
+Desde 21/09/2026 a legislação roda sempre no `gpt-5.6-luna`, pelo gateway, com a cadeia da
+matriz (`gemini/gemini-3.7-flash` → `claude-sonnet-5`). Nada põe o Gemini à frente.
 
-- Contexto ≤ 800K tokens → `gemini/gemini-2.5-flash` (mais rápido, mais barato)
-- Contexto > 800K tokens → `gemini/gemini-2.5-pro` (janela maior)
+- **Saiu o roteamento por tamanho de contexto** (Flash → Pro acima de ~800K tokens), junto
+  com `GEMINI_LEGAL_LONG_MODEL`, `GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS` e o teto
+  `AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG`.
+- **Saiu a flag `LEGISLATION_USE_GEMINI_DEFAULT`** (Sprint O, 21/04), com o aviso de boot que
+  dependia dela.
+- **Saiu o caminho que chamava a Anthropic direto pelo SDK** (`claude_client.py`).
+- **O contexto montado cabe no Luna:** `LEGISLATION_MAX_CONTEXT_TOKENS_LONG` = 750.000
+  tokens estimados (antes 1,9M, maior que a janela de qualquer modelo da cadeia). Mesmo com
+  erro de estimativa de ~4 para ~3,5 caracteres por token, fica abaixo da janela de 922K do
+  Luna; se ainda assim um provedor recusar, o gateway passa ao próximo elo.
+- **Teto de custo:** `AI_MAX_COST_PER_JOB_USD_LEGISLACAO` = $0.30. O Luna com 750K tokens
+  custa ~$0.16. Com contexto muito grande, o fallback para Gemini ou Claude pode estourar o
+  teto e falhar com `cost_exceeded`, em vez de gastar mais (Princípio 7).
 
-O limiar é `GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS` (3.200.000 caracteres ≈ 800K tokens).
 Os modelos 2.0-flash e 1.5-pro foram trocados em 14/05 (Sprint W); o 2.0-flash foi
-descontinuado pelo Google e derrubou o worker de produção. Health check no boot loga WARNING se `LEGISLATION_USE_GEMINI_DEFAULT=true` sem `GEMINI_API_KEY` configurada.
+descontinuado pelo Google e derrubou o worker de produção.
 
 ### Resposta padrão (`AIResponse`)
 
@@ -114,7 +125,7 @@ Toda chamada retorna:
 @dataclass
 class AIResponse:
     content: str            # texto gerado
-    model_used: str         # ex: "gpt-4o-mini"
+    model_used: str         # ex: "gpt-5.6-luna"
     tokens_in: int
     tokens_out: int
     cost_usd: float

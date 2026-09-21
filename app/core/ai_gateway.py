@@ -66,7 +66,7 @@ def _normalize_finish_reason(raw: object) -> str:
     """Normaliza o finish_reason do provider para vocabulário comum.
 
     OpenAI/LiteLLM: "stop" | "length" | "content_filter" | "tool_calls".
-    Anthropic (via claude_client): "end_turn" | "max_tokens" | "stop_sequence".
+    Anthropic nativo: "end_turn" | "max_tokens" | "stop_sequence".
     Mapeia qualquer variante de "estourou tokens" para "length".
     """
     s = str(raw or "").strip().lower()
@@ -200,7 +200,9 @@ def _build_model_list(settings) -> list[tuple[str, str]]:
     candidates: list[tuple[str, str, str]] = [
         (settings.OPENAI_API_KEY, settings.AI_DEFAULT_MODEL, settings.OPENAI_API_KEY),
         (settings.GEMINI_API_KEY, settings.AI_FALLBACK_MODEL, settings.GEMINI_API_KEY),
-        (settings.ANTHROPIC_API_KEY, "claude-haiku-4-5-20251001", settings.ANTHROPIC_API_KEY),
+        (settings.ANTHROPIC_API_KEY,
+         getattr(settings, "AI_ANTHROPIC_FALLBACK_MODEL", "claude-sonnet-5"),
+         settings.ANTHROPIC_API_KEY),
     ]
     result: list[tuple[str, str]] = []
     seen: set[str] = set()

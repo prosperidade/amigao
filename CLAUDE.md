@@ -92,7 +92,7 @@ Para o "porquê" completo: `docs/manifesto/01-VISAO_PRODUTO.md`.
 - **Frontend (consultor — ativo):** React 18 + Vite + TypeScript + TailwindCSS + React Query + Zustand
 - **Frontend (cliente — congelado):** Next.js 16 (App Router) + TypeScript + TailwindCSS
 - **Mobile (campo — congelado):** Expo (React Native) com SQLite offline-first
-- **IA:** LiteLLM (multi-provider: OpenAI, Gemini, Anthropic)
+- **IA:** LiteLLM (multi-provider: OpenAI, Gemini, Anthropic). Cadeia de todos os agentes: `gpt-5.6-luna` → `gemini/gemini-3.7-flash` → `claude-sonnet-5` (André, 21/09/2026); o extrator fica sem o terceiro elo. Tabela em `docs/arquitetura/GOVERNANCA_IA.md`
 - **Infra:** Docker Compose (db, redis, minio, api, worker, client-portal)
 
 `client-portal/` e `mobile/` estão congelados até validação do painel consultor. Ver `docs/adr/009-mobile-clientportal-congelados.md`.
@@ -249,7 +249,7 @@ Mesma política do client-portal. Quando descongelar:
 - `POSTGRES_SERVER`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 - `REDIS_URL`
 - `MINIO_SERVER`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
-- `OPENAI_API_KEY` (e/ou `GEMINI_API_KEY` se `LEGISLATION_USE_GEMINI_DEFAULT=true`)
+- `OPENAI_API_KEY` (primário de todos os agentes); `GEMINI_API_KEY` e `ANTHROPIC_API_KEY` habilitam o 2º e o 3º elo do fallback
 - Para waitlist: `RESEND_API_KEY`, `RESEND_AUDIENCE_ID`, `RESEND_FROM_EMAIL`
 
 Lista completa em `.env.example` (o arquivo nunca se chamou `_env.example`).

@@ -73,21 +73,6 @@ def _warm_up_runtime_dependencies() -> None:
     except Exception as exc:
         logger.warning("Falha no warm-up do storage: %s", exc)
 
-    _check_ai_provider_contracts()
-
-
-def _check_ai_provider_contracts() -> None:
-    """Valida contratos de providers de IA declarados em settings.
-
-    Sprint -1 Tarefa A: Sprint O definiu Gemini como default do agente legislacao.
-    Se a flag está ligada mas GEMINI_API_KEY não existe, o fallback cai para OpenAI
-    silenciosamente (bug detectado na auditoria 2026-04-23).
-    """
-    if settings.LEGISLATION_USE_GEMINI_DEFAULT and not settings.GEMINI_API_KEY.strip():
-        logger.warning(
-            "[startup] Sprint O contract violated: LEGISLATION_USE_GEMINI_DEFAULT=True "
-            "but GEMINI_API_KEY is empty. Legislation agent will fall back to OpenAI."
-        )
 
 
 @asynccontextmanager
