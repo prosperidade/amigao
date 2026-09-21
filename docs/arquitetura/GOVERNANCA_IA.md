@@ -10,7 +10,7 @@ não é autorização de consumo. Consulte o ADR para cobertura e limites atuais
 
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada nova política, agente, ou provider
-**Última revisão:** 2026-05-15
+**Última revisão:** 2026-09-21 (política do extrator; modelos históricos dos demais agentes abaixo)
 
 ---
 
@@ -46,6 +46,10 @@ Camada única de contato com provedores. **Nenhum serviço chama provider direta
 
 Quando o provider primário falha (timeout, rate limit, erro do provider), o LiteLLM tenta o próximo. Ordem padrão: OpenAI → Gemini → Anthropic.
 
+Exceção atual do extrator: `gpt-5.6-luna` → `gemini/gemini-3.7-flash`, sem
+terceiro provedor. Na medição do Incremento 2 em dev, somente Luna:
+`AI_EXTRATOR_ALLOW_FALLBACK=false`. Erro de validação documental não aciona fallback.
+
 ### White label — provider por consultor (PR LLM, 30/05)
 
 Decisão André 2026-05-28: o sistema é white label — o consultor pode trazer a própria chave de
@@ -66,7 +70,9 @@ LLM (`anthropic`/`google`/`openai`/`deepseek`; chinês default = `deepseek` via
 
 | Modelo | Uso | Por quê |
 |---|---|---|
-| `gpt-4o-mini` | Default geral (atendimento, redator, diagnostico, extrator) | Custo baixo, qualidade adequada para a maioria, PT-BR sólido |
+| `gpt-5.6-luna` | Extrator semântico, primário | Decisão André; medição fixa em dev |
+| `gemini/gemini-3.7-flash` | Fallback operacional exclusivo do extrator | Resiliência de provedor; desabilitado na medição |
+| `gpt-4o-mini` | Default geral histórico; demais agentes seguem `model_matrix.py` | Não é o primário do extrator semântico |
 | `gpt-4o` | Casos complexos com necessidade de raciocínio | Quando o `mini` falha em testes de qualidade |
 | `gemini/gemini-2.0-flash` | `LegislacaoAgent` (corpus regulatório grande) | Janela 1M tokens, custo competitivo |
 | `gemini/gemini-1.5-pro` | Fallback para contexto > 800K tokens | Janela 2M |

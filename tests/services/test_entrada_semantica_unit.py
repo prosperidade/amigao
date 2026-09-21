@@ -197,3 +197,13 @@ def test_rejected_party_invalidates_only_its_dependent_claim():
     valid, rejected = filtrar_ancoras(entrada, "buyer area", 0, 10)
     assert not valid.partes and not valid.participacoes
     assert len(valid.observacoes) == 1 and len(rejected) == 2
+
+
+def test_registry_rejects_contract_proposal_without_losing_valid_act():
+    from app.schemas.entrada_semantica import EntradaExtraida
+    from app.services.entrada_semantica import filtrar_ancoras
+    entrada = EntradaExtraida(atos=[{"natureza": "compra", "especie": "registro", "ordem": 1, "trecho": "R-1"}],
+        contratos=[{"objeto": "unsupported", "trecho": "contract"}])
+    valid, rejected = filtrar_ancoras(entrada, "R-1 contract", 0, 12, especie="certidao_matricula")
+    assert len(valid.atos) == 1 and not valid.contratos
+    assert len(rejected) == 1 and rejected[0]["colecao"] == "contratos"

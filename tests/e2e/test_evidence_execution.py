@@ -460,6 +460,7 @@ def test_verified_query_preserves_scope_and_is_invalidated_by_query_revision(com
 def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observation(committed_case, monkeypatch):
     """Controlled gateway response; invalid anchor must not erase the paid audit trail."""
     from app.core.ai_gateway import AIResponse
+    from app.core.config import settings
     from app.models.ai_job import AIJob
     factory, case = committed_case
     with factory() as db:
@@ -469,9 +470,14 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
         db.commit()
     raw = json.dumps({"observacoes": [{"predicado": "area_documental_ha", "valor": 12,
                                       "trecho": "ANCHOR_NOT_IN_SOURCE"}, {"predicado": "area_documental_ha", "valor": 13, "trecho": "Valid area."}]})
-    monkeypatch.setattr("app.core.ai_gateway.complete", lambda *args, **kwargs: AIResponse(
-        content=raw, model_used="controlled", provider="test", tokens_in=17, tokens_out=11,
-        cost_usd=0.002, duration_ms=1))
+    monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_MODEL", "gpt-5.6-luna")
+    def gateway(*args, **kwargs):
+        assert kwargs["allow_fallback"] is False
+        assert kwargs["model"] == "gpt-5.6-luna"
+        return AIResponse(content=raw, model_used="controlled", provider="test", tokens_in=17, tokens_out=11,
+                          cost_usd=0.002, duration_ms=1)
+    monkeypatch.setattr("app.core.ai_gateway.complete", gateway)
     with TestClient(app) as client:
         response = client.post("/api/v1/agents/run", headers=login(client, case["email"]),
             json={"agent_name": "extrator", "process_id": case["case"]})

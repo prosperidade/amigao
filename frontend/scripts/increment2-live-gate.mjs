@@ -85,7 +85,13 @@ try {
     const data = await evidence(page, caseId);
     const execution = data.executions.find(e => e.id === run.id);
     // A success receipt must never be produced from an empty or failed extraction.
-    expect(execution?.status).toBe('completed');
+    if (execution?.status !== 'completed') {
+      receipt.executions.push({ case: caseId, id: run.id, status: execution?.status || 'missing',
+        observations: data.objects.filter(r => r.object.kind === 'observacao').length });
+      console.log('CASE_FAILED=' + JSON.stringify(receipt.executions.at(-1)));
+      await ctx.close();
+      continue; // Measure the other case too; a failed case still fails the final gate.
+    }
     const observations = data.objects.filter(r => r.object.kind === 'observacao');
     expect(observations.length).toBeGreaterThan(0);
     const identities = observations.map(r => `${r.object.id}:${r.object.version}`).sort();
@@ -111,7 +117,7 @@ try {
     receipt.new_session.push(caseId);
     await fresh.close();
   }
-  if (!associationOnly) {
+  if (!associationOnly && receipt.executions.every(e => e.status === 'completed')) {
   const doc = state.documents['559'];
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -133,6 +139,7 @@ try {
     stale: dependents.filter(r => r.stale).length, before_objects: before.objects.length };
   }
   console.log('GATE_RECEIPT=' + JSON.stringify(receipt));
+  if (receipt.executions.some(e => e.status !== 'completed')) process.exitCode = 1;
 } finally {
   await browser.close();
 }

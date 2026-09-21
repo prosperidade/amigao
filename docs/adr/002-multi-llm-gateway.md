@@ -25,6 +25,13 @@ O domínio LLM se move trimestralmente. Provider líder muda. Preço cai. Modelo
 
 Política de fallback: OpenAI → Gemini → Anthropic, ordem ajustável por contexto. Quando o provider primário falha (timeout, rate limit, erro), o LiteLLM tenta o próximo. Tudo configurável via env (`AI_DEFAULT_MODEL`, `AI_FALLBACK_MODEL`).
 
+Atualização 21/09/2026, decisão André: o extrator possui cadeia própria
+`AI_EXTRATOR_MODEL=gpt-5.6-luna` →
+`AI_EXTRATOR_FALLBACK_MODEL=gemini/gemini-3.7-flash`, sem Anthropic.
+`AI_EXTRATOR_ALLOW_FALLBACK=false` fixa Luna no gate dev do Incremento 2;
+o default operacional `true` mantém o fallback. Essa exceção prevalece sobre
+as descrições históricas de modelos gerais deste ADR.
+
 Cada chamada retorna `AIResponse(content, model_used, tokens_in, tokens_out, cost_usd, duration_ms, provider)` e é persistida em `AIJob` para auditoria.
 
 ## Consequências
@@ -33,7 +40,7 @@ Cada chamada retorna `AIResponse(content, model_used, tokens_in, tokens_out, cos
 - **Resiliência operacional** — falha de provider não derruba a feature; fallback é automático
 - **Diversidade econômica** — modelo barato em provider A para tarefa simples, modelo robusto em provider B para tarefa complexa
 - **Lockin reduzido** — trocar provider primário é uma config, não um refactor
-- **Custo otimizável** — agente `LegislacaoAgent` usa Gemini 2.0 Flash (janela 1M-2M tokens, custo baixo); demais usam gpt-4o-mini
+- **Custo otimizável** — escolha por agente via matriz; o extrator usa Luna/Gemini 3.7 Flash conforme decisão acima. A configuração dos outros agentes é independente.
 - **Audit unificado** — uma única forma de logar custo, tokens, modelo, provider
 - **Credenciais por tenant** — capacidade habilitada (Tenant pode trazer chave própria, custo vai pro cartão dele)
 

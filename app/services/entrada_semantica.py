@@ -347,7 +347,7 @@ def qualificar_observacoes(rows, *, data_referencia):
 
 
 
-def filtrar_ancoras(entrada, texto, inicio_fatia, fim_fatia):
+def filtrar_ancoras(entrada, texto, inicio_fatia, fim_fatia, *, especie=None):
     """Reject individual invalid anchors and dependent claims, retaining independent items."""
     rejeicoes = []
     def rejeitar(colecao, indice, item, motivo):
@@ -365,6 +365,13 @@ def filtrar_ancoras(entrada, texto, inicio_fatia, fim_fatia):
                 if start < inicio_fatia or end > fim_fatia:
                     raise ValueError("Ancora fora da fatia examinada")
                 item.trecho, item.posicao_inicio, item.posicao_fim = literal, start, end
+                if nome == "contratos" and especie and especie not in {"contrato_particular", "contrato_servico_documental"}:
+                    raise ValueError("Objeto contratual não sustentado pela espécie documental")
+                if nome == "falecimentos_declarados" and especie and especie != "comprovante_situacao_cadastral_cpf":
+                    raise ValueError("Declaração de falecimento exige a espécie Receita")
+                if especie == "comprovante_situacao_cadastral_cpf" and (
+                        nome == "participacoes" or (nome == "partes" and item.natureza == "espolio")):
+                    raise ValueError("Receita não fundamenta espólio ou representação")
                 validos.append(item)
             except ValueError as exc:
                 rejeitar(nome, indice, item, str(exc))
@@ -450,7 +457,7 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
         if raw.startswith("```"):
             raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
         parcial = EntradaExtraida.model_validate_json(raw)
-        parcial, recusadas = filtrar_ancoras(parcial, doc.extracted_text, fatia.inicio, fatia.fim)
+        parcial, recusadas = filtrar_ancoras(parcial, doc.extracted_text, fatia.inicio, fatia.fim, especie=especie)
         rejeicoes.extend({**r, "fatia": fatia.indice} for r in recusadas)
         modelos.append(response.model_used)
         # Window-local references remain scoped; same names never merge identities.
