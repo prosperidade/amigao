@@ -4,6 +4,7 @@
 **Data:** 2026-04-03 (Sprint IA-1); formalizada como ADR em 2026-05-15
 **Decisores:** tecnologia
 **Relacionado:** [`./005-pgvector-rag.md`](./005-pgvector-rag.md), [`./006-skills-procedurais.md`](./006-skills-procedurais.md)
+**Adendo:** 21/09/2026 — os nomes de modelo no corpo são os de abril–maio/2026; os vigentes estão no [adendo ao fim](#adendo--21092026-modelos-vigentes).
 
 ---
 
@@ -76,3 +77,27 @@ Cada chamada retorna `AIResponse(content, model_used, tokens_in, tokens_out, cos
 - [`./006-skills-procedurais.md`](./006-skills-procedurais.md) — skills carregadas pelo gateway antes da chamada LLM
 - [`./007-stage-output-content.md`](./007-stage-output-content.md) — schema validado para a saída dos agentes
 - [`./003-mempalace-REVOKED.md`](./003-mempalace-REVOKED.md) — memória de agente que foi revogada (substituída por RAG)
+
+## Adendo — 21/09/2026: modelos vigentes
+
+A decisão continua valendo: LiteLLM como driver único, o gateway como porta única e fallback
+entre providers. Mudou o modelo em cada ponto, e o corpo acima (gpt-4o-mini para quase tudo,
+Gemini 2.0 Flash na Legislação) deixou de descrever o sistema:
+
+- **Legislação e OCR** saíram do `gemini-2.0-flash`, que o Google descontinuou e que derrubou o
+  worker de produção. A Legislação migrou em 14/05 (Sprint W) para `gemini/gemini-2.5-flash`,
+  com `gemini/gemini-2.5-pro` acima de ~800K tokens. O OCR migrou em 02/06 para
+  `gemini/gemini-2.5-flash`.
+- **Diagnóstico** ganhou modelo próprio em 02/06: `gpt-4.1` (`AI_DIAGNOSTICO_MODEL`).
+- **Matriz agente × provider** (`app/core/model_matrix.py`, 07/06). Cada agente declara o
+  equivalente em cada provider. O primário vem sempre de setting, e o fallback só entra entre
+  providers com chave. Carga fixada (`allow_fallback=False`) falha em vez de trocar de provider.
+- **Extrator** (decisão do André, 19/09, #183): `gpt-5.6-luna` (`AI_EXTRATOR_MODEL`), com
+  fallback exclusivo `gemini/gemini-3.7-flash` (`AI_EXTRATOR_FALLBACK_MODEL`) e sem Anthropic.
+  O fallback cobre falha de provedor; erro de validação semântica da saída não troca de modelo.
+- **Demais agentes** seguem em `gpt-4o-mini` (`AI_DEFAULT_MODEL`), com fallback
+  `gemini/gemini-2.5-flash` (`AI_FALLBACK_MODEL`).
+
+A tabela viva, com a cadeia de fallback de cada agente, está em
+[`GOVERNANCA_IA.md` › Modelos por contexto](../arquitetura/GOVERNANCA_IA.md#modelos-por-contexto).
+A próxima troca de modelo atualiza aquela tabela, não este adendo.
