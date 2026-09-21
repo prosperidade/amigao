@@ -112,8 +112,10 @@ linhas "Diagnóstico" e "Demais agentes" do adendo anterior.
   decisão de 19/09.
 - **Legislação:** passa a rodar no Luna e sempre pelo gateway. O caminho que chamava a Anthropic
   direto pelo SDK (`claude_client.py`, que contrariava o "nenhum serviço chama provider
-  diretamente" desta decisão) saiu. O Gemini só lidera acima de ~800K tokens (janela de 1M) ou
-  com `LEGISLATION_USE_GEMINI_DEFAULT=true`.
+  diretamente" desta decisão) saiu. O Gemini não lidera em nenhum caso: saíram o roteamento
+  por tamanho de contexto e a flag `LEGISLATION_USE_GEMINI_DEFAULT` do Sprint O. Na avaliação
+  do André, o Gemini à frente da legislação não funcionou como se esperava. O contexto montado
+  foi limitado para caber na janela do Luna.
 - **Fora da troca:** OCR (`GEMINI_OCR_MODEL`), transcrição (`AUDIO_TRANSCRIPTION_MODEL`) e
   embeddings (`EMBEDDING_PROVIDER`), que não são agentes. Trocar embedding exige re-embedar o
   corpus.

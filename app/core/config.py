@@ -239,10 +239,8 @@ class Settings(BaseSettings):
     # dispararia cost_exceeded antes da conclusão. $0.50 cobre o pior caso
     # (input grande + 32k de saída no gpt-4.1) com folga. Roda 1×/caso.
     AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO: float = 0.50
-    # Modelo OpenAI do agente legislação (matriz agente×provider). Desde
-    # 21/09/2026 é o PRIMÁRIO da legislação; o Gemini só lidera acima do limiar de
-    # janela (GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS) ou com
-    # LEGISLATION_USE_GEMINI_DEFAULT=true. Por env.
+    # Modelo primário do agente legislação desde 21/09/2026 (André): Luna, como os
+    # demais agentes; o Gemini (GEMINI_LEGAL_MODEL) entra só como fallback. Por env.
     AI_LEGAL_MODEL_OPENAI: str = "gpt-5.6-luna"
     # White label (André 2026-05-28): provider chinês selecionável pelo consultor.
     # DeepSeek é o mais maduro para LiteLLM; trocar aqui se mudar.
@@ -309,13 +307,12 @@ class Settings(BaseSettings):
     # Sprint 0 (2026-04-23): Gemini 2.0 Flash tem janela de 1M tokens.
     # Deixamos 900K como budget de contexto (10% de margem pra system prompt + memória).
     LEGISLATION_MAX_CONTEXT_TOKENS: int = 900_000
-    # Sprint 0 — budget expandido quando o roteador escolhe o modelo de janela longa.
-    # Usado só em consultas com corpus muito grande (coletâneas completas).
-    # 21/09/2026: 1.900.000 → 940.000. O 1,9M era da janela de 2M do gemini-1.5-pro;
-    # desde o Sprint W nenhum modelo da cadeia passa de ~1M (Gemini 3.7 Flash
-    # 1.048.576, Claude Sonnet 5 1.000.000, Luna 922.000), e contexto acima disso
-    # falhava em todos os elos.
-    LEGISLATION_MAX_CONTEXT_TOKENS_LONG: int = 940_000
+    # Budget do contexto que o agente legislação monta (é o que ele usa).
+    # 21/09/2026: 1.900.000 → 750.000. O 1,9M era da janela de 2M do gemini-1.5-pro;
+    # desde o Sprint W nenhum modelo da cadeia passa de ~1M, e contexto acima disso
+    # falhava em todos os elos. 750K cabe no Luna (922K) com margem para o prompt e
+    # para o erro da estimativa de ~4 caracteres por token.
+    LEGISLATION_MAX_CONTEXT_TOKENS_LONG: int = 750_000
     LEGISLATION_MAX_RESULTS: int = 20
 
     # Sprint V (2026-04-29) — top-k chunks RAG (knowledge_catalog) injetados no
@@ -352,16 +349,12 @@ class Settings(BaseSettings):
     CLAUDE_LEGAL_TEMPERATURE: float = 0.1
 
     # Gemini (context loading de legislação)
-    # Default: Flash (1M tokens) — caso comum.
+    # Fallback Gemini do agente legislação (2º elo da cadeia, depois do Luna).
     # Sprint W (2026-05-14): migrado de gemini-2.0-flash (descontinuado para
     # contas com billing novo) para gemini-2.5-flash. 21/09/2026: gemini-3.7-flash.
+    # Saíram em 21/09 o GEMINI_LEGAL_LONG_MODEL e o limiar que punha o Gemini à
+    # frente em contexto longo.
     GEMINI_LEGAL_MODEL: str = "gemini/gemini-3.7-flash"
-    # Modelo para consultas com contexto >800K tokens, acima da janela do Luna
-    # (922K). Sprint W: gemini-1.5-pro → gemini-2.5-pro; 21/09/2026:
-    # gemini-3.7-flash (janela de 1M).
-    GEMINI_LEGAL_LONG_MODEL: str = "gemini/gemini-3.7-flash"
-    # Threshold de contexto acima do qual o roteador troca Flash → Pro.
-    GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS: int = 3_200_000  # ~800K tokens
 
     # Modelo Gemini Vision do pipeline de OCR (app/services/ocr_pdf.py).
     # 2026-06-02: migrado de gemini-2.0-flash (descontinuado pelo Google — o
@@ -371,15 +364,10 @@ class Settings(BaseSettings):
     # variável, sem mexer no código.
     GEMINI_OCR_MODEL: str = "gemini/gemini-2.5-flash"
 
-    # Sprint O — Gemini como provider default do agente legislação (decisão da sócia 2026-04-21).
-    # 21/09/2026 (André): o default passa a False — a legislação roda no Luna como os
-    # demais agentes. True devolve o Gemini à frente da cadeia.
-    LEGISLATION_USE_GEMINI_DEFAULT: bool = False
-
-    # Sprint 0 — cost guard específico do agente legislação (docs grandes no Gemini).
-    # Flash default: $0.30. Override pra Pro quando contexto >800K: $5.00.
+    # Sprint 0 — cost guard específico do agente legislação (contexto grande).
+    # O LEGISLATION_USE_GEMINI_DEFAULT (Sprint O) e o teto LONG de $5.00 saíram em
+    # 21/09/2026: a legislação roda no Luna (750K tokens ≈ $0.16); o Gemini é só fallback.
     AI_MAX_COST_PER_JOB_USD_LEGISLACAO: float = 0.30
-    AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG: float = 5.00
 
     # ------------------------------------------------------------------
     # Transcrição de áudio (dívida #103 · ADR-060)

@@ -79,35 +79,40 @@ LLM (`anthropic`/`google`/`openai`/`deepseek`; chinês default = `deepseek` via
 |---|---|---|---|
 | Extrator (entrada semântica) | `gpt-5.6-luna` (`AI_EXTRATOR_MODEL`) | só `gemini/gemini-3.7-flash` (`AI_EXTRATOR_FALLBACK_MODEL`) | `ExtratorAgent` → `entrada_semantica.py` |
 | Diagnóstico | `gpt-5.6-luna` (`AI_DIAGNOSTICO_MODEL`) | `gemini/gemini-3.7-flash` → `claude-sonnet-5` | `diagnostico.py` |
-| Legislação, contexto ≤ ~800K tokens | `gpt-5.6-luna` (`AI_LEGAL_MODEL_OPENAI`) | `gemini/gemini-3.7-flash` (`GEMINI_LEGAL_MODEL`) → `claude-sonnet-5` | `legislacao.py` |
-| Legislação, contexto > ~800K tokens | `gemini/gemini-3.7-flash` (`GEMINI_LEGAL_LONG_MODEL`) | `gpt-5.6-luna` → `claude-sonnet-5` | `legislacao.py` |
+| Legislação | `gpt-5.6-luna` (`AI_LEGAL_MODEL_OPENAI`) | `gemini/gemini-3.7-flash` (`GEMINI_LEGAL_MODEL`) → `claude-sonnet-5` | `legislacao.py` |
 | Demais agentes (redator, orçamento, acompanhamento, financeiro, marketing) | `gpt-5.6-luna` (`AI_DEFAULT_MODEL`) | `gemini/gemini-3.7-flash` (`AI_FALLBACK_MODEL`) → `claude-sonnet-5` (`AI_ANTHROPIC_FALLBACK_MODEL`) | `_build_model_list` no gateway |
 | OCR de PDF escaneado | `gemini/gemini-2.5-flash` (`GEMINI_OCR_MODEL`) | — | `ocr_pdf.py` |
 | Transcrição de áudio | `whisper-1` (`AUDIO_TRANSCRIPTION_MODEL`) | — | ADR-060 |
 
 Os defaults estão em `app/core/config.py`; qualquer um é trocado por variável de ambiente, sem
 deploy de código. O `render.yaml` declara `AI_DEFAULT_MODEL`, `AI_DIAGNOSTICO_MODEL`,
-`AI_FALLBACK_MODEL`, `LEGISLATION_USE_GEMINI_DEFAULT` e `AUDIO_TRANSCRIPTION_MODEL` com os
+`AI_FALLBACK_MODEL` e `AUDIO_TRANSCRIPTION_MODEL` com os
 mesmos valores da tabela; as demais seguem o default do `config.py`. OCR e transcrição não são
 agentes e ficaram fora da troca de 21/09. Com chave própria
 do consultor (white label, acima), vale só o modelo dele. `gpt-4o` só aparece como opção de
 chave própria, não em cadeia da casa.
 
-### Roteamento dinâmico por janela (`LegislacaoAgent`)
+### Modelo do `LegislacaoAgent`
 
-`app/agents/legislacao.py` detecta tamanho do contexto e roteia, sempre pelo gateway:
+Desde 21/09/2026 a legislação roda sempre no `gpt-5.6-luna`, pelo gateway, com a cadeia da
+matriz (`gemini/gemini-3.7-flash` → `claude-sonnet-5`). Nada põe o Gemini à frente.
 
-- Contexto ≤ 800K tokens → `gpt-5.6-luna` (janela de 922K tokens)
-- Contexto > 800K tokens → `gemini/gemini-3.7-flash` (janela de 1M)
-- `LEGISLATION_USE_GEMINI_DEFAULT=true` põe o Gemini à frente também no contexto curto. O
-  default passou a `false` em 21/09/2026.
+- **Saiu o roteamento por tamanho de contexto** (Flash → Pro acima de ~800K tokens), junto
+  com `GEMINI_LEGAL_LONG_MODEL`, `GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS` e o teto
+  `AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG`.
+- **Saiu a flag `LEGISLATION_USE_GEMINI_DEFAULT`** (Sprint O, 21/04), com o aviso de boot que
+  dependia dela.
+- **Saiu o caminho que chamava a Anthropic direto pelo SDK** (`claude_client.py`).
+- **O contexto montado cabe no Luna:** `LEGISLATION_MAX_CONTEXT_TOKENS_LONG` = 750.000
+  tokens estimados (antes 1,9M, maior que a janela de qualquer modelo da cadeia). Mesmo com
+  erro de estimativa de ~4 para ~3,5 caracteres por token, fica abaixo da janela de 922K do
+  Luna; se ainda assim um provedor recusar, o gateway passa ao próximo elo.
+- **Teto de custo:** `AI_MAX_COST_PER_JOB_USD_LEGISLACAO` = $0.30. O Luna com 750K tokens
+  custa ~$0.16. Com contexto muito grande, o fallback para Gemini ou Claude pode estourar o
+  teto e falhar com `cost_exceeded`, em vez de gastar mais (Princípio 7).
 
-O limiar é `GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS` (3.200.000 caracteres ≈ 800K tokens), e o
-contexto montado é limitado por `LEGISLATION_MAX_CONTEXT_TOKENS_LONG` (940.000 tokens desde
-21/09; antes 1,9M, maior que a janela de qualquer modelo da cadeia). O caminho que chamava a
-Anthropic direto pelo SDK (`claude_client.py`) saiu em 21/09. Os modelos 2.0-flash e 1.5-pro
-foram trocados em 14/05 (Sprint W); o 2.0-flash foi descontinuado pelo Google e derrubou o
-worker de produção. Health check no boot loga WARNING se `LEGISLATION_USE_GEMINI_DEFAULT=true` sem `GEMINI_API_KEY` configurada.
+Os modelos 2.0-flash e 1.5-pro foram trocados em 14/05 (Sprint W); o 2.0-flash foi
+descontinuado pelo Google e derrubou o worker de produção.
 
 ### Resposta padrão (`AIResponse`)
 

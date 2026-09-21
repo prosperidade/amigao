@@ -247,7 +247,7 @@ Mesma política do client-portal. Quando descongelar:
 - `POSTGRES_SERVER`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 - `REDIS_URL`
 - `MINIO_SERVER`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
-- `OPENAI_API_KEY` (e/ou `GEMINI_API_KEY` se `LEGISLATION_USE_GEMINI_DEFAULT=true`)
+- `OPENAI_API_KEY` (primário de todos os agentes); `GEMINI_API_KEY` e `ANTHROPIC_API_KEY` habilitam o 2º e o 3º elo do fallback
 - Para waitlist: `RESEND_API_KEY`, `RESEND_AUDIENCE_ID`, `RESEND_FROM_EMAIL`
 
 Lista completa em `.env.example` (o arquivo nunca se chamou `_env.example`).

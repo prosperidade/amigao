@@ -203,8 +203,6 @@ envVarGroups:
         value: gemini/gemini-3.7-flash
       - key: AI_MAX_COST_PER_JOB_USD
         value: "0.10"
-      - key: LEGISLATION_USE_GEMINI_DEFAULT
-        value: "false"
       - key: EMBEDDING_PROVIDER
         value: openai
 

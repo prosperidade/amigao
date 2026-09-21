@@ -281,19 +281,16 @@ class TestPathIA:
 # ---------------------------------------------------------------------------
 
 class TestRoteamentoDeModelo:
-    """André, 21/09/2026: legislação no Luna pelo gateway; o Gemini só lidera acima do
-    limiar de janela ou com LEGISLATION_USE_GEMINI_DEFAULT=true. Não há mais caminho
-    que chame a Anthropic direto pelo SDK."""
+    """André, 21/09/2026: a legislação roda sempre no Luna, pelo gateway; Gemini e Claude
+    são só fallback da matriz. Nenhum caminho põe o Gemini à frente (nem contexto grande,
+    nem chave Gemini presente) e nenhum chama a Anthropic direto pelo SDK."""
 
     _PAYLOAD = {"caminho_regulatorio": "x", "legislacao_aplicavel": [], "riscos": [],
                 "confianca": "media", "justificativa": "x"}
 
-    def _modelo_chamado(self, monkeypatch, *, contexto: str = "", flag: bool = False,
-                        gemini_key: str = "") -> dict:
+    def _kwargs_da_chamada(self, monkeypatch, *, contexto: str = "", gemini_key: str = "") -> dict:
         from app.core.config import settings
-        monkeypatch.setattr(settings, "LEGISLATION_USE_GEMINI_DEFAULT", flag)
         monkeypatch.setattr(settings, "GEMINI_API_KEY", gemini_key)
-        monkeypatch.setattr(settings, "GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS", 10)
         with ExitStack() as stack:
             _enter_default_patches(stack, legislation_context=contexto)
             complete = stack.enter_context(patch("app.agents.base.complete"))
@@ -304,24 +301,28 @@ class TestRoteamentoDeModelo:
 
     def test_default_e_luna_com_matriz(self, monkeypatch):
         from app.core.config import settings
-        kwargs = self._modelo_chamado(monkeypatch, contexto="curto")
+        kwargs = self._kwargs_da_chamada(monkeypatch, contexto="curto")
         assert kwargs["model"] == settings.AI_LEGAL_MODEL_OPENAI == "gpt-5.6-luna"
         assert kwargs["agent_name"] == "legislacao"
+        assert kwargs["max_cost_override_usd"] == settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO
 
-    def test_contexto_acima_do_limiar_vai_para_janela_longa(self, monkeypatch):
-        from app.core.config import settings
-        kwargs = self._modelo_chamado(monkeypatch, contexto="x" * 11)
-        assert kwargs["model"] == settings.GEMINI_LEGAL_LONG_MODEL
-        assert kwargs["max_cost_override_usd"] == settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG
-
-    def test_flag_com_chave_gemini_devolve_gemini_a_frente(self, monkeypatch):
-        from app.core.config import settings
-        kwargs = self._modelo_chamado(monkeypatch, flag=True, gemini_key="test-g")
-        assert kwargs["model"] == settings.GEMINI_LEGAL_MODEL
-
-    def test_flag_sem_chave_gemini_fica_no_luna(self, monkeypatch):
-        kwargs = self._modelo_chamado(monkeypatch, flag=True, gemini_key="")
+    def test_contexto_grande_continua_no_luna(self, monkeypatch):
+        # >100K chars ia para o Gemini pela regra do Sprint O; não vai mais.
+        kwargs = self._kwargs_da_chamada(monkeypatch, contexto="x" * 150_000)
         assert kwargs["model"] == "gpt-5.6-luna"
+
+    def test_chave_gemini_presente_nao_poe_gemini_a_frente(self, monkeypatch):
+        kwargs = self._kwargs_da_chamada(monkeypatch, contexto="curto", gemini_key="test-g")
+        assert kwargs["model"] == "gpt-5.6-luna"
+
+    def test_budget_de_contexto_cabe_na_janela_do_luna(self):
+        import litellm
+
+        from app.core.config import settings
+        janela = litellm.model_cost["gpt-5.6-luna"]["max_input_tokens"]
+        # Estimativa do legislation_service é ~4 chars/token; texto jurídico em português
+        # pode render ~3,5. O budget com esse erro ainda precisa caber na janela.
+        assert janela > settings.LEGISLATION_MAX_CONTEXT_TOKENS_LONG * 4 / 3.5
 
 
 class TestPathRulesBased:
