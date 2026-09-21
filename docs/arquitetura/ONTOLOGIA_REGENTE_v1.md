@@ -1,5 +1,19 @@
 # Ontologia Regente v1 — vocabulário para a migração do Incremento 2
 
+## Adendo de 18/09/2026 — proposta encaminhada pelo André
+
+**Aprovação: André. Domínio: Ísis. Estado: proposta; suficiência documental PENDENTE-ISIS.**
+
+| Nome | Definição e suporte | Limites e relações |
+|---|---|---|
+| `comprovante_situacao_cadastral_cpf` | Espécie documental da Receita. Sustenta situação cadastral na data da consulta e falecimento declarado com ano. | Não sustenta data exata, causa, sucessão ou inventário. Família de extração cadastral. |
+| `falecimento_declarado` | Predicado sustentável dessa espécie: sujeito pessoa; valor ano/data conforme suporte; fonte e data da consulta preservadas. | O comprovante da Receita sustenta ano, não data exata. Ausência de ano ou data da consulta fica explícita. |
+| `pessoa.estado = falecimento_declarado` | Estado próprio de domínio apoiado em observação versionada. | K/R independentes na evidência de fundamento. Não implica espólio; este exige fundamento próprio em contrato/inventário. Não é campo do Client. |
+
+**PENDENTE-ISIS:** decidir se TITULAR FALECIDO da Receita basta para o gate ou se
+é necessária certidão de óbito. A implementação preserva a declaração; não
+antecipa aprovação de domínio nem cria sucessão ou representação a partir dela.
+
 **Base inspecionada:** `b6df7e64830361e52c84d6276c92549419d77f72`, 17/09/2026. **Estado:** proposta canônica de arquitetura; decisões de domínio indicadas como PENDENTE-ISIS. Não é schema implementado nem homologação jurídica. Tenant continua sendo a **consultoria**.
 
 Referência de execução: [Plano v1.1, §3, §4.3, §4.4 e §8](PLANO_DIRETOR_REGENTE_v1.1.md#3-os-quatro-contratos-que-fecham-a-arquitetura). Entregas associadas: [cobertura](COBERTURA_MVP_v1.md) e [insumos, padrões e perguntas](INVENTARIO_INSUMOS_E_PADROES_v1.md).

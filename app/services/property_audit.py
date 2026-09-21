@@ -241,10 +241,15 @@ def audit_property(
     """
     findings: list[AuditFinding] = []
     extracted = extracted_data or {}
+    # Legacy envelope adapter; nested fields are the payload, not a second source.
+    if isinstance(extracted.get("extracted_fields"), dict):
+        extracted = extracted["extracted_fields"]
 
     # --- 1. Cruzamento de áreas (Matrícula × CAR × CCIR/ITR / CAR × CCIR) --
     # Cada par tem código próprio no catálogo (PROMPT_5 Onda A).
     area_doc = property_data.get("area_documental_ha")
+    if area_doc is None:
+        area_doc = extracted.get("area_documental_ha")
     area_car = property_data.get("car_area_ha") or property_data.get("area_grafica_ha") or extracted.get("car_area_ha")
     area_ccir = property_data.get("ccir_area_ha") or extracted.get("ccir_area_ha")
     area_itr = property_data.get("itr_area_ha") or extracted.get("itr_area_ha")
@@ -265,6 +270,13 @@ def audit_property(
         if a is None or b is None:
             continue
         cmp = compare_areas(a, b, tolerance_pct=tolerance_pct)
+        if cmp.diff_pct is None:
+            findings.append(AuditFinding(codigo_alerta=codigo, familia="area", grade=GRADE_ATENCAO,
+                tema=f"área ({tema})", descricao="Confronto não calculável: medida inválida ou zero.",
+                impacto="Revisar a medida na fonte antes de comparar.",
+                evidencia={"area_a_ha": str(a), "area_b_ha": str(b), "estado": "nao_determinado"},
+                documentos_cruzados=docs))
+            continue
         # Onda C: SEMPRE emite finding quando há cruzamento real (ambos lados
         # presentes). A régua decide o grau (informativo/atencao/alto/critico);
         # divergência nunca é suprimida. Áreas iguais (≤ 1%) viram "informativo"

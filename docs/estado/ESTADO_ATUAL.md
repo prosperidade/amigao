@@ -1,5 +1,49 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso: fallback do extrator autorizado para Gemini 3.7 Flash.**
+Primario gpt-5.6-luna; fallback exclusivo gemini/gemini-3.7-flash via gateway.
+Substitui a decisao anterior sem fallback. Gate real continua aberto.
+
+**Pulso 19/09/2026 — modelo autorizado e implementado na worktree.**
+André transferiu a alteração do modelo para esta frente: AI_EXTRATOR_MODEL=gpt-5.6-luna,
+via ai_gateway, sem fallback, gate somente em dev. Smoke real com prompt sintético
+passou em uma tentativa (13/8 tokens); temperatura 1 exigida pela API. Decisão em
+CLAUDE.md, .env.example e ADR-071. Triagem 20+1 publicada no PR #183; G1–G9
+restaurados e conferidos no artefato do CI `92b37d3`: seis jobs aprovados,
+2.080 testes backend e 169 frontend; Ruff aprovado, mypy consultivo com 978 erros.
+Jobs reais dev 154–156 falharam na validação de âncoras, zero observações.
+Auditoria da resposta/custo em falha e recuperação literal de layout corrigidas;
+o job 156 recusou trecho repetido sem posição, mantendo a proteção.
+Extração dos nove textos ainda não comprovada. Novas regressões seguem ao CI.
+
+**Pulso 19/09/2026 — migrations e associação dev comprovadas; extração bloqueada.**
+amigao_db 127.0.0.1:15432 em 071es004. Nove documentos preparados no DB dev,
+associados pela tela após login real, mantidos em 2 recargas e 2 novas sessões.
+Observações e jobs do extrator no tenant do gate: **0**, conferidos por SELECT dev.
+Revisão automática bloqueou o percurso que enviaria textos sensíveis ao LLM sem
+autorização explícita do provedor. Não houve contorno; retomada preparada para
+OpenAI/gpt-4o-mini, sem outros provedores. Gate segue aberto. Regressão focal:
+1 teste passou; TypeScript e build concluídos. Suíte reservada ao CI do PR rascunho.
+
+**Pulso 19/09/2026 — MCP autenticado, recorte com texto real em memória.**
+SELECT dos docs 546–551 e 557–559 concluído via supabase-prod-ro. Nove hashes e
+tamanhos conferidos localmente e registrados no gate; nenhum texto salvo em
+arquivo/fixture/banco local. Recorte de taxonomia encontrou e corrigiu marcador
+de certidão eletrônica; quatro identidades número+CNS separadas. Schema da Receita
+e limites de representação exercitados. Sem LLM/persistência/navegador neste
+recorte; gate integral aberto, suficiência da Receita PENDENTE-ISIS. Sem suíte,
+escrita/migration de produção ou merge.
+
+**Pulso 18/09/2026 — Incremento 2 em `wt-entrada-semantica`, sem PR/merge.**
+Blocos de entrada contratual e Receita implementados no código em elaboração:
+schema + skill + observação durável + staging referenciado, sem escrita no Client.
+Adendo proposto da Ontologia nomeia espécie CPF/Receita e falecimento declarado;
+suficiência da Receita no gate é PENDENTE-ISIS. Quatro matrículas ELODI são objetos
+distintos por número e serventia. [Gate](../auditoria/GATE_INCREMENTO2.md) todo aberto:
+MCP não exposto, zero leitura de produção, nenhuma fixture real recebida.
+Após orientação de não rodar suíte, somente sintaxe/lint focal; sem testes,
+migrations ou chamadas LLM nesta rodada. Motor e integração permanecem incompletos.
+
 **Revisão pré-merge de 17/09/2026:** documentos independentes no PR #173; #172
 retargetado para a branch documental, sem merge. Os nove itens do §8 agora têm
 um teste autenticado único, com [relatório por prova](../auditoria/GATE_INCREMENTO1_PR172.md).

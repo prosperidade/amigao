@@ -1,6 +1,5 @@
 """Authorized review and resumption endpoints; no job-completed shortcut."""
 
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.evidence import AgentExecution, EvidenceInvalidation, EvidenceReview, EvidenceVersion
+from app.models.evidence import AgentExecution, EvidenceInvalidation, EvidenceReview, EvidenceVersion, RetornoColeta
 from app.models.process import Process
 from app.models.user import User
 from app.schemas.evidence import ReviewRequest
@@ -23,6 +22,54 @@ UserDep = Annotated[User, Depends(get_current_internal_user)]
 class ResumeRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     recompute_stale: bool = False
+
+
+class ReclassificacaoRequest(BaseModel):
+    tipo: str
+    motivo: str = Field(min_length=1)
+    expected_version: int = Field(ge=0)
+
+
+@router.post("/cases/{process_id}/documents/{document_id}/associate")
+def associar_documento(process_id: int, document_id: int, db: Db, user: UserDep):
+    from app.models.document import Document
+    authorize(db, user.tenant_id, user.id, process_id)
+    lock_case(db, user.tenant_id, process_id)
+    doc = db.query(Document).filter_by(id=document_id, tenant_id=user.tenant_id,
+        deleted_at=None).with_for_update().first()
+    if doc is None:
+        raise HTTPException(404, "Documento não encontrado")
+    if doc.process_id not in (None, process_id):
+        raise HTTPException(409, "Documento já pertence a outro caso")
+    doc.process_id = process_id
+    db.commit()
+    return {"document_id": doc.id, "process_id": process_id}
+
+
+@router.get("/cases/{process_id}/documents")
+def documentos_do_caso(process_id: int, db: Db, user: UserDep):
+    from app.models.document import Document
+    from app.services.entrada_semantica import classificacao_atual
+    authorize(db, user.tenant_id, user.id, process_id)
+    result = []
+    for doc in db.query(Document).filter_by(tenant_id=user.tenant_id, process_id=process_id, deleted_at=None).order_by(Document.id):
+        c = classificacao_atual(db, doc)
+        result.append({"id": doc.id, "filename": doc.original_file_name,
+            "tipo": (c.tipo_revisado or c.tipo_proposto) if c else doc.document_type,
+            "classificacao_versao": c.versao if c else 0, "review_required": doc.review_required})
+    return result
+
+
+@router.post("/cases/{process_id}/documents/{document_id}/reclassify")
+def reclassificar_documento(process_id: int, document_id: int, body: ReclassificacaoRequest, db: Db, user: UserDep):
+    from app.schemas.entrada_semantica import EspecieDocumental
+    from app.services.entrada_semantica import reclassificar
+    if body.tipo not in EspecieDocumental._value2member_map_:
+        raise HTTPException(422, "Espécie documental inválida")
+    result = reclassificar(db, user.tenant_id, user.id, process_id, document_id,
+        body.tipo, body.motivo, body.expected_version)
+    db.commit()
+    return result
 
 
 @router.get("/cases/{process_id}/sources/{object_id}/versions/{version}")
@@ -89,15 +136,16 @@ def return_to_collection(process_id: int, db: Db, user: UserDep):
     authorize(db, user.tenant_id, user.id, process_id)
     lock_case(db, user.tenant_id, process_id, wait=False)
     pending = db.query(EvidenceInvalidation).filter(EvidenceInvalidation.tenant_id == user.tenant_id,
-        EvidenceInvalidation.process_id == process_id, EvidenceInvalidation.returned_at.is_(None)).all()
+        EvidenceInvalidation.process_id == process_id, EvidenceInvalidation.returned_at.is_(None),
+        ~db.query(RetornoColeta.id).filter(RetornoColeta.invalidacao_id == EvidenceInvalidation.id,
+            RetornoColeta.tenant_id == user.tenant_id, RetornoColeta.process_id == process_id).exists()).all()
     if not pending:
         raise HTTPException(409, "Não há pendência de coleta dependente")
     case = db.query(Process).filter(Process.id == process_id, Process.tenant_id == user.tenant_id).one()
     previous = case.macroetapa
     case.macroetapa = "coleta_documental"
     for item in pending:
-        item.returned_at = datetime.now(UTC)
-        item.returned_by_user_id = user.id
-        item.reason = {**item.reason, "previous_stage": previous, "requested_stage": case.macroetapa}
+        db.add(RetornoColeta(tenant_id=user.tenant_id, process_id=process_id,
+            invalidacao_id=item.id, author_id=user.id, previous_stage=previous))
     db.commit()
     return {"macroetapa": case.macroetapa, "previous_stage": previous}

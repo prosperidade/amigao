@@ -190,7 +190,7 @@ MOTIVO_AREA_DE_OUTRO_OBJETO = (
 
 # Frente F (ADR-066) — vocabulário fechado do campo DERIVADO `vigencia`.
 # Nunca escrito pelo LLM; só por :func:`derivar_vigencia`.
-VIGENCIA_VIGENTE = "vigente"
+VIGENCIA_VIGENTE = "vigente_segundo_o_material"
 VIGENCIA_BAIXADO = "baixado"
 VIGENCIA_RETIFICADO = "retificado"
 VIGENCIA_EXPIRADO = "expirado"
@@ -468,7 +468,13 @@ def aplicar_alteracoes(observacoes: list[Observacao]) -> None:
     Ato que não encontra o alvo citado não some nem vira erro: continua uma
     observação visível, só sem o grafo fechado do outro lado.
     """
-    por_chave = {o.chave: o for o in observacoes if o.chave}
+    por_chave = {}
+    ambiguas = set()
+    for o in observacoes:
+        if o.chave in por_chave:
+            ambiguas.add(o.chave)
+        elif o.chave:
+            por_chave[o.chave] = o
     for obs in observacoes:
         if obs.tipo not in (TIPO_BAIXA, TIPO_ADITIVO):
             continue
@@ -481,6 +487,11 @@ def aplicar_alteracoes(observacoes: list[Observacao]) -> None:
         campo = "baixado_por" if obs.tipo == TIPO_BAIXA else "retificado_por"
         for chave in citados:
             alvo = por_chave.get(chave)
+            if chave in ambiguas:
+                continue
+            if alvo and any(obs.atributos.get(k) is not None and alvo.atributos.get(k) != obs.atributos[k]
+                            for k in ("documento_id", "matricula", "serventia")):
+                continue
             if alvo is None or alvo is obs or alvo.tipo in (TIPO_BAIXA, TIPO_ADITIVO):
                 continue
             if alvo.tipo not in TIPOS_COM_VIGENCIA:
@@ -492,6 +503,9 @@ def aplicar_alteracoes(observacoes: list[Observacao]) -> None:
                 # baixado por AV.14", sugerindo a venda anulada. Só tipos com
                 # estado de vigência são alvo válido de baixa/retificação.
                 continue
+            historico = alvo.atributos.setdefault(f"{campo}_eventos", [])
+            if (obs.ato or chave) not in historico:
+                historico.append(obs.ato or chave)
             alvo.atributos[campo] = obs.ato or chave
             logger.info(
                 "observacao_registral: %s (%s) %s por %s",
@@ -587,30 +601,12 @@ def _ultima_data(bruto: Any) -> Optional[date]:
 def derivar_vigencia(
     observacoes: list[Observacao], data_referencia: Optional[date] = None
 ) -> None:
-    """Preenche `atributos["vigencia"]` de cada observação — por REGRA, nunca
-    pelo LLM. Modifica em lugar; roda depois de :func:`aplicar_alteracoes`
-    (precisa de `baixado_por`/`retificado_por` já resolvidos).
+    """Deriva estado temporal do material, nunca do silencio ou do relogio local.
 
-    Ordem de decisão, a mesma tabela do ADR-066:
-
-    1. **Alterado** — outro ato desta matrícula cita este em `altera_ato`.
-       `baixa` ⇒ `baixado`; `aditivo` ⇒ `retificado`. Referência textual,
-       igual a :func:`aplicar_alteracoes` — não é inferência.
-    2. **Prazo com termo** — só `arrendamento`/`usufruto` (:data:`_TIPOS_COM_TERMO`).
-       Termo final < `data_referencia` ⇒ `expirado`; senão `vigente`. A
-       comparação é com a data de referência do CASO, não com `date.today()`
-       — quem chama decide "vigente quando" (default: hoje, quando ninguém
-       tem uma data de caso à mão).
-    3. **Ato de origem com data** (`data_ato` presente, sem alteração
-       encontrada) ⇒ `vigente`.
-    4. **Nenhuma das anteriores** ⇒ `indeterminado`. Nunca `vigente` por
-       default — silêncio não é vigência (a mesma regra do ADR-065 para
-       "partes[0] não é o credor": o sistema só afirma o que o documento
-       sustenta).
-
-    Só tipos em :data:`TIPOS_COM_VIGENCIA` recebem o campo — `compra_venda`,
-    `baixa`, `aditivo` etc. são eventos, não estados; `vigencia` neles não
-    responderia pergunta nenhuma.
+    Baixa/aditivo explicitos preservam o vinculo ao ato. Prazo final e data
+    de origem so autorizam comparacao com data_referencia informada.
+    Sem referencia, o estado e indeterminado. VIGENCIA_VIGENTE significa
+    vigente_segundo_o_material; nao certifica estado registral atual.
     """
     ref = data_referencia
     for obs in observacoes:
@@ -638,7 +634,25 @@ def derivar_vigencia(
                         VIGENCIA_EXPIRADO if termo_final < ref else VIGENCIA_VIGENTE
                     )
                 continue
-        if obs.atributos.get("data_ato"):
+        data_literal = obs.atributos.get("data_ato")
+        data_ato = _ultima_data(data_literal)
+        if data_ato is None and isinstance(data_literal, str):
+            try:
+                data_ato = date.fromisoformat(data_literal)
+            except ValueError:
+                # Registry dates may spell the month and group the year (2.025).
+                # Parse the whole field only; never infer missing day/month/year.
+                meses = {nome: i for i, nome in enumerate(("janeiro", "fevereiro", "março",
+                    "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
+                    "novembro", "dezembro"), 1)}
+                extenso = re.fullmatch(r"\s*(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d\.?\d{3})\s*",
+                    data_literal.lower())
+                if extenso and extenso[2] in meses:
+                    try:
+                        data_ato = date(int(extenso[3].replace(".", "")), meses[extenso[2]], int(extenso[1]))
+                    except ValueError:
+                        pass
+        if data_ato is not None and ref is not None and data_ato <= ref:
             obs.atributos["vigencia"] = VIGENCIA_VIGENTE
             continue
         obs.atributos["vigencia"] = VIGENCIA_INDETERMINADO
@@ -662,7 +676,7 @@ def rl_vigente(observacoes: list[Observacao]) -> Optional[Observacao]:
     candidatas = [
         obs for obs in observacoes
         if obs.tipo == TIPO_RESERVA_LEGAL
-        and obs.vigencia not in (VIGENCIA_BAIXADO, VIGENCIA_RETIFICADO, VIGENCIA_EXPIRADO)
+        and obs.vigencia == VIGENCIA_VIGENTE
     ]
     if not candidatas:
         return None
@@ -695,30 +709,16 @@ def cadeia_titularidade(observacoes: list[Observacao]) -> list[dict[str, Any]]:
 
 
 def titular_atual(observacoes: list[Observacao]) -> Optional[dict[str, Any]]:
-    """O titular do ato de transferência de domínio mais recente.
+    """Adaptador legado sem premissas suficientes para titularidade atual.
 
-    "Sem ato posterior que o transfira" (ADR-066) é automático para o ÚLTIMO
-    ato: por definição não há nenhum depois dele nesta matrícula. Os
-    adquirentes de atos ANTERIORES aparecem em :func:`cadeia_titularidade`
-    como titulares passados (e, no caso comum, como transmitentes do ato
-    seguinte — mas isso não é verificado aqui: cada ato fala por si).
-
-    None quando nenhum ato de transferência desta matrícula nomeia
-    adquirente — a matrícula pode não ter tido transferência registrada, ou o
-    texto não distinguiu os dois lados.
+    A assinatura nao traz cobertura, identidade completa ou saldo/fracoes.
+    Retorna None; cadeia_titularidade preserva as participacoes historicas.
+    O motor cartorario exige premissas qualificadas para avaliar cadeia.
     """
-    transferencias = [
-        o for o in observacoes
-        if o.tipo in TIPOS_TRANSFERENCIA_TITULARIDADE and o.atributos.get("adquirentes")
-    ]
-    if not transferencias:
-        return None
-    ultimo = max(transferencias, key=lambda o: o.ordem)
-    return {
-        "titulares": ultimo.atributos["adquirentes"],
-        "ato": ultimo.ato,
-        "data_ato": ultimo.atributos.get("data_ato"),
-    }
+    # The legacy signature carries neither coverage nor fractions/initial balance.
+    # Keep the historical participation list via cadeia_titularidade; current
+    # ownership requires avaliar_material's qualified chain premises.
+    return None
 
 
 def area_de_outro_objeto(

@@ -304,8 +304,9 @@ def test_orcamento_esgotado_nao_transcreve_e_diz_por_que(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("versioned", [True, False])
 def test_mesmo_audio_no_rascunho_e_no_caso_usa_cache_twin(
-    seeded, db_session, monkeypatch, mock_boundaries
+    seeded, db_session, monkeypatch, mock_boundaries, versioned
 ):
     tenant, user, cli, proc = seeded
     from app.services.ocr_pdf import compute_sha256
@@ -317,26 +318,34 @@ def test_mesmo_audio_no_rascunho_e_no_caso_usa_cache_twin(
         extracted_text="[TRANSCRIÇÃO DE ÁUDIO — REUNIÃO]\n\njá transcrito",
         checksum=checksum,
     )
+    # Inc2: s transcrio literal versionada pode ser reutilizada; resumo legado no.
+    if versioned:
+        from app.services.documento_versao import registrar_leitura
+        registrar_leitura(db_session, gemeo, "já transcrito", metodo="controlled",
+            origem="transcricao", sha256_original=checksum)
+        db_session.commit()
     novo = _make_audio_doc(
         db_session, tenant_id=tenant.id, client_id=cli.id, process_id=proc.id,
         filename="reuniao-caso.m4a",
     )
 
     chamou = []
-    monkeypatch.setattr(
-        "app.services.transcricao_audio.transcrever_audio",
-        lambda *a, **kw: chamou.append(1),
-    )
-
+    def transcribe(*args, **kwargs):
+        chamou.append(1)
+        return _ok("literal retranscrito")
+    monkeypatch.setattr("app.services.transcricao_audio.transcrever_audio", transcribe)
     result = _run(doc_id=novo.id, tenant_id=tenant.id, user_id=user.id)
-
-    assert result["status"] == "cache_hit_twin"
-    assert result["twin_id"] == gemeo.id
-    assert chamou == []  # não pagou de novo
-
     refreshed = db_session.get(Document, novo.id)
     assert refreshed.ocr_status == OcrStatus.done
-    assert "já transcrito" in refreshed.extracted_text
+    if versioned:
+        assert result["status"] == "cache_hit_twin" and result["twin_id"] == gemeo.id
+        assert chamou == []
+        assert refreshed.extracted_text == gemeo.extracted_text
+    else:
+        # Unknown legacy origin cannot contaminate another document's literal.
+        assert result["status"] == "transcricao_ok"
+        assert chamou == [1]
+        assert refreshed.extracted_text == "literal retranscrito"
 
 
 def test_force_reprocessa_mesmo_com_texto(seeded, db_session, monkeypatch, mock_boundaries):

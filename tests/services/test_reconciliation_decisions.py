@@ -432,10 +432,11 @@ class TestTitularidadeMatricula:
         resultado = build_decisions(list(rows.values()))
         d = _decisao(resultado, "titularidade", "3313")
         assert d is not None
-        assert d.valor_proposto == "IZAURA DE FATIMA PEGO (ato R-11)"
+        assert d.valor_proposto is None  # Inc2: ultimo ato nao prova cadeia completa.
         nomes_na_evidencia = {e.valor_normalizado for e in d.evidencias}
         assert "SONIA INÊS GONDIM (transmitente)" in nomes_na_evidencia
-        assert "SONIA" not in d.valor_proposto
+        assert "SONIA" not in str(d.valor_proposto)
+        assert any("IZAURA" in str(e.valor_normalizado) for e in d.evidencias)
         assert rows["cv_3313_r11"].id in d.staging_ids
         # saiu do sem_agrupamento — Frente G tratava compra_venda como campo
         # sem chave natural.
@@ -449,7 +450,7 @@ class TestTitularidadeMatricula:
         resultado = build_decisions(list(rows.values()))
         d = _decisao(resultado, "titularidade", "3181")
         assert d is not None
-        assert d.valor_proposto == "ELODI AGROPECUÁRIA (ato R-09)"
+        assert d.valor_proposto is None  # Inc2: preservar papeis, nao inferir estado atual.
         assert len(d.evidencias) == 4  # 2 atos × (adquirente + transmitente)
 
 
@@ -691,7 +692,8 @@ class TestFrenteJEvidenciaTipada:
         assert titularidade is not None
         assert {e.tipo_observacao for e in titularidade.evidencias} == {"compra_venda"}
         assert all("tipo_observacao" in e.to_dict() for e in titularidade.evidencias)
-        assert "ELODI AGROPECUÁRIA" in str(titularidade.valor_proposto)
+        assert titularidade.valor_proposto is None
+        assert any("ELODI" in str(e.valor_normalizado) for e in titularidade.evidencias)
 
     def test_evidencia_sintetica_de_soma_tem_tipo_none(self, db_session):
         tenant, proc, _prop, _cli, rows = _elodi(db_session)
