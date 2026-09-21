@@ -27,7 +27,9 @@ registrados com a medição que os mostrou; nenhum foi corrigido neste PR.
     com 192 observações). Resta `capture_snapshot` relendo todas as versões do caso cinco vezes
     por requisição, resposta de ~900 KB e um GET que grava snapshot e invalidações.
   - **Correção:** ler as versões uma vez por requisição; paginar ou resumir `objects`.
-- **#258 — reextração acumula observações de execuções anteriores (aberta; decisão de domínio):**
+- **#258 — reextração acumula observações de execuções anteriores (FECHADA, branch
+  `feat/inc2-validacao-por-campo`: pelo ADR-070 a reextração é nova versão e a anterior fica superada,
+  via `EvidenceInvalidation` com `superada_por`; decisão do consultor não é superada):**
   - A identidade da observação inclui posição e predicado. Cada execução do LLM propõe itens
     um pouco diferentes, e os da execução anterior continuam vivos (não ficam `stale`). No
     tenant dev 4, o documento de origem 546 somou 33 observações em três execuções; cada

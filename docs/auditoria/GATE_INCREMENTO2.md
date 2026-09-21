@@ -334,3 +334,74 @@ execução; não é mais falha sistêmica. Próximo passo proposto, que é **dec
 aceitar o item e rejeitar só o campo opcional sem suporte no trecho (data da consulta, ano,
 referência judicial, identificador), registrando a rejeição do campo. O schema já prevê
 `data_consulta` e `ano` nulos, com a lacuna correspondente.
+
+## 21/09/2026 (noite) — validação por campo, reextração superada e Luna × Terra no #25
+
+Decisões do André após a medição acima. **Validação por campo:** a âncora resolvida é a condição
+de entrada da observação. Campo sem suporte no trecho do próprio item fica vazio, com o motivo
+registrado e conhecimento não determinado. Trecho inexistente rejeita a observação.
+**#258:** segue o ADR-070 — a reextração é nova versão e a anterior fica superada. **Medição
+adicional:** caso #25, famílias cadastral (557) e contratual (558), com `gpt-5.6-terra`, mesmo
+protocolo, comparada com o Luna.
+
+### Implementação (branch `feat/inc2-validacao-por-campo`)
+
+- Validação por campo. Os campos cobertos são: identificador (com o seu tipo), número de
+  inventário, referência judicial, ano e data da consulta. O campo sem suporte fica vazio, e a
+  observação guarda o motivo em `campos_sem_suporte`, que também aparece no relatório da extração
+  e no painel. O falecimento continua exigindo "TITULAR FALECIDO" no trecho: sem isso, a própria
+  declaração não tem suporte.
+- Reextração (#258). As observações da extração anterior do documento que a nova não reproduz
+  recebem `EvidenceInvalidation` com `superada_por` (a versão nova do relatório
+  `extracao:rejeicoes:{doc}`). Saem do envelope, e os dependentes são invalidados pelo mecanismo
+  único. A projeção de staging sem decisão sai da Conferência. Observação que o consultor já
+  decidiu (revisão no painel ou staging aceito/rejeitado) não é superada pela máquina. A superação
+  não vira pendência de coleta.
+- Gateway. A família gpt-5 aceita só temperatura 1. A adaptação agora reage à recusa, seja a do
+  LiteLLM, seja a da API, em vez de depender do nome do modelo. A primeira rodada desta medição
+  (jobs 168–170, zero tokens) pegou uma regressão: a recusa vinha da API e não era tratada.
+  Corrigida antes do push.
+
+### Protocolo
+
+O mesmo das medições anteriores. Para cada execução: um helper novo, com `INC2_MODEL` restrito a
+Luna ou Terra e fallback desligado, e um tenant novo com o caso #25 (557 e 558), cujos textos
+conferem com os hashes do SELECT MCP. Em seguida, login e extração pela tela, recarga, nova sessão,
+prova da Isis e recibo. Três execuções por modelo, intercaladas (L1, T1, L2, T2, L3, T3), tenants
+dev 11–16, SHA `48d13f5`. O mapa de modelos foi servido em loopback, pelo motivo da dívida #255
+(corrigida no #191, que ainda não está nesta branch).
+
+### Resultado
+
+| Execução | Falecimento (557) | Espólio | Inventariante | Contrato | Ref. judicial | Observações | Rejeitadas | Campos vazios | Tokens entrada/saída | US$ | s |
+|---|---|---|---|---|---|---:|---:|---:|---|---:|---:|
+| Luna 1 | ❌ trecho inexistente | ✅ | ✅ | ✅ | vazia (fora do trecho) | 21 | 1 | 1 | 9.498 / 6.647 | 0,0099 | 66 |
+| Luna 2 | ❌ trecho sem "TITULAR FALECIDO" | ✅ | ✅ | ✅ | vazia (fora do trecho) | 16 | 1 | 1 | 9.498 / 6.051 | 0,0075 | 66 |
+| Luna 3 | ✅ ano e consulta | ❌ rejeitado (2 trechos inexistentes, 2 dependentes) | ❌ | ❌ | — | 15 | 4 | 0 | 9.498 / 5.935 | 0,0073 | 64 |
+| Terra 1 | ❌ trecho sem "TITULAR FALECIDO" | ✅ | ✅ | ✅ | ✅ | 19 | 1 | 0 | 9.498 / 6.358 | 0,0953 | 110 |
+| Terra 2 | ✅ ano e consulta | ✅ | ✅ | ✅ | ✅ | 23 | 0 | 0 | 9.498 / 7.100 | 0,0871 | 136 |
+| Terra 3 | ✅ ano e consulta | ✅ | ✅ | ✅ | ✅ | 22 | 0 | 0 | 9.498 / 6.219 | 0,0765 | 121 |
+
+| Por modelo, 3 execuções | Luna | Terra |
+|---|---|---|
+| Execuções com as três provas da Isis (falecimento, espólio, inventariante) | 0/3 | 2/3 |
+| Falecimento declarado | 1/3 | 2/3 |
+| Espólio e inventariante declarados | 2/3 | 3/3 |
+| Referência judicial preservada no contrato | 0/3 | 3/3 |
+| Observações rejeitadas (total) | 6 | 1 |
+| Custo médio por execução | US$ 0,0082 | US$ 0,0863 (10,5×) |
+| Tempo médio | 65 s | 122 s (1,9×) |
+
+Em todas as execuções: offsets válidos em todas as observações, nenhuma participação confirmada
+pela extração, conhecimento não promovido, revisão humana separada. Três execuções por modelo é
+amostra pequena, e a variação entre execuções do mesmo modelo é grande.
+
+### Reextração real (#258)
+
+No tenant 11 (Luna 1) foi feita uma segunda extração pela tela (job 177, US$ 0,0087). A nova versão
+superou 15 observações do 558 e 3 do 557. Ficaram 16 e 4 observações correntes, e nenhuma projeção
+de staging aponta para observação superada. Nessa execução, o falecimento do 557 entrou com
+`data_consulta` vazia, por estar fora do trecho, e foi preservado. Pela regra anterior ele teria
+sido rejeitado.
+
+Custo real de IA desta medição (jobs 168–177): US$ 0,2923.

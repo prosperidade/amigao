@@ -22,6 +22,10 @@ worktree; não depende mais de PR separado do Claude Code.
 
 A medição dos nove textos usa Luna fixo e `AI_EXTRATOR_ALLOW_FALLBACK=false`;
 o fallback Gemini permanece na configuração operacional.
+Validação por campo (André, 21/09): âncora resolvida admite a observação; campo sem
+suporte no trecho do próprio item fica vazio com motivo e K não determinado; trecho
+inexistente rejeita. Reextração é nova versão; a anterior fica superada (ADR-070).
+Medição comparativa com `gpt-5.6-terra` autorizada só em dev (`INC2_MODEL`).
 O percurso dos nove textos reais é autorizado somente em dev. Produção:
 somente SELECT pelo MCP `supabase-prod-ro`; texto somente em memória e no
 banco de dev, nunca em arquivos/fixtures. Registrar IDs, hashes e tamanhos.
