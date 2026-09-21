@@ -161,12 +161,13 @@ def test_cost_limit_per_job_allows_cheap_call(fake_litellm):
     assert result.cost_usd == pytest.approx(0.005)
 
 
-def test_cost_limit_skipped_when_cost_is_zero_or_none(fake_litellm):
-    """Se litellm não retornar custo (cost=0.0), não bloqueia — apenas loga."""
+def test_cost_limit_skipped_when_computed_cost_is_zero(fake_litellm):
+    """Custo CALCULADO zero (preço declarado zero) não bloqueia. Preço desconhecido
+    não chega aqui: falha antes da chamada (dívida #256, testes abaixo)."""
     fake_litellm.completion.return_value = _litellm_response_stub(
         "ok", tokens_in=100, tokens_out=20
     )
-    fake_litellm.completion_cost.return_value = 0.0  # provider sem tabela de preço
+    fake_litellm.completion_cost.return_value = 0.0
 
     with patch("app.core.config.settings", _build_settings_for_complete()):
         result = complete("prompt")
@@ -454,3 +455,22 @@ def test_extrator_luna_uses_supported_temperature(fake_litellm):
                           allow_fallback=False, temperature=0)
     assert result.model_used == "gpt-5.6-luna"
     assert fake_litellm.completion.call_args.kwargs["temperature"] == 1
+
+
+def test_model_without_price_fails_before_the_call(fake_litellm):
+    """Dívida #256: sem preço o custo sairia zero e o teto por job não atuaria."""
+    fake_litellm.get_model_info.return_value = {"litellm_provider": "openai"}
+    with patch("app.core.config.settings", _build_settings_for_complete()),             pytest.raises(AIGatewayError) as caught:
+        complete("prompt", model="gpt-sem-preco")
+    assert caught.value.message.startswith("Modelo sem preço na tabela local: gpt-sem-preco")
+    fake_litellm.completion.assert_not_called()
+
+
+def test_cost_not_computed_is_an_error_not_zero(fake_litellm):
+    fake_litellm.completion.return_value = _litellm_response_stub("ok", tokens_in=100, tokens_out=20)
+    fake_litellm.completion_cost.side_effect = ValueError("model not mapped")
+    with patch("app.core.config.settings", _build_settings_for_complete()),             pytest.raises(AIGatewayError) as caught:
+        complete("prompt")
+    assert caught.value.message.startswith("Custo não calculado")
+    assert (caught.value.tokens_in, caught.value.tokens_out) == (100, 20)
+
