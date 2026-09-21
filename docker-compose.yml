@@ -1,9 +1,21 @@
+# Log de container com teto. Sem isto o json-file cresce sem limite dentro do
+# docker_data.vhdx: a api chegou a 684 MB so com restarts em loop (auditoria de disco 19/09).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     build:
       context: .
       dockerfile: docker/db/Dockerfile
     image: amigao_do_meio_ambiente-db
+    # Mesma politica da api/worker: sem ela, quando o Docker religa, api/worker
+    # sobem sem as dependencias e entram em loop (api: restart a cada ~23 s).
+    restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pgpass2026}"
@@ -23,6 +35,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Mesma politica da api/worker: sem ela, quando o Docker religa, api/worker
+    # sobem sem as dependencias e entram em loop (api: restart a cada ~23 s).
+    restart: unless-stopped
+    logging: *default-logging
     command: redis-server --requirepass ${REDIS_PASSWORD:-redispass2026}
     ports:
       - "6379:6379"
@@ -36,6 +52,10 @@ services:
 
   minio:
     image: minio/minio
+    # Mesma politica da api/worker: sem ela, quando o Docker religa, api/worker
+    # sobem sem as dependencias e entram em loop (api: restart a cada ~23 s).
+    restart: unless-stopped
+    logging: *default-logging
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: "${MINIO_ACCESS_KEY:-minioadmin}"
@@ -128,6 +148,7 @@ services:
       EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-}"
       EVOLUTION_WEBHOOK_SECRET: "${EVOLUTION_WEBHOOK_SECRET:-}"
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       db:
         condition: service_healthy
@@ -205,6 +226,7 @@ services:
       EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-}"
       EVOLUTION_WEBHOOK_SECRET: "${EVOLUTION_WEBHOOK_SECRET:-}"
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       db:
         condition: service_healthy
@@ -226,6 +248,7 @@ services:
       NEXT_TELEMETRY_DISABLED: 1
       API_BACKEND_URL: "${API_BACKEND_URL:-http://api:8000}"
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       api:
         condition: service_started
