@@ -1,14 +1,25 @@
 """Entrada única: fonte versionada → observação durável → projeção de staging."""
 import json
 import re
+from collections import Counter
 from datetime import date
 
 from fastapi import HTTPException
+from pydantic import TypeAdapter, ValidationError
 
 from app.models.document import Document, DocumentSource
 from app.models.entrada_semantica import ClassificacaoDocumento, DocumentoVersao
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
-from app.schemas.entrada_semantica import EntradaExtraida, EspecieDocumental
+from app.schemas.entrada_semantica import (
+    AtoExtraido,
+    ContratoExtraido,
+    EntradaExtraida,
+    EspecieDocumental,
+    FalecimentoDeclarado,
+    ObservacaoExtraida,
+    ParteExtraida,
+    ParticipacaoExtraida,
+)
 from app.schemas.evidence import EvidenceAttributes, EvidenceRef
 from app.services.documento_versao import registrar_fragmento, registrar_leitura
 from app.services.evidence import _capture, authorize, lock_case
@@ -134,7 +145,8 @@ def _persistir_entrada(db, doc, entrada: EntradaExtraida, *, metodo="extrator_se
                 documento_versao_id=version.id, fragmento_id=fragment.id, original_hash=version.sha256_original,
                 text_hash=version.sha256_texto, predicate=predicate, literal=trecho,
                 normalized=normalizar_conteudo(item), unit=item.get("unidade"), subject=item.get("sujeito"),
-                role=item.get("papel"), anchor=trecho, method=metodo, method_version="071.1")
+                role=item.get("papel"), anchor=trecho, position=f"[{start},{start + len(trecho)})",
+                method=metodo, method_version="071.2")
         row = _capture(db, doc.tenant_id, doc.process_id, object_id, "observacao", {
             "origin": "extrator", "attributes": attrs.model_dump(mode="json"),
             "premises": [EvidenceRef(id=source.object_id, version=source.version).model_dump()],
@@ -149,7 +161,8 @@ def _persistir_entrada(db, doc, entrada: EntradaExtraida, *, metodo="extrator_se
             db.add(ExtractedFieldStaging(tenant_id=doc.tenant_id, process_id=doc.process_id,
                 document_id=doc.id, observacao_ref=row.id, source_doc_type=especie,
                 field_name=predicate, field_value={"value": normalizar_conteudo(item) if sem_destino else item.get("valor"),
-                    "unidade": item.get("unidade"), "ancora": {"trecho": trecho, "pos": start}},
+                    "unidade": item.get("unidade"), "ancora": {
+                        "trecho": trecho, "pos": start, "start": start, "end": start + len(trecho)}},
                 tipo_observacao=tipo if sem_destino else None, atributos=normalizar_conteudo(item) if sem_destino else None,
                 target_entity=target[0] if target else None, target_field=target[1] if target else None,
                 status=ExtractedFieldStatus.pendente, created_by_agent="extrator"))
@@ -172,8 +185,11 @@ def persistir_entidades(db, doc, entrada, refs, especie):
         normalized = normalizar_conteudo(item.model_dump(mode="json"))
         if tipo == "participacao":
             normalized["estado_confirmacao"] = "declarado"
+        start = localizar_trecho(doc.extracted_text, item.trecho, item.posicao_inicio)
+        position = f"[{start},{start + len(item.trecho)})"
         matches = [r for r in refs if (r.source_record or {}).get("tipo_entrada") == tipo
-                   and r.content["attributes"]["normalized"] == normalized]
+                   and r.content["attributes"]["normalized"] == normalized
+                   and r.content["attributes"].get("position") == position]
         if len(matches) != 1:
             raise HTTPException(422, "Fundamento da entidade ausente ou ambíguo")
         return matches[0]
@@ -341,6 +357,176 @@ def qualificar_observacoes(rows, *, data_referencia):
         "limites": ["Participações extraídas são declarações; cadeia completa e poderes dependem de fundamento e revisão."]}
 
 
+ITENS = {"partes": ParteExtraida, "participacoes": ParticipacaoExtraida, "atos": AtoExtraido,
+         "observacoes": ObservacaoExtraida, "contratos": ContratoExtraido,
+         "falecimentos_declarados": FalecimentoDeclarado}
+ESPECIES_CONTRATUAIS = {"contrato_particular", "contrato_servico_documental"}
+RECEITA = "comprovante_situacao_cadastral_cpf"
+
+
+def _sem_espacos(valor):
+    return re.sub(r"\s+", "", valor)
+
+
+def _motivo_schema(exc):
+    # Messages only: Pydantic input values would copy source text into the rejection record.
+    return "; ".join(f"{'.'.join(map(str, e['loc'])) or 'item'}: {e['msg']}"
+                     for e in exc.errors(include_url=False, include_input=False))
+
+
+def _posicoes(item):
+    valores = item if isinstance(item, dict) else getattr(item, "__dict__", {})
+    return {campo: valores.get(campo) if isinstance(valores.get(campo), int) else None
+            for campo in ("posicao_inicio", "posicao_fim")}
+
+
+def _ancorar(item, nome, texto, inicio_fatia, fim_fatia, especie):
+    """Checks local to one proposed item; the ValueError message is the rejection reason."""
+    literal, start = resolver_ancora_literal(texto, item.trecho, item.posicao_inicio, item.posicao_fim)
+    end = start + len(literal)
+    if start < inicio_fatia or end > fim_fatia:
+        raise ValueError("Ancora fora da fatia examinada")
+    item.trecho, item.posicao_inicio, item.posicao_fim = literal, start, end
+    if especie and nome == "contratos" and especie not in ESPECIES_CONTRATUAIS:
+        raise ValueError("Objeto contratual não sustentado pela espécie documental")
+    if especie and nome == "falecimentos_declarados" and especie != RECEITA:
+        raise ValueError("Declaração de falecimento exige a espécie Receita")
+    if especie == RECEITA and (nome == "participacoes" or (nome == "partes" and item.natureza == "espolio")):
+        raise ValueError("Receita não fundamenta espólio ou representação")
+    # Literal support once checked only at persistence, where one item discarded the document.
+    compacto = _sem_espacos(literal)
+    if nome == "partes" and any(v and _sem_espacos(v) not in compacto for v in (item.identificador, item.inventario)):
+        raise ValueError("Identificador ou inventário ausente do trecho da parte")
+    if nome == "contratos" and any(_sem_espacos(n) not in compacto for n in item.referencia_processo_judicial):
+        raise ValueError("Referência judicial ausente do trecho contratual")
+    if nome == "falecimentos_declarados":
+        if "titular falecido" not in literal.lower():
+            raise ValueError("Falecimento declarado exige trecho TITULAR FALECIDO")
+        if item.ano is not None and not re.search(rf"\b{item.ano}\b", literal):
+            raise ValueError("Ano de falecimento ausente do trecho")
+        consulta = item.data_consulta
+        if consulta and not any(v in literal for v in (consulta.isoformat(), consulta.strftime("%d/%m/%Y"))):
+            raise ValueError("Data da consulta ausente do trecho")
+
+
+def validar_proposta(proposta, texto, inicio_fatia, fim_fatia, *, especie=None):
+    """Validate each proposed item; one invalid item never discards the others.
+
+    Schema, anchor, species and literal support are checked per item. A reference
+    to an absent or rejected party rejects only the dependent claim. Indices point
+    into the proposal, whose raw response stays in the job audit. Only a response
+    that is not a JSON object fails whole.
+    """
+    if not isinstance(proposta, dict):
+        raise ValueError("Resposta do extrator não é objeto JSON")
+    rejeicoes = []
+
+    def rejeitar(colecao, indice, item, motivo):
+        rejeicoes.append({"colecao": colecao, "indice": indice, "motivo": motivo, **_posicoes(item)})
+
+    def validar(colecao, nome, modelo, indice, bruto):
+        try:
+            item = modelo.model_validate(bruto)
+            _ancorar(item, nome, texto, inicio_fatia, fim_fatia, especie)
+        except ValidationError as exc:
+            rejeitar(colecao, indice, bruto, _motivo_schema(exc))
+        except ValueError as exc:
+            rejeitar(colecao, indice, bruto, str(exc))
+        else:
+            return item
+
+    for nome in sorted(proposta.keys() - EntradaExtraida.model_fields.keys()):
+        rejeitar(nome, None, None, "Coleção fora do schema")
+    try:
+        limites = TypeAdapter(list[str]).validate_python(proposta.get("limites") or [])
+    except ValidationError as exc:
+        limites = []
+        rejeitar("limites", None, None, _motivo_schema(exc))
+    itens, representacoes = {}, {}
+    for nome, modelo in ITENS.items():
+        brutos = proposta.get(nome)
+        itens[nome] = []
+        if brutos is None:
+            continue
+        if not isinstance(brutos, list):
+            rejeitar(nome, None, None, "Coleção deve ser lista")
+            continue
+        for indice, bruto in enumerate(brutos):
+            if nome == "contratos" and isinstance(bruto, dict) and isinstance(
+                    reps := bruto.get("representacao_declarada") or [], list):
+                # Each declared representation stands alone, like any participation.
+                colecao = f"contratos[{indice}].representacao_declarada"
+                representacoes[indice] = []
+                for j, rep in enumerate(reps):
+                    item = validar(colecao, "participacoes", ParticipacaoExtraida, j, rep)
+                    if item is not None and item.papel not in {"representante", "inventariante"}:
+                        rejeitar(colecao, j, rep, "Representação contratual exige papel representante ou inventariante")
+                    elif item is not None:
+                        representacoes[indice].append((j, item))
+                bruto = {**bruto, "representacao_declarada": []}
+            if (item := validar(nome, nome, modelo, indice, bruto)) is not None:
+                itens[nome].append((indice, item))
+
+    brutas = proposta.get("partes")
+    chaves_propostas = {p.get("chave") for p in brutas if isinstance(p, dict)} if isinstance(brutas, list) else set()
+
+    def referencia(chave, aceitas, existentes, motivo):
+        if chave in aceitas:
+            return None
+        return "Dependência de parte rejeitada" if chave in chaves_propostas and chave not in existentes else motivo
+
+    # A rejected identity cannot become the foundation of another accepted claim.
+    while True:
+        contagem = Counter(p.chave for _, p in itens["partes"])
+        unicas = {chave for chave, n in contagem.items() if n == 1}
+        pf = {p.chave for _, p in itens["partes"] if p.chave in unicas and p.natureza == "pf"}
+        invalidas = {}
+        for indice, parte in itens["partes"]:
+            if parte.chave not in unicas:
+                invalidas[indice] = "Chave de parte duplicada no documento"
+            elif parte.natureza == "espolio" and (motivo := referencia(parte.falecido_chave, pf, unicas,
+                    "Espólio exige referência à pessoa física falecida")):
+                invalidas[indice] = motivo
+        if not invalidas:
+            break
+        for indice, parte in itens["partes"]:
+            if indice in invalidas:
+                rejeitar("partes", indice, parte, invalidas[indice])
+        itens["partes"] = [(i, p) for i, p in itens["partes"] if i not in invalidas]
+    chaves = {p.chave for _, p in itens["partes"]}
+
+    def participacao(p):
+        return referencia(p.parte_chave, chaves, chaves, "Participação sem parte extraída") or (
+            p.representado_chave and referencia(p.representado_chave, chaves, chaves, "Representado sem parte extraída"))
+
+    def manter(colecao, pares, motivo):
+        mantidos = []
+        for indice, item in pares:
+            if razao := motivo(item):
+                rejeitar(colecao, indice, item, razao)
+            else:
+                mantidos.append((indice, item))
+        return mantidos
+
+    itens["participacoes"] = manter("participacoes", itens["participacoes"], participacao)
+    itens["falecimentos_declarados"] = manter("falecimentos_declarados", itens["falecimentos_declarados"],
+        lambda f: referencia(f.sujeito, pf, chaves, "Falecimento declarado exige sujeito pessoa física, não espólio"))
+    itens["observacoes"] = manter("observacoes", itens["observacoes"], lambda o:
+        "Use falecimentos_declarados para respeitar o schema e os limites da fonte"
+        if o.predicado == "falecimento_declarado" else
+        "Dependência de parte rejeitada" if o.sujeito in chaves_propostas - chaves else None)
+
+    def partes_contratuais(c):
+        return next((m for k in [*c.contratante, *c.contratado]
+                     if (m := referencia(k, chaves, chaves, "Parte contratual sem identidade extraída"))), None)
+
+    itens["contratos"] = manter("contratos", itens["contratos"], partes_contratuais)
+    for indice, contrato in itens["contratos"]:
+        contrato.representacao_declarada = [item for _, item in manter(
+            f"contratos[{indice}].representacao_declarada", representacoes.get(indice, []), participacao)]
+    return EntradaExtraida(limites=limites, **{nome: [item for _, item in pares] for nome, pares in itens.items()}), rejeicoes
+
+
 def extrair_documento(db, doc, *, manifest, on_response=None):
     """Único parser/persistidor, compartilhado pelo agente e adaptador de staging."""
     from app.core.ai_gateway import complete
@@ -368,19 +554,29 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
         raise HTTPException(422, "Cobertura documental insuficiente; nenhuma extração parcial será publicada como completa")
     colecoes = {key: [] for key in EntradaExtraida.model_fields}
     modelos = []
+    rejeicoes = []
     for fatia in fatias:
         texto = doc.extracted_text[fatia.inicio:fatia.fim]
         response = complete(texto, system=system + f"\nEspécie: {especie}. Fatia {fatia.indice}; "
-            "copie trechos literalmente desta fatia. Deixe posicao_inicio nula quando não puder calcular. "
+            f"Offsets globais em caracteres Unicode no extracted_text; fatia [{fatia.inicio}, {fatia.fim}). "
+            "Informe posicao_inicio (start, base zero) e posicao_fim (end exclusivo) além do literal. "
+            "Para trecho único, offsets podem ser nulos e serão localizados deterministicamente. "
+            "Trecho repetido exige offsets corretos; sem eles somente a observação será rejeitada. "
+            "Não estime offsets. Amplie o trecho para torná-lo único quando necessário. "
             "Não preencha campos de famílias ausentes. Não devolva Markdown.",
-            agent_name="extrator", model=settings.AI_EXTRATOR_MODEL, allow_fallback=True,
+            agent_name="extrator", model=settings.AI_EXTRATOR_MODEL, allow_fallback=settings.AI_EXTRATOR_ALLOW_FALLBACK,
             max_tokens=12000, temperature=0)
         if on_response:
             on_response(response, f"doc{doc.id}:{fatia.rotulo}")
         raw = response.content.strip()
         if raw.startswith("```"):
             raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
-        parcial = EntradaExtraida.model_validate_json(raw)
+        try:
+            proposta = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Resposta do extrator não é JSON: {exc.msg}") from exc
+        parcial, recusadas = validar_proposta(proposta, doc.extracted_text, fatia.inicio, fatia.fim, especie=especie)
+        rejeicoes.extend({**r, "fatia": fatia.indice} for r in recusadas)
         modelos.append(response.model_used)
         # Window-local references remain scoped; same names never merge identities.
         prefix = f"f{fatia.indice}:"
@@ -397,20 +593,25 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
             contrato.contratado = [prefix + key for key in contrato.contratado]
         for declaracao in parcial.falecimentos_declarados:
             declaracao.sujeito = prefix + declaracao.sujeito
-        for item in [*parcial.partes, *parcial.todas_participacoes, *parcial.atos,
-                     *parcial.observacoes, *parcial.contratos, *parcial.falecimentos_declarados]:
-            item.trecho, posicao = resolver_ancora_literal(texto, item.trecho, item.posicao_inicio)
-            item.posicao_inicio = fatia.inicio + posicao
         for key in colecoes:
             colecoes[key].extend(getattr(parcial, key))
     entrada = EntradaExtraida(**colecoes)
-    if family == "contratual" and not entrada.contratos:
+    if family == "contratual" and not entrada.contratos and not rejeicoes:
         raise HTTPException(422, "Extração contratual incompleta: contratos ausentes; não publicar sucesso vazio")
-    if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados:
+    if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados and not rejeicoes:
         raise HTTPException(422, "Extração cadastral incompleta: declaração de falecimento não preservada")
     rows = persistir_entrada(db, doc, entrada, modelo=",".join(sorted(set(modelos))))
-    doc.review_required = doc.review_required or bool(rows)
+    source = fonte_documental(db, doc)
+    _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
+            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.2",
+                "normalized": {"rejeicoes": rejeicoes, "observacoes_preservadas": len(rows)}},
+            "premises": [{"id": source.object_id, "version": source.version}],
+            "limits": ["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [],
+        })
+    doc.review_required = doc.review_required or bool(rows) or bool(rejeicoes)
     doc.extraction_status = "observações extraídas; revisão necessária" if rows else "extração sem observações"
+    if rejeicoes:
+        doc.extraction_status = f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por ancora/dependencia; revisar"
     return rows
 
 

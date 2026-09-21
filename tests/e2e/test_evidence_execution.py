@@ -457,32 +457,81 @@ def test_verified_query_preserves_scope_and_is_invalidated_by_query_revision(com
         assert build_envelope(db, case["tenant"], case["user"], case["case"]).conclusions == []
 
 
-def test_extrator_failed_anchor_preserves_paid_response(committed_case, monkeypatch):
+def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observation(committed_case, monkeypatch):
     """Controlled gateway response; invalid anchor must not erase the paid audit trail."""
     from app.core.ai_gateway import AIResponse
+    from app.core.config import settings
     from app.models.ai_job import AIJob
     factory, case = committed_case
     with factory() as db:
         doc = db.get(Document, case["doc"])
         doc.document_type = "certidao_matricula"
-        doc.extracted_text = "Controlled registry material."
+        doc.extracted_text = "Controlled registry material. Valid area."
         db.commit()
     raw = json.dumps({"observacoes": [{"predicado": "area_documental_ha", "valor": 12,
-                                      "trecho": "ANCHOR_NOT_IN_SOURCE"}]})
-    monkeypatch.setattr("app.core.ai_gateway.complete", lambda *args, **kwargs: AIResponse(
-        content=raw, model_used="controlled", provider="test", tokens_in=17, tokens_out=11,
-        cost_usd=0.002, duration_ms=1))
+                                      "trecho": "ANCHOR_NOT_IN_SOURCE"}, {"predicado": "area_documental_ha", "valor": 13, "trecho": "Valid area."}]})
+    monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_MODEL", "gpt-5.6-luna")
+    def gateway(*args, **kwargs):
+        assert kwargs["allow_fallback"] is False
+        assert kwargs["model"] == "gpt-5.6-luna"
+        return AIResponse(content=raw, model_used="controlled", provider="test", tokens_in=17, tokens_out=11,
+                          cost_usd=0.002, duration_ms=1)
+    monkeypatch.setattr("app.core.ai_gateway.complete", gateway)
     with TestClient(app) as client:
         response = client.post("/api/v1/agents/run", headers=login(client, case["email"]),
             json={"agent_name": "extrator", "process_id": case["case"]})
         assert response.status_code == 200
-        assert response.json()["status"] == "failed"
+        assert response.json()["status"] == "completed"
     with factory() as db:
         job = db.query(AIJob).filter_by(tenant_id=case["tenant"], agent_name="extrator").one()
         assert (job.tokens_in, job.tokens_out, job.model_used) == (17, 11, "controlled")
         assert job.cost_usd == 0.002
         assert json.loads(job.raw_output)[0]["raw"] == raw
-        assert db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").count() == 0
+        assert db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").count() == 1
+
+    with factory() as db:
+        report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+            object_id=f"extracao:rejeicoes:{case['doc']}").one()
+        normalized = report.content["attributes"]["normalized"]
+        assert normalized["observacoes_preservadas"] == 1
+        assert [(r["colecao"], r["indice"], r["motivo"]) for r in normalized["rejeicoes"]] == [
+            ("observacoes", 0, "Trecho extraído não existe no texto versionado")]
+
+
+def test_case_evidence_queries_do_not_grow_with_observations(committed_case):
+    """Real extractions persist ~200 observations; one review query per object took seconds."""
+    from sqlalchemy import event
+    factory, case = committed_case
+    engine = factory.kw["bind"]
+
+    def queries_for(total):
+        with factory() as db:
+            source = capture_snapshot(db, case["tenant"], case["user"], case["case"]).content["sources"][0]
+            present = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").count()
+            for i in range(present, total):
+                obj = EvidenceObject(id=f"scale-{i}", version=1, kind="observacao", origin="extrator",
+                                     premises=[source], attributes={"predicate": "area", "literal": i})
+                persist_object(db, case["tenant"], case["case"], obj)
+                review_object(db, case["tenant"], case["user"], case["case"], obj.id,
+                    ReviewRequest(expected_version=1, expected_revision=0, action="aprovar", justification="Escala"))
+            db.commit()
+        with TestClient(app) as client:
+            headers = login(client, case["email"])
+            client.get(f"/api/v1/evidence/cases/{case['case']}", headers=headers)  # snapshot settles
+            statements = []
+            def count(*_args):
+                statements.append(1)
+            event.listen(engine, "before_cursor_execute", count)
+            try:
+                response = client.get(f"/api/v1/evidence/cases/{case['case']}", headers=headers)
+            finally:
+                event.remove(engine, "before_cursor_execute", count)
+            assert response.status_code == 200
+            assert len([r for r in response.json()["objects"] if r["review"]]) == total
+            return len(statements)
+
+    assert queries_for(2) == queries_for(22)
 
 
 def test_citation_gate_recognizes_short_forms_and_every_norm_of_the_source(committed_case):

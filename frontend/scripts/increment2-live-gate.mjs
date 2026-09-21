@@ -57,10 +57,20 @@ try {
     }
     await page.locator('select').filter({ has: page.locator('option[value=extrator]') }).first().selectOption('extrator');
     console.log(`EXTRACTION_STARTED case=${caseId}`);
-    const [response] = await Promise.all([
+    let response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+    await page.waitForLoadState('networkidle');
+    [response] = await Promise.all([
       page.waitForResponse(r => r.url().endsWith('/agents/run-async') && r.request().method() === 'POST', { timeout: 1200000 }),
       page.getByRole('button', { name: 'Executar', exact: true }).click(),
     ]);
+    if (response.status() !== 409) break;
+    const conflict = await response.json();
+    if (conflict.detail !== 'Execução ou revisão concorrente; recarregue o estado') break;
+    console.log(`TRANSIENT_READ_CONFLICT case=${caseId} attempt=${attempt + 1}`);
+    await page.reload();
+    await page.locator('select').filter({ has: page.locator('option[value=extrator]') }).first().selectOption('extrator');
+    }
     if (response.status() === 409) {
       const conflict = await response.json();
       const knownConflicts = [
@@ -75,7 +85,13 @@ try {
     const data = await evidence(page, caseId);
     const execution = data.executions.find(e => e.id === run.id);
     // A success receipt must never be produced from an empty or failed extraction.
-    expect(execution?.status).toBe('completed');
+    if (execution?.status !== 'completed') {
+      receipt.executions.push({ case: caseId, id: run.id, status: execution?.status || 'missing',
+        observations: data.objects.filter(r => r.object.kind === 'observacao').length });
+      console.log('CASE_FAILED=' + JSON.stringify(receipt.executions.at(-1)));
+      await ctx.close();
+      continue; // Measure the other case too; a failed case still fails the final gate.
+    }
     const observations = data.objects.filter(r => r.object.kind === 'observacao');
     expect(observations.length).toBeGreaterThan(0);
     const identities = observations.map(r => `${r.object.id}:${r.object.version}`).sort();
@@ -84,7 +100,8 @@ try {
       observations: data.objects.filter(r => r.object.kind === 'observacao').length });
     console.log('CASE_RESULT=' + JSON.stringify(receipt.executions.at(-1)));
     await page.reload();
-    await expect(page.getByText('Observações documentais', { exact: true })).toBeVisible();
+    // Real cases carry ~200 observations; the evidence read is not instantaneous.
+    await expect(page.getByText('Observações documentais', { exact: true })).toBeVisible({ timeout: 60000 });
     const after = await evidence(page, caseId);
     expect(after.objects.length).toBe(data.objects.length);
     expect(after.objects.filter(r => r.object.kind === 'observacao')
@@ -101,7 +118,7 @@ try {
     receipt.new_session.push(caseId);
     await fresh.close();
   }
-  if (!associationOnly) {
+  if (!associationOnly && receipt.executions.every(e => e.status === 'completed')) {
   const doc = state.documents['559'];
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -123,6 +140,7 @@ try {
     stale: dependents.filter(r => r.stale).length, before_objects: before.objects.length };
   }
   console.log('GATE_RECEIPT=' + JSON.stringify(receipt));
+  if (receipt.executions.some(e => e.status !== 'completed')) process.exitCode = 1;
 } finally {
   await browser.close();
 }

@@ -215,6 +215,8 @@ class Settings(BaseSettings):
     AI_DEFAULT_MODEL: str = "gpt-5.6-luna"
     # André, 19/09/2026: extração semântica do Inc2, pelo gateway; fallback
     # exclusivo no Gemini 3.7 Flash, sem terceiro provedor (CLAUDE.md).
+    # AI_EXTRATOR_ALLOW_FALLBACK=false fixa o Luna (medição dev do Incremento 2).
+    AI_EXTRATOR_ALLOW_FALLBACK: bool = True
     AI_EXTRATOR_MODEL: str = "gpt-5.6-luna"
     AI_EXTRATOR_FALLBACK_MODEL: str = "gemini/gemini-3.7-flash"
     AI_FALLBACK_MODEL: str = "gemini/gemini-3.7-flash"

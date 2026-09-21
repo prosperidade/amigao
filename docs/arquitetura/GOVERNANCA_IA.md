@@ -39,7 +39,7 @@ Camada única de contato com provedores. **Nenhum serviço chama provider direta
 | Provider | Configuração | Default para |
 |---|---|---|
 | OpenAI | `OPENAI_API_KEY` em `.env` | Primário de todos os agentes (`gpt-5.6-luna`) |
-| Gemini (Google) | `GEMINI_API_KEY` em `.env` | Segundo elo de todos (`gemini-3.7-flash`); primário da Legislação com contexto longo; OCR (`gemini-2.5-flash`) |
+| Gemini (Google) | `GEMINI_API_KEY` em `.env` | Segundo elo de todos (`gemini-3.7-flash`); OCR (`gemini-2.5-flash`) |
 | Anthropic Claude | `ANTHROPIC_API_KEY` em `.env` | Terceiro elo (`claude-sonnet-5`), exceto no extrator. Sem a chave, o elo fica fora da cadeia |
 
 ### Fallback automático
@@ -55,7 +55,10 @@ provider.
 **Exceção do extrator (decisão do André, 19/09/2026, #183; CLAUDE.md):** a cadeia é
 `gpt-5.6-luna` → `gemini/gemini-3.7-flash`, sem terceiro provedor. O fallback cobre só falha de provedor: erro
 de validação semântica da saída (`EntradaExtraida`) não troca de modelo. O modelo efetivo de
-cada fatia fica registrado.
+cada fatia fica registrado. `AI_EXTRATOR_ALLOW_FALLBACK` (default `true`) liga essa cadeia; com
+`false` o extrator fica só no Luna e indisponibilidade falha visível — é como roda a medição
+dev do Incremento 2 (`scripts/incremento2_dev_gate.py`). Item rejeitado por âncora, schema ou
+referência entre partes é rejeição individual registrada, nunca motivo de trocar de modelo.
 
 ### White label — provider por consultor (PR LLM, 30/05)
 
@@ -122,7 +125,7 @@ Toda chamada retorna:
 @dataclass
 class AIResponse:
     content: str            # texto gerado
-    model_used: str         # ex: "gpt-4o-mini"
+    model_used: str         # ex: "gpt-5.6-luna"
     tokens_in: int
     tokens_out: int
     cost_usd: float

@@ -26,16 +26,38 @@ def normalizar_conteudo(value):
     if isinstance(value, list):
         return [normalizar_conteudo(x) for x in value]
     if isinstance(value, dict):
-        return {k: normalizar_conteudo(v) for k, v in value.items() if k not in {"trecho", "posicao_inicio"}}
+        return {k: normalizar_conteudo(v) for k, v in value.items() if k not in {"trecho", "posicao_inicio", "posicao_fim"}}
     return value
 
 
-def resolver_ancora_literal(texto, trecho, inicio=None):
+def resolver_ancora_literal(texto, trecho, inicio=None, fim=None):
     """Recover only whitespace layout; persist the exact original source span.
 
     No case, punctuation, number or word correction. Repeated occurrences still
     require an explicit position. The raw LLM response remains in the job audit.
+    Proposed offsets only disambiguate repetition: on the real Receita text the
+    model sent unique literals displaced by a constant. A literal found once is
+    located by the system; wrong offsets on a repeated one are still rejected.
     """
+    try:
+        return _resolver_ancora(texto, trecho, inicio, fim)
+    except ValueError:
+        if inicio is None and fim is None:
+            raise
+    try:
+        return _resolver_ancora(texto, trecho)
+    except ValueError as sem_posicao:
+        raise ValueError(f"Offsets nao correspondem ao trecho literal; {sem_posicao}") from None
+
+
+def _resolver_ancora(texto, trecho, inicio=None, fim=None):
+    if fim is not None:
+        if inicio is None or not 0 <= inicio < fim <= len(texto):
+            raise ValueError("Intervalo de ancora invalido")
+        literal = texto[inicio:fim]
+        if literal != trecho and re.sub(r"\s+", " ", literal).strip() != re.sub(r"\s+", " ", trecho).strip():
+            raise ValueError("Offsets nao correspondem ao trecho literal")
+        return literal, inicio
     if trecho in texto:
         pos = localizar_trecho(texto, trecho, inicio)
         return trecho, pos
