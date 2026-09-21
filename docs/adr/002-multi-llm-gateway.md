@@ -4,7 +4,7 @@
 **Data:** 2026-04-03 (Sprint IA-1); formalizada como ADR em 2026-05-15
 **Decisores:** tecnologia
 **Relacionado:** [`./005-pgvector-rag.md`](./005-pgvector-rag.md), [`./006-skills-procedurais.md`](./006-skills-procedurais.md)
-**Adendo:** 21/09/2026 — os nomes de modelo no corpo são os de abril–maio/2026; os vigentes estão no [adendo ao fim](#adendo--21092026-modelos-vigentes).
+**Adendos:** 21/09/2026 — os nomes de modelo no corpo são os de abril–maio/2026; os vigentes estão nos [adendos ao fim](#adendo--21092026-modelos-vigentes), e o segundo ([Luna em todos os agentes](#adendo-2--21092026-luna-em-todos-os-agentes)) prevalece sobre o primeiro.
 
 ---
 
@@ -103,3 +103,24 @@ Gemini 2.0 Flash na Legislação) deixou de descrever o sistema:
 A tabela viva, com a cadeia de fallback de cada agente, está em
 [`GOVERNANCA_IA.md` › Modelos por contexto](../arquitetura/GOVERNANCA_IA.md#modelos-por-contexto).
 A próxima troca de modelo atualiza aquela tabela, não este adendo.
+
+## Adendo 2 — 21/09/2026: Luna em todos os agentes
+
+**Decisão do André, 21/09/2026.** Todos os agentes passam a ter o `gpt-5.6-luna` como primário,
+com a cadeia `gpt-5.6-luna` → `gemini/gemini-3.7-flash` → `claude-sonnet-5`. Prevalece sobre as
+linhas "Diagnóstico" e "Demais agentes" do adendo anterior.
+
+- **Extrator:** mantém a cadeia de dois elos, sem Anthropic, como manda o CLAUDE.md desde a
+  decisão de 19/09.
+- **Legislação:** passa a rodar no Luna e sempre pelo gateway. O caminho que chamava a Anthropic
+  direto pelo SDK (`claude_client.py`, que contrariava o "nenhum serviço chama provider
+  diretamente" desta decisão) saiu. O Gemini não lidera em nenhum caso: saíram o roteamento
+  por tamanho de contexto e a flag `LEGISLATION_USE_GEMINI_DEFAULT` do Sprint O. Na avaliação
+  do André, o Gemini à frente da legislação não funcionou como se esperava. O contexto montado
+  foi limitado para caber na janela do Luna.
+- **Fora da troca:** OCR (`GEMINI_OCR_MODEL`), transcrição (`AUDIO_TRANSCRIPTION_MODEL`) e
+  embeddings (`EMBEDDING_PROVIDER`), que não são agentes. Trocar embedding exige re-embedar o
+  corpus.
+- **Sem `ANTHROPIC_API_KEY`**, o terceiro elo fica fora da cadeia (a matriz só usa providers com
+  chave). O agente continua rodando, só com dois elos.
+

@@ -41,7 +41,7 @@ GOVERNANCA_IA.md e ADR-002 (adendo) passam a descrever os modelos que o código 
 Na conferência apareceu uma divergência de configuração, que fica registrada aqui porque o PR
 é só de documentação:
 
-- **#254 — defaults de modelo divergentes entre `config.py`, compose e gateway (aberta):**
+- ~~**#254 — defaults de modelo divergentes entre `config.py`, compose e gateway**~~ — **FECHADA 21/09/2026** no PR da troca para o Luna: o compose usa os defaults do `config.py`, e o gateway lê `AI_ANTHROPIC_FALLBACK_MODEL`. Registro original:
   - O `docker-compose.yml` (api e worker) usa `AI_FALLBACK_MODEL=gemini/gemini-1.5-flash` como
     default. `config.py` e `render.yaml` usam `gemini/gemini-2.5-flash`, e o `.env` deste
     repositório não define a variável. No dev em Docker, o fallback dos agentes sem matriz cai
@@ -49,8 +49,9 @@ Na conferência apareceu uma divergência de configuração, que fica registrada
   - `_build_model_list` (`app/core/ai_gateway.py`) fixa `claude-haiku-4-5-20251001` no código
     em vez de ler `AI_HAIKU_MODEL`. É o padrão que já derrubou produção duas vezes quando o
     modelo foi descontinuado.
-  - **Correção:** alinhar o default do compose ao `config.py` e trocar o literal por
-    `settings.AI_HAIKU_MODEL`. Mudança de config e código, fora deste PR.
+  - **Correção prevista:** alinhar o default do compose ao `config.py` e trocar o literal por
+    uma setting. Feita no PR seguinte: o `AI_HAIKU_MODEL` saiu, e o terceiro elo é
+    `AI_ANTHROPIC_FALLBACK_MODEL=claude-sonnet-5`.
 
 ## Pulso 19/09/2026 — bloqueio de envio ao provedor
 
