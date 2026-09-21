@@ -8,6 +8,7 @@ O canal de preparação é loopback; as ações do caso usam API autenticada na 
 import hashlib
 import json
 import os
+import re
 import socket
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -21,9 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT.parent / ".env")
 os.environ.update(POSTGRES_SERVER="127.0.0.1", POSTGRES_PORT=os.environ["HOST_DB_PORT"], DATABASE_URL="",
     ENVIRONMENT="development",
-    AI_TIMEOUT_SECONDS="180",
+    AI_TIMEOUT_SECONDS="180", AI_EXTRATOR_MODEL="gpt-5.6-luna", AI_EXTRATOR_ALLOW_FALLBACK="false",
     REDIS_URL="redis://127.0.0.1:6379/15", LOG_LEVEL="CRITICAL", ALERT_WEBHOOK_URL="",
-    ANTHROPIC_API_KEY="",
+    GEMINI_API_KEY="", ANTHROPIC_API_KEY="",
     OPENAI_API_BASE="https://api.openai.com/v1", OPENAI_BASE_URL="https://api.openai.com/v1")
 os.environ.pop("MIGRATE_DATABASE_URL", None)
 
@@ -34,7 +35,7 @@ from app.core.model_matrix import resolve_agent_models
 
 # Preserve André's model decision. Fail before opening the server.
 models = resolve_agent_models("extrator", settings)
-assert models and models[0][0] == "gpt-5.6-luna" and models[0][1], (
+assert len(models) == 1 and not settings.AI_EXTRATOR_ALLOW_FALLBACK and models[0][0] == "gpt-5.6-luna" and models[0][1], (
     "Gate requires configured Luna primary with credentials")
 assert all(name in {"gpt-5.6-luna", "gemini/gemini-3.7-flash"} for name, _ in models), (
     "Gate allows only the approved Gemini 3.7 Flash fallback")
@@ -143,10 +144,18 @@ def main():
             state.update(tenant=tenant_id, user=user.id, email=user.email)
             for case in db.query(Process).filter_by(tenant_id=tenant_id):
                 state["cases"][case.title.removeprefix("Gate Inc2 caso ")] = case.id
+            receipt_text = (ROOT / "docs/auditoria/GATE_INCREMENTO2.md").read_text(encoding="utf-8")
+            expected = {m[0]: (int(m[1]), int(m[2]), m[3]) for m in re.findall(
+                r"\| (\d+) \| (\d+) \| (\d+) \| `([a-f0-9]{64})`", receipt_text)}
             for doc in db.query(Document).filter_by(tenant_id=tenant_id):
                 assert doc.storage_key.startswith(f"mcp-read/{tenant_id}/")
-                state["documents"][doc.storage_key.rsplit("/", 1)[1]] = {"id": doc.id, "case": doc.process_id,
+                origin = doc.storage_key.rsplit("/", 1)[1]
+                actual = (len(doc.extracted_text), len(doc.extracted_text.encode()), hashlib.sha256(doc.extracted_text.encode()).hexdigest())
+                assert actual == expected[origin], "Dev source differs from MCP receipt"
+                state["documents"][origin] = {"id": doc.id, "case": doc.process_id,
                     "sha256": hashlib.sha256(doc.extracted_text.encode()).hexdigest()}
+    if os.getenv("INC2_RESUME_TENANT"):
+        assert set(state["documents"]) == {"546", "547", "548", "549", "550", "551", "557", "558", "559"}
     dist = ROOT / "frontend/dist"
     assert (dist / "index.html").exists()
     app.mount("/assets", StaticFiles(directory=dist / "assets"))

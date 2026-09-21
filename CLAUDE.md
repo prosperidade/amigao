@@ -20,6 +20,8 @@ fallback; tentativas e modelo efetivo permanecem auditáveis.
 André autorizou implementar essa configuração nesta
 worktree; não depende mais de PR separado do Claude Code.
 
+A medição dos nove textos usa Luna fixo e `AI_EXTRATOR_ALLOW_FALLBACK=false`;
+o fallback Gemini permanece na configuração operacional.
 O percurso dos nove textos reais é autorizado somente em dev. Produção:
 somente SELECT pelo MCP `supabase-prod-ro`; texto somente em memória e no
 banco de dev, nunca em arquivos/fixtures. Registrar IDs, hashes e tamanhos.

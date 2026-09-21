@@ -190,6 +190,16 @@ def test_dossie_do_caso_mostra_o_que_a_consolidacao_gravou(client: TestClient, d
     assert mat["numero_ccir"] == "65077345244"
 
 
+def test_dossie_mostra_cpf_cnpj_do_cliente(client: TestClient, db_session):
+    """A Ficha lia `document_number`, que o Client nunca teve: CPF/CNPJ saía "—" para todos."""
+    _tenant, proc, _prop, _ids = _setup(db_session, "cnpj@example.com")
+    db_session.get(Client, proc.client_id).cpf_cnpj = "11.222.333/0001-81"
+    db_session.commit()
+    r = client.get(f"/api/v1/processes/{proc.id}/dossier", headers=_login(client, "cnpj@example.com"))
+    assert r.status_code == 200, r.text
+    assert r.json()["client"]["document_number"] == "11.222.333/0001-81"
+
+
 def test_imovel_com_duas_matriculas_mostra_as_duas_nunca_escolhe(client: TestClient, db_session):
     """Regra de domínio da Isis (02/08): o imóvel é a JUNÇÃO das matrículas.
 

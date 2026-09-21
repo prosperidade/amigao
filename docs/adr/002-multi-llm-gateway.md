@@ -95,6 +95,8 @@ Gemini 2.0 Flash na Legislação) deixou de descrever o sistema:
 - **Extrator** (decisão do André, 19/09, #183): `gpt-5.6-luna` (`AI_EXTRATOR_MODEL`), com
   fallback exclusivo `gemini/gemini-3.7-flash` (`AI_EXTRATOR_FALLBACK_MODEL`) e sem Anthropic.
   O fallback cobre falha de provedor; erro de validação semântica da saída não troca de modelo.
+  `AI_EXTRATOR_ALLOW_FALLBACK` (default `true`) liga a cadeia; `false` fixa o Luna (medição
+  dev do Incremento 2).
 - **Demais agentes** seguem em `gpt-4o-mini` (`AI_DEFAULT_MODEL`), com fallback
   `gemini/gemini-2.5-flash` (`AI_FALLBACK_MODEL`).
 

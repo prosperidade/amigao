@@ -162,3 +162,139 @@ def test_ancora_nao_corrige_numero_ou_pontuacao():
     from app.services.identidade_observacao import resolver_ancora_literal
     with pytest.raises(ValueError, match="não existe"):
         resolver_ancora_literal("Área:\n12,3 ha", "Área: 12.3 ha")
+
+
+def test_offset_global_disambiguates_and_invalid_item_does_not_stop_others():
+    from app.services.entrada_semantica import validar_proposta
+    text = "same | same | unique"
+    valid, rejected = validar_proposta({"observacoes": [
+        {"predicado": "x", "valor": 1, "trecho": "same"},
+        {"predicado": "y", "valor": 2, "trecho": "same", "posicao_inicio": 7, "posicao_fim": 11},
+        {"predicado": "z", "valor": 3, "trecho": "unique"}]}, text, 0, len(text))
+    assert [o.predicado for o in valid.observacoes] == ["y", "z"]
+    assert [(o.posicao_inicio, o.posicao_fim) for o in valid.observacoes] == [(7, 11), (14, 20)]
+    assert len(rejected) == 1 and "repetido" in rejected[0]["motivo"]
+
+
+def test_offset_outside_chunk_and_wrong_offset_on_repeated_literal_are_rejected():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"observacoes": [
+        {"predicado": "x", "valor": 1, "trecho": "first", "posicao_inicio": 0, "posicao_fim": 5},
+        {"predicado": "y", "valor": 2, "trecho": "last", "posicao_inicio": 6, "posicao_fim": 9}]}, "first last last", 6, 15)
+    assert not valid.observacoes and len(rejected) == 2
+    assert rejected[1]["motivo"].startswith("Offsets nao correspondem ao trecho literal; Trecho repetido")
+
+
+def test_wrong_offsets_on_unique_literal_are_replaced_by_its_only_position():
+    from app.services.entrada_semantica import validar_proposta
+    text = "Header. TITULAR FALECIDO em 2022. Fim"
+    valid, rejected = validar_proposta({"observacoes": [
+        {"predicado": "situacao", "valor": "x", "trecho": "TITULAR FALECIDO", "posicao_inicio": 5, "posicao_fim": 21}]},
+        text, 0, len(text))
+    assert not rejected
+    assert (valid.observacoes[0].posicao_inicio, valid.observacoes[0].posicao_fim) == (8, 24)
+
+
+def test_rejected_party_invalidates_only_its_dependent_claim():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"partes": [{"chave": "p", "nome": "Name", "natureza": "pf", "trecho": "missing"}],
+        "participacoes": [{"parte_chave": "p", "papel": "adquirente", "trecho": "buyer"}],
+        "observacoes": [{"predicado": "area", "valor": 1, "trecho": "area"}]}, "buyer area", 0, 10)
+    assert not valid.partes and not valid.participacoes
+    assert len(valid.observacoes) == 1 and len(rejected) == 2
+    assert rejected[1] == {"colecao": "participacoes", "indice": 0, "motivo": "Dependência de parte rejeitada",
+                           "posicao_inicio": 0, "posicao_fim": 5}
+
+
+def test_registry_rejects_contract_proposal_without_losing_valid_act():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"atos": [{"natureza": "compra", "especie": "registro", "ordem": 1, "trecho": "R-1"}],
+        "contratos": [{"objeto": "unsupported", "trecho": "contract"}]}, "R-1 contract", 0, 12, especie="certidao_matricula")
+    assert len(valid.atos) == 1 and not valid.contratos
+    assert len(rejected) == 1 and rejected[0]["colecao"] == "contratos"
+
+
+# Synthetic material only. Each case below once failed the whole document.
+DEED = "A vende a B. B adquire. C representa D. Consulta 2022."
+
+
+def test_unknown_represented_party_rejects_only_that_participation():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"partes": [
+        {"chave": "a", "nome": "A", "natureza": "pf", "trecho": "A vende"},
+        {"chave": "b", "nome": "B", "natureza": "pf", "trecho": "B adquire"},
+        {"chave": "c", "nome": "C", "natureza": "pf", "trecho": "C representa"}],
+        "participacoes": [
+        {"parte_chave": "a", "papel": "transmitente", "trecho": "A vende"},
+        {"parte_chave": "c", "papel": "representante", "representado_chave": "d", "trecho": "C representa D"},
+        {"parte_chave": "b", "papel": "adquirente", "trecho": "B adquire"}]}, DEED, 0, len(DEED))
+    assert [p.papel for p in valid.participacoes] == ["transmitente", "adquirente"]
+    assert [p.chave for p in valid.partes] == ["a", "b", "c"]
+    assert [(r["colecao"], r["indice"], r["motivo"]) for r in rejected] == [
+        ("participacoes", 1, "Representado sem parte extraída")]
+
+
+def test_schema_invalid_item_is_rejected_alone_without_echoing_input():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"partes": [
+        {"chave": "e", "nome": "SECRET NAME", "natureza": "espolio", "identificador": "1", "tipo_identificador": "cpf",
+         "falecido_chave": "a", "trecho": "D."},
+        {"chave": "a", "nome": "A", "natureza": "pf", "trecho": "A vende"}],
+        "observacoes": [{"predicado": "p", "trecho": "B adquire"}], "extra": []}, DEED, 0, len(DEED))
+    assert [p.chave for p in valid.partes] == ["a"] and not valid.observacoes
+    assert [(r["colecao"], r["indice"]) for r in rejected] == [("extra", None), ("partes", 0), ("observacoes", 0)]
+    assert "Espólio exige falecido" in rejected[1]["motivo"] and "SECRET" not in str(rejected)
+
+
+def test_duplicate_key_and_estate_of_rejected_person_cascade_to_dependents():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"partes": [
+        {"chave": "a", "nome": "A", "natureza": "pf", "trecho": "A vende"},
+        {"chave": "a", "nome": "A", "natureza": "pf", "trecho": "A vende a B"},
+        {"chave": "e", "nome": "Espólio de A", "natureza": "espolio", "falecido_chave": "a", "trecho": "D."},
+        {"chave": "c", "nome": "C", "natureza": "pf", "trecho": "C representa"}],
+        "participacoes": [{"parte_chave": "c", "papel": "inventariante", "representado_chave": "e",
+                           "trecho": "C representa D"}],
+        "falecimentos_declarados": [{"sujeito": "a", "trecho": "Consulta 2022."}]}, DEED, 0, len(DEED))
+    assert [p.chave for p in valid.partes] == ["c"] and not valid.participacoes and not valid.falecimentos_declarados
+    assert [(r["colecao"], r["indice"], r["motivo"]) for r in rejected] == [
+        ("falecimentos_declarados", 0, "Falecimento declarado exige trecho TITULAR FALECIDO"),
+        ("partes", 0, "Chave de parte duplicada no documento"),
+        ("partes", 1, "Chave de parte duplicada no documento"),
+        ("partes", 2, "Dependência de parte rejeitada"),
+        ("participacoes", 0, "Dependência de parte rejeitada")]
+
+
+def test_literal_support_is_checked_per_item_before_persistence():
+    from app.services.entrada_semantica import validar_proposta
+    text = "TITULAR FALECIDO. A, CPF 123. Contrato com processo 5286960-36.2022. A, CPF 123."
+    valid, rejected = validar_proposta({"partes": [
+        {"chave": "a", "nome": "A", "natureza": "pf", "identificador": "123", "tipo_identificador": "cpf",
+         "trecho": "A, CPF 123"},
+        {"chave": "b", "nome": "A", "natureza": "pf", "identificador": "123", "tipo_identificador": "cpf",
+         "trecho": "A, CPF 123", "posicao_inicio": 18, "posicao_fim": 28}],
+        "falecimentos_declarados": [{"sujeito": "b", "ano": 2021, "trecho": "TITULAR FALECIDO"},
+                                    {"sujeito": "b", "trecho": "TITULAR FALECIDO"}],
+        "contratos": [{"objeto": "x", "referencia_processo_judicial": ["9999999-00.2022"], "trecho": "Contrato com processo"}]},
+        text, 0, len(text), especie="comprovante_situacao_cadastral_cpf")
+    assert [p.chave for p in valid.partes] == ["b"] and len(valid.falecimentos_declarados) == 1
+    assert [(r["colecao"], r["motivo"]) for r in rejected] == [
+        ("partes", "Trecho repetido exige posição explícita; primeira ocorrência não vence"),
+        ("contratos", "Objeto contratual não sustentado pela espécie documental"),
+        ("falecimentos_declarados", "Ano de falecimento ausente do trecho")]
+
+
+def test_identifier_absent_from_party_anchor_rejects_the_party():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"partes": [
+        {"chave": "a", "nome": "A", "natureza": "pf", "identificador": "999", "tipo_identificador": "cpf",
+         "trecho": "A vende"}]}, DEED, 0, len(DEED))
+    assert not valid.partes and rejected[0]["motivo"] == "Identificador ou inventário ausente do trecho da parte"
+
+
+def test_response_that_is_not_an_object_fails_whole():
+    import pytest
+
+    from app.services.entrada_semantica import validar_proposta
+    with pytest.raises(ValueError, match="não é objeto JSON"):
+        validar_proposta([], DEED, 0, len(DEED))

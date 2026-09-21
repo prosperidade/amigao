@@ -1,7 +1,7 @@
 ---
 name: extrator/geoespacial
 agent: extrator
-version: 1.0.0
+version: 1.1.0
 description: Método geoespacial da entrada semântica ADR-071
 applies_to: {}
 ---
@@ -10,3 +10,16 @@ Extraia uma única coleção de observações. Preserve trecho literal exato e a
 
 ## Método
 Identifique formato, nome e ocorrência do arquivo. Não invente polígono, CRS, coordenadas ou área a partir de nome/menção textual. Registre que a capacidade geométrica é externa a este incremento (ADR-072); arquivo recebido não significa geometria processada. Não apresente área escrita em documento como cálculo geométrico.
+
+## Ocorrencia documental e offsets
+
+Cada item inclui trecho literal e posicao_inicio/posicao_fim: offsets globais
+no extracted_text, caracteres Unicode, base zero e fim exclusivo. Nao estime
+posicoes. Se o literal for unico, ambos podem ser nulos para localizacao
+exata pelo sistema. Se repetido, amplie o contexto ate identificar uma unica
+ocorrencia ou informe offsets exatos. Item ambiguo e rejeitado com motivo;
+outros itens independentes continuam. Preserve as referencias entre partes,
+representacao e atos; uma identidade rejeitada nao fundamenta participacao.
+Identificador, inventario, referencia judicial, ano e data de consulta
+informados precisam constar do trecho do proprio item; sem isso o item e
+rejeitado. Amplie o trecho em vez de omitir o valor.

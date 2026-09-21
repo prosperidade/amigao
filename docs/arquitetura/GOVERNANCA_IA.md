@@ -55,7 +55,10 @@ provider.
 **Exceção do extrator (decisão do André, 19/09/2026, #183):** a cadeia é `gpt-5.6-luna` →
 `gemini/gemini-3.7-flash`, sem terceiro provedor. O fallback cobre só falha de provedor: erro
 de validação semântica da saída (`EntradaExtraida`) não troca de modelo. O modelo efetivo de
-cada fatia fica registrado.
+cada fatia fica registrado. `AI_EXTRATOR_ALLOW_FALLBACK` (default `true`) liga essa cadeia; com
+`false` o extrator fica só no Luna e indisponibilidade falha visível — é como roda a medição
+dev do Incremento 2 (`scripts/incremento2_dev_gate.py`). Item rejeitado por âncora, schema ou
+referência entre partes é rejeição individual registrada, nunca motivo de trocar de modelo.
 
 ### White label — provider por consultor (PR LLM, 30/05)
 

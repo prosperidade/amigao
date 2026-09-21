@@ -63,6 +63,19 @@ def last_review(db, row):
                                            EvidenceReview.process_id == row.process_id).order_by(EvidenceReview.revision.desc()).first()
 
 
+def reviews_by_evidence(db, tenant_id, process_id):
+    """Every review of the case in one query, per evidence row in revision order.
+
+    Case-wide loops call this once instead of last_review per object: with real
+    extractions (~200 observations per case) the per-object query took seconds.
+    """
+    grouped = {}
+    for review in db.query(EvidenceReview).filter(EvidenceReview.tenant_id == tenant_id,
+            EvidenceReview.process_id == process_id).order_by(EvidenceReview.revision):
+        grouped.setdefault(review.evidence_id, []).append(review)
+    return grouped
+
+
 def persist_object(db, tenant_id, process_id, obj: EvidenceObject, *, agent=None, job_id=None, source_record=None):
     if obj.attributes.document_id is not None:
         document = db.query(Document).filter(Document.id == obj.attributes.document_id,
@@ -140,6 +153,7 @@ def invalidate_dependents(db, tenant_id, process_id):
     latest = latest_objects(db, tenant_id, process_id)
     invalid = {r.evidence_id for r in db.query(EvidenceInvalidation).filter(
         EvidenceInvalidation.tenant_id == tenant_id, EvidenceInvalidation.process_id == process_id).all()}
+    reviews = reviews_by_evidence(db, tenant_id, process_id)
     changed = True
     while changed:
         changed = False
@@ -150,7 +164,7 @@ def invalidate_dependents(db, tenant_id, process_id):
             dependencies = object_dependencies(row.content)
             for ref in dependencies:
                 premise = latest.get(ref["id"])
-                if premise is None or premise.version != ref["version"] or premise.id in invalid or (decision := last_review(db, premise)) and decision.action in {"rejeitar", "corrigir"}:
+                if premise is None or premise.version != ref["version"] or premise.id in invalid or (decision := (reviews.get(premise.id) or [None])[-1]) and decision.action in {"rejeitar", "corrigir"}:
                     broken.append(ref)
             if broken:
                 db.add(EvidenceInvalidation(tenant_id=tenant_id, process_id=process_id,
@@ -276,13 +290,14 @@ def build_envelope(db, tenant_id, user_id, process_id, snapshot_id=None):
     rows = versions(db, tenant_id, process_id)
     indexed = {(r.object_id, r.version): r for r in rows}
     latest = latest_objects(db, tenant_id, process_id)
+    reviews = reviews_by_evidence(db, tenant_id, process_id)
     envelope = ExecutionEnvelope(tenant_id=tenant_id, case_id=process_id,
         objective=snapshot.content["case"]["objective"], reference_date=snapshot.content["reference_date"],
         snapshot_id=snapshot.id, snapshot_hash=snapshot.content_hash, case=snapshot.content["case"])
     for name in ("sources", "observations"):
         for ref in snapshot.content[name]:
             row = indexed[(ref["id"], ref["version"])]
-            review = last_review(db, row)
+            review = (reviews.get(row.id) or [None])[-1]
             legacy_decision = (row.source_record or {}).get("staging_status")
             envelope.review_states.append({"id": row.object_id, "version": row.version,
                 "decision": review.action if review else legacy_decision or "proposta", "stale": row.id in invalid})
@@ -313,7 +328,7 @@ def build_envelope(db, tenant_id, user_id, process_id, snapshot_id=None):
         seen = set() if seen is None else seen
         if row.id in seen or row.id in invalid or latest[row.object_id].version != row.version:
             return False
-        review = last_review(db, row)
+        review = (reviews.get(row.id) or [None])[-1]
         if review and review.action in {"rejeitar", "corrigir"}:
             return False
         if row.kind == "conclusao":

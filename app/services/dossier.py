@@ -85,9 +85,11 @@ def generate_dossier(db: Session, process_id: int, tenant_id: int) -> ProcessDos
             client_data = {
                 "id": client.id,
                 "full_name": client.full_name,
-                "document_number": getattr(client, "document_number", None),
-                "phone": getattr(client, "phone", None),
-                "email": getattr(client, "email", None),
+                # Client has no document_number: getattr(..., None) hid that since MVP1
+                # and the Ficha showed CPF/CNPJ as "—" for every client.
+                "document_number": client.cpf_cnpj,
+                "phone": client.phone,
+                "email": client.email,
                 # Sprint 3 — selo de 3 estados por campo (Ficha 07 §3.4)
                 "field_sources": client.field_sources or {},
             }
