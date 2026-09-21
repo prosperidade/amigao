@@ -27,8 +27,6 @@ Este documento mostra o horizonte de evolução do Regente Ambiental em três ja
 
 **Ingestão de mais 3 estados** — adicionar SP, MG e TO ao corpus regulatório do `knowledge_catalog`. Atualmente: GO (3855 chunks), MS (4587), MT (13411), Federal (720). Próximo passo: 7 UFs cobertas.
 
-**Cirurgia MemPalace** — remover stub no-op e referências espalhadas (58 ocorrências em 16 arquivos). Limpeza pendente desde 23/04.
-
 **Hardening de produção** — finalizar checklist `ops/production-secrets-checklist.md` antes do primeiro deploy real com a sócia.
 
 **Reunião institucional SEMAD-GO** — preparação de demo, deck e pitch específico. Objetivo: carta de anuência ou acesso a programa piloto regulatório.
@@ -38,7 +36,6 @@ Este documento mostra o horizonte de evolução do Regente Ambiental em três ja
 - Sócia consegue rodar 1 caso real do início ao fim no painel sem precisar de suporte técnico
 - 6 skills prioritárias em produção
 - 7 UFs no `knowledge_catalog`
-- MemPalace excisado
 - Deploy de produção homologado
 
 ## Janela 2 — Médio prazo (3-6 meses)
