@@ -4,7 +4,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, PrivateAttr, model_validator
 
 from app.schemas.evidence import Contract
 
@@ -42,7 +42,17 @@ class PapelParticipacao(StrEnum):
     indeterminado = "indeterminado"
 
 
-class ParteExtraida(Contract):
+class ItemAncorado(Contract):
+    """Item proposto com trecho literal.
+
+    Campo sem suporte no trecho do próprio item fica vazio, com o motivo aqui e
+    conhecimento não determinado. Atributo privado: fora do JSON Schema enviado
+    ao modelo e do model_dump; a persistência o grava explicitamente.
+    """
+    _campos_sem_suporte: list[dict] = PrivateAttr(default_factory=list)
+
+
+class ParteExtraida(ItemAncorado):
     chave: str = Field(min_length=1)
     nome: str = Field(min_length=1)
     natureza: Literal["pf", "pj", "indeterminada", "espolio"]
@@ -67,7 +77,7 @@ class ParteExtraida(Contract):
         return self
 
 
-class ParticipacaoExtraida(Contract):
+class ParticipacaoExtraida(ItemAncorado):
     parte_chave: str
     papel: PapelParticipacao
     ato_rotulo: str | None = None
@@ -82,7 +92,7 @@ class ParticipacaoExtraida(Contract):
     estado_confirmacao: Literal["declarado", "confirmado"] = "declarado"
 
 
-class AtoExtraido(Contract):
+class AtoExtraido(ItemAncorado):
     rotulo: str | None = None
     matricula: str | None = None
     serventia: str | None = None
@@ -98,7 +108,7 @@ class AtoExtraido(Contract):
     relacao: Literal["baixa", "aditivo", "retificacao", "cancelamento"] | None = None
 
 
-class ObservacaoExtraida(Contract):
+class ObservacaoExtraida(ItemAncorado):
     predicado: str = Field(min_length=1)
     valor: str | int | float | list | dict | None
     unidade: str | None = None
@@ -109,7 +119,7 @@ class ObservacaoExtraida(Contract):
     ato_rotulo: str | None = None
 
 
-class ContratoExtraido(Contract):
+class ContratoExtraido(ItemAncorado):
     """Proposta documental, inclusive quando não há destino no cadastro."""
     contratante: list[str] = Field(default_factory=list, description="Chaves das partes contratantes")
     contratado: list[str] = Field(default_factory=list, description="Chaves das partes contratadas")
@@ -127,7 +137,7 @@ class ContratoExtraido(Contract):
         return self
 
 
-class FalecimentoDeclarado(Contract):
+class FalecimentoDeclarado(ItemAncorado):
     """Adendo proposto da Ontologia v1; suficiência documental PENDENTE-ISIS."""
     predicado: Literal["falecimento_declarado"] = "falecimento_declarado"
     sujeito: str = Field(min_length=1, description="Chave da pessoa em partes[]")

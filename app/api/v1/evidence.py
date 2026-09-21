@@ -68,8 +68,9 @@ def documentos_do_caso(process_id: int, db: Db, user: UserDep):
             "rejeicoes": (db.query(EvidenceVersion).filter_by(
                 tenant_id=user.tenant_id, process_id=process_id,
                 object_id=f"extracao:rejeicoes:{doc.id}").order_by(EvidenceVersion.version.desc()).first())})
-        report = result[-1]["rejeicoes"]
-        result[-1]["rejeicoes"] = (report.content["attributes"].get("normalized") or {}).get("rejeicoes", []) if report else []
+        report = (result[-1]["rejeicoes"].content["attributes"].get("normalized") or {}) if result[-1]["rejeicoes"] else {}
+        result[-1]["rejeicoes"] = report.get("rejeicoes", [])
+        result[-1]["campos_sem_suporte"] = report.get("campos_sem_suporte", [])
     return result
 
 
@@ -103,15 +104,17 @@ def source_version(process_id: int, object_id: str, version: int, db: Db, user: 
 def case_evidence(process_id: int, db: Db, user: UserDep):
     envelope = build_envelope(db, user.tenant_id, user.id, process_id)
     rows = []
-    invalid = {i.evidence_id for i in db.query(EvidenceInvalidation).filter(
-        EvidenceInvalidation.tenant_id == user.tenant_id, EvidenceInvalidation.process_id == process_id).all()}
+    invalidations = db.query(EvidenceInvalidation).filter(
+        EvidenceInvalidation.tenant_id == user.tenant_id, EvidenceInvalidation.process_id == process_id).all()
+    invalid = {i.evidence_id for i in invalidations}
+    superseded = {i.evidence_id for i in invalidations if "superada_por" in (i.reason or {})}
     reviews = reviews_by_evidence(db, user.tenant_id, process_id)
     for row in versions(db, user.tenant_id, process_id):
         if row.kind not in {"conclusao", "observacao"}:
             continue
         history = reviews.get(row.id, [])
         review = history[-1] if history else None
-        rows.append({"object": row.content, "stale": row.id in invalid,
+        rows.append({"object": row.content, "stale": row.id in invalid, "superseded": row.id in superseded,
                      "history": [{"action": r.action, "author": r.author_id, "justification": r.justification,
                                   "at": r.created_at, "revision": r.revision, "premises": r.premises} for r in history],
                      "revision": review.revision if review else 0,
@@ -152,6 +155,8 @@ def return_to_collection(process_id: int, db: Db, user: UserDep):
         EvidenceInvalidation.process_id == process_id, EvidenceInvalidation.returned_at.is_(None),
         ~db.query(RetornoColeta.id).filter(RetornoColeta.invalidacao_id == EvidenceInvalidation.id,
             RetornoColeta.tenant_id == user.tenant_id, RetornoColeta.process_id == process_id).exists()).all()
+    # A re-extraction superseding its previous version is not a collection pendency.
+    pending = [i for i in pending if "superada_por" not in (i.reason or {})]
     if not pending:
         raise HTTPException(409, "Não há pendência de coleta dependente")
     case = db.query(Process).filter(Process.id == process_id, Process.tenant_id == user.tenant_id).one()

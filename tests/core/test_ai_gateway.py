@@ -446,11 +446,32 @@ def test_extrator_luna_missing_key_fails_before_provider(fake_litellm):
     fake_litellm.completion.assert_not_called()
 
 
-def test_extrator_luna_uses_supported_temperature(fake_litellm):
-    fake_litellm.completion.return_value = _litellm_response_fr('{"ok":true}', 10, 5, "stop")
+@pytest.mark.parametrize("model", ["gpt-5.6-luna", "gpt-5.6-terra"])
+def test_gpt5_family_temperature_adapts_from_the_provider_refusal(fake_litellm, model):
+    """LiteLLM refuses temperature 0 for the gpt-5 family before any request (21/09/2026)."""
+    class UnsupportedParamsError(Exception):
+        pass
+    fake_litellm.UnsupportedParamsError = UnsupportedParamsError
+
+    def completion(**kwargs):
+        if kwargs["temperature"] != 1:
+            raise UnsupportedParamsError("gpt-5 models don't support temperature=0. Only temperature=1 is supported.")
+        return _litellm_response_fr('{"ok":true}', 10, 5, "stop")
+    fake_litellm.completion.side_effect = completion
     fake_litellm.completion_cost.return_value = 0.0001
-    with patch("app.core.config.settings", _build_settings_for_complete()):
-        result = complete("controlled", model="gpt-5.6-luna", agent_name="extrator",
-                          allow_fallback=False, temperature=0)
-    assert result.model_used == "gpt-5.6-luna"
-    assert fake_litellm.completion.call_args.kwargs["temperature"] == 1
+    config = _build_settings_for_complete()
+    config.AI_EXTRATOR_MODEL = model
+    with patch("app.core.config.settings", config):
+        result = complete("controlled", model=model, agent_name="extrator", allow_fallback=False, temperature=0)
+    assert result.model_used == model
+    assert [c.kwargs["temperature"] for c in fake_litellm.completion.call_args_list] == [0, 1]
+
+
+def test_unsupported_param_other_than_temperature_is_not_retried(fake_litellm):
+    class UnsupportedParamsError(Exception):
+        pass
+    fake_litellm.UnsupportedParamsError = UnsupportedParamsError
+    fake_litellm.completion.side_effect = UnsupportedParamsError("max_tokens is not supported")
+    with patch("app.core.config.settings", _build_settings_for_complete()), pytest.raises(AIGatewayError):
+        complete("controlled", model="gpt-5.6-luna", agent_name="extrator", allow_fallback=False, temperature=0)
+    assert fake_litellm.completion.call_count == 1

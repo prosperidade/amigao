@@ -298,6 +298,9 @@ def complete(
         )
         if isinstance(e, type) and issubclass(e, BaseException)
     )
+    _unsupported = getattr(litellm, "UnsupportedParamsError", None)
+    if not (isinstance(_unsupported, type) and issubclass(_unsupported, BaseException)):
+        _unsupported = ()
 
     # White label: se o consultor configurou provider+model+chave, usa SÓ a
     # combinação dele (sem fallback global — não gastar crédito do sistema na
@@ -354,15 +357,16 @@ def complete(
                 resp = None
                 for _attempt in range(_max_retries + 1):
                     try:
-                        resp = tracked_completion(litellm.completion,
-                            model=_model,
-                            messages=messages,
-                            max_tokens=mt,
-                            # Luna rejects non-default sampling temperature (API smoke, 19/09/2026).
-                            temperature=1 if _model.removeprefix("openai/") == "gpt-5.6-luna" else _temperature,
-                            timeout=_timeout,
-                            api_key=_api_key or None,
-                        )
+                        call = dict(model=_model, messages=messages, max_tokens=mt,
+                                    timeout=_timeout, api_key=_api_key or None)
+                        try:
+                            resp = tracked_completion(litellm.completion, temperature=_temperature, **call)
+                        except _unsupported as unsupported:
+                            # The gpt-5 family (Luna, Terra) accepts only temperature 1.
+                            # LiteLLM refuses before any request; both attempts stay in the trace.
+                            if _temperature == 1 or "temperature" not in str(unsupported):
+                                raise
+                            resp = tracked_completion(litellm.completion, temperature=1, **call)
                         break
                     except _transient as transient_exc:
                         if _attempt >= _max_retries:
