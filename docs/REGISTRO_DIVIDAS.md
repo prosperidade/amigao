@@ -78,6 +78,48 @@ frente (docs-only).
   de `_DEMAND_RULES`, o classificador o trata como tipo **declarado** (`intake_classifier.py:506`).
   Latente enquanto o Atendimento estiver congelado (ADR-069); fecha antes de reativá-lo.
 
+## Pulso 2026-09-21 — auditoria de disco da máquina de dev
+
+Origem: o C: da máquina de dev perdeu ~44 GB entre 28/08 e 19/09, e 34 GB disso eram o
+`docker_data.vhdx`. A evidência bruta fica fora do repositório (`C:\disk-audit\RELATORIO_DISCO.md`).
+
+- **#248 — api em loop de restart quando o Docker religa (corrigida neste PR):**
+  - **Causa:** `api`, `worker` e `client-portal` tinham `restart: unless-stopped`; `db`, `redis`
+    e `minio` não tinham política. O `depends_on: service_healthy` só vale no
+    `docker compose up`. Quando o daemon religa os containers, a api sobe sem banco, o `init_db`
+    falha e ela morre.
+  - **Frequência:** morria a cada ~23 s. Foram 35 restarts em 19/09 e ~150/h durante 7 h em 17/09.
+  - **Efeito:** o log json da api chegou a 684 MB.
+  - **Correção:** `restart: unless-stopped` nas três dependências. Vale para containers
+    recriados (`docker compose up -d --force-recreate`).
+- **#249 — worker em loop de reconexão ao redis (corrigida neste PR):** o `redis` estava parado
+  desde 12/09, porque não tinha restart. O worker registrava 27.237 linhas de ERROR por hora.
+  Mesma correção da #248.
+- **#250 — log de container sem teto (corrigida neste PR):** nenhum serviço declarava `logging:`,
+  e o `json-file` crescia sem limite dentro do disco do Docker, que não devolve espaço ao Windows.
+  - **Correção:** âncora `x-logging` (10 MB × 3) em todos os serviços, no mesmo padrão que o
+    enjoyfun já usa.
+  - Na máquina de dev, o `daemon.json` também passou a ter `log-opts` (fora do repositório).
+- **#251 — stack Supabase local órfã, deixada por sessão de agente (aberta — processo):**
+  - **O que houve:** uma sessão subiu a stack `supabase-incremental` em 10/09 (teste incremental
+    do ADR-070) e não a derrubou. A pasta do projeto sumiu, mas ficaram 11 containers com
+    `restart: always` e ~9,6 GB de imagens.
+  - **O loop:** o `supabase_vector` reiniciou 47 vezes em 19/09. A fonte `docker_logs` dele tenta
+    o Docker por TCP e recebe *connection refused*.
+  - **Já feito:** a stack foi removida em 19/09, com dump dos bancos antes.
+  - **Falta a regra:** harness que sobe Supabase local o derruba no fim (`supabase stop`). Se
+    precisar ficar de pé, usar `[analytics] enabled = false`.
+- **#252 — `client-portal` congelado sobe a cada boot do Docker (aberta):** o ADR-009 congela o
+  portal, mas o serviço tem `restart: unless-stopped` e ocupa RAM numa máquina de 12 GB. Decidir
+  entre `restart: "no"` e `profiles: ["frozen"]`.
+- **#253 — resíduos de sessões de agente dentro do Docker (aberta):**
+  - **Resíduos:**
+    - imagem `regente-ffmpeg-test:local` (1,47 GB, teste do ADR-060);
+    - volumes `wt-fechamento-contrato_*` (worktree da Frente J, já encerrada);
+    - volumes `amigo_do_meio_ambiente_*` (nome antigo do projeto).
+  - **Correção:** limpar, e adotar a regra: worktree que sobe o compose derruba com
+    `docker compose down -v` na limpeza pós-merge.
+
 ## Pulso 2026-09-17 — Incremento 1, PR #172
 
 - **#231 — cobertura de métodos-base:** extrator, legislação, redator e orçamento
@@ -100,7 +142,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 248.** (#242 a #247 abertas pela Frente B — ADR-075, 18/09.)
+> **PRÓXIMO NÚMERO LIVRE: 254.** (#248 a #253 abertas pela auditoria de disco, 21/09;
+> conferido `gh pr list`: #179, #180 e #183 abertos, nenhum usa 248+.)
+> Anterior: 248 (#242 a #247 abertas pela Frente B — ADR-075, 18/09.)
 > Anterior: 242 (#237 a #241 abertas na emenda do ADR-070, 18/09.)
 > Anterior: 237. (#233 a #236 abertas pela Frente A — ADR-070,
 > `docs/arquitetura-dados-adr070`, 17/09; conferido `gh pr list`: nenhum PR aberto; #175, mergeado, não usa 23x.)
