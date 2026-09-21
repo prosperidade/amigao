@@ -291,9 +291,10 @@ def complete(
     enforcado do mesmo jeito — job acima dele levanta AIGatewayError.
     """
     # Import tardio para evitar erro de import quando IA desabilitada
-    import litellm  # noqa: PLC0415
-
     from app.core.config import settings
+    from app.core.litellm_tabela import ModeloSemPreco, carregar, exigir_preco  # noqa: PLC0415
+
+    litellm = carregar()
 
     # Erros TRANSITÓRIOS que justificam retry (vs. erro permanente que cai pro
     # próximo provider). Coletados via getattr para tolerar variação de versão
@@ -358,6 +359,11 @@ def complete(
 
     last_error: Optional[str] = None
     for attempt_model, api_key in models:
+        try:
+            exigir_preco(litellm, attempt_model)
+        except ModeloSemPreco as exc:
+            # Dívida #256: sem preço, o custo sairia zero e o teto por job não atuaria.
+            raise AIGatewayError(message=str(exc), last_error=f"price_unknown model={attempt_model}") from exc
         try:
             t0 = time.monotonic()
 
@@ -450,18 +456,24 @@ def complete(
             tokens_in = getattr(usage, "prompt_tokens", 0) or 0
             tokens_out = getattr(usage, "completion_tokens", 0) or 0
 
-            # litellm calcula custo automaticamente quando disponível
+            # Preço conhecido é pré-condição (exigir_preco); custo não calculado é erro, não zero.
             try:
-                cost = litellm.completion_cost(completion_response=response) or 0.0
+                cost = litellm.completion_cost(completion_response=response)
             except Exception:
-                cost = 0.0
+                cost = None
+            if cost is None:
+                raise AIGatewayError(
+                    message=f"Custo não calculado para {attempt_model}; a chamada não é registrada como gratuita",
+                    last_error=f"cost_unknown model={attempt_model}",
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    model_used=attempt_model,
+                )
 
             provider = attempt_model.split("/")[0] if "/" in attempt_model else attempt_model.split("-")[0]
 
-            # Sprint -1 B — teto de custo por job.
-            # Só enforcado quando o provider informa custo (>0). Provider sem tabela de preço
-            # retorna 0.0 e o guardrail não dispara — custo real é monitorado pelos limites
-            # horário e mensal por tenant.
+            # Sprint -1 B — teto de custo por job. Desde a dívida #256 todo modelo chamado
+            # tem preço na tabela local, então o custo aqui é sempre o calculado.
             # Sprint 0 — override por chamada permite budgets maiores para casos específicos
             # (ex: legislacao com Gemini 1.5 Pro em coletâneas grandes).
             max_per_job = (
@@ -574,9 +586,10 @@ def transcribe(
     """
     import io  # noqa: PLC0415
 
-    import litellm  # noqa: PLC0415
-
     from app.core.config import settings  # noqa: PLC0415
+    from app.core.litellm_tabela import carregar  # noqa: PLC0415
+
+    litellm = carregar()
 
     if not audio_bytes:
         raise AIGatewayError(message="Áudio vazio — nada a transcrever.")

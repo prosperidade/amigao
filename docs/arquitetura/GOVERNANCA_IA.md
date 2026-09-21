@@ -42,6 +42,14 @@ Camada única de contato com provedores. **Nenhum serviço chama provider direta
 | Gemini (Google) | `GEMINI_API_KEY` em `.env` | Segundo elo de todos (`gemini-3.7-flash`); OCR (`gemini-2.5-flash`) |
 | Anthropic Claude | `ANTHROPIC_API_KEY` em `.env` | Terceiro elo (`claude-sonnet-5`), exceto no extrator. Sem a chave, o elo fica fora da cadeia |
 
+### Tabela local de modelos (dívidas #255 e #256)
+
+O sistema não baixa o mapa de modelos do LiteLLM no boot: `app/__init__.py` força o mapa embutido
+(`LITELLM_LOCAL_MODEL_COST_MAP`) e `app/core/litellm_tabela.py` registra por cima as entradas de
+`app/core/litellm_modelos.json`, copiadas do mapa upstream com data e hash. Modelo configurado fora
+da tabela reprova `tests/core/test_litellm_tabela.py`; modelo sem preço falha no gateway **antes** da
+chamada, nunca vira custo zero. Trocar ou acrescentar modelo inclui atualizar a tabela.
+
 ### Fallback automático
 
 Quando o provider primário falha (timeout, rate limit, erro do provider, modelo inexistente), o gateway tenta o próximo. Ordem padrão, decidida pelo André em 21/09/2026: `gpt-5.6-luna` → `gemini/gemini-3.7-flash` → `claude-sonnet-5`.
