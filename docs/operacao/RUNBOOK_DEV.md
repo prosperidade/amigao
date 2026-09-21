@@ -45,8 +45,8 @@ SECRET_KEY=<rodar: openssl rand -hex 32>
 # Para IA (opcional em dev):
 AI_ENABLED=true
 OPENAI_API_KEY=sk-proj-...
-GEMINI_API_KEY=AIza...      # obrigatório se LEGISLATION_USE_GEMINI_DEFAULT=true
-ANTHROPIC_API_KEY=          # opcional, fallback secundário
+GEMINI_API_KEY=AIza...      # 2º elo do fallback (gemini-3.7-flash) e OCR
+ANTHROPIC_API_KEY=          # opcional, 3º elo do fallback (claude-sonnet-5)
 ```
 
 Todas as outras variáveis têm default razoável para dev. Detalhes em `.env.example`.

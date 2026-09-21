@@ -38,8 +38,9 @@ código do agente + prompt. (Anotado como dívida documental menor.)
   busca vetorial pgvector (768d), filtros `uf`, `jurisdiction`, `agency`,
   `demand_type`, `source_type`.
 - **Busca por metadados** (dump de legislação por identificador).
-- **LiteLLM gateway** — roteamento dual (Gemini 2.5 Flash padrão / Pro p/
-  contextos grandes; ver `config.py:GEMINI_LEGAL_MODEL`/`GEMINI_LEGAL_LONG_MODEL`).
+- **LiteLLM gateway** — `gpt-5.6-luna` (`AI_LEGAL_MODEL_OPENAI`), com fallback
+  `gemini/gemini-3.7-flash` (`GEMINI_LEGAL_MODEL`) → `claude-sonnet-5` (21/09/2026; ver
+  `docs/arquitetura/GOVERNANCA_IA.md`).
 
 ## 5. Inputs aceitos
 

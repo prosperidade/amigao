@@ -185,62 +185,30 @@ class LegislacaoAgent(BaseAgent):
                 + rag_context
             )
 
-        # Sprint O — Gemini é o provider default do agente legislação.
-        # Sprint 0 (2026-04-23) — roteamento dinâmico Flash → Pro:
-        #   - Flash 2.0 (janela 1M, $0.10/1M): caso comum, ~95% das chamadas.
-        #   - Pro 1.5 (janela 2M, $2.50/1M acima de 200K): só quando contexto
-        #     legislativo extrapola o limiar (coletâneas grandes, múltiplos
-        #     diplomas grandes na resposta do search_legislation).
+        # André, 21/09/2026: a legislação roda no Luna como os demais agentes, sempre pelo
+        # gateway. Gemini 3.7 Flash e Claude Sonnet 5 entram só como fallback (matriz).
+        # Saiu o roteamento que punha o Gemini à frente (Sprint O e contexto longo): o
+        # contexto montado cabe na janela do Luna (LEGISLATION_MAX_CONTEXT_TOKENS_LONG), e se
+        # um provedor falhar, inclusive por janela, o gateway passa ao próximo elo.
         context_chars = len(legislation_context) if legislation_context else 0
-        needs_long_window = context_chars > settings.GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS
-        gemini_available = (
-            settings.LEGISLATION_USE_GEMINI_DEFAULT and bool(settings.GEMINI_API_KEY)
+        chosen_model = settings.AI_LEGAL_MODEL_OPENAI or settings.AI_DEFAULT_MODEL
+        cost_limit = settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO
+        import logging as _log  # noqa: PLC0415
+
+        _log.getLogger(__name__).info(
+            "legislacao.route context_chars=%d model=%s cost_limit=%.2f",
+            context_chars, chosen_model, cost_limit,
         )
-        # "use_gemini" mantém compat com a decisão do Sprint O: qualquer contexto
-        # legislativo material (>100K chars) vai pro Gemini, mesmo que a flag esteja
-        # off (não queremos truncar legislação em modelos de janela pequena).
-        use_gemini = needs_long_window or context_chars > 100_000 or gemini_available
-
-        if use_gemini:
-            # Roteamento Flash → Pro baseado no tamanho do contexto.
-            chosen_model = (
-                settings.GEMINI_LEGAL_LONG_MODEL
-                if needs_long_window
-                else settings.GEMINI_LEGAL_MODEL
-            )
-            cost_limit = (
-                settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG
-                if needs_long_window
-                else settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO
-            )
-            import logging as _log  # noqa: PLC0415
-
-            _log.getLogger(__name__).info(
-                "legislacao.route context_chars=%d needs_long=%s model=%s cost_limit=%.2f",
-                context_chars, needs_long_window, chosen_model, cost_limit,
-            )
-            response = self.call_llm(
-                user_prompt,
-                system=system_prompt,
-                model=chosen_model,
-                max_tokens=settings.CLAUDE_LEGAL_MAX_TOKENS,
-                max_cost_override_usd=cost_limit,
-                # fix/llm-consistencia: liga a matriz. Gemini (primário) continua
-                # 1º; em 503/timeout cai pro equivalente OpenAI/Anthropic
-                # disponível — antes ficava refém do `model=` único.
-                agent_name="legislacao",
-            )
-        elif settings.ANTHROPIC_API_KEY:
-            # Fallback: Claude via SDK quando Gemini não tiver API key.
-            response = self._call_claude(user_prompt, system=system_prompt)
-        else:
-            # Último fallback: LiteLLM padrao (outro provider configurado).
-            response = self.call_llm(
-                user_prompt,
-                system=system_prompt,
-                max_cost_override_usd=settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO,
-                agent_name="legislacao",
-            )
+        response = self.call_llm(
+            user_prompt,
+            system=system_prompt,
+            model=chosen_model,
+            max_tokens=settings.CLAUDE_LEGAL_MAX_TOKENS,
+            max_cost_override_usd=cost_limit,
+            # fix/llm-consistencia: a matriz põe o primário em 1º e, em falha do
+            # provedor, cai para o equivalente disponível em outro provider.
+            agent_name="legislacao",
+        )
 
         parsed = OutputValidationPipeline.parse_llm_json(response.content)
 
@@ -278,14 +246,6 @@ class LegislacaoAgent(BaseAgent):
             risco_legal=str(parsed.get("risco_legal", parsed.get("confianca", "medio")) or "medio"),
             prazos_legais=list(parsed.get("prazos_legais", []) or []),
         )
-
-    def _call_claude(self, prompt: str, *, system: str = "") -> Any:
-        """Chama Claude diretamente via Anthropic SDK."""
-        from app.core.claude_client import ClaudeClient
-        client = ClaudeClient()
-        response = client.complete(prompt, system=system)
-        self._llm_response = response
-        return response
 
     def _load_rag_chunks(
         self,
@@ -505,11 +465,9 @@ class LegislacaoAgent(BaseAgent):
     ) -> str:
         """Busca legislacao no banco e monta contexto textual.
 
-        Sprint 0 — usa o budget LONG (1.9M tokens) quando o agente roda Gemini Pro.
-        Como não sabemos a priori se vamos rodar Pro (depende do tamanho do contexto
-        montado), usamos sempre o budget LONG aqui e deixamos o roteamento decidir
-        o modelo. Se o contexto ficar abaixo do threshold, usa Flash; se ficar
-        acima, usa Pro. Ambos cabem na janela do modelo escolhido.
+        O budget (LEGISLATION_MAX_CONTEXT_TOKENS_LONG) é dimensionado para caber na janela
+        do modelo da legislação (Luna, 922K tokens), com margem para o prompt e para o
+        erro da estimativa de ~4 caracteres por token.
         """
         from app.core.config import settings  # noqa: PLC0415
         from app.services.legislation_service import build_legislation_context, search_legislation

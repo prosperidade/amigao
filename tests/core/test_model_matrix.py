@@ -66,7 +66,7 @@ def test_fallback_restricted_to_available_providers():
     )
     names = [m for m, _ in models]
     assert names[0] == "gemini/gemini-2.5-flash"  # primário
-    assert any(n == "gpt-4.1-mini" for n in names)  # equivalente openai
+    assert any(n == "gpt-5.6-luna" for n in names)  # equivalente openai
     assert not any(n.startswith("claude") for n in names)  # anthropic indisponível
 
 
@@ -106,3 +106,26 @@ def test_extrator_only_uses_luna_and_approved_gemini_fallback():
         ("gpt-5.6-luna", "test-o"), ("gemini/gemini-3.7-flash", "test-g")]
     settings.OPENAI_API_KEY = ""
     assert resolve_agent_models("extrator", settings) == [("gemini/gemini-3.7-flash", "test-g")]
+
+
+def test_todos_os_agentes_exceto_extrator_seguem_luna_gemini_sonnet():
+    """André, 21/09/2026: cadeia única Luna → Gemini 3.7 Flash → Claude Sonnet 5,
+    lida das settings reais. O extrator mantém a cadeia própria de dois elos."""
+    from app.core.config import settings as real
+    from app.core.model_matrix import build_agent_model_matrix
+
+    s = SimpleNamespace(**{k: getattr(real, k) for k in (
+        "AI_DEFAULT_MODEL", "AI_FALLBACK_MODEL", "AI_ANTHROPIC_FALLBACK_MODEL",
+        "AI_DIAGNOSTICO_MODEL", "AI_LEGAL_MODEL_OPENAI", "GEMINI_LEGAL_MODEL",
+        "AI_EXTRATOR_MODEL", "AI_EXTRATOR_FALLBACK_MODEL")})
+    matriz = build_agent_model_matrix(s)
+    cadeia = [("openai", "gpt-5.6-luna"), ("google", "gemini/gemini-3.7-flash"),
+              ("anthropic", "claude-sonnet-5")]
+    for agente, linha in matriz.items():
+        if agente == "extrator":
+            assert linha == cadeia[:2], agente
+        else:
+            assert linha == cadeia, agente
+    assert resolve_agent_models(
+        "agente_sem_linha", _settings(openai="o", gemini="g", anthropic="a")) == [
+        ("gpt-5.6-luna", "o"), ("gemini/gemini-3.7-flash", "g"), ("claude-sonnet-5", "a")]

@@ -34,7 +34,7 @@ def _settings_stub(*, openai: str = "", gemini: str = "", anthropic: str = "",
 
 
 def test_build_model_list_all_keys_populated_orders_openai_gemini_claude():
-    """Sprint -1 A: com as 3 keys presentes, ordem é OpenAI → Gemini → Claude Haiku."""
+    """Sprint -1 A: com as 3 keys presentes, ordem é OpenAI → Gemini → Claude (Sonnet 5 desde 21/09)."""
     settings = _settings_stub(openai="sk-proj-abc", gemini="AIza123", anthropic="sk-ant-xyz")
 
     models = _build_model_list(settings)
@@ -42,7 +42,7 @@ def test_build_model_list_all_keys_populated_orders_openai_gemini_claude():
     assert [m for m, _ in models] == [
         "gpt-4o-mini",
         "gemini/gemini-1.5-flash",
-        "claude-haiku-4-5-20251001",
+        "claude-sonnet-5",
     ]
 
 
@@ -67,7 +67,7 @@ def test_build_model_list_skips_missing_keys():
 
     models = _build_model_list(settings)
 
-    assert [m for m, _ in models] == ["gpt-4o-mini", "claude-haiku-4-5-20251001"]
+    assert [m for m, _ in models] == ["gpt-4o-mini", "claude-sonnet-5"]
 
 
 def test_build_model_list_no_keys_returns_default_placeholder():
@@ -394,10 +394,9 @@ def test_agent_name_falls_back_to_equivalent_provider_on_503(fake_litellm):
     ]
     fake_litellm.completion_cost.return_value = 0.001
 
-    with patch(
-        "app.core.config.settings",
-        _build_settings_for_complete(gemini="AIza", AI_MAX_RETRIES=0),
-    ):
+    s = _build_settings_for_complete(gemini="AIza", AI_MAX_RETRIES=0)
+    s.AI_LEGAL_MODEL_OPENAI = "gpt-5.6-luna"
+    with patch("app.core.config.settings", s):
         result = complete(
             "consulta legislacao",
             model="gemini/gemini-2.5-flash",
@@ -405,8 +404,8 @@ def test_agent_name_falls_back_to_equivalent_provider_on_503(fake_litellm):
         )
 
     assert result.content == "base legal ok"
-    # caiu pro 2º modelo da matriz (OpenAI gpt-4.1-mini)
-    assert result.model_used == "gpt-4.1-mini"
+    # caiu pro 2º modelo da matriz (OpenAI, Luna desde 21/09)
+    assert result.model_used == "gpt-5.6-luna"
     assert fake_litellm.completion.call_count == 2
 
 

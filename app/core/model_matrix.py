@@ -66,51 +66,49 @@ def available_house_providers(settings) -> dict[str, str]:
     return {p: k for p, k in keys.items() if k}
 
 
+def _cadeia(settings, primario_openai: str, google: str | None = None) -> list[tuple[str, str]]:
+    """Cadeia padrão (André, 21/09/2026): Luna → Gemini 3.7 Flash → Claude Sonnet 5."""
+    if not google:
+        google = getattr(settings, "AI_FALLBACK_MODEL", "gemini/gemini-3.7-flash")
+    terceiro: str = getattr(settings, "AI_ANTHROPIC_FALLBACK_MODEL", "claude-sonnet-5")
+    return [("openai", primario_openai), ("google", google), ("anthropic", terceiro)]
+
+
 def build_agent_model_matrix(settings) -> dict[str, list[tuple[str, str]]]:
     """Monta a matriz agente → [(provider, modelo), ...] em ordem de preferência.
 
     Todos os modelos vêm de settings (env-configurável). A ordem de cada linha é
     a ordem de preferência GLOBAL do agente (primeiro = primário preferido).
+    Desde 21/09/2026 todos os agentes seguem a mesma cadeia (Luna → Gemini 3.7
+    Flash → Claude Sonnet 5); cada um mantém o setting próprio do primário, para
+    que trocar um agente siga sendo troca de variável. O extrator é a exceção:
+    cadeia própria, sem terceiro provedor (CLAUDE.md, decisão de 19/09).
     """
-    openai_cheap = getattr(settings, "AI_DEFAULT_MODEL", "gpt-4o-mini")
-    gemini_flash = getattr(settings, "GEMINI_LEGAL_MODEL", "gemini/gemini-2.5-flash")
-    gemini_pro = getattr(settings, "GEMINI_LEGAL_LONG_MODEL", "gemini/gemini-2.5-pro")
-    claude_mid = getattr(settings, "CLAUDE_LEGAL_MODEL", "claude-sonnet-4-20250514")
-    claude_cheap = getattr(settings, "AI_HAIKU_MODEL", "claude-haiku-4-5-20251001")
-    diag_openai = getattr(settings, "AI_DIAGNOSTICO_MODEL", "gpt-4.1") or openai_cheap
-    legal_openai = getattr(settings, "AI_LEGAL_MODEL_OPENAI", "gpt-4.1-mini")
-
-    # Agentes "pesados" (raciocínio complexo): preferem modelos capazes.
-    heavy = [("openai", diag_openai), ("google", gemini_pro), ("anthropic", claude_mid)]
-    # Agentes "econômicos" (extração/classificação/rotina): modelos baratos.
-    cheap = [("openai", openai_cheap), ("google", gemini_flash), ("anthropic", claude_cheap)]
+    luna = getattr(settings, "AI_DEFAULT_MODEL", "gpt-5.6-luna")
+    padrao = _cadeia(settings, luna)
 
     return {
-        "diagnostico": heavy,
-        "redator": heavy,
-        "legislacao": [
-            ("google", gemini_flash),
-            ("openai", legal_openai),
-            ("anthropic", claude_mid),
-        ],
-        "extrator": [("openai", getattr(settings, "AI_EXTRATOR_MODEL", openai_cheap)),
+        "diagnostico": _cadeia(settings, getattr(settings, "AI_DIAGNOSTICO_MODEL", luna) or luna),
+        "redator": padrao,
+        "legislacao": _cadeia(
+            settings,
+            getattr(settings, "AI_LEGAL_MODEL_OPENAI", luna) or luna,
+            getattr(settings, "GEMINI_LEGAL_MODEL", None),
+        ),
+        "extrator": [("openai", getattr(settings, "AI_EXTRATOR_MODEL", luna)),
                      ("google", getattr(settings, "AI_EXTRATOR_FALLBACK_MODEL", "gemini/gemini-3.7-flash"))],
-        "atendimento": cheap,
-        "vigia": cheap,
-        "auditor_imovel": cheap,
-        "financeiro": cheap,
-        "acompanhamento": cheap,
-        "marketing": cheap,
-        "orcamento": cheap,
+        "atendimento": padrao,
+        "vigia": padrao,
+        "auditor_imovel": padrao,
+        "financeiro": padrao,
+        "acompanhamento": padrao,
+        "marketing": padrao,
+        "orcamento": padrao,
     }
 
 
 def _default_row(settings) -> list[tuple[str, str]]:
-    return [
-        ("openai", getattr(settings, "AI_DEFAULT_MODEL", "gpt-4o-mini")),
-        ("google", getattr(settings, "GEMINI_LEGAL_MODEL", "gemini/gemini-2.5-flash")),
-        ("anthropic", getattr(settings, "AI_HAIKU_MODEL", "claude-haiku-4-5-20251001")),
-    ]
+    return _cadeia(settings, getattr(settings, "AI_DEFAULT_MODEL", "gpt-5.6-luna"))
 
 
 def resolve_agent_models(
