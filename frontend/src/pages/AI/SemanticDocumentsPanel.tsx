@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 interface SourceDocument { id: number; filename: string; tipo: string; classificacao_versao: number; review_required: boolean;
-  extraction_status?: string; rejeicoes?: { colecao: string; indice: number; motivo: string }[] }
+  extraction_status?: string; rejeicoes?: { colecao: string; indice: number | null; fatia?: number; motivo: string }[] }
 const species = ['certidao_matricula', 'escritura_publica', 'contrato_particular', 'contrato_servico_documental',
   'documento_pessoal', 'documento_representacao', 'comprovante_situacao_cadastral_cpf', 'car', 'ccir', 'itr', 'sigef', 'rat', 'peca_orgao', 'arquivo_geoespacial', 'indeterminada'];
 const label = (value: string) => value.replace(/_/g, ' ');
@@ -23,7 +23,7 @@ function Classification({ doc, processId }: { doc: SourceDocument; processId: nu
     <p>Classificação: {label(doc.tipo)}{doc.review_required ? ' — revisão necessária' : ''}</p>
     {doc.extraction_status && <p>{doc.extraction_status}</p>}
     {!!doc.rejeicoes?.length && <details><summary>Observações rejeitadas ({doc.rejeicoes.length})</summary>
-      <ul>{doc.rejeicoes.map((r, i) => <li key={i}>{r.colecao} — item {r.indice + 1}: {r.motivo}</li>)}</ul>
+      <ul>{doc.rejeicoes.map((r, i) => <li key={i}>{r.fatia != null && `fatia ${r.fatia + 1} · `}{r.colecao}{r.indice != null && ` — item ${r.indice + 1}`}: {r.motivo}</li>)}</ul>
     </details>}
     <select aria-label={`Espécie do documento ${doc.id}`} value={tipo} onChange={e => setTipo(e.target.value)}>
       {!species.includes(tipo) && <option value={tipo}>{label(tipo)}</option>}

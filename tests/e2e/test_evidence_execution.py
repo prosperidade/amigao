@@ -491,8 +491,12 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
         assert db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").count() == 1
 
     with factory() as db:
-        reports = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="derivacao").all()
-        assert any(len((r.content["attributes"].get("normalized") or {}).get("rejeicoes", [])) == 1 for r in reports)
+        report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+            object_id=f"extracao:rejeicoes:{case['doc']}").one()
+        normalized = report.content["attributes"]["normalized"]
+        assert normalized["observacoes_preservadas"] == 1
+        assert [(r["colecao"], r["indice"], r["motivo"]) for r in normalized["rejeicoes"]] == [
+            ("observacoes", 0, "Trecho extraído não existe no texto versionado")]
 
 
 def test_citation_gate_recognizes_short_forms_and_every_norm_of_the_source(committed_case):
