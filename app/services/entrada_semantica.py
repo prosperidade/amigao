@@ -576,10 +576,34 @@ DEPENDENCIA = "Dependência de parte rejeitada"
 INSTRUCAO_REPARO = (
     "\nRODADA DE REPARO (uma tentativa). Os itens abaixo foram rejeitados na validação, cada um com "
     "o motivo. Para cada um, devolva o item corrigido conforme o schema: trecho copiado do texto "
-    "caractere por caractere, contíguo, sem reescrever, resumir ou juntar pedaços; se o trecho se "
-    "repete, amplie-o até ser único ou informe offsets exatos. Se o texto não sustenta o item, "
+    "caractere por caractere, contíguo, sem reescrever, resumir, pular ou juntar pedaços; se o trecho se "
+    "repete, amplie-o até ser único ou informe offsets exatos. Quando houver 'divergencia', seu trecho "
+    "coincide com a fonte nas primeiras palavras indicadas e depois a fonte segue com 'fonte_continua': "
+    "copie essa continuação ou termine o trecho no ponto de divergência. Se o texto não sustenta o item, "
     "devolva item null. Não altere nem acrescente outros itens. Responda só JSON, sem Markdown: "
     '{"reparos": [{"colecao": ..., "indice": ..., "item": {...} ou null}]}.\nItens rejeitados: ')
+
+
+def divergencia(texto, trecho, janela=60):
+    """Where a non-existent anchor departs from the source, for the repair round.
+
+    The longest prefix of the anchor (whitespace-tolerant, as the resolver) found in the
+    source; the source and the anchor continuations show the model what it skipped or
+    rewrote. On 21/09/2026 the model jumped a 176-character control code to reach a date.
+    """
+    tokens = trecho.split()
+
+    def busca(n):
+        return re.search(r"\s+".join(re.escape(t) for t in tokens[:n]), texto) if n else None
+    baixo, alto = 0, len(tokens)
+    while baixo < alto:  # a prefix that matches implies every shorter one matches
+        meio = (baixo + alto + 1) // 2
+        baixo, alto = (meio, alto) if busca(meio) else (baixo, meio - 1)
+    if not baixo:
+        return {"coincide_palavras": 0, "total_palavras": len(tokens)}
+    fim = busca(baixo).end()
+    return {"coincide_palavras": baixo, "total_palavras": len(tokens),
+            "fonte_continua": texto[fim:fim + janela], "trecho_continua": " ".join(tokens[baixo:])[:janela]}
 
 
 def _item_da_proposta(proposta, colecao, indice):
@@ -589,7 +613,7 @@ def _item_da_proposta(proposta, colecao, indice):
     return proposta[colecao], indice
 
 
-def reparar_proposta(proposta, recusadas, pedir):
+def reparar_proposta(proposta, recusadas, pedir, texto=None):
     """One repair round: each item rejected on its own checks returns to the model with its reason.
 
     Dependency rejections are not sent: a repaired parent clears them on revalidation. Returns the
@@ -601,7 +625,11 @@ def reparar_proposta(proposta, recusadas, pedir):
         if r["indice"] is None or r["motivo"] == DEPENDENCIA:
             continue
         lista, indice = _item_da_proposta(proposta, r["colecao"], r["indice"])
-        pedidos.append({"colecao": r["colecao"], "indice": indice, "motivo": r["motivo"], "item": lista[indice]})
+        pedido = {"colecao": r["colecao"], "indice": indice, "motivo": r["motivo"], "item": lista[indice]}
+        trecho = lista[indice].get("trecho") if isinstance(lista[indice], dict) else None
+        if texto and isinstance(trecho, str) and "não existe" in r["motivo"]:
+            pedido["divergencia"] = divergencia(texto, trecho)
+        pedidos.append(pedido)
     if not pedidos:
         return proposta, []
     resposta = pedir(pedidos)
@@ -694,7 +722,7 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
         try:
             reparada, pedidos = reparar_proposta(proposta, recusadas, lambda itens, sistema=system_fatia,
                 rotulo=f"doc{doc.id}:{fatia.rotulo}:reparo": chamar(
-                    sistema + INSTRUCAO_REPARO + json.dumps(itens, ensure_ascii=False), rotulo))
+                    sistema + INSTRUCAO_REPARO + json.dumps(itens, ensure_ascii=False), rotulo), texto=texto)
         except (ValueError, AIGatewayError) as exc:
             reparos.append({"fatia": fatia.indice, "erro": getattr(exc, "message", None) or str(exc)})
         else:

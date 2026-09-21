@@ -35,6 +35,7 @@ e contigua; no JSON a quebra de linha vira \n), ou so "TITULAR FALECIDO" se o it
 informa o ano.
 Errado, e rejeitado: "Situacao: titular falecido em 2021" (reescrito: caixa,
 palavras e ordem mudaram); "TITULAR FALECIDO ... 2021" (reticencias juntando
-pedacos); "SITUACAO TITULAR FALECIDO" (pontuacao removida); texto que nao esta
+pedacos); o mesmo sem reticencias, pulando no meio um codigo longo ou numero de
+controle; "SITUACAO TITULAR FALECIDO" (pontuacao removida); texto que nao esta
 na fonte. Regra: selecione e copie; nunca redija o trecho. Isto vale para todos
 os itens; continue preenchendo todos os campos do schema.

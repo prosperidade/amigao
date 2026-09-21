@@ -367,3 +367,13 @@ def test_repair_round_is_skipped_without_own_rejections():
     def pedir(_itens):
         raise AssertionError("no repair call expected")
     assert reparar_proposta({"observacoes": []}, [], pedir) == ({"observacoes": []}, [])
+
+
+def test_divergence_points_to_what_the_anchor_skipped():
+    """21/09/2026: the model jumped a long control code to reach the date."""
+    from app.services.entrada_semantica import divergencia
+    text = "TITULAR FALECIDO. Codigo: 0C1A2B3C4D. Emitido em 01/02/2023."
+    got = divergencia(text, "TITULAR FALECIDO. Emitido em 01/02/2023.", janela=20)
+    assert got == {"coincide_palavras": 2, "total_palavras": 5,
+                   "fonte_continua": " Codigo: 0C1A2B3C4D.", "trecho_continua": "Emitido em 01/02/202"}
+    assert divergencia(text, "nada disso")["coincide_palavras"] == 0
