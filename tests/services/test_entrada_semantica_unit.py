@@ -265,8 +265,10 @@ def test_duplicate_key_and_estate_of_rejected_person_cascade_to_dependents():
         ("participacoes", 0, "Dependência de parte rejeitada")]
 
 
-def test_literal_support_is_checked_per_item_before_persistence():
-    from app.services.entrada_semantica import validar_proposta
+def test_field_without_support_in_its_anchor_is_emptied_and_the_observation_stays():
+    """André, 21/09/2026: resolved anchor admits the observation; an unsupported field
+    stays empty with its reason and knowledge not determined."""
+    from app.services.entrada_semantica import campos_sem_suporte, conteudo_do_item, validar_proposta
     text = "TITULAR FALECIDO. A, CPF 123. Contrato com processo 5286960-36.2022. A, CPF 123."
     valid, rejected = validar_proposta({"partes": [
         {"chave": "a", "nome": "A", "natureza": "pf", "identificador": "123", "tipo_identificador": "cpf",
@@ -277,19 +279,51 @@ def test_literal_support_is_checked_per_item_before_persistence():
                                     {"sujeito": "b", "trecho": "TITULAR FALECIDO"}],
         "contratos": [{"objeto": "x", "referencia_processo_judicial": ["9999999-00.2022"], "trecho": "Contrato com processo"}]},
         text, 0, len(text), especie="comprovante_situacao_cadastral_cpf")
-    assert [p.chave for p in valid.partes] == ["b"] and len(valid.falecimentos_declarados) == 1
+    assert [p.chave for p in valid.partes] == ["b"] and len(valid.falecimentos_declarados) == 2
     assert [(r["colecao"], r["motivo"]) for r in rejected] == [
         ("partes", "Trecho repetido exige posição explícita; primeira ocorrência não vence"),
-        ("contratos", "Objeto contratual não sustentado pela espécie documental"),
-        ("falecimentos_declarados", "Ano de falecimento ausente do trecho")]
+        ("contratos", "Objeto contratual não sustentado pela espécie documental")]
+    declaracao = valid.falecimentos_declarados[0]
+    assert declaracao.ano is None
+    assert campos_sem_suporte(valid) == [{"campo": "ano", "motivo": "Ano de falecimento ausente do trecho",
+        "conhecimento": "nao_determinado", "colecao": "falecimentos_declarados", "indice": 0}]
+    assert conteudo_do_item(declaracao)["campos_sem_suporte"][0]["campo"] == "ano"
+    assert "campos_sem_suporte" not in conteudo_do_item(valid.falecimentos_declarados[1])
 
 
-def test_identifier_absent_from_party_anchor_rejects_the_party():
+def test_identifier_absent_from_party_anchor_is_emptied_with_its_type():
     from app.services.entrada_semantica import validar_proposta
     valid, rejected = validar_proposta({"partes": [
         {"chave": "a", "nome": "A", "natureza": "pf", "identificador": "999", "tipo_identificador": "cpf",
-         "trecho": "A vende"}]}, DEED, 0, len(DEED))
-    assert not valid.partes and rejected[0]["motivo"] == "Identificador ou inventário ausente do trecho da parte"
+         "trecho": "A vende"}],
+        "participacoes": [{"parte_chave": "a", "papel": "transmitente", "trecho": "A vende"}]}, DEED, 0, len(DEED))
+    assert not rejected and len(valid.participacoes) == 1
+    assert (valid.partes[0].identificador, valid.partes[0].tipo_identificador) == (None, None)
+    assert valid.partes[0]._campos_sem_suporte[0]["motivo"] == "Identificador ausente do trecho da parte"
+
+
+def test_contract_keeps_supported_references_and_estate_loses_only_unsupported_inventory():
+    from app.services.entrada_semantica import campos_sem_suporte, validar_proposta
+    text = "J, CPF 1. Espolio de J. Contrato do inventario 111-22.2022 com o espolio."
+    valid, rejected = validar_proposta({"partes": [
+        {"chave": "j", "nome": "J", "natureza": "pf", "identificador": "1", "tipo_identificador": "cpf", "trecho": "J, CPF 1"},
+        {"chave": "e", "nome": "Espolio de J", "natureza": "espolio", "falecido_chave": "j", "inventario": "111-22.2022",
+         "trecho": "Espolio de J"}],
+        "contratos": [{"contratante": ["e"], "objeto": "servico", "trecho": "Contrato do inventario 111-22.2022",
+                       "referencia_processo_judicial": ["111-22.2022", "333-44.2023"]}]},
+        text, 0, len(text), especie="contrato_servico_documental")
+    assert not rejected and len(valid.partes) == 2 and len(valid.contratos) == 1
+    assert valid.partes[1].inventario is None
+    assert valid.contratos[0].referencia_processo_judicial == ["111-22.2022"]
+    assert [(c["colecao"], c["campo"]) for c in campos_sem_suporte(valid)] == [
+        ("partes", "inventario"), ("contratos", "referencia_processo_judicial[1]")]
+
+
+def test_nonexistent_anchor_still_rejects_the_observation():
+    from app.services.entrada_semantica import validar_proposta
+    valid, rejected = validar_proposta({"observacoes": [{"predicado": "p", "valor": 1, "trecho": "NOT IN THE DEED"}]},
+        DEED, 0, len(DEED))
+    assert not valid.observacoes and rejected[0]["motivo"] == "Trecho extraído não existe no texto versionado"
 
 
 def test_response_that_is_not_an_object_fails_whole():

@@ -25,5 +25,6 @@ ocorrencia ou informe offsets exatos. Item ambiguo e rejeitado com motivo;
 outros itens independentes continuam. Preserve as referencias entre partes,
 representacao e atos; uma identidade rejeitada nao fundamenta participacao.
 Identificador, inventario, referencia judicial, ano e data de consulta
-informados precisam constar do trecho do proprio item; sem isso o item e
-rejeitado. Amplie o trecho em vez de omitir o valor.
+informados precisam constar do trecho do proprio item; sem isso o campo
+fica vazio, com motivo, e a observacao segue. Trecho que nao existe no texto
+rejeita a observacao. Amplie o trecho em vez de omitir o valor.

@@ -9,6 +9,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.models.document import Document, DocumentSource
 from app.models.entrada_semantica import ClassificacaoDocumento, DocumentoVersao
+from app.models.evidence import EvidenceInvalidation
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
 from app.schemas.entrada_semantica import (
     AtoExtraido,
@@ -22,7 +23,14 @@ from app.schemas.entrada_semantica import (
 )
 from app.schemas.evidence import EvidenceAttributes, EvidenceRef
 from app.services.documento_versao import registrar_fragmento, registrar_leitura
-from app.services.evidence import _capture, authorize, lock_case
+from app.services.evidence import (
+    _capture,
+    authorize,
+    invalidate_dependents,
+    latest_objects,
+    lock_case,
+    reviews_by_evidence,
+)
 from app.services.identidade_observacao import (
     identidade_observacao,
     localizar_trecho,
@@ -77,6 +85,21 @@ def reclassificar(db, tenant_id, user_id, process_id, document_id, especie, moti
     return {"versao": row.versao, "tipo_revisado": row.tipo_revisado, "revisao_necessaria": True}
 
 
+def conteudo_do_item(item):
+    """Proposed content plus the fields emptied for lack of support in the item's anchor."""
+    content = item.model_dump(mode="json")
+    if item._campos_sem_suporte:
+        content["campos_sem_suporte"] = item._campos_sem_suporte
+    return content
+
+
+def campos_sem_suporte(entrada):
+    """Emptied fields of the surviving items, for the extraction report."""
+    items = [*entrada.partes, *entrada.todas_participacoes, *entrada.atos, *entrada.observacoes,
+             *entrada.contratos, *entrada.falecimentos_declarados]
+    return [campo for item in items for campo in item._campos_sem_suporte]
+
+
 def persistir_entrada(db, doc, entrada: EntradaExtraida, *, metodo="extrator_semantico", modelo=None):
     with db.begin_nested():
         return _persistir_entrada(db, doc, entrada, metodo=metodo, modelo=modelo)
@@ -105,12 +128,12 @@ def _persistir_entrada(db, doc, entrada: EntradaExtraida, *, metodo="extrator_se
     source = fonte_documental(db, doc)
     refs = []
     # Preserve every extracted item, including acts and participants with no cadastral target.
-    items = [("parte", x.model_dump(mode="json"), x.trecho) for x in entrada.partes]
-    items += [("observacao", x.model_dump(mode="json"), x.trecho) for x in entrada.observacoes]
-    items += [("ato_registral", x.model_dump(mode="json"), x.trecho) for x in entrada.atos]
-    items += [("participacao", x.model_dump(mode="json"), x.trecho) for x in entrada.todas_participacoes]
-    items += [("contrato", {**x.model_dump(mode="json"), "predicado": especie}, x.trecho) for x in entrada.contratos]
-    items += [("falecimento_declarado", x.model_dump(mode="json"), x.trecho) for x in entrada.falecimentos_declarados]
+    items = [("parte", conteudo_do_item(x), x.trecho) for x in entrada.partes]
+    items += [("observacao", conteudo_do_item(x), x.trecho) for x in entrada.observacoes]
+    items += [("ato_registral", conteudo_do_item(x), x.trecho) for x in entrada.atos]
+    items += [("participacao", conteudo_do_item(x), x.trecho) for x in entrada.todas_participacoes]
+    items += [("contrato", {**conteudo_do_item(x), "predicado": especie}, x.trecho) for x in entrada.contratos]
+    items += [("falecimento_declarado", conteudo_do_item(x), x.trecho) for x in entrada.falecimentos_declarados]
     for tipo, item, trecho in items:
         try:
             start = localizar_trecho(version.texto, trecho, item.get("posicao_inicio"))
@@ -182,7 +205,7 @@ def persistir_entidades(db, doc, entrada, refs, especie):
         Serventia,
     )
     def fundamento_do(tipo, item):
-        normalized = normalizar_conteudo(item.model_dump(mode="json"))
+        normalized = normalizar_conteudo(conteudo_do_item(item))
         if tipo == "participacao":
             normalized["estado_confirmacao"] = "declarado"
         start = localizar_trecho(doc.extracted_text, item.trecho, item.posicao_inicio)
@@ -326,9 +349,11 @@ def qualificar_observacoes(rows, *, data_referencia):
             falecimentos.append({"observacao": row.object_id, "versao": row.version,
                 "documento_id": row.source_document_id, **item,
                 "estado_pessoa": "falecimento_declarado", "suficiencia_gate": "PENDENTE-ISIS"})
+            sem_suporte = {c["campo"] for c in item.get("campos_sem_suporte", [])}
             for campo in ("ano", "data_consulta"):
                 if item.get(campo) is None:
-                    lacunas.append({"observacao": row.object_id, "motivo": f"{campo}_nao_localizado_no_material"})
+                    motivo = "sem_suporte_no_trecho" if campo in sem_suporte else "nao_localizado_no_material"
+                    lacunas.append({"observacao": row.object_id, "motivo": f"{campo}_{motivo}"})
         if metadata.get("tipo_entrada") == "ato_registral":
             if not all(item.get(k) for k in ("serventia", "matricula", "rotulo")):
                 lacunas.append({"observacao": row.object_id, "motivo": "identidade_registral_nao_determinada",
@@ -381,7 +406,12 @@ def _posicoes(item):
 
 
 def _ancorar(item, nome, texto, inicio_fatia, fim_fatia, especie):
-    """Checks local to one proposed item; the ValueError message is the rejection reason."""
+    """Checks local to one proposed item; the ValueError message is the rejection reason.
+
+    A resolved anchor is the condition for the observation to enter. A field the
+    item's own anchor does not support is emptied with its reason and knowledge
+    not determined (André, 21/09/2026); the observation stays.
+    """
     literal, start = resolver_ancora_literal(texto, item.trecho, item.posicao_inicio, item.posicao_fim)
     end = start + len(literal)
     if start < inicio_fatia or end > fim_fatia:
@@ -393,20 +423,33 @@ def _ancorar(item, nome, texto, inicio_fatia, fim_fatia, especie):
         raise ValueError("Declaração de falecimento exige a espécie Receita")
     if especie == RECEITA and (nome == "participacoes" or (nome == "partes" and item.natureza == "espolio")):
         raise ValueError("Receita não fundamenta espólio ou representação")
-    # Literal support once checked only at persistence, where one item discarded the document.
+    if nome == "falecimentos_declarados" and "titular falecido" not in literal.lower():
+        raise ValueError("Falecimento declarado exige trecho TITULAR FALECIDO")
     compacto = _sem_espacos(literal)
-    if nome == "partes" and any(v and _sem_espacos(v) not in compacto for v in (item.identificador, item.inventario)):
-        raise ValueError("Identificador ou inventário ausente do trecho da parte")
-    if nome == "contratos" and any(_sem_espacos(n) not in compacto for n in item.referencia_processo_judicial):
-        raise ValueError("Referência judicial ausente do trecho contratual")
+
+    def sem_suporte(campo, motivo):
+        item._campos_sem_suporte.append({"campo": campo, "motivo": motivo, "conhecimento": "nao_determinado"})
+
+    if nome == "partes" and item.identificador and _sem_espacos(item.identificador) not in compacto:
+        sem_suporte("identificador", "Identificador ausente do trecho da parte")
+        item.identificador = item.tipo_identificador = None  # the schema keeps value and type together
+    if nome == "partes" and item.inventario and _sem_espacos(item.inventario) not in compacto:
+        sem_suporte("inventario", "Número de inventário ausente do trecho da parte")
+        item.inventario = None
+    if nome == "contratos":
+        referencias = item.referencia_processo_judicial
+        for indice, numero in enumerate(referencias):
+            if _sem_espacos(numero) not in compacto:
+                sem_suporte(f"referencia_processo_judicial[{indice}]", "Referência judicial ausente do trecho contratual")
+        item.referencia_processo_judicial = [n for n in referencias if _sem_espacos(n) in compacto]
     if nome == "falecimentos_declarados":
-        if "titular falecido" not in literal.lower():
-            raise ValueError("Falecimento declarado exige trecho TITULAR FALECIDO")
         if item.ano is not None and not re.search(rf"\b{item.ano}\b", literal):
-            raise ValueError("Ano de falecimento ausente do trecho")
+            sem_suporte("ano", "Ano de falecimento ausente do trecho")
+            item.ano = None
         consulta = item.data_consulta
         if consulta and not any(v in literal for v in (consulta.isoformat(), consulta.strftime("%d/%m/%Y"))):
-            raise ValueError("Data da consulta ausente do trecho")
+            sem_suporte("data_consulta", "Data da consulta ausente do trecho")
+            item.data_consulta = None
 
 
 def validar_proposta(proposta, texto, inicio_fatia, fim_fatia, *, especie=None):
@@ -433,6 +476,8 @@ def validar_proposta(proposta, texto, inicio_fatia, fim_fatia, *, especie=None):
         except ValueError as exc:
             rejeitar(colecao, indice, bruto, str(exc))
         else:
+            for campo in item._campos_sem_suporte:
+                campo.update(colecao=colecao, indice=indice)
             return item
 
     for nome in sorted(proposta.keys() - EntradaExtraida.model_fields.keys()):
@@ -527,8 +572,12 @@ def validar_proposta(proposta, texto, inicio_fatia, fim_fatia, *, especie=None):
     return EntradaExtraida(limites=limites, **{nome: [item for _, item in pares] for nome, pares in itens.items()}), rejeicoes
 
 
-def extrair_documento(db, doc, *, manifest, on_response=None):
-    """Único parser/persistidor, compartilhado pelo agente e adaptador de staging."""
+def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
+    """Único parser/persistidor, compartilhado pelo agente e adaptador de staging.
+
+    With ``superacoes`` the caller supersedes the previous version after writing
+    the case derivations; otherwise supersession happens here.
+    """
     from app.core.ai_gateway import complete
     from app.services.taxonomia_documental import FAMILIAS
     if manifest["status"] != "available":
@@ -554,7 +603,7 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
         raise HTTPException(422, "Cobertura documental insuficiente; nenhuma extração parcial será publicada como completa")
     colecoes = {key: [] for key in EntradaExtraida.model_fields}
     modelos = []
-    rejeicoes = []
+    rejeicoes, campos = [], []
     for fatia in fatias:
         texto = doc.extracted_text[fatia.inicio:fatia.fim]
         response = complete(texto, system=system + f"\nEspécie: {especie}. Fatia {fatia.indice}; "
@@ -577,6 +626,9 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
             raise ValueError(f"Resposta do extrator não é JSON: {exc.msg}") from exc
         parcial, recusadas = validar_proposta(proposta, doc.extracted_text, fatia.inicio, fatia.fim, especie=especie)
         rejeicoes.extend({**r, "fatia": fatia.indice} for r in recusadas)
+        for campo in campos_sem_suporte(parcial):
+            campo["fatia"] = fatia.indice
+            campos.append(campo)
         modelos.append(response.model_used)
         # Window-local references remain scoped; same names never merge identities.
         prefix = f"f{fatia.indice}:"
@@ -601,18 +653,69 @@ def extrair_documento(db, doc, *, manifest, on_response=None):
     if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados and not rejeicoes:
         raise HTTPException(422, "Extração cadastral incompleta: declaração de falecimento não preservada")
     rows = persistir_entrada(db, doc, entrada, modelo=",".join(sorted(set(modelos))))
+    anteriores = extracao_anterior(db, doc, {r.id for r in rows})
     source = fonte_documental(db, doc)
-    _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
-            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.2",
-                "normalized": {"rejeicoes": rejeicoes, "observacoes_preservadas": len(rows)}},
+    # One version per extraction of the document: its observations and what it supersedes.
+    relatorio = _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
+            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.3",
+                "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "observacoes_preservadas": len(rows),
+                    "observacoes": [{"id": r.object_id, "version": r.version} for r in rows],
+                    "superadas": [{"id": r.object_id, "version": r.version} for r in anteriores]}},
             "premises": [{"id": source.object_id, "version": source.version}],
             "limits": ["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [],
         })
-    doc.review_required = doc.review_required or bool(rows) or bool(rejeicoes)
+    if superacoes is None:
+        superar(db, doc, anteriores, relatorio)
+    else:
+        superacoes.append((doc, anteriores, relatorio))
+    doc.review_required = doc.review_required or bool(rows) or bool(rejeicoes) or bool(campos)
     doc.extraction_status = "observações extraídas; revisão necessária" if rows else "extração sem observações"
-    if rejeicoes:
-        doc.extraction_status = f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por ancora/dependencia; revisar"
+    if rejeicoes or campos:
+        doc.extraction_status = (f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por "
+                                 f"ancora/dependencia; {len(campos)} campos sem suporte no trecho; revisar")
     return rows
+
+
+def extracao_anterior(db, doc, atuais):
+    """Current semantic observations of the document that the new extraction did not produce again.
+
+    An observation a consultant decided (review in the panel, or an accepted or
+    rejected projection) is not the machine's to supersede; it stays as decided.
+    """
+    invalid = {i.evidence_id for i in db.query(EvidenceInvalidation).filter(
+        EvidenceInvalidation.tenant_id == doc.tenant_id, EvidenceInvalidation.process_id == doc.process_id)}
+    decididas = set(reviews_by_evidence(db, doc.tenant_id, doc.process_id))
+    decididas |= {ref for (ref,) in db.query(ExtractedFieldStaging.observacao_ref).filter(
+        ExtractedFieldStaging.tenant_id == doc.tenant_id, ExtractedFieldStaging.process_id == doc.process_id,
+        ExtractedFieldStaging.observacao_ref.isnot(None),
+        (ExtractedFieldStaging.decided_by_user_id.isnot(None)) | ExtractedFieldStaging.status.in_(
+            [ExtractedFieldStatus.aceito, ExtractedFieldStatus.rejeitado]))}
+    return [r for r in latest_objects(db, doc.tenant_id, doc.process_id).values()
+            if r.kind == "observacao" and r.source_document_id == doc.id and r.id not in atuais
+            and r.id not in invalid and r.id not in decididas
+            and r.content["attributes"].get("method") == "extrator_semantico"]
+
+
+def superar(db, doc, anteriores, relatorio):
+    """ADR-070: re-extraction is a new version; the previous one is superseded, never erased.
+
+    The single invalidation mechanism takes superseded observations out of the
+    envelope and invalidates their dependents. Their undecided review projections
+    leave the queue: they are projections, and the observation keeps the history.
+    """
+    if not anteriores:
+        return
+    motivo = {"superada_por": {"id": relatorio.object_id, "version": relatorio.version},
+              "motivo": "nova extração do documento"}
+    for row in anteriores:
+        db.add(EvidenceInvalidation(tenant_id=doc.tenant_id, process_id=doc.process_id, evidence_id=row.id, reason=motivo))
+    for staging in db.query(ExtractedFieldStaging).filter(ExtractedFieldStaging.tenant_id == doc.tenant_id,
+            ExtractedFieldStaging.observacao_ref.in_([r.id for r in anteriores])):
+        if staging.decided_by_user_id is None and staging.status not in (
+                ExtractedFieldStatus.aceito, ExtractedFieldStatus.rejeitado):
+            db.delete(staging)
+    db.flush()
+    invalidate_dependents(db, doc.tenant_id, doc.process_id)
 
 
 def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
@@ -627,7 +730,7 @@ def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
         deleted_at=None).filter((Document.source.is_(None)) | (Document.source != DocumentSource.generated_ai))
     if ctx.metadata.get("document_id"):
         query = query.filter(Document.id == ctx.metadata["document_id"])
-    rows, documentos_sem_texto = [], []
+    rows, documentos_sem_texto, superacoes = [], [], []
     for doc in query.order_by(Document.id).all():
         if not (doc.extracted_text or "").strip() and ctx.metadata.get("document_id") == doc.id and ctx.metadata.get("text"):
             from datetime import UTC, datetime
@@ -638,7 +741,8 @@ def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
         if not (doc.extracted_text or "").strip():
             documentos_sem_texto.append({"documento_id": doc.id, "motivo": "texto_ausente"})
             continue
-        rows.extend(extrair_documento(ctx.session, doc, manifest=manifest, on_response=on_response))
+        rows.extend(extrair_documento(ctx.session, doc, manifest=manifest, on_response=on_response,
+                                      superacoes=superacoes))
     if not rows and documentos_sem_texto:
         raise ValueError("OCR: texto extraido ausente; reprocessar os documentos antes de extrair")
     if ai_job_id is not None and rows:
@@ -660,6 +764,9 @@ def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
             "limits": ["Qualificação do material; não certifica titularidade atual ou poderes externos."],
         })
         preview["derivacao_cartoraria"] = {"id": derivacao.object_id, "version": derivacao.version}
+    # After the new derivation: its previous version is superseded by version, not a pendency.
+    for superacao in superacoes:
+        superar(ctx.session, *superacao)
     return {**preview, "manifest": manifest, "documentos_sem_texto": documentos_sem_texto,
         "pendencias_dominio": ["PENDENTE-ISIS: suficiência da Receita para o gate de falecimento"]
             if preview["qualificacao_cartoraria"]["falecimentos_declarados"] else [],

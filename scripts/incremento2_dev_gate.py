@@ -20,9 +20,12 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT.parent / ".env")
+# Luna is André's decision; Terra only for the comparative measurement he authorized (21/09/2026).
+MODEL = os.environ.get("INC2_MODEL", "gpt-5.6-luna")
+assert MODEL in {"gpt-5.6-luna", "gpt-5.6-terra"}, "Gate model outside the authorized measurement"
 os.environ.update(POSTGRES_SERVER="127.0.0.1", POSTGRES_PORT=os.environ["HOST_DB_PORT"], DATABASE_URL="",
     ENVIRONMENT="development",
-    AI_TIMEOUT_SECONDS="180", AI_EXTRATOR_MODEL="gpt-5.6-luna", AI_EXTRATOR_ALLOW_FALLBACK="false",
+    AI_TIMEOUT_SECONDS="180", AI_EXTRATOR_MODEL=MODEL, AI_EXTRATOR_ALLOW_FALLBACK="false",
     REDIS_URL="redis://127.0.0.1:6379/15", LOG_LEVEL="CRITICAL", ALERT_WEBHOOK_URL="",
     GEMINI_API_KEY="", ANTHROPIC_API_KEY="",
     OPENAI_API_BASE="https://api.openai.com/v1", OPENAI_BASE_URL="https://api.openai.com/v1")
@@ -35,9 +38,9 @@ from app.core.model_matrix import resolve_agent_models
 
 # Preserve André's model decision. Fail before opening the server.
 models = resolve_agent_models("extrator", settings)
-assert len(models) == 1 and not settings.AI_EXTRATOR_ALLOW_FALLBACK and models[0][0] == "gpt-5.6-luna" and models[0][1], (
-    "Gate requires configured Luna primary with credentials")
-assert all(name in {"gpt-5.6-luna", "gemini/gemini-3.7-flash"} for name, _ in models), (
+assert len(models) == 1 and not settings.AI_EXTRATOR_ALLOW_FALLBACK and models[0][0] == MODEL and models[0][1], (
+    "Gate requires the measured model alone, with credentials")
+assert all(name in {MODEL, "gemini/gemini-3.7-flash"} for name, _ in models), (
     "Gate allows only the approved Gemini 3.7 Flash fallback")
 
 target = make_url(settings.SQLALCHEMY_DATABASE_URI)
@@ -155,7 +158,7 @@ def main():
                 state["documents"][origin] = {"id": doc.id, "case": doc.process_id,
                     "sha256": hashlib.sha256(doc.extracted_text.encode()).hexdigest()}
     if os.getenv("INC2_RESUME_TENANT"):
-        assert set(state["documents"]) == {"546", "547", "548", "549", "550", "551", "557", "558", "559"}
+        assert set(state["documents"]) <= {"546", "547", "548", "549", "550", "551", "557", "558", "559"}
     dist = ROOT / "frontend/dist"
     assert (dist / "index.html").exists()
     app.mount("/assets", StaticFiles(directory=dist / "assets"))
@@ -169,7 +172,8 @@ def main():
     server = uvicorn.Server(uvicorn.Config(app, log_level="critical", access_log=False))
     Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True).start()
     control = HTTPServer(("127.0.0.1", 0), Control)
-    print(json.dumps({"control_port": control.server_port, "api": state["url"], "db": "127.0.0.1:15432/amigao_db"}), flush=True)
+    print(json.dumps({"control_port": control.server_port, "api": state["url"], "db": "127.0.0.1:15432/amigao_db",
+                      "model": MODEL}), flush=True)
     control.serve_forever()
 
 

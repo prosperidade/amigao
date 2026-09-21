@@ -499,6 +499,107 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
             ("observacoes", 0, "Trecho extraído não existe no texto versionado")]
 
 
+def _controlled_extractions(monkeypatch, *responses):
+    from app.core.config import settings
+    pending = iter(responses)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_MODEL", "gpt-5.6-luna")
+    monkeypatch.setattr("app.core.ai_gateway.complete", lambda *args, **kwargs: AIResponse(
+        content=json.dumps(next(pending)), model_used="controlled", provider="test",
+        tokens_in=1, tokens_out=1, cost_usd=0.001, duration_ms=1))
+
+
+def test_reextraction_supersedes_the_previous_version_except_decided_observations(committed_case, monkeypatch):
+    """#258, ADR-070: a new extraction is a new version and the previous one is superseded.
+
+    Decisions of the consultant (panel review, accepted projection) are not the
+    machine's to supersede. Supersession is not a collection pendency.
+    """
+    from app.models.evidence import EvidenceInvalidation
+    from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry. Area one. Area two. Area three. Area four."
+        db.commit()
+
+    def area(value, anchor):
+        return {"predicado": "area_documental_ha", "valor": value, "trecho": anchor}
+    _controlled_extractions(monkeypatch,
+        {"observacoes": [area(1, "Area one."), area(2, "Area two."), area(3, "Area three."), area(4, "Area four.")]},
+        {"observacoes": [area(1, "Area one."), {"predicado": "cabecalho", "valor": "r", "trecho": "Registry."}]})
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+
+        def extract():
+            return client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"]
+        assert extract() == "completed"
+        with factory() as db:
+            # Plain values: the rows expire with this session.
+            first = {r.content["attributes"]["literal"]: (r.id, r.object_id) for r in db.query(EvidenceVersion).filter_by(
+                tenant_id=case["tenant"], kind="observacao")}
+            review_object(db, case["tenant"], case["user"], case["case"], first["Area two."][1],
+                ReviewRequest(expected_version=1, expected_revision=0, action="aprovar", justification="Conferido"))
+            accepted = db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area three."][0]).one()
+            accepted.status, accepted.decided_by_user_id = ExtractedFieldStatus.aceito, case["user"]
+            db.commit()
+        assert extract() == "completed"
+        with factory() as db:
+            reasons = {i.evidence_id: i.reason for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])}
+            superseded = {literal for literal, (row_id, _) in first.items() if "superada_por" in reasons.get(row_id, {})}
+            assert superseded == {"Area four."}
+            assert first["Area one."][0] not in reasons  # produced again by the new version
+            report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+                object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first()
+            assert reasons[first["Area four."][0]]["superada_por"] == {"id": report.object_id, "version": report.version}
+            assert [r["id"] for r in report.content["attributes"]["normalized"]["superadas"]] == [first["Area four."][1]]
+            assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area four."][0]).count() == 0
+            assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area three."][0]).one().status == \
+                ExtractedFieldStatus.aceito
+        state = client.get(f"/api/v1/evidence/cases/{case['case']}", headers=headers).json()
+        rows = {r["object"]["attributes"]["literal"]: r for r in state["objects"] if r["object"]["kind"] == "observacao"}
+        assert rows["Area four."]["superseded"] is True and rows["Area four."]["stale"] is True
+        assert rows["Area two."]["superseded"] is False and rows["Area two."]["stale"] is False
+        assert "Area four." not in {o["attributes"]["literal"] for o in state["envelope"]["observations"]}
+        # The first extraction also versions the source (documento_versao), which is a
+        # pendency of its own; supersession must not be one.
+        client.post(f"/api/v1/evidence/cases/{case['case']}/return-to-collection", headers=headers)
+    with factory() as db:
+        from app.models.evidence import RetornoColeta
+        returned = {r.invalidacao_id for r in db.query(RetornoColeta).filter_by(tenant_id=case["tenant"])}
+        superseding = {i.id for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])
+                       if "superada_por" in i.reason}
+        assert superseding and not returned & superseding
+
+
+def test_field_without_support_in_its_anchor_is_persisted_empty_with_reason(committed_case, monkeypatch):
+    """André, 21/09/2026: the observation enters by its anchor; the unsupported field stays empty."""
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry. Seller Ana sells the land."
+        db.commit()
+    _controlled_extractions(monkeypatch, {"partes": [{"chave": "a", "nome": "Ana", "natureza": "pf",
+        "identificador": "123.456.789-00", "tipo_identificador": "cpf", "trecho": "Seller Ana"}]})
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        assert client.post("/api/v1/agents/run", headers=headers,
+                           json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+        documents = client.get(f"/api/v1/evidence/cases/{case['case']}/documents", headers=headers).json()
+    assert documents[0]["rejeicoes"] == []
+    assert [(c["colecao"], c["campo"], c["conhecimento"]) for c in documents[0]["campos_sem_suporte"]] == [
+        ("partes", "identificador", "nao_determinado")]
+    with factory() as db:
+        party = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").one()
+        normalized = party.content["attributes"]["normalized"]
+        assert normalized["identificador"] is None and normalized["tipo_identificador"] is None
+        assert normalized["campos_sem_suporte"][0]["motivo"] == "Identificador ausente do trecho da parte"
+        assert party.content["knowledge"]["state"] == "nao_determinado"
+
+
 def test_case_evidence_queries_do_not_grow_with_observations(committed_case):
     """Real extractions persist ~200 observations; one review query per object took seconds."""
     from sqlalchemy import event

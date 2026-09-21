@@ -446,20 +446,57 @@ def test_extrator_luna_missing_key_fails_before_provider(fake_litellm):
     fake_litellm.completion.assert_not_called()
 
 
-def test_extrator_luna_uses_supported_temperature(fake_litellm):
-    fake_litellm.completion.return_value = _litellm_response_fr('{"ok":true}', 10, 5, "stop")
+# Both refusals seen on 21/09/2026: LiteLLM's local check (model unknown to its map) and
+# the OpenAI 400 when LiteLLM knows the model and lets the request through.
+TEMPERATURE_REFUSALS = [
+    ("UnsupportedParamsError", "gpt-5 models don't support temperature=0. Only temperature=1 is supported."),
+    ("BadRequestError", "OpenAIException - Unsupported value: 'temperature' does not support 0 with this model. "
+                        "Only the default (1) value is supported."),
+]
+
+
+@pytest.mark.parametrize("model", ["gpt-5.6-luna", "gpt-5.6-terra"])
+@pytest.mark.parametrize("refusal", TEMPERATURE_REFUSALS, ids=[r[0] for r in TEMPERATURE_REFUSALS])
+def test_gpt5_family_temperature_adapts_from_the_refusal(fake_litellm, monkeypatch, model, refusal):
+    from app.core import ai_gateway
+    monkeypatch.setattr(ai_gateway, "_SO_TEMPERATURA_PADRAO", set())
+    error = type(refusal[0], (Exception,), {})
+    setattr(fake_litellm, refusal[0], error)
+
+    def completion(**kwargs):
+        if kwargs["temperature"] != 1:
+            raise error(refusal[1])
+        return _litellm_response_fr('{"ok":true}', 10, 5, "stop")
+    fake_litellm.completion.side_effect = completion
     fake_litellm.completion_cost.return_value = 0.0001
-    with patch("app.core.config.settings", _build_settings_for_complete()):
-        result = complete("controlled", model="gpt-5.6-luna", agent_name="extrator",
-                          allow_fallback=False, temperature=0)
-    assert result.model_used == "gpt-5.6-luna"
-    assert fake_litellm.completion.call_args.kwargs["temperature"] == 1
+    config = _build_settings_for_complete()
+    config.AI_EXTRATOR_MODEL = model
+    with patch("app.core.config.settings", config):
+        for _ in range(2):
+            result = complete("controlled", model=model, agent_name="extrator", allow_fallback=False, temperature=0)
+    assert result.model_used == model
+    # Refused once, then the process remembers the model.
+    assert [c.kwargs["temperature"] for c in fake_litellm.completion.call_args_list] == [0, 1, 1]
+
+
+def test_unsupported_param_other_than_temperature_is_not_retried(fake_litellm, monkeypatch):
+    from app.core import ai_gateway
+    monkeypatch.setattr(ai_gateway, "_SO_TEMPERATURA_PADRAO", set())
+
+    class UnsupportedParamsError(Exception):
+        pass
+    fake_litellm.UnsupportedParamsError = UnsupportedParamsError
+    fake_litellm.completion.side_effect = UnsupportedParamsError("max_tokens is not supported")
+    with patch("app.core.config.settings", _build_settings_for_complete()), pytest.raises(AIGatewayError):
+        complete("controlled", model="gpt-5.6-luna", agent_name="extrator", allow_fallback=False, temperature=0)
+    assert fake_litellm.completion.call_count == 1
 
 
 def test_model_without_price_fails_before_the_call(fake_litellm):
     """Dívida #256: sem preço o custo sairia zero e o teto por job não atuaria."""
     fake_litellm.get_model_info.return_value = {"litellm_provider": "openai"}
-    with patch("app.core.config.settings", _build_settings_for_complete()),             pytest.raises(AIGatewayError) as caught:
+    with (patch("app.core.config.settings", _build_settings_for_complete()),
+          pytest.raises(AIGatewayError) as caught):
         complete("prompt", model="gpt-sem-preco")
     assert caught.value.message.startswith("Modelo sem preço na tabela local: gpt-sem-preco")
     fake_litellm.completion.assert_not_called()
@@ -468,8 +505,8 @@ def test_model_without_price_fails_before_the_call(fake_litellm):
 def test_cost_not_computed_is_an_error_not_zero(fake_litellm):
     fake_litellm.completion.return_value = _litellm_response_stub("ok", tokens_in=100, tokens_out=20)
     fake_litellm.completion_cost.side_effect = ValueError("model not mapped")
-    with patch("app.core.config.settings", _build_settings_for_complete()),             pytest.raises(AIGatewayError) as caught:
+    with (patch("app.core.config.settings", _build_settings_for_complete()),
+          pytest.raises(AIGatewayError) as caught):
         complete("prompt")
     assert caught.value.message.startswith("Custo não calculado")
     assert (caught.value.tokens_in, caught.value.tokens_out) == (100, 20)
-

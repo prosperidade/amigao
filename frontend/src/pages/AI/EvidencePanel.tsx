@@ -16,6 +16,7 @@ interface EvidenceRow {
   object: EvidenceObject;
   revision: number;
   stale: boolean;
+  superseded?: boolean;
   review: { action: string; author: number; justification: string; at: string } | null;
   history?: { action: string; author: number; justification: string; at: string; revision: number }[];
 }
@@ -56,7 +57,7 @@ function ReviewCard({ row, latest, processId }: { row: EvidenceRow; latest: bool
       <p>Documento {row.object.attributes.document_id} — declaração extraída{row.object.attributes.role ? ` — ${row.object.attributes.role}` : ''}</p>
       <p className="text-sm whitespace-pre-wrap">{String(row.object.attributes.literal ?? '')}</p>
     </>}
-    <p className="text-sm">{row.stale ? 'Desatualizada — pendência de coleta dependente' : labels[row.review?.action || 'pending']}</p>
+    <p className="text-sm">{row.superseded ? 'Superada por nova extração do documento' : row.stale ? 'Desatualizada — pendência de coleta dependente' : labels[row.review?.action || 'pending']}</p>
     {row.review && <p className="text-xs">Decisão de {new Date(row.review.at).toLocaleString('pt-BR')} — {row.review.justification}</p>}
     {!!row.history?.length && <details><summary className="text-sm">Histórico de decisões</summary>
       {row.history.map(r => <p key={r.revision} className="text-xs">{labels[r.action] || r.action} — consultor {r.author} — {new Date(r.at).toLocaleString('pt-BR')} — {r.justification}</p>)}
@@ -129,7 +130,7 @@ export default function EvidencePanel({ processId }: { processId: number }) {
     <p className="text-sm">A correção cria nova versão pendente. Só conclusões aprovadas e vigentes entram na análise seguinte.</p>
     <label className="text-sm"><input type="checkbox" checked={history} onChange={e => setHistory(e.target.checked)} /> Mostrar versões anteriores</label>
     <details><summary>Observações documentais</summary>
-      {query.data.objects.filter(r => r.object.kind === 'observacao' && (history || latest.get(r.object.id) === r.object.version)).map(row =>
+      {query.data.objects.filter(r => r.object.kind === 'observacao' && (history || (latest.get(r.object.id) === r.object.version && !r.superseded))).map(row =>
         <ReviewCard key={`${row.object.id}:${row.object.version}`} row={row} latest={latest.get(row.object.id) === row.object.version} processId={processId} />)}
     </details>
     {conclusions.filter(r => history || latest.get(r.object.id) === r.object.version).map(row =>

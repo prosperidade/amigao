@@ -258,6 +258,15 @@ def _resolve_user_model(user_preferences: Optional[dict]) -> Optional[tuple[str,
     return (litellm_model, api_key)
 
 
+# Models whose provider refused a non-default temperature in this process.
+_SO_TEMPERATURA_PADRAO: set[str] = set()
+
+
+def _recusa_de_temperatura(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "temperature" in message and ("support" in message or "unsupported" in message)
+
+
 def complete(
     prompt: str,
     *,
@@ -299,6 +308,12 @@ def complete(
             getattr(litellm, "InternalServerError", None),
             getattr(litellm, "RateLimitError", None),
         )
+        if isinstance(e, type) and issubclass(e, BaseException)
+    )
+    # Temperature refusals: LiteLLM's own check, or the provider's 400 when LiteLLM lets it through.
+    _refused: tuple[type[BaseException], ...] = tuple(
+        e
+        for e in (getattr(litellm, "UnsupportedParamsError", None), getattr(litellm, "BadRequestError", None))
         if isinstance(e, type) and issubclass(e, BaseException)
     )
 
@@ -362,15 +377,19 @@ def complete(
                 resp = None
                 for _attempt in range(_max_retries + 1):
                     try:
-                        resp = tracked_completion(litellm.completion,
-                            model=_model,
-                            messages=messages,
-                            max_tokens=mt,
-                            # Luna rejects non-default sampling temperature (API smoke, 19/09/2026).
-                            temperature=1 if _model.removeprefix("openai/") == "gpt-5.6-luna" else _temperature,
-                            timeout=_timeout,
-                            api_key=_api_key or None,
-                        )
+                        call = dict(model=_model, messages=messages, max_tokens=mt,
+                                    timeout=_timeout, api_key=_api_key or None)
+                        temperature = 1 if _model in _SO_TEMPERATURA_PADRAO else _temperature
+                        try:
+                            resp = tracked_completion(litellm.completion, temperature=temperature, **call)
+                        except _refused as refused:
+                            # The gpt-5 family (Luna, Terra) accepts only temperature 1. The refusal
+                            # happens before generation (no tokens); both attempts stay in the trace
+                            # and the process remembers the model.
+                            if temperature == 1 or not _recusa_de_temperatura(refused):
+                                raise
+                            _SO_TEMPERATURA_PADRAO.add(_model)
+                            resp = tracked_completion(litellm.completion, temperature=1, **call)
                         break
                     except _transient as transient_exc:
                         if _attempt >= _max_retries:
