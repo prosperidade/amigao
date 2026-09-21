@@ -209,36 +209,41 @@ class Settings(BaseSettings):
     # Vazio = auto-detecta (OpenAI se key, senão Gemini). Trocar exige
     # re-embedar TODOS os chunks (vetores entre provedores são incompatíveis).
     EMBEDDING_PROVIDER: str = ""
-    AI_DEFAULT_MODEL: str = "gpt-4o-mini"
-    # André, 19/09/2026: extração semântica do Inc2, pelo gateway e sem fallback.
+    # André, 21/09/2026: todos os agentes rodam no gpt-5.6-luna, com a cadeia
+    # Luna → Gemini 3.7 Flash (AI_FALLBACK_MODEL) → Claude Sonnet 5
+    # (AI_ANTHROPIC_FALLBACK_MODEL). O extrator mantém a cadeia própria abaixo.
+    AI_DEFAULT_MODEL: str = "gpt-5.6-luna"
+    # André, 19/09/2026: extração semântica do Inc2, pelo gateway; fallback
+    # exclusivo no Gemini 3.7 Flash, sem terceiro provedor (CLAUDE.md).
     AI_EXTRATOR_MODEL: str = "gpt-5.6-luna"
     AI_EXTRATOR_FALLBACK_MODEL: str = "gemini/gemini-3.7-flash"
-    AI_FALLBACK_MODEL: str = "gemini/gemini-2.5-flash"
+    AI_FALLBACK_MODEL: str = "gemini/gemini-3.7-flash"
+    # Terceiro elo da cadeia de todos os agentes, exceto o extrator.
+    AI_ANTHROPIC_FALLBACK_MODEL: str = "claude-sonnet-5"
     # Modelo dedicado do agente de diagnóstico (André 2026-06-02). O diagnóstico
     # é a peça mais complexa do funil (cruza extrator + auditor + legislação),
     # então roda num modelo mais capaz que o default. Por env, nunca hardcoded no
     # agente — deprecation futura é troca de variável, não de código. Vazio = cai
     # no AI_DEFAULT_MODEL. Mesma convenção do GEMINI_LEGAL_MODEL (legislacao).
-    AI_DIAGNOSTICO_MODEL: str = "gpt-4.1"
+    # 21/09/2026: gpt-4.1 → gpt-5.6-luna (decisão do André: Luna em todos).
+    AI_DIAGNOSTICO_MODEL: str = "gpt-5.6-luna"
     # Teto de tokens de SAÍDA do diagnóstico (fix/llm-consistencia 2026-06-07).
     # O diagnóstico é a peça mais fundamental do funil; pós-#70 o formato
     # {afirmacao, fonte, confianca} ficou 2-3× maior e o caso #12 (228 campos)
     # estourava o teto global de 2048 → JSON truncado → parser falhava. Subimos
-    # para o MÁXIMO de saída do gpt-4.1 (32.768). Os fallbacks do diagnóstico
-    # (gemini-2.5-pro 65k, claude-sonnet 64k) comportam esse teto. Por env, nunca
+    # para o MÁXIMO de saída do gpt-4.1 (32.768). A cadeia de 21/09 comporta esse
+    # teto: Luna 128k, Gemini 3.7 Flash 65k, Claude Sonnet 5 128k. Por env, nunca
     # hardcoded no agente — próximo redimensionamento é troca de variável.
     AI_DIAGNOSTICO_MAX_TOKENS: int = 32_768
     # Cost cap dedicado do diagnóstico: com saída longa o teto global de $0.10
     # dispararia cost_exceeded antes da conclusão. $0.50 cobre o pior caso
     # (input grande + 32k de saída no gpt-4.1) com folga. Roda 1×/caso.
     AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO: float = 0.50
-    # Modelo OpenAI equivalente do agente legislação (matriz de equivalência
-    # agente×provider — fix/llm-consistencia). Usado APENAS como fallback de
-    # resiliência quando o Gemini (primário) está indisponível. Por env.
-    AI_LEGAL_MODEL_OPENAI: str = "gpt-4.1-mini"
-    # Modelo Anthropic econômico (equivalente Haiku) usado na matriz para
-    # extrator/atendimento/vigia quando só a chave Anthropic está disponível.
-    AI_HAIKU_MODEL: str = "claude-haiku-4-5-20251001"
+    # Modelo OpenAI do agente legislação (matriz agente×provider). Desde
+    # 21/09/2026 é o PRIMÁRIO da legislação; o Gemini só lidera acima do limiar de
+    # janela (GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS) ou com
+    # LEGISLATION_USE_GEMINI_DEFAULT=true. Por env.
+    AI_LEGAL_MODEL_OPENAI: str = "gpt-5.6-luna"
     # White label (André 2026-05-28): provider chinês selecionável pelo consultor.
     # DeepSeek é o mais maduro para LiteLLM; trocar aqui se mudar.
     LLM_CHINESE_PROVIDER: str = "deepseek"
@@ -304,9 +309,13 @@ class Settings(BaseSettings):
     # Sprint 0 (2026-04-23): Gemini 2.0 Flash tem janela de 1M tokens.
     # Deixamos 900K como budget de contexto (10% de margem pra system prompt + memória).
     LEGISLATION_MAX_CONTEXT_TOKENS: int = 900_000
-    # Sprint 0 — budget expandido quando o roteador escolhe Pro (janela 2M).
+    # Sprint 0 — budget expandido quando o roteador escolhe o modelo de janela longa.
     # Usado só em consultas com corpus muito grande (coletâneas completas).
-    LEGISLATION_MAX_CONTEXT_TOKENS_LONG: int = 1_900_000
+    # 21/09/2026: 1.900.000 → 940.000. O 1,9M era da janela de 2M do gemini-1.5-pro;
+    # desde o Sprint W nenhum modelo da cadeia passa de ~1M (Gemini 3.7 Flash
+    # 1.048.576, Claude Sonnet 5 1.000.000, Luna 922.000), e contexto acima disso
+    # falhava em todos os elos.
+    LEGISLATION_MAX_CONTEXT_TOKENS_LONG: int = 940_000
     LEGISLATION_MAX_RESULTS: int = 20
 
     # Sprint V (2026-04-29) — top-k chunks RAG (knowledge_catalog) injetados no
@@ -336,7 +345,7 @@ class Settings(BaseSettings):
     ROTA_REGULATORIA_MODE: str = "shadow"
 
     # Claude API (agente regulatório)
-    CLAUDE_LEGAL_MODEL: str = "claude-sonnet-4-20250514"
+    CLAUDE_LEGAL_MODEL: str = "claude-sonnet-5"
     # Sprint W (2026-05-14): subido de 4096 para 8192. Gemini 2.5 Flash é
     # verboso e estava truncando o JSON antes do fechamento, quebrando o parser.
     CLAUDE_LEGAL_MAX_TOKENS: int = 8192
@@ -345,11 +354,12 @@ class Settings(BaseSettings):
     # Gemini (context loading de legislação)
     # Default: Flash (1M tokens) — caso comum.
     # Sprint W (2026-05-14): migrado de gemini-2.0-flash (descontinuado para
-    # contas com billing novo) para gemini-2.5-flash.
-    GEMINI_LEGAL_MODEL: str = "gemini/gemini-2.5-flash"
-    # Modelo para consultas com contexto >800K tokens (janela 2M).
-    # Sprint W: migrado de gemini-1.5-pro para gemini-2.5-pro.
-    GEMINI_LEGAL_LONG_MODEL: str = "gemini/gemini-2.5-pro"
+    # contas com billing novo) para gemini-2.5-flash. 21/09/2026: gemini-3.7-flash.
+    GEMINI_LEGAL_MODEL: str = "gemini/gemini-3.7-flash"
+    # Modelo para consultas com contexto >800K tokens, acima da janela do Luna
+    # (922K). Sprint W: gemini-1.5-pro → gemini-2.5-pro; 21/09/2026:
+    # gemini-3.7-flash (janela de 1M).
+    GEMINI_LEGAL_LONG_MODEL: str = "gemini/gemini-3.7-flash"
     # Threshold de contexto acima do qual o roteador troca Flash → Pro.
     GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS: int = 3_200_000  # ~800K tokens
 
@@ -362,8 +372,9 @@ class Settings(BaseSettings):
     GEMINI_OCR_MODEL: str = "gemini/gemini-2.5-flash"
 
     # Sprint O — Gemini como provider default do agente legislação (decisão da sócia 2026-04-21).
-    # Claude continua como fallback quando Gemini não estiver configurado.
-    LEGISLATION_USE_GEMINI_DEFAULT: bool = True
+    # 21/09/2026 (André): o default passa a False — a legislação roda no Luna como os
+    # demais agentes. True devolve o Gemini à frente da cadeia.
+    LEGISLATION_USE_GEMINI_DEFAULT: bool = False
 
     # Sprint 0 — cost guard específico do agente legislação (docs grandes no Gemini).
     # Flash default: $0.30. Override pra Pro quando contexto >800K: $5.00.

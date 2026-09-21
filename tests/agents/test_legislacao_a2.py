@@ -280,6 +280,50 @@ class TestPathIA:
 # Path fallback (regras sem IA)
 # ---------------------------------------------------------------------------
 
+class TestRoteamentoDeModelo:
+    """André, 21/09/2026: legislação no Luna pelo gateway; o Gemini só lidera acima do
+    limiar de janela ou com LEGISLATION_USE_GEMINI_DEFAULT=true. Não há mais caminho
+    que chame a Anthropic direto pelo SDK."""
+
+    _PAYLOAD = {"caminho_regulatorio": "x", "legislacao_aplicavel": [], "riscos": [],
+                "confianca": "media", "justificativa": "x"}
+
+    def _modelo_chamado(self, monkeypatch, *, contexto: str = "", flag: bool = False,
+                        gemini_key: str = "") -> dict:
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "LEGISLATION_USE_GEMINI_DEFAULT", flag)
+        monkeypatch.setattr(settings, "GEMINI_API_KEY", gemini_key)
+        monkeypatch.setattr(settings, "GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS", 10)
+        with ExitStack() as stack:
+            _enter_default_patches(stack, legislation_context=contexto)
+            complete = stack.enter_context(patch("app.agents.base.complete"))
+            complete.return_value = _make_ai_response(self._PAYLOAD)
+            LegislacaoAgent(_ctx())._run_legacy_unconnected()
+        assert complete.call_count == 1
+        return complete.call_args.kwargs
+
+    def test_default_e_luna_com_matriz(self, monkeypatch):
+        from app.core.config import settings
+        kwargs = self._modelo_chamado(monkeypatch, contexto="curto")
+        assert kwargs["model"] == settings.AI_LEGAL_MODEL_OPENAI == "gpt-5.6-luna"
+        assert kwargs["agent_name"] == "legislacao"
+
+    def test_contexto_acima_do_limiar_vai_para_janela_longa(self, monkeypatch):
+        from app.core.config import settings
+        kwargs = self._modelo_chamado(monkeypatch, contexto="x" * 11)
+        assert kwargs["model"] == settings.GEMINI_LEGAL_LONG_MODEL
+        assert kwargs["max_cost_override_usd"] == settings.AI_MAX_COST_PER_JOB_USD_LEGISLACAO_LONG
+
+    def test_flag_com_chave_gemini_devolve_gemini_a_frente(self, monkeypatch):
+        from app.core.config import settings
+        kwargs = self._modelo_chamado(monkeypatch, flag=True, gemini_key="test-g")
+        assert kwargs["model"] == settings.GEMINI_LEGAL_MODEL
+
+    def test_flag_sem_chave_gemini_fica_no_luna(self, monkeypatch):
+        kwargs = self._modelo_chamado(monkeypatch, flag=True, gemini_key="")
+        assert kwargs["model"] == "gpt-5.6-luna"
+
+
 class TestPathRulesBased:
     def _run_with_settings_off(self, *, demand_type: str | None, state: str = "GO") -> dict:
         agent = LegislacaoAgent(_ctx(metadata={

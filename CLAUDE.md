@@ -90,7 +90,7 @@ Para o "porquê" completo: `docs/manifesto/01-VISAO_PRODUTO.md`.
 - **Frontend (consultor — ativo):** React 18 + Vite + TypeScript + TailwindCSS + React Query + Zustand
 - **Frontend (cliente — congelado):** Next.js 16 (App Router) + TypeScript + TailwindCSS
 - **Mobile (campo — congelado):** Expo (React Native) com SQLite offline-first
-- **IA:** LiteLLM (multi-provider: OpenAI, Gemini, Anthropic)
+- **IA:** LiteLLM (multi-provider: OpenAI, Gemini, Anthropic). Cadeia de todos os agentes: `gpt-5.6-luna` → `gemini/gemini-3.7-flash` → `claude-sonnet-5` (André, 21/09/2026); o extrator fica sem o terceiro elo. Tabela em `docs/arquitetura/GOVERNANCA_IA.md`
 - **Infra:** Docker Compose (db, redis, minio, api, worker, client-portal)
 
 `client-portal/` e `mobile/` estão congelados até validação do painel consultor. Ver `docs/adr/009-mobile-clientportal-congelados.md`.
