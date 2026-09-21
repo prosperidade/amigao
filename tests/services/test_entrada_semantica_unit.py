@@ -332,3 +332,38 @@ def test_response_that_is_not_an_object_fails_whole():
     from app.services.entrada_semantica import validar_proposta
     with pytest.raises(ValueError, match="não é objeto JSON"):
         validar_proposta([], DEED, 0, len(DEED))
+
+def test_repair_round_resends_only_own_rejections_and_records_each_result():
+    """André, 21/09/2026: a rejected observation returns once to the model with item and reason."""
+    from app.services.entrada_semantica import registro_do_reparo, reparar_proposta, validar_proposta
+    text = "A vende. B compra."
+    proposta = {"partes": [{"chave": "a", "nome": "A", "natureza": "pf", "trecho": "A vendeu"}],
+                "participacoes": [{"parte_chave": "a", "papel": "transmitente", "trecho": "A vende."}],
+                "observacoes": [{"predicado": "x", "valor": 1, "trecho": "C paga"}]}
+    _, recusadas = validar_proposta(proposta, text, 0, len(text))
+    enviados = []
+
+    def pedir(itens):
+        enviados.extend(itens)
+        return {"reparos": [{"colecao": "partes", "indice": 0, "item": {**proposta["partes"][0], "trecho": "A vende."}},
+                            {"colecao": "observacoes", "indice": 0, "item": None}]}
+    reparada, pedidos = reparar_proposta(proposta, recusadas, pedir)
+    # The dependent participation is not sent: the repaired party clears it.
+    assert [(i["colecao"], i["indice"], i["motivo"]) for i in enviados] == [
+        ("partes", 0, "Trecho extraído não existe no texto versionado"),
+        ("observacoes", 0, "Trecho extraído não existe no texto versionado")]
+    valid, finais = validar_proposta(reparada, text, 0, len(text))
+    assert [p.chave for p in valid.partes] == ["a"] and len(valid.participacoes) == 1 and not valid.observacoes
+    assert registro_do_reparo(pedidos, finais) == [
+        {"colecao": "partes", "indice": 0, "motivo_original": "Trecho extraído não existe no texto versionado",
+         "resultado": "aceito"},
+        {"colecao": "observacoes", "indice": 0, "motivo_original": "Trecho extraído não existe no texto versionado",
+         "resultado": "nao_devolvido", "motivo_final": "Trecho extraído não existe no texto versionado"}]
+    assert proposta["partes"][0]["trecho"] == "A vendeu"  # the audited proposal is not rewritten
+
+
+def test_repair_round_is_skipped_without_own_rejections():
+    from app.services.entrada_semantica import reparar_proposta
+    def pedir(_itens):
+        raise AssertionError("no repair call expected")
+    assert reparar_proposta({"observacoes": []}, [], pedir) == ({"observacoes": []}, [])

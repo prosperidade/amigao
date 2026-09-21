@@ -71,6 +71,7 @@ def documentos_do_caso(process_id: int, db: Db, user: UserDep):
         report = (result[-1]["rejeicoes"].content["attributes"].get("normalized") or {}) if result[-1]["rejeicoes"] else {}
         result[-1]["rejeicoes"] = report.get("rejeicoes", [])
         result[-1]["campos_sem_suporte"] = report.get("campos_sem_suporte", [])
+        result[-1]["reparos"] = report.get("reparos", [])
     return result
 
 
