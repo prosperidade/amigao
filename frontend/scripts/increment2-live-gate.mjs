@@ -118,7 +118,8 @@ try {
     receipt.new_session.push(caseId);
     await fresh.close();
   }
-  if (!associationOnly && receipt.executions.every(e => e.status === 'completed')) {
+  // The #25 cadastral/contractual cut carries no deed; nothing to reclassify there.
+  if (!associationOnly && state.documents['559'] && receipt.executions.every(e => e.status === 'completed')) {
   const doc = state.documents['559'];
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
