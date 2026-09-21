@@ -26,6 +26,9 @@ Validação por campo (André, 21/09): âncora resolvida admite a observação; 
 suporte no trecho do próprio item fica vazio com motivo e K não determinado; trecho
 inexistente rejeita. Reextração é nova versão; a anterior fica superada (ADR-070).
 Medição comparativa com `gpt-5.6-terra` autorizada só em dev (`INC2_MODEL`).
+Extrator permanece no Luna (André, 21/09); a compensação é da skill: regra do trecho
+literal com exemplo e uma rodada de reparo por fatia, com resultado registrado.
+Mudança de modelo só por decisão do André, nunca por conta do agente.
 O percurso dos nove textos reais é autorizado somente em dev. Produção:
 somente SELECT pelo MCP `supabase-prod-ro`; texto somente em memória e no
 banco de dev, nunca em arquivos/fixtures. Registrar IDs, hashes e tamanhos.
