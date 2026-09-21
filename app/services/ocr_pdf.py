@@ -104,6 +104,18 @@ def extract_text_with_pypdf(pdf_bytes: bytes) -> str:
         return ""
 
 
+def _sem_preco(model: str) -> Optional[OcrResult]:
+    """Dívida #256: modelo sem preço falha explícito antes da chamada, nunca custo zero."""
+    from app.core.litellm_tabela import ModeloSemPreco, carregar, exigir_preco  # noqa: PLC0415
+
+    try:
+        exigir_preco(carregar(), model)
+    except ModeloSemPreco as exc:
+        logger.error("ocr_pdf: %s", exc)
+        return OcrResult("", "none", 0, 0.0, 0, 0, 0, model, "", error=f"price_unknown:{model}")
+    return None
+
+
 def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf") -> OcrResult:
     """OCR via Gemini Vision, UMA imagem rasterizada por página.
 
@@ -126,6 +138,8 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
         return OcrResult("", "none", 0, 0.0, 0, 0, 0, "", "", error="gemini_api_key_missing")
 
     model = settings.GEMINI_OCR_MODEL
+    if (sem_preco := _sem_preco(model)) is not None:
+        return sem_preco
 
     images = _rasterize_pdf_pages_to_jpegs(
         pdf_bytes, max_pages=GEMINI_OCR_MAX_PAGES, dpi=GEMINI_OCR_DPI
@@ -134,7 +148,9 @@ def extract_text_with_gemini(pdf_bytes: bytes, mime_type: str = "application/pdf
         logger.info("ocr_pdf.gemini: rasterização indisponível/vazia, usando inline")
         return _extract_text_with_gemini_inline(pdf_bytes, mime_type, model)
 
-    import litellm  # noqa: PLC0415
+    from app.core.litellm_tabela import carregar  # noqa: PLC0415
+
+    litellm = carregar()
 
     t0 = time.monotonic()
     page_texts: list[str] = []
@@ -231,9 +247,10 @@ def _extract_text_with_gemini_inline(
     Mantida só como fallback de extract_text_with_gemini quando a rasterização
     não está disponível. NÃO usar como caminho principal: em PDFs multipágina o
     Gemini transcreve só a 1ª página por aqui."""
-    import litellm  # noqa: PLC0415
-
     from app.core.config import settings  # noqa: PLC0415
+    from app.core.litellm_tabela import carregar  # noqa: PLC0415
+
+    litellm = carregar()
 
     b64 = base64.b64encode(pdf_bytes).decode("ascii")
     t0 = time.monotonic()
@@ -338,6 +355,8 @@ def extract_text_with_openai_vision(pdf_bytes: bytes) -> OcrResult:
 
     if not settings.OPENAI_API_KEY:
         return OcrResult("", "none", 0, 0.0, 0, 0, 0, "", "", error="openai_api_key_missing")
+    if (sem_preco := _sem_preco(OPENAI_VISION_MODEL)) is not None:
+        return sem_preco
 
     t0 = time.monotonic()
     images = _rasterize_pdf_pages_to_jpegs(pdf_bytes)
@@ -350,7 +369,9 @@ def extract_text_with_openai_vision(pdf_bytes: bytes) -> OcrResult:
             error="rasterization_failed",
         )
 
-    import litellm  # noqa: PLC0415
+    from app.core.litellm_tabela import carregar  # noqa: PLC0415
+
+    litellm = carregar()
 
     content: list[dict] = [{"type": "text", "text": OCR_PROMPT}]
     for img_bytes in images:

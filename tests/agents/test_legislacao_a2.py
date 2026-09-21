@@ -316,10 +316,11 @@ class TestRoteamentoDeModelo:
         assert kwargs["model"] == "gpt-5.6-luna"
 
     def test_budget_de_contexto_cabe_na_janela_do_luna(self):
-        import litellm
-
         from app.core.config import settings
-        janela = litellm.model_cost["gpt-5.6-luna"]["max_input_tokens"]
+        from app.core.litellm_tabela import modelos
+
+        # Tabela local (#255): o mapa baixado no import pode faltar.
+        janela = modelos()["gpt-5.6-luna"]["max_input_tokens"]
         # Estimativa do legislation_service é ~4 chars/token; texto jurídico em português
         # pode render ~3,5. O budget com esse erro ainda precisa caber na janela.
         assert janela > settings.LEGISLATION_MAX_CONTEXT_TOKENS_LONG * 4 / 3.5
