@@ -4,6 +4,7 @@
 **Data:** 2026-04-03 (Sprint IA-1); formalizada como ADR em 2026-05-15
 **Decisores:** tecnologia
 **Relacionado:** [`./005-pgvector-rag.md`](./005-pgvector-rag.md), [`./006-skills-procedurais.md`](./006-skills-procedurais.md)
+**Adendo:** 21/09/2026 — os nomes de modelo no corpo são os de abril–maio/2026; os vigentes estão no [adendo ao fim](#adendo--21092026-modelos-vigentes).
 
 ---
 
@@ -25,13 +26,6 @@ O domínio LLM se move trimestralmente. Provider líder muda. Preço cai. Modelo
 
 Política de fallback: OpenAI → Gemini → Anthropic, ordem ajustável por contexto. Quando o provider primário falha (timeout, rate limit, erro), o LiteLLM tenta o próximo. Tudo configurável via env (`AI_DEFAULT_MODEL`, `AI_FALLBACK_MODEL`).
 
-Atualização 21/09/2026, decisão André: o extrator possui cadeia própria
-`AI_EXTRATOR_MODEL=gpt-5.6-luna` →
-`AI_EXTRATOR_FALLBACK_MODEL=gemini/gemini-3.7-flash`, sem Anthropic.
-`AI_EXTRATOR_ALLOW_FALLBACK=false` fixa Luna no gate dev do Incremento 2;
-o default operacional `true` mantém o fallback. Essa exceção prevalece sobre
-as descrições históricas de modelos gerais deste ADR.
-
 Cada chamada retorna `AIResponse(content, model_used, tokens_in, tokens_out, cost_usd, duration_ms, provider)` e é persistida em `AIJob` para auditoria.
 
 ## Consequências
@@ -40,7 +34,7 @@ Cada chamada retorna `AIResponse(content, model_used, tokens_in, tokens_out, cos
 - **Resiliência operacional** — falha de provider não derruba a feature; fallback é automático
 - **Diversidade econômica** — modelo barato em provider A para tarefa simples, modelo robusto em provider B para tarefa complexa
 - **Lockin reduzido** — trocar provider primário é uma config, não um refactor
-- **Custo otimizável** — escolha por agente via matriz; o extrator usa Luna/Gemini 3.7 Flash conforme decisão acima. A configuração dos outros agentes é independente.
+- **Custo otimizável** — agente `LegislacaoAgent` usa Gemini 2.0 Flash (janela 1M-2M tokens, custo baixo); demais usam gpt-4o-mini
 - **Audit unificado** — uma única forma de logar custo, tokens, modelo, provider
 - **Credenciais por tenant** — capacidade habilitada (Tenant pode trazer chave própria, custo vai pro cartão dele)
 
@@ -84,16 +78,28 @@ Cada chamada retorna `AIResponse(content, model_used, tokens_in, tokens_out, cos
 - [`./007-stage-output-content.md`](./007-stage-output-content.md) — schema validado para a saída dos agentes
 - [`./003-mempalace-REVOKED.md`](./003-mempalace-REVOKED.md) — memória de agente que foi revogada (substituída por RAG)
 
-## Politica atual do extrator - 21/09/2026
+## Adendo — 21/09/2026: modelos vigentes
 
-Decisao Andre: primario `AI_EXTRATOR_MODEL=gpt-5.6-luna`; fallback operacional
-exclusivo `AI_EXTRATOR_FALLBACK_MODEL=gemini/gemini-3.7-flash`, via ai_gateway.
-`AI_EXTRATOR_ALLOW_FALLBACK=true` habilita a resiliencia operacional; nenhum
-terceiro provedor na cadeia do extrator. Demais agentes seguem a matriz propria.
-Para a medicao do Incremento 2 em dev: `AI_EXTRATOR_ALLOW_FALLBACK=false`,
-modelo Luna fixo, sem chaves de fallback no helper. Indisponibilidade falha
-visivelmente; nunca substitui o modelo medido. Erro de ancora/schema nao e
-motivo para trocar de provedor. Registrar modelo efetivo, tentativas e custo.
-Antes desta edicao foram conferidos os PRs: apenas #180 aberto, nenhum PR de
-modelos/governanca do Claude Code encontrado. Substitui as descricoes historicas
-que atribuem gpt-4o-mini ao extrator. Nao modifica a politica BYOK dos demais agentes.
+A decisão continua valendo: LiteLLM como driver único, o gateway como porta única e fallback
+entre providers. Mudou o modelo em cada ponto, e o corpo acima (gpt-4o-mini para quase tudo,
+Gemini 2.0 Flash na Legislação) deixou de descrever o sistema:
+
+- **Legislação e OCR** saíram do `gemini-2.0-flash`, que o Google descontinuou e que derrubou o
+  worker de produção. A Legislação migrou em 14/05 (Sprint W) para `gemini/gemini-2.5-flash`,
+  com `gemini/gemini-2.5-pro` acima de ~800K tokens. O OCR migrou em 02/06 para
+  `gemini/gemini-2.5-flash`.
+- **Diagnóstico** ganhou modelo próprio em 02/06: `gpt-4.1` (`AI_DIAGNOSTICO_MODEL`).
+- **Matriz agente × provider** (`app/core/model_matrix.py`, 07/06). Cada agente declara o
+  equivalente em cada provider. O primário vem sempre de setting, e o fallback só entra entre
+  providers com chave. Carga fixada (`allow_fallback=False`) falha em vez de trocar de provider.
+- **Extrator** (decisão do André, 19/09, #183): `gpt-5.6-luna` (`AI_EXTRATOR_MODEL`), com
+  fallback exclusivo `gemini/gemini-3.7-flash` (`AI_EXTRATOR_FALLBACK_MODEL`) e sem Anthropic.
+  O fallback cobre falha de provedor; erro de validação semântica da saída não troca de modelo.
+  `AI_EXTRATOR_ALLOW_FALLBACK` (default `true`) liga a cadeia; `false` fixa o Luna (medição
+  dev do Incremento 2).
+- **Demais agentes** seguem em `gpt-4o-mini` (`AI_DEFAULT_MODEL`), com fallback
+  `gemini/gemini-2.5-flash` (`AI_FALLBACK_MODEL`).
+
+A tabela viva, com a cadeia de fallback de cada agente, está em
+[`GOVERNANCA_IA.md` › Modelos por contexto](../arquitetura/GOVERNANCA_IA.md#modelos-por-contexto).
+A próxima troca de modelo atualiza aquela tabela, não este adendo.

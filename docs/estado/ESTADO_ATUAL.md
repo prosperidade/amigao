@@ -1,5 +1,16 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 21/09/2026 — Frente B (zona normativa e RAG) encerrada.**
+Entregue e mergeado: ADR-075 + adendos A1–A5 (#178, #184), trava de citação #243 parcial
+(#181), dev × produção (#182) e confirmações em produção (#187). **Incremento 1 em produção =
+schema aplicado (alembic `069ce001`), zero execuções: `evidence_versions` vazia.** Issue #185
+confirmada: ids 16–22 com 3,7% a 4,7% de `U+FFFD`; correção é a reconstrução a partir do dev no
+Incremento 6, nada reingerido. Replay do #181 em produção: 76 peças, zero regressão de aceite.
+**Leitura de produção:** o padrão é o `supabase-prod-ro` numa sessão reiniciada após `/mcp`; a
+leitura por CLI não interativo (`claude -p` liberado só para o `execute_sql` do `supabase-prod-ro`,
+resultado lido do stream) foi aceita pelo André como **contorno único**, não como caminho padrão.
+Pendentes: Q-ISIS-18/19/04 com a Ísis; dívidas #242–#247 (#243 parcial).
+
 **Pulso: fallback do extrator autorizado para Gemini 3.7 Flash.**
 Primario gpt-5.6-luna; fallback exclusivo gemini/gemini-3.7-flash via gateway.
 Substitui a decisao anterior sem fallback. Gate real continua aberto.

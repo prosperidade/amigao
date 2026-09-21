@@ -1,5 +1,22 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 21/09/2026 — modelos de IA alinhados na documentação
+
+GOVERNANCA_IA.md e ADR-002 (adendo) passam a descrever os modelos que o código da main usa.
+Na conferência apareceu uma divergência de configuração, que fica registrada aqui porque o PR
+é só de documentação:
+
+- **#254 — defaults de modelo divergentes entre `config.py`, compose e gateway (aberta):**
+  - O `docker-compose.yml` (api e worker) usa `AI_FALLBACK_MODEL=gemini/gemini-1.5-flash` como
+    default. `config.py` e `render.yaml` usam `gemini/gemini-2.5-flash`, e o `.env` deste
+    repositório não define a variável. No dev em Docker, o fallback dos agentes sem matriz cai
+    num modelo de geração que o código já abandonou.
+  - `_build_model_list` (`app/core/ai_gateway.py`) fixa `claude-haiku-4-5-20251001` no código
+    em vez de ler `AI_HAIKU_MODEL`. É o padrão que já derrubou produção duas vezes quando o
+    modelo foi descontinuado.
+  - **Correção:** alinhar o default do compose ao `config.py` e trocar o literal por
+    `settings.AI_HAIKU_MODEL`. Mudança de config e código, fora deste PR.
+
 ## Pulso 19/09/2026 — bloqueio de envio ao provedor
 
 Migrations aplicadas apenas em dev e nove associações autenticadas comprovadas.
@@ -69,11 +86,15 @@ frente (docs-only).
   mais recusada, `MPV`, sigla com hífen (`SEMAD-GO`) e zero à esquerda (`02` = `2`) entram;
   `comp 780/2017` deixa de virar medida provisória. **Seguem abertos:** citação **sem ano** não é
   extraída (passa sem conferência); dispositivo não é conferido; `art. 61-A` não é capturado.
+  **Replay em produção (21/09, `supabase-prod-ro`):** 76 peças, zero regressão de aceite, zero peça que
+  virou de válida para inválida; o novo avaliador enxerga 127 citações estaduais que antes passavam sem
+  conferência (ex.: `Decreto GO 9.710/2020`, `Lei Estadual nº 18.104/2013`). Comentário no PR #181.
 - **#244 — corpus de dev ≠ produção:** **medido em 18/09 (decisão 5):** produção não tem nada que o dev
   não tenha; o dev tem 49 documentos federais a mais (ids 102–210, incluindo Decreto 6.514/2008 e
   OJN 06/2009) — ver ZONA_NORMATIVA_RAG §0. **O reparo de charset da #95 (7 federais do Planalto) e a
   reindexação da fase 4 rodaram só no dev:** a produção deve guardar o Código Florestal, a Lei 9.605 e
-  outras 5 com ~4% de `U+FFFD` (confirmar pelo `supabase-prod-ro`). Números: dev 32.161 chunks / 113 documentos / 395 fontes;
+  outras 5 com texto corrompido — **confirmado em 21/09 pelo `supabase-prod-ro`: 3,7% a 4,7% de `U+FFFD`
+  nos ids 16–22** (issue #185; correção = reconstrução a partir do dev, Incremento 6, sem reingerir antes). Números: dev 32.161 chunks / 113 documentos / 395 fontes;
   produção 28.891 / 64 / 346 (medido 18/09). Medição feita em dev não representa produção.
 - **#245 — `rota_shadow` lê chunk sem tenant:** `_carregar_chunks` faz `WHERE kc.id = ANY(:ids)`
   sem predicado de tenant (`rota_shadow.py:199–238`) e carimba `confianca: "alta"` em todo trecho.
@@ -171,8 +192,9 @@ Cada item: o que é, de onde veio, o que destrava, e o estado.
 > fim de cada sprint. Itens fechados saem para a seção "Fechadas (histórico)" abaixo; não somem.
 > Ver `docs/arquitetura/GOVERNANCA_DOCUMENTAL.md` para a regra.
 
-> **PRÓXIMO NÚMERO LIVRE: 254.** (#248 a #253 abertas pela auditoria de disco, 21/09;
-> conferido `gh pr list`: #179, #180 e #183 abertos, nenhum usa 248+.)
+> **PRÓXIMO NÚMERO LIVRE: 255.** (#254 aberta no alinhamento dos modelos de IA, 21/09;
+> conferido `gh pr list`: só o #188 aberto, que não numera dívida.)
+> Anterior: 254 (#248 a #253 abertas pela auditoria de disco, 21/09.)
 > Anterior: 248 (#242 a #247 abertas pela Frente B — ADR-075, 18/09.)
 > Anterior: 242 (#237 a #241 abertas na emenda do ADR-070, 18/09.)
 > Anterior: 237. (#233 a #236 abertas pela Frente A — ADR-070,

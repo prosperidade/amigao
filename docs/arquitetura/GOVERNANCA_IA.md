@@ -10,7 +10,7 @@ não é autorização de consumo. Consulte o ADR para cobertura e limites atuais
 
 **Documento:** Arquitetura · referência viva
 **Estado:** atualizar a cada nova política, agente, ou provider
-**Última revisão:** 2026-09-21 (política do extrator; modelos históricos dos demais agentes abaixo)
+**Última revisão:** 2026-09-21 (modelos alinhados ao código da main: extrator do #183, Legislação/OCR no Gemini 2.5, diagnóstico no gpt-4.1)
 
 ---
 
@@ -38,17 +38,27 @@ Camada única de contato com provedores. **Nenhum serviço chama provider direta
 
 | Provider | Configuração | Default para |
 |---|---|---|
-| OpenAI | `OPENAI_API_KEY` em `.env` | Maioria dos agentes (`gpt-4o-mini`) |
-| Gemini (Google) | `GEMINI_API_KEY` em `.env` | `LegislacaoAgent` (janela 1M-2M tokens) |
-| Anthropic Claude | `ANTHROPIC_API_KEY` em `.env` | Fallback secundário |
+| OpenAI | `OPENAI_API_KEY` em `.env` | Extrator (`gpt-5.6-luna`), diagnóstico (`gpt-4.1`) e demais agentes (`gpt-4o-mini`) |
+| Gemini (Google) | `GEMINI_API_KEY` em `.env` | Legislação e OCR (`gemini-2.5-flash`/`-pro`); fallback do extrator (`gemini-3.7-flash`) e dos demais |
+| Anthropic Claude | `ANTHROPIC_API_KEY` em `.env` | Fallback de terceira linha (Haiku ou Sonnet, conforme o agente); fora da cadeia do extrator |
 
 ### Fallback automático
 
 Quando o provider primário falha (timeout, rate limit, erro do provider), o LiteLLM tenta o próximo. Ordem padrão: OpenAI → Gemini → Anthropic.
 
-Exceção atual do extrator: `gpt-5.6-luna` → `gemini/gemini-3.7-flash`, sem
-terceiro provedor. Na medição do Incremento 2 em dev, somente Luna:
-`AI_EXTRATOR_ALLOW_FALLBACK=false`. Erro de validação documental não aciona fallback.
+Desde o fix/llm-consistencia (07/06), agente que chama o gateway com `agent_name` segue a
+**matriz agente × provider** (`app/core/model_matrix.py`): o primário vem sempre de setting e
+fica em primeiro; os equivalentes do agente em outros providers entram como fallback, e só
+entre providers com chave. Carga fixada (`allow_fallback=False`) falha em vez de trocar de
+provider.
+
+**Exceção do extrator (decisão do André, 19/09/2026, #183):** a cadeia é `gpt-5.6-luna` →
+`gemini/gemini-3.7-flash`, sem terceiro provedor. O fallback cobre só falha de provedor: erro
+de validação semântica da saída (`EntradaExtraida`) não troca de modelo. O modelo efetivo de
+cada fatia fica registrado. `AI_EXTRATOR_ALLOW_FALLBACK` (default `true`) liga essa cadeia; com
+`false` o extrator fica só no Luna e indisponibilidade falha visível — é como roda a medição
+dev do Incremento 2 (`scripts/incremento2_dev_gate.py`). Item rejeitado por âncora, schema ou
+referência entre partes é rejeição individual registrada, nunca motivo de trocar de modelo.
 
 ### White label — provider por consultor (PR LLM, 30/05)
 
@@ -68,26 +78,33 @@ LLM (`anthropic`/`google`/`openai`/`deepseek`; chinês default = `deepseek` via
 
 ### Modelos por contexto
 
-| Modelo | Uso | Por quê |
-|---|---|---|
-| `gpt-5.6-luna` | Extrator semântico, primário | Decisão André; medição fixa em dev |
-| `gemini/gemini-3.7-flash` | Fallback operacional exclusivo do extrator | Resiliência de provedor; desabilitado na medição |
-| `gpt-4o-mini` | Default geral histórico; demais agentes seguem `model_matrix.py` | Não é o primário do extrator semântico |
-| `gpt-4o` | Casos complexos com necessidade de raciocínio | Quando o `mini` falha em testes de qualidade |
-| `gemini/gemini-2.0-flash` | `LegislacaoAgent` (corpus regulatório grande) | Janela 1M tokens, custo competitivo |
-| `gemini/gemini-1.5-pro` | Fallback para contexto > 800K tokens | Janela 2M |
-| Anthropic Claude (qualquer SKU) | Fallback secundário | Diversidade de risco |
+| Uso | Primário (setting) | Fallback, em ordem | Onde |
+|---|---|---|---|
+| Extrator (entrada semântica) | `gpt-5.6-luna` (`AI_EXTRATOR_MODEL`) | só `gemini/gemini-3.7-flash` (`AI_EXTRATOR_FALLBACK_MODEL`) | `ExtratorAgent` → `entrada_semantica.py` |
+| Diagnóstico | `gpt-4.1` (`AI_DIAGNOSTICO_MODEL`) | `gemini/gemini-2.5-pro` → `claude-sonnet-4-20250514` | `diagnostico.py` |
+| Legislação, contexto ≤ ~800K tokens | `gemini/gemini-2.5-flash` (`GEMINI_LEGAL_MODEL`) | `gpt-4.1-mini` (`AI_LEGAL_MODEL_OPENAI`) → `claude-sonnet-4-20250514` | `legislacao.py` |
+| Legislação, contexto > ~800K tokens | `gemini/gemini-2.5-pro` (`GEMINI_LEGAL_LONG_MODEL`) | mesma cadeia acima | `legislacao.py` |
+| Demais agentes (redator, orçamento, acompanhamento, financeiro, marketing) | `gpt-4o-mini` (`AI_DEFAULT_MODEL`) | `gemini/gemini-2.5-flash` (`AI_FALLBACK_MODEL`) → `claude-haiku-4-5-20251001` | `_build_model_list` no gateway |
+| OCR de PDF escaneado | `gemini/gemini-2.5-flash` (`GEMINI_OCR_MODEL`) | — | `ocr_pdf.py` |
+| Transcrição de áudio | `whisper-1` (`AUDIO_TRANSCRIPTION_MODEL`) | — | ADR-060 |
 
-Configuração default está em `.env` (`AI_DEFAULT_MODEL`, `AI_FALLBACK_MODEL`).
+Os defaults estão em `app/core/config.py`; qualquer um é trocado por variável de ambiente, sem
+deploy de código. O `render.yaml` declara `AI_DEFAULT_MODEL`, `AI_DIAGNOSTICO_MODEL`,
+`AI_FALLBACK_MODEL` e `AUDIO_TRANSCRIPTION_MODEL` com os mesmos valores da tabela; as demais
+seguem o default do `config.py`. Com chave própria
+do consultor (white label, acima), vale só o modelo dele. `gpt-4o` só aparece como opção de
+chave própria, não em cadeia da casa.
 
 ### Roteamento dinâmico por janela (`LegislacaoAgent`)
 
 `app/agents/legislacao.py` detecta tamanho do contexto e roteia:
 
-- Contexto ≤ 800K tokens → `gemini/gemini-2.0-flash` (mais rápido, mais barato)
-- Contexto > 800K tokens → `gemini/gemini-1.5-pro` (janela maior)
+- Contexto ≤ 800K tokens → `gemini/gemini-2.5-flash` (mais rápido, mais barato)
+- Contexto > 800K tokens → `gemini/gemini-2.5-pro` (janela maior)
 
-Threshold é ajustável. Health check no boot loga WARNING se `LEGISLATION_USE_GEMINI_DEFAULT=true` sem `GEMINI_API_KEY` configurada.
+O limiar é `GEMINI_LEGAL_LONG_CONTEXT_THRESHOLD_CHARS` (3.200.000 caracteres ≈ 800K tokens).
+Os modelos 2.0-flash e 1.5-pro foram trocados em 14/05 (Sprint W); o 2.0-flash foi
+descontinuado pelo Google e derrubou o worker de produção. Health check no boot loga WARNING se `LEGISLATION_USE_GEMINI_DEFAULT=true` sem `GEMINI_API_KEY` configurada.
 
 ### Resposta padrão (`AIResponse`)
 
@@ -263,7 +280,6 @@ Toda chamada IA gera:
 1. ~~Skills reais não existem ainda~~ — **Primeira skill real escrita em 2026-05-23**: `app/skills/diagnostico/situacao_ambiental_imovel_rural/SKILL.md` (3 estágios: preliminar/consolidado/saneamento; 18 heurísticas; mapa de riscos com 7 categorias × 4 graus × 4 prioridades). 5 skills do Redator continuam aguardando reunião com a sócia.
 2. ~~Citation evaluator só roda no Redator hoje~~ — **Expandido para o DiagnosticoAgent em 2026-05-23** (Fase 2 Onda 2, commit `5c4dd33`). Espelha o padrão do RedatorAgent: extrai citações de `situacao_geral + passivos + acoes + observacoes`, valida contra `legislation_context` da chain (`legislacao_aplicavel`, `normas_estaduais`, `rag_chunks_meta`), e popula `citation_total/issues/coverage_ratio/valid` no payload. Citações sem match ficam como suspeitas, não derrubam a execução.
 3. **Override de prompts via UI cortado** — formalizar como ADR ([`../adr/`](../adr/)).
-4. ~~MemPalace stub vivo em `app/agents/memory.py`~~ — **Já removido em commit `757b7de`** (Sprint Z). Gap A5 da auditoria fechado.
 5. **`AI_HOURLY_COST_LIMIT_USD` ainda hardcoded** — migrar para config quando justificar.
 6. ~~`AuditorImovelAgent` registrado mas sem chain~~ — **Resolvido em 2026-05-24** (PROMPT_3 Onda B). Agente entrou na chain `diagnostico_completo` (`extrator → auditor_imovel → legislacao → diagnostico`) via `NON_BLOCKING_REVIEW_AGENTS` — `requires_review=True` do auditor não interrompe a chain (critério: o output é INSUMO `chain_data`, não produto final).
 7. ~~Diagnóstico não consome findings do auditor~~ — **Resolvido em 2026-05-25** (PROMPT_4 Onda A, commit `f93b4b4`). `DiagnosticoAgent._consume_auditor_findings()` lê `chain_data["auditor_imovel"]["findings_raw"]` e os incorpora como "primeiro movimento": cada finding vira `Divergencia` (matriz de cruzamento) + `Risco` com `grau` 4-níveis preservado (`critico` → `critico_impeditivo_potencial`, **NÃO** colapsa em "alto" no payload). `nivel_risco_geral` derivado do pior grau dos findings. Path rules-based também consome (auditor é fonte independente do LLM).
@@ -275,17 +291,3 @@ Toda chamada IA gera:
 - [`MODELO_DE_DADOS.md`](./MODELO_DE_DADOS.md) — schema do `AIJob`, `PromptTemplate`, `knowledge_catalog`
 - [`BASE_REGULATORIA.md`](./BASE_REGULATORIA.md) — detalhe da base que o citation evaluator confronta
 - [`OBSERVABILIDADE.md`](./OBSERVABILIDADE.md) — métricas e logs gerados pelos agentes
-
-## Politica atual do extrator - 21/09/2026
-
-Decisao Andre: primario `AI_EXTRATOR_MODEL=gpt-5.6-luna`; fallback operacional
-exclusivo `AI_EXTRATOR_FALLBACK_MODEL=gemini/gemini-3.7-flash`, via ai_gateway.
-`AI_EXTRATOR_ALLOW_FALLBACK=true` habilita a resiliencia operacional; nenhum
-terceiro provedor na cadeia do extrator. Demais agentes seguem a matriz propria.
-Para a medicao do Incremento 2 em dev: `AI_EXTRATOR_ALLOW_FALLBACK=false`,
-modelo Luna fixo, sem chaves de fallback no helper. Indisponibilidade falha
-visivelmente; nunca substitui o modelo medido. Erro de ancora/schema nao e
-motivo para trocar de provedor. Registrar modelo efetivo, tentativas e custo.
-Antes desta edicao foram conferidos os PRs: apenas #180 aberto, nenhum PR de
-modelos/governanca do Claude Code encontrado. Substitui as descricoes historicas
-que atribuem gpt-4o-mini ao extrator. Nao modifica a politica BYOK dos demais agentes.
