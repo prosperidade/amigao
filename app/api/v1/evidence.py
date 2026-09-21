@@ -56,7 +56,13 @@ def documentos_do_caso(process_id: int, db: Db, user: UserDep):
         c = classificacao_atual(db, doc)
         result.append({"id": doc.id, "filename": doc.original_file_name,
             "tipo": (c.tipo_revisado or c.tipo_proposto) if c else doc.document_type,
-            "classificacao_versao": c.versao if c else 0, "review_required": doc.review_required})
+            "classificacao_versao": c.versao if c else 0, "review_required": doc.review_required,
+            "extraction_status": doc.extraction_status,
+            "rejeicoes": (db.query(EvidenceVersion).filter_by(
+                tenant_id=user.tenant_id, process_id=process_id,
+                object_id=f"extracao:rejeicoes:{doc.id}").order_by(EvidenceVersion.version.desc()).first())})
+        report = result[-1]["rejeicoes"]
+        result[-1]["rejeicoes"] = (report.content["attributes"].get("normalized") or {}).get("rejeicoes", []) if report else []
     return result
 
 

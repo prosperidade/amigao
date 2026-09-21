@@ -162,3 +162,38 @@ def test_ancora_nao_corrige_numero_ou_pontuacao():
     from app.services.identidade_observacao import resolver_ancora_literal
     with pytest.raises(ValueError, match="não existe"):
         resolver_ancora_literal("Área:\n12,3 ha", "Área: 12.3 ha")
+
+
+def test_offset_global_disambiguates_and_invalid_item_does_not_stop_others():
+    from app.schemas.entrada_semantica import EntradaExtraida
+    from app.services.entrada_semantica import filtrar_ancoras
+    text = "same | same | unique"
+    entrada = EntradaExtraida(observacoes=[
+        {"predicado": "x", "valor": 1, "trecho": "same"},
+        {"predicado": "y", "valor": 2, "trecho": "same", "posicao_inicio": 7, "posicao_fim": 11},
+        {"predicado": "z", "valor": 3, "trecho": "unique"}])
+    valid, rejected = filtrar_ancoras(entrada, text, 0, len(text))
+    assert [o.predicado for o in valid.observacoes] == ["y", "z"]
+    assert [(o.posicao_inicio, o.posicao_fim) for o in valid.observacoes] == [(7, 11), (14, 20)]
+    assert len(rejected) == 1 and "repetido" in rejected[0]["motivo"]
+
+
+def test_offset_outside_chunk_and_mismatched_end_are_rejected():
+    from app.schemas.entrada_semantica import EntradaExtraida
+    from app.services.entrada_semantica import filtrar_ancoras
+    entrada = EntradaExtraida(observacoes=[
+        {"predicado": "x", "valor": 1, "trecho": "first", "posicao_inicio": 0, "posicao_fim": 5},
+        {"predicado": "y", "valor": 2, "trecho": "last", "posicao_inicio": 6, "posicao_fim": 9}])
+    valid, rejected = filtrar_ancoras(entrada, "first last", 6, 10)
+    assert not valid.observacoes and len(rejected) == 2
+
+
+def test_rejected_party_invalidates_only_its_dependent_claim():
+    from app.schemas.entrada_semantica import EntradaExtraida
+    from app.services.entrada_semantica import filtrar_ancoras
+    entrada = EntradaExtraida(partes=[{"chave": "p", "nome": "Name", "natureza": "pf", "trecho": "missing"}],
+        participacoes=[{"parte_chave": "p", "papel": "adquirente", "trecho": "buyer"}],
+        observacoes=[{"predicado": "area", "valor": 1, "trecho": "area"}])
+    valid, rejected = filtrar_ancoras(entrada, "buyer area", 0, 10)
+    assert not valid.partes and not valid.participacoes
+    assert len(valid.observacoes) == 1 and len(rejected) == 2

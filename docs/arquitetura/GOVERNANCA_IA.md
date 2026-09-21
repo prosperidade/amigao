@@ -269,3 +269,17 @@ Toda chamada IA gera:
 - [`MODELO_DE_DADOS.md`](./MODELO_DE_DADOS.md) — schema do `AIJob`, `PromptTemplate`, `knowledge_catalog`
 - [`BASE_REGULATORIA.md`](./BASE_REGULATORIA.md) — detalhe da base que o citation evaluator confronta
 - [`OBSERVABILIDADE.md`](./OBSERVABILIDADE.md) — métricas e logs gerados pelos agentes
+
+## Politica atual do extrator - 21/09/2026
+
+Decisao Andre: primario `AI_EXTRATOR_MODEL=gpt-5.6-luna`; fallback operacional
+exclusivo `AI_EXTRATOR_FALLBACK_MODEL=gemini/gemini-3.7-flash`, via ai_gateway.
+`AI_EXTRATOR_ALLOW_FALLBACK=true` habilita a resiliencia operacional; nenhum
+terceiro provedor na cadeia do extrator. Demais agentes seguem a matriz propria.
+Para a medicao do Incremento 2 em dev: `AI_EXTRATOR_ALLOW_FALLBACK=false`,
+modelo Luna fixo, sem chaves de fallback no helper. Indisponibilidade falha
+visivelmente; nunca substitui o modelo medido. Erro de ancora/schema nao e
+motivo para trocar de provedor. Registrar modelo efetivo, tentativas e custo.
+Antes desta edicao foram conferidos os PRs: apenas #180 aberto, nenhum PR de
+modelos/governanca do Claude Code encontrado. Substitui as descricoes historicas
+que atribuem gpt-4o-mini ao extrator. Nao modifica a politica BYOK dos demais agentes.

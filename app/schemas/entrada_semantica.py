@@ -51,7 +51,8 @@ class ParteExtraida(Contract):
     falecido_chave: str | None = None
     inventario: str | None = None
     trecho: str = Field(min_length=1)
-    posicao_inicio: int | None = Field(default=None, ge=0)
+    posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
+    posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
 
     @model_validator(mode="after")
     def identidade(self):
@@ -76,7 +77,8 @@ class ParticipacaoExtraida(Contract):
     fim: date | None = None
     fracao: Decimal | None = Field(default=None, gt=0, le=1)
     trecho: str = Field(min_length=1)
-    posicao_inicio: int | None = Field(default=None, ge=0)
+    posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
+    posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
     estado_confirmacao: Literal["declarado", "confirmado"] = "declarado"
 
 
@@ -90,7 +92,8 @@ class AtoExtraido(Contract):
     data_ato: date | None = None
     ordem: int = Field(ge=0)
     trecho: str = Field(min_length=1)
-    posicao_inicio: int | None = Field(default=None, ge=0)
+    posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
+    posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
     altera_rotulo: str | None = None
     relacao: Literal["baixa", "aditivo", "retificacao", "cancelamento"] | None = None
 
@@ -100,7 +103,8 @@ class ObservacaoExtraida(Contract):
     valor: str | int | float | list | dict | None
     unidade: str | None = None
     trecho: str = Field(min_length=1)
-    posicao_inicio: int | None = Field(default=None, ge=0)
+    posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
+    posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
     sujeito: str | None = None
     ato_rotulo: str | None = None
 
@@ -113,7 +117,8 @@ class ContratoExtraido(Contract):
     representacao_declarada: list[ParticipacaoExtraida] = Field(default_factory=list)
     referencia_processo_judicial: list[str] = Field(default_factory=list)
     trecho: str = Field(min_length=1)
-    posicao_inicio: int | None = Field(default=None, ge=0)
+    posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
+    posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
 
     @model_validator(mode="after")
     def representacoes(self):
@@ -131,7 +136,8 @@ class FalecimentoDeclarado(Contract):
     fonte: Literal["receita_federal"] = "receita_federal"
     data_consulta: date | None = None
     trecho: str = Field(min_length=1)
-    posicao_inicio: int | None = Field(default=None, ge=0)
+    posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
+    posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
 
     @model_validator(mode="after")
     def limite_da_fonte(self):
