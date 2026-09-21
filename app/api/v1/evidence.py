@@ -7,12 +7,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
-from app.models.evidence import AgentExecution, EvidenceInvalidation, EvidenceReview, EvidenceVersion, RetornoColeta
+from app.models.evidence import AgentExecution, EvidenceInvalidation, EvidenceVersion, RetornoColeta
 from app.models.process import Process
 from app.models.user import User
 from app.schemas.evidence import ReviewRequest
 from app.services.connected_agents import execution_data, get_execution, resume_execution
-from app.services.evidence import authorize, build_envelope, last_review, lock_case, review_object, versions
+from app.services.evidence import (
+    authorize,
+    build_envelope,
+    lock_case,
+    review_object,
+    reviews_by_evidence,
+    versions,
+)
 
 router = APIRouter()
 Db = Annotated[Session, Depends(get_db)]
@@ -98,12 +105,12 @@ def case_evidence(process_id: int, db: Db, user: UserDep):
     rows = []
     invalid = {i.evidence_id for i in db.query(EvidenceInvalidation).filter(
         EvidenceInvalidation.tenant_id == user.tenant_id, EvidenceInvalidation.process_id == process_id).all()}
+    reviews = reviews_by_evidence(db, user.tenant_id, process_id)
     for row in versions(db, user.tenant_id, process_id):
         if row.kind not in {"conclusao", "observacao"}:
             continue
-        review = last_review(db, row)
-        history = db.query(EvidenceReview).filter(EvidenceReview.tenant_id == user.tenant_id,
-            EvidenceReview.process_id == process_id, EvidenceReview.evidence_id == row.id).order_by(EvidenceReview.revision).all()
+        history = reviews.get(row.id, [])
+        review = history[-1] if history else None
         rows.append({"object": row.content, "stale": row.id in invalid,
                      "history": [{"action": r.action, "author": r.author_id, "justification": r.justification,
                                   "at": r.created_at, "revision": r.revision, "premises": r.premises} for r in history],

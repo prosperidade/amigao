@@ -499,6 +499,41 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
             ("observacoes", 0, "Trecho extraído não existe no texto versionado")]
 
 
+def test_case_evidence_queries_do_not_grow_with_observations(committed_case):
+    """Real extractions persist ~200 observations; one review query per object took seconds."""
+    from sqlalchemy import event
+    factory, case = committed_case
+    engine = factory.kw["bind"]
+
+    def queries_for(total):
+        with factory() as db:
+            source = capture_snapshot(db, case["tenant"], case["user"], case["case"]).content["sources"][0]
+            present = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").count()
+            for i in range(present, total):
+                obj = EvidenceObject(id=f"scale-{i}", version=1, kind="observacao", origin="extrator",
+                                     premises=[source], attributes={"predicate": "area", "literal": i})
+                persist_object(db, case["tenant"], case["case"], obj)
+                review_object(db, case["tenant"], case["user"], case["case"], obj.id,
+                    ReviewRequest(expected_version=1, expected_revision=0, action="aprovar", justification="Escala"))
+            db.commit()
+        with TestClient(app) as client:
+            headers = login(client, case["email"])
+            client.get(f"/api/v1/evidence/cases/{case['case']}", headers=headers)  # snapshot settles
+            statements = []
+            def count(*_args):
+                statements.append(1)
+            event.listen(engine, "before_cursor_execute", count)
+            try:
+                response = client.get(f"/api/v1/evidence/cases/{case['case']}", headers=headers)
+            finally:
+                event.remove(engine, "before_cursor_execute", count)
+            assert response.status_code == 200
+            assert len([r for r in response.json()["objects"] if r["review"]]) == total
+            return len(statements)
+
+    assert queries_for(2) == queries_for(22)
+
+
 def test_citation_gate_recognizes_short_forms_and_every_norm_of_the_source(committed_case):
     """Dívida #243, no caminho ativo: persist_object deixava passar forma que a regex não
     reconhecia e recusava quem citava uma norma que não fosse a primeira da fonte."""

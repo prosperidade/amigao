@@ -100,7 +100,8 @@ try {
       observations: data.objects.filter(r => r.object.kind === 'observacao').length });
     console.log('CASE_RESULT=' + JSON.stringify(receipt.executions.at(-1)));
     await page.reload();
-    await expect(page.getByText('Observações documentais', { exact: true })).toBeVisible();
+    // Real cases carry ~200 observations; the evidence read is not instantaneous.
+    await expect(page.getByText('Observações documentais', { exact: true })).toBeVisible({ timeout: 60000 });
     const after = await evidence(page, caseId);
     expect(after.objects.length).toBe(data.objects.length);
     expect(after.objects.filter(r => r.object.kind === 'observacao')
