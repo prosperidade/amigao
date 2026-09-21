@@ -174,8 +174,11 @@ def persistir_entidades(db, doc, entrada, refs, especie):
         normalized = normalizar_conteudo(item.model_dump(mode="json"))
         if tipo == "participacao":
             normalized["estado_confirmacao"] = "declarado"
+        start = localizar_trecho(doc.extracted_text, item.trecho, item.posicao_inicio)
+        position = f"[{start},{start + len(item.trecho)})"
         matches = [r for r in refs if (r.source_record or {}).get("tipo_entrada") == tipo
-                   and r.content["attributes"]["normalized"] == normalized]
+                   and r.content["attributes"]["normalized"] == normalized
+                   and r.content["attributes"].get("position") == position]
         if len(matches) != 1:
             raise HTTPException(422, "Fundamento da entidade ausente ou ambíguo")
         return matches[0]

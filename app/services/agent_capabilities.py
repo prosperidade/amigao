@@ -32,7 +32,8 @@ def capability_manifest(agent_name, metadata):
             name = f"extrator/{family}"
             meta = catalog.get(name)
             skill = load_skill(name) if meta else None
-            if skill is None or meta.version != "1.0.0":
+            expected_version = "1.0.0" if family == "cartorario" else "1.1.0"
+            if skill is None or meta.version != expected_version:
                 manifest["missing"].append({"skill": name, "reason": "metodo_obrigatorio_ausente"})
                 continue
             manifest["applied"].append({"name": name, "version": meta.version,

@@ -57,10 +57,20 @@ try {
     }
     await page.locator('select').filter({ has: page.locator('option[value=extrator]') }).first().selectOption('extrator');
     console.log(`EXTRACTION_STARTED case=${caseId}`);
-    const [response] = await Promise.all([
+    let response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+    await page.waitForLoadState('networkidle');
+    [response] = await Promise.all([
       page.waitForResponse(r => r.url().endsWith('/agents/run-async') && r.request().method() === 'POST', { timeout: 1200000 }),
       page.getByRole('button', { name: 'Executar', exact: true }).click(),
     ]);
+    if (response.status() !== 409) break;
+    const conflict = await response.json();
+    if (conflict.detail !== 'Execução ou revisão concorrente; recarregue o estado') break;
+    console.log(`TRANSIENT_READ_CONFLICT case=${caseId} attempt=${attempt + 1}`);
+    await page.reload();
+    await page.locator('select').filter({ has: page.locator('option[value=extrator]') }).first().selectOption('extrator');
+    }
     if (response.status() === 409) {
       const conflict = await response.json();
       const knownConflicts = [
