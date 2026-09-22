@@ -174,7 +174,55 @@ produção, guardado sem abrir desde 13/09. O LLM não participa.
 | **Prova em dev — percurso autenticado real** (`scripts/gate_incremento3_geometria.py`) | Contra o mesmo dev confirmado, com login real (`/auth/login`), KMZ real gravado no MinIO de dev (não `dados=` de teste) e HTTP real via `TestClient`: (1) painel antes de ler mostra o arquivo "não lido"; (2) `POST .../ler` calcula **2,7250 ha** (geodésico, GRS80 — não graus²); (3) `Property.geom` projetada automaticamente (`feicao_poligonal_unica`); (4) confronto publica 2,72502007 ha × 2,6893 ha, Δ0,03572007 ha, **1,328% sobre a área documental**, tolerância 1,0% (`provisoria_regua_onda_c_pendente_q_isis_04`), resultado `divergente`, grau `atencao`; (5) recarga (novo GET) devolve a mesma leitura e o mesmo `execucao`; (6) nova sessão (novo login, novo token) devolve o mesmo resultado. 6/6 passos OK. Dados persistidos e conferidos por SQL direto: 1 `arquivo_geo`, 1 `feicao`, 2 `medicao`, 1 `confronto_area`, 1 `projecao_geometria`. Tenant de gate 29, nome prefixado `Incremento 3 geometria gate ` — deixado em dev, localizável para limpeza posterior |
 | Casos #22/#23 no percurso | Sem arquivo geoespacial em produção (ver acima), não há o que ler nesses dois — a prova do percurso ficou no #25, que é o único com KMZ |
 
-**O que falta para a prova valer com os bytes reais de Jobson:** um canal autorizado para trazer o
-binário de produção para dev (a decisão de dado > texto do Incremento 2 não cobre isto — cobre
-texto), ou o André anexar o arquivo diretamente. Sem isso, o pipeline está provado e a divergência
-documentada foi reproduzida — mas com um polígono construído, não com os 832 bytes originais.
+**O que faltava para a prova valer com os bytes reais de Jobson:** um canal autorizado para trazer o
+binário de produção para dev, ou o André anexar o arquivo diretamente. O André entregou o arquivo em
+22/09 (fora de qualquer repositório git, em `amigao_geo_producao/`) — ver §Reprocessamento abaixo.
+
+## Reprocessamento com o KMZ real (22/09/2026)
+
+**Decisão do André, na revisão do PR #195:** a prova com polígono calibrado (linha "Prova em dev"
+acima) é **mecanismo/sintética, não prova** — regra 6 do Plano §10.1 ("replay de dado fabricado mede
+roteamento, nunca semântica"). O gate do Incremento 3 permanece aberto até o KMZ real ser
+reprocessado e a divergência medida contra 2,7250 ha ser reportada.
+
+O André entregou `MEDIDA_POLIGONO.kmz` em `amigao_geo_producao/` (fora de qualquer repositório git).
+**832 bytes — bate exatamente com o `file_size_bytes` registrado no doc 560 em produção.** Produção
+não tem `checksum_sha256` gravado para esse documento; não há hash contra o qual conferir identidade
+bit a bit. `sha256` local do arquivo entregue: `67e7157f72f3f0d47bf75f275aac103d420c99210eca7bbeb88cf76250d7c730`
+(registrado aqui para qualquer conferência futura).
+
+O KML interno (`doc.kml`, 1655 bytes, Google Earth Pro 7.3.6.10441) tem **um** `Placemark`, um
+`Polygon`, sete pares de coordenada (anel já fechado), `altitudeMode relativeToGround` — altitude
+descartada conforme ADR-072 §3. `geo_leitura.ler_arquivo` lê sem ambiguidade.
+
+**Reprocessado em dev** (`scripts/reprocessar_kmz_real_jobson.py`, mesmo percurso autenticado do
+gate: login real, upload real no MinIO de dev, leitura, confronto, recarga, nova sessão — 6/6 OK,
+2 execuções independentes, mesmo resultado nas duas):
+
+| Medida | Valor |
+|---|---|
+| Área calculada (geodésica, GRS80, PostGIS 3.3.4) | **2,71563738 ha** (27.156,3738 m²) |
+| Área documental (matrícula, mesmo literal do Plano) | 2,6893 ha |
+| Delta | 0,02633738 ha (263,3738 m²) |
+| Percentual sobre a área documental (denominador da Ísis) | **0,9793%** |
+| Percentual sobre o maior valor (convenção antiga) | 0,9698% |
+| Tolerância (provisória, pendente Q-ISIS-04) | 1,0% |
+| **Resultado** | **`dentro_da_tolerancia`, grau `informativo`** |
+
+**Achado que diverge do documentado:** o Plano §4.5 registra "≈2,7250 ha" para este KMZ; a área
+geodésica real medida é **2,7156 ha** — 94 m² (≈0,34%) abaixo do valor citado. A citação do Plano é
+descrita como arredondada e não diz qual ferramenta/método a produziu; a hipótese mais provável é
+a régua de área do Google Earth Pro (o `atom:link` do próprio arquivo identifica essa origem), que
+tipicamente usa aproximação esférica, não o elipsoide GRS80 que o PostGIS usa aqui — mas isso é
+hipótese, não medição: não tenho como reproduzir o cálculo do Google Earth para confirmar a causa.
+**Consequência prática:** com o número real, o KMZ × documental de Jobson fica **dentro da
+tolerância de 1%** — não é mais o par "divergente/atencao" citado em todo o material de referência
+(Plano, Mergulho, COBERTURA_MVP) até este reprocessamento. Nenhuma dessas fontes foi alterada
+retroativamente além da atualização registrada aqui e em COBERTURA_MVP — a Ísis decide se a régua
+de 1% (pensada para divergência documento×documento) é a mesma tolerância de reprodução geométrica
+da Q-ISIS-04, ou se um limiar mais apertado teria classificado este par como divergente.
+
+Tenants de reprocessamento em dev: `Incremento 3 geometria REAL Jobson 438634ceeb` e
+`...540eaf3ffe` (duas execuções, mesmo resultado) — deixados em dev, localizáveis para limpeza
+posterior. O tenant do gate sintético (29, `Incremento 3 geometria gate `) permanece como prova do
+mecanismo, não como prova do dado.
