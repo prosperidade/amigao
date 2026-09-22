@@ -197,9 +197,22 @@ def root():
     return {"message": f"Bem-vindo à API do {settings.PROJECT_NAME}"}
 
 
+def _identificacao_da_versao() -> dict:
+    return {"commit": settings.GIT_COMMIT or None, "ambiente": settings.ENVIRONMENT}
+
+
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": settings.VERSION, "service": settings.SERVICE_NAME}
+    return {"status": "ok", "version": settings.VERSION, "service": settings.SERVICE_NAME,
+            **_identificacao_da_versao()}
+
+
+# Sob o prefixo da API para o painel alcançar pelo mesmo baseURL (/api/v1) —
+# o /health fica na raiz. Público como o /health: commit e ambiente não são
+# segredo, e o rodapé precisa aparecer mesmo com a sessão expirada.
+@app.get(f"{settings.API_V1_STR}/versao", tags=["Sistema"])
+def versao():
+    return _identificacao_da_versao()
 
 
 @app.get("/metrics", include_in_schema=False)

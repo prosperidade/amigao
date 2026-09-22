@@ -4,7 +4,7 @@ from functools import lru_cache
 from typing import Iterator, Literal
 from urllib.parse import urlencode, urlparse, urlsplit, urlunsplit
 
-from pydantic import EmailStr, model_validator
+from pydantic import AliasChoices, EmailStr, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "172.31.32.1"}
@@ -115,6 +115,11 @@ class Settings(BaseSettings):
     PROMETHEUS_QUEUE_NAMES: str = "celery"
     PROJECT_NAME: str = "Regente Ambiental"
     VERSION: str = "0.1.0"
+    # Commit em execução — o Render injeta RENDER_GIT_COMMIT em runtime; fora
+    # dele, GIT_COMMIT. Vazio = versão não identificada (dev local). Aparece no
+    # /health e no rodapé da tela de conferência, para que prova colhida em tela
+    # diga de qual versão veio.
+    GIT_COMMIT: str = Field(default="", validation_alias=AliasChoices("GIT_COMMIT", "RENDER_GIT_COMMIT"))
     API_V1_STR: str = "/api/v1"
 
     # DATABASE

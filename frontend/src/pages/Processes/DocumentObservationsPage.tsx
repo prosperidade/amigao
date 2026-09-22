@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import RodapeVersao from '@/components/RodapeVersao';
 import { camposLegiveis, segmentar, type ObservacaoConferencia } from './documentObservations';
 
 interface DocumentoDoCaso { id: number; filename: string; tipo: string }
@@ -124,5 +125,6 @@ export default function DocumentObservationsPage() {
         </section>
       </div>
     </>}
+    <RodapeVersao />
   </div>;
 }

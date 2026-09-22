@@ -17,6 +17,7 @@ import CadeiaFichasPanel from './CadeiaFichasPanel';
 import RequisitosPanel from './RequisitosPanel';
 import ConfrontoIdentidade from './ConfrontoIdentidade';
 import GeometriaPanel from './GeometriaPanel';
+import RodapeVersao from '@/components/RodapeVersao';
 
 interface ConferenciaTabProps {
   processId: number;
@@ -62,6 +63,7 @@ export default function ConferenciaTab({ processId }: ConferenciaTabProps) {
             divergências aparecem aqui para você decidir e gravar na base.
           </p>
         </div>
+        <RodapeVersao />
       </div>
     );
   }
@@ -76,6 +78,7 @@ export default function ConferenciaTab({ processId }: ConferenciaTabProps) {
       <CadeiaFichasPanel processId={processId} />
       <GeometriaPanel processId={processId} />
       <ConsolidacaoPanel processId={processId} />
+      <RodapeVersao />
     </div>
   );
 }
