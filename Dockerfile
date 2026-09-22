@@ -14,8 +14,25 @@ WORKDIR /app
 # Bônus: formatos que o provedor não lê (.amr de gravador antigo, .wma) passam a
 # ser transcritos em vez de recusados.
 # `--no-install-recommends` mantém o custo em ~60 MB (só o binário e os codecs).
+#
+# postgresql-client — pg_dump/pg_restore do backup de pré-deploy
+# (scripts/predeploy_backup.py). A major TEM de ser >= a do servidor: produção
+# (Supabase) roda PostgreSQL 17.6 e pg_dump mais antigo recusa o dump. O Debian
+# não traz a 17, então vem do repositório oficial PGDG. Subir PG_CLIENT_MAJOR
+# junto com qualquer upgrade de major do Supabase.
+ARG PG_CLIENT_MAJOR=17
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-${PG_CLIENT_MAJOR} \
+    && pg_dump --version | grep -q " ${PG_CLIENT_MAJOR}\." \
+    && apt-get purge -y curl && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./

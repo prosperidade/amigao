@@ -40,7 +40,14 @@ services:
     # quando já está em head. Usa MIGRATE_DATABASE_URL (conexão direta) via env.py.
     # Incidente que originou: deploy de código ≠ migration aplicada — a Fase 1-4
     # subiu sem extracted_field_staging e o extrator explodia em prod.
-    preDeployCommand: alembic upgrade head
+    #
+    # Backup ANTES da migration (22/09/2026): pg_dump do schema public para o
+    # bucket privado de backups no R2 (BACKUP_BUCKET). Se o dump, a conferência
+    # (pg_restore --list) ou o upload falharem, o `&&` impede o alembic e o
+    # deploy para — sem cópia do estado anterior, migration não roda.
+    # Retenção declarada: 30 dias, e nunca menos que os 10 dumps mais recentes
+    # (BACKUP_RETENTION_DAYS / BACKUP_MIN_KEEP). Restore: RUNBOOK_OPS.md.
+    preDeployCommand: python scripts/predeploy_backup.py && alembic upgrade head
     # Render injeta $PORT. Bind explícito; seed.py NÃO roda aqui.
     dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
@@ -48,6 +55,15 @@ services:
       - fromGroup: regente-shared
       - key: SERVICE_NAME
         value: api
+      # Backup de pré-deploy (só a API roda preDeploy). Mesmas credenciais R2
+      # do MINIO_*; bucket SEPARADO do regente-docs e privado — o dump carrega
+      # dados de clientes (LGPD).
+      - key: BACKUP_BUCKET
+        value: regente-backups
+      - key: BACKUP_RETENTION_DAYS
+        value: "30"
+      - key: BACKUP_MIN_KEEP
+        value: "10"
       # CORS: lista CSV. Atualizar quando o domínio mudar.
       - key: BACKEND_CORS_ORIGINS
         value: "https://app.regenteambiental.com.br,https://regenteambiental.com.br,https://www.regenteambiental.com.br"
