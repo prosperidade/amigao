@@ -2,7 +2,7 @@
 
 ## Pulso 22/09/2026 — reextração em produção: a cadeia não extraiu (#23 e #25)
 
-- **#260 — produção nunca executou leitura semântica; três falhas em fila, todas mudas (corrigidas, falta provar):**
+- **#268 — produção nunca executou leitura semântica; três falhas em fila, todas mudas (corrigidas, falta provar):**
   - A rodada autorizada de 22/09 gravou 10 OCRs e **zero** extrações. Causas: (a) `_dispatch_extrator`
     enfileirava o extrator sem `process_id`, e `authorize` respondia 404; (b) `_connected_task`
     transformava esse 404 em `{"status": "failed"}` **sem log algum**; (c) a imagem de produção não
@@ -15,8 +15,10 @@
     (ver `docs/auditoria/GATE_INCREMENTO2.md`, seção de 22/09).
   - **Origem:** reextração autorizada de #23 e #25; medição pelo `supabase-prod-ro`.
 
-> **PRÓXIMO NÚMERO LIVRE: 261.** (#260 aberta pela reextração em produção, 22/09;
-> conferido `gh pr list`: nenhum PR aberto no momento da numeração.)
+> **PRÓXIMO NÚMERO LIVRE: 269.** (#268 aberta pela reextração em produção, 22/09.
+> **#260 a #267 são da frente 4a** — registradas em
+> [ZONA_NORMATIVA_INCREMENTO4A.md](arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md), não aqui;
+> esta dívida nasceu #260 e foi renumerada por colisão com elas.)
 
 ## Pulso 22/09/2026 — reprocessamento do KMZ real de Jobson (#195, Incremento 3)
 

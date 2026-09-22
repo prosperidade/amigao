@@ -616,3 +616,6 @@ tela aciona; o gesto veio do servidor do gate de dev, pela API autenticada — n
   provou hoje é o contrário: a cadeia não chega ao extrator. Verificar em
   produção exige o deploy do conserto e **nova rodada** — que precisa de
   autorização própria do André, por operação.
+
+Dívida **#268** aberta com esta medição (nasceu #260; renumerada por colisão com a
+faixa #260–#267 da frente 4a).
