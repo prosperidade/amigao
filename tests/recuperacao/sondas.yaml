@@ -1,0 +1,310 @@
+# Sondas de recuperação normativa — ADR-075 §9, ZONA_NORMATIVA_RAG §7.2.
+#
+# Alvo casado por IDENTIDADE CANÔNICA da fonte (tipo|ente|órgão|número|ano) +
+# ARTIGO — nunca por regex no texto. `dispositivo: null` = a fonte inteira
+# (ficha, TR, manual: não articulados).
+#
+# status_alvo: proposto — os alvos foram escolhidos pela engenharia sobre o
+# corpus de dev (22/09/2026) e AGUARDAM a Ísis validar (mesmo ciclo do corpus).
+# Enquanto o catálogo inteiro está `bruto`, as sondas positivas rodam em uso
+# `descoberta`; o controle de `peca` (só validado) é uma sonda negativa.
+#
+# Achado registrado: a OJN 06/2009 NÃO cita o art. 18 do Decreto 6.514 (o
+# exemplo do §7.2 supunha isso); ela interpreta prescrição e processo — arts.
+# 21, 22, 100, 101, 121 e 126. A sonda de anexo mira o que ela interpreta.
+
+padrao: &padrao {uso: descoberta, data_ref: 2026-09-22}
+
+sondas:
+  # --- Norma federal com dispositivo (11) -----------------------------------
+  - id: fed-6514-art18-embargo
+    grupo: norma_federal
+    pergunta: "descumprimento de embargo de obra ou atividade: quais sanções cumulativas se aplicam?"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    alvo: [{fonte: "decreto|br||6514|2008", dispositivo: "18"}, {fonte: "decreto|br||6514|2008", dispositivo: "79"}]
+    status_alvo: proposto
+  - id: fed-12651-art61a-consolidada
+    grupo: norma_federal
+    pergunta: "continuidade de atividades agrossilvipastoris em APP de área rural consolidada até 22 de julho de 2008"
+    contexto: {<<: *padrao, objetivo: car, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||12651|2012", dispositivo: "61-A"}]
+    status_alvo: proposto
+  - id: fed-9605-art71-prazo-defesa
+    grupo: norma_federal
+    pergunta: "prazo máximo para o infrator oferecer defesa ou impugnação contra o auto de infração ambiental"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||9605|1998", dispositivo: "71"}, {fonte: "decreto|br||6514|2008", dispositivo: "113"}]
+    status_alvo: proposto
+  - id: fed-12651-art12-rl-amazonia
+    grupo: norma_federal
+    pergunta: "percentual mínimo de reserva legal de imóvel rural na Amazônia Legal situado em área de floresta"
+    contexto: {<<: *padrao, objetivo: car, esferas: [federal], uf: MT}
+    alvo: [{fonte: "lei|br||12651|2012", dispositivo: "12"}]
+    status_alvo: proposto
+  - id: fed-12651-art4-faixa-app
+    grupo: norma_federal
+    pergunta: "largura da faixa marginal de preservação permanente em curso d'água natural com menos de 10 metros de largura"
+    contexto: {<<: *padrao, objetivo: car, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||12651|2012", dispositivo: "4"}]
+    status_alvo: proposto
+  - id: fed-12651-art29-car
+    grupo: norma_federal
+    pergunta: "o Cadastro Ambiental Rural é registro público eletrônico obrigatório para todos os imóveis rurais?"
+    contexto: {<<: *padrao, objetivo: car, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||12651|2012", dispositivo: "29"}]
+    status_alvo: proposto
+  - id: fed-lc140-art13-ente-unico
+    grupo: norma_federal
+    pergunta: "o empreendimento é licenciado ou autorizado ambientalmente por um único ente federativo?"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei_complementar|br||140|2011", dispositivo: "13"}]
+    status_alvo: proposto
+  - id: fed-conama369-art3-intervencao-app
+    grupo: norma_federal
+    pergunta: "o que o requerente precisa comprovar para autorizar intervenção ou supressão de vegetação em APP, inexistência de alternativa técnica e locacional"
+    contexto: {<<: *padrao, objetivo: supressao, esferas: [federal], uf: GO}
+    alvo: [{fonte: "resolucao|br|conama|369|2006", dispositivo: "3"}]
+    status_alvo: proposto
+  - id: fed-7830-art7-pendencias-car
+    grupo: norma_federal
+    pergunta: "pendências ou inconsistências nas informações declaradas no CAR: o órgão notifica o requerente para corrigir?"
+    contexto: {<<: *padrao, objetivo: car, esferas: [federal], uf: GO}
+    alvo: [{fonte: "decreto|br||7830|2012", dispositivo: "7"}]
+    status_alvo: proposto
+  - id: fed-12651-art66-regularizar-rl
+    grupo: norma_federal
+    pergunta: "imóvel com reserva legal inferior ao exigido em 22 de julho de 2008 pode regularizar por recomposição, regeneração natural ou compensação?"
+    contexto: {<<: *padrao, objetivo: car, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||12651|2012", dispositivo: "66"}]
+    status_alvo: proposto
+  - id: fed-9784-art56-recurso
+    grupo: norma_federal
+    pergunta: "cabe recurso administrativo contra a decisão por razões de legalidade e de mérito? a quem é dirigido?"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||9784|1999", dispositivo: "56"}]
+    status_alvo: proposto
+
+  # --- Norma estadual pós-desmembramento (12) — prova que o ato saiu da coletânea com identidade
+  - id: go-18104-art29-compensacao-rl
+    grupo: norma_estadual
+    pergunta: "compensação da reserva legal dentro da propriedade rural em Goiás para qualquer tipo de vegetação nativa, com ganho ambiental"
+    contexto: {<<: *padrao, objetivo: car, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "lei|go||18104|2013", dispositivo: "29"}]
+    status_alvo: proposto
+  - id: go-in-semad-3-2025-supressao-rl
+    grupo: norma_estadual
+    pergunta: "procedimento de compensação da supressão de reserva legal para empreendimento de utilidade pública em Goiás"
+    contexto: {<<: *padrao, objetivo: compensacao, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "in|go|semad|3|2025", dispositivo: "1"}, {fonte: "in|go|semad|3|2025", dispositivo: "2"}]
+    status_alvo: proposto
+  - id: go-in-semad-3-2023-outorga
+    grupo: norma_estadual
+    pergunta: "vazões de referência adotadas para emissão de outorga de direito de uso de recursos hídricos em Goiás"
+    contexto: {<<: *padrao, objetivo: outorga, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "in|go|semad|3|2023", dispositivo: "1"}]
+    status_alvo: proposto
+  - id: go-9710-art27-registro-eletronico
+    grupo: norma_estadual
+    pergunta: "atividades sujeitas a registro eletrônico em vez de licença em Goiás"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "decreto|go||9710|2020", dispositivo: "27"}, {fonte: "lei|go||20694|2019", dispositivo: "22"}]
+    status_alvo: proposto
+  - id: mt-1031-pra-simcar
+    grupo: norma_estadual
+    pergunta: "regulamento do Programa de Regularização Ambiental e do Sistema Mato-grossense de Cadastro Ambiental Rural"
+    contexto: {<<: *padrao, objetivo: car, esferas: [estadual], uf: MT}
+    alvo: [{fonte: "decreto|mt||1031|2017", dispositivo: "1"}]
+    status_alvo: proposto
+  - id: mt-1473-car-automatizado
+    grupo: norma_estadual
+    pergunta: "análise automatizada do CAR no SIMCAR, CAR digital 2.0 em Mato Grosso"
+    contexto: {<<: *padrao, objetivo: car, esferas: [estadual], uf: MT}
+    alvo: [{fonte: "decreto|mt||1473|2025", dispositivo: "1"}]
+    status_alvo: proposto
+  - id: mt-592-art10-car-nao-autoriza
+    grupo: norma_estadual
+    pergunta: "o CAR em Mato Grosso não serve para autorizar atividade nem supressão de vegetação"
+    contexto: {<<: *padrao, objetivo: car, esferas: [estadual], uf: MT}
+    alvo: [{fonte: "lei_complementar|mt||592|2017", dispositivo: "10"}]
+    status_alvo: proposto
+  - id: mt-262-art7-apf-queima
+    grupo: norma_estadual
+    pergunta: "a Autorização Provisória de Funcionamento de Atividade Rural vale para queima controlada ou supressão de vegetação?"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: MT}
+    alvo: [{fonte: "decreto|mt||262|2019", dispositivo: "7"}]
+    status_alvo: proposto
+  - id: ms-13977-car-ms
+    grupo: norma_estadual
+    pergunta: "Cadastro Ambiental Rural de Mato Grosso do Sul CAR-MS e o Programa de Regularização Ambiental do estado"
+    contexto: {<<: *padrao, objetivo: car, esferas: [estadual], uf: MS}
+    alvo: [{fonte: "decreto|ms||13977|2014", dispositivo: "1"}]
+    status_alvo: proposto
+  - id: ms-16588-credito-reposicao
+    grupo: norma_estadual
+    pergunta: "concessão de crédito de reposição florestal no plantio de espécies nativas pelo IMASUL"
+    contexto: {<<: *padrao, objetivo: supressao, esferas: [estadual], uf: MS}
+    alvo: [{fonte: "decreto|ms||16588|2025", dispositivo: "31"}]
+    status_alvo: proposto
+  - id: ac-2308-sisa
+    grupo: norma_estadual
+    pergunta: "Sistema Estadual de Incentivos a Serviços Ambientais SISA do Acre"
+    contexto: {<<: *padrao, objetivo: compensacao, esferas: [estadual], uf: AC}
+    alvo: [{fonte: "lei|ac||2308|2010", dispositivo: "1"}]
+    status_alvo: proposto
+  - id: ac-4397-art100-dispensa
+    grupo: norma_estadual
+    pergunta: "documentos para comprovar a dispensa do licenciamento ambiental no Acre"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: AC}
+    alvo: [{fonte: "lei|ac||4397|2024", dispositivo: "100"}]
+    status_alvo: proposto
+
+  # --- Interpretação anexada, sem deslocar a norma (4) -----------------------
+  - id: int-ojn-prescricao-art21
+    grupo: interpretacao_anexada
+    pergunta: "prazo de prescrição da ação da administração para apurar infração ambiental"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    alvo: [{fonte: "decreto|br||6514|2008", dispositivo: "21"}]
+    anexos_esperados: [{fonte: "ojn|br|pfe-ibama|6|2009"}]
+    status_alvo: proposto
+  - id: int-ojn-interrupcao-art22
+    grupo: interpretacao_anexada
+    pergunta: "o que interrompe a prescrição da pretensão punitiva ambiental"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    alvo: [{fonte: "decreto|br||6514|2008", dispositivo: "22"}]
+    anexos_esperados: [{fonte: "ojn|br|pfe-ibama|6|2009"}]
+    status_alvo: proposto
+  - id: int-on-semad-1-2020-art59
+    grupo: interpretacao_anexada
+    pergunta: "prazo para requerer licenciamento corretivo de atividade que passou a constar da lista de tipologias em Goiás"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "decreto|go||9710|2020", dispositivo: "59"}]
+    anexos_esperados: [{fonte: "orientacao_normativa|go|semad|1|2020"}]
+    status_alvo: proposto
+  - id: int-on-semad-4-2021-art40
+    grupo: interpretacao_anexada
+    pergunta: "publicação do pedido de licença ambiental em periódico ou na internet em Goiás"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "lei|go||20694|2019", dispositivo: "40"}]
+    anexos_esperados: [{fonte: "orientacao_normativa|go|semad|4|2021"}]
+    status_alvo: proposto
+
+  # --- Exigência (ficha/TR) e procedimento (manual IPÊ) (6) ------------------
+  - id: exi-ficha-suinos-lac
+    grupo: exigencia_procedimento
+    pergunta: "suinocultura ciclo completo licença ambiental por adesão e compromisso LAC em Goiás"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "ficha_tipologia|go||a3-6-suinos-ciclo-completo-licenca-ambiental-por-adesao-e-compromisso-lac-1-pdf|", dispositivo: null}]
+    status_alvo: proposto
+  - id: exi-ficha-piscicultura-reg
+    grupo: exigencia_procedimento
+    pergunta: "piscicultura em tanque escavado registro eletrônico REG em Goiás"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo:
+      - {fonte: "ficha_tipologia|go||a4-1-piscicultura-em-tanque-escavado-registro-eletronico-reg-pdf|", dispositivo: null}
+      - {fonte: "ficha_tipologia|go||a4-1-piscicultura-em-tanque-escavado-registro-eletronico-reg1-pdf|", dispositivo: null}
+    status_alvo: proposto
+  - id: exi-tr-fauna-resgate
+    grupo: exigencia_procedimento
+    pergunta: "termo de referência para manejo de fauna: resgate, salvamento e afugentamento"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo:
+      - {fonte: "termo_referencia|go||termo-de-referencia-de-elaboracao-de-manejo-de-fauna-para-resgate-salvamento-e-afugentamento-pdf|", dispositivo: null}
+      - {fonte: "termo_referencia|go||termo-de-referencia-faunapdf-pdf|", dispositivo: null}
+      - {fonte: "termo_referencia|go||termo-de-referencia-faunapdf-1-pdf|", dispositivo: null}
+    status_alvo: proposto
+  - id: proc-queima-controlada
+    grupo: exigencia_procedimento
+    pergunta: "como solicitar autorização de queima controlada no sistema IPÊ"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "manual_ipe|go||manual-de-queima-controlada-pdf|", dispositivo: null}]
+    status_alvo: proposto
+  - id: proc-servidao-ambiental
+    grupo: exigencia_procedimento
+    pergunta: "passo a passo para pedir autorização de averbação de servidão ambiental no IPÊ"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "manual_ipe|go||manual-de-autorizacao-para-averbacao-de-servidao-ambiental-pdf|", dispositivo: null}]
+    status_alvo: proposto
+  - id: proc-alteracao-empreendedor
+    grupo: exigencia_procedimento
+    pergunta: "como alterar o empreendedor de um processo no sistema IPÊ"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [estadual], uf: GO}
+    alvo: [{fonte: "manual_ipe|go||manual-alteracao-de-empreendedor-pdf|", dispositivo: null}]
+    status_alvo: proposto
+
+  # --- Vigência: norma revogada × data de referência (4) --------------------
+  - id: vig-3179-fato-2007
+    grupo: vigencia
+    pergunta: "multa por destruir ou danificar floresta de preservação permanente"
+    contexto: {uso: descoberta, data_ref: 2007-05-01, objetivo: defesa, esferas: [federal], uf: GO}
+    alvo: [{fonte: "decreto|br||3179|1999", dispositivo: "25"}]
+    status_alvo: proposto
+  - id: vig-3179-fato-hoje
+    grupo: vigencia
+    pergunta: "multa por destruir ou danificar floresta de preservação permanente"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    alvo: [{fonte: "decreto|br||6514|2008", dispositivo: "43"}]
+    ausentes: ["decreto|br||3179|1999"]
+    status_alvo: proposto
+  - id: vig-4771-fato-2010
+    grupo: vigencia
+    pergunta: "florestas de preservação permanente ao longo dos rios: faixa marginal mínima"
+    contexto: {uso: descoberta, data_ref: 2010-03-01, objetivo: car, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||4771|1965", dispositivo: "2"}]
+    status_alvo: proposto
+  - id: vig-4771-fato-hoje
+    grupo: vigencia
+    pergunta: "florestas de preservação permanente ao longo dos rios: faixa marginal mínima"
+    contexto: {<<: *padrao, objetivo: car, esferas: [federal], uf: GO}
+    alvo: [{fonte: "lei|br||12651|2012", dispositivo: "4"}]
+    ausentes: ["lei|br||4771|1965"]
+    status_alvo: proposto
+
+  # --- Controle negativo: vazio com a razão certa (8) ------------------------
+  - id: neg-uf-sem-corpus
+    grupo: controle_negativo
+    pergunta: "regularização do CAR em Roraima"
+    contexto: {<<: *padrao, objetivo: car, esferas: [estadual], uf: RR}
+    vazio_esperado: fora_da_cobertura
+    status_alvo: proposto
+  - id: neg-esfera-municipal
+    grupo: controle_negativo
+    pergunta: "licenciamento ambiental municipal de impacto local"
+    contexto: {<<: *padrao, objetivo: licenciamento, esferas: [municipal], uf: GO}
+    vazio_esperado: fora_da_cobertura
+    status_alvo: proposto
+  - id: neg-objetivo-nao-resolvido
+    grupo: controle_negativo
+    pergunta: "o que a lei diz sobre isso"
+    contexto: {<<: *padrao, objetivo: nao_identificado, esferas: [federal], uf: GO}
+    vazio_esperado: contexto_insuficiente
+    status_alvo: proposto
+  - id: neg-sem-data-de-referencia
+    grupo: controle_negativo
+    pergunta: "prazo de defesa contra auto de infração"
+    contexto: {uso: descoberta, objetivo: defesa, esferas: [federal], uf: GO}
+    vazio_esperado: contexto_insuficiente
+    status_alvo: proposto
+  - id: neg-estadual-sem-uf
+    grupo: controle_negativo
+    pergunta: "compensação de reserva legal"
+    contexto: {<<: *padrao, objetivo: car, esferas: [estadual]}
+    vazio_esperado: contexto_insuficiente
+    status_alvo: proposto
+  - id: neg-dispositivo-inexistente
+    grupo: controle_negativo
+    pergunta: "sanção do art. 999 do Decreto 6.514/2008"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    vazio_esperado: sem_fonte_elegivel
+    status_alvo: proposto
+  - id: neg-norma-fora-do-catalogo
+    grupo: controle_negativo
+    pergunta: "o que diz o art. 5 da Lei 99.999/2030"
+    contexto: {<<: *padrao, objetivo: defesa, esferas: [federal], uf: GO}
+    vazio_esperado: fora_da_cobertura
+    status_alvo: proposto
+  - id: neg-peca-so-cita-validado
+    grupo: controle_negativo
+    pergunta: "Cadastro Ambiental Rural de Mato Grosso do Sul"
+    contexto: {uso: peca, data_ref: 2026-09-22, objetivo: car, esferas: [estadual], uf: MS}
+    vazio_esperado: sem_fonte_elegivel
+    status_alvo: proposto

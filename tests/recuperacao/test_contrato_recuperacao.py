@@ -201,3 +201,22 @@ def test_a3_so_precedente_pode_ser_privado(db_session):
 def test_a3_precedente_nasce_privado(db_session):
     with pytest.raises(IntegrityError), db_session.begin_nested():
         cs.fonte(db_session, "precedente|go||1|2025", nivel="precedente", tenant_id=None)
+
+
+def test_identidade_sem_ente_resolve_pela_esfera_pedida(db_session):
+    # Achado no percurso autenticado (22/09): "Lei 18.104/2013" sem "GO" virava lei FEDERAL.
+    f = cs.fonte(db_session, "lei|go||18104|2013", rotulo="Lei GO 18.104/2013", ente="go", objetivos=["car"])
+    v = cs.versao(db_session, f)
+    cs.trecho(db_session, v, cs.dispositivo(db_session, v, "29", rotulo_fonte="Lei GO 18.104/2013"), "compensação", 0)
+    ctx = _ctx(pergunta="o que diz o art. 29 da Lei 18.104/2013?", objetivo="car", esferas=("estadual",), uf="GO")
+    r = _buscar(db_session, ctx)
+    assert r.metodo == "identidade" and [t.artigo for t in r.trechos] == ["29"]
+
+
+def test_identidade_ambigua_entre_uniao_e_uf_nao_escolhe(db_session):
+    for ente in ("br", "go"):
+        f = cs.fonte(db_session, f"lei|{ente}||7|2001", ente=ente, objetivos=["car"])
+        cs.dispositivo(db_session, cs.versao(db_session, f), "1")
+    ctx = _ctx(pergunta="art. 1 da Lei 7/2001", objetivo="car", esferas=("federal", "estadual"), uf="GO")
+    r = _buscar(db_session, ctx)
+    assert r.vazio.razao == "contexto_insuficiente" and "diga a esfera" in r.vazio.detalhe

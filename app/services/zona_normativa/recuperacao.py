@@ -53,6 +53,18 @@ RAZOES = (
     "espaco_vetorial_incompativel",
 )
 RRF_K = 60
+# Peso de cada ramo na fusão. Fixo e declarado; mudar exige rodada de sondas.
+# Medido em 22/09 (45 sondas, dev, alvos ainda `proposto`), recall@5:
+#   lexical = todas as palavras, peso 1 ...... 0,622
+#   só vetor ................................ 0,811
+#   lexical = tokens raros, peso 1 .......... 0,757
+#   lexical = tokens raros, peso 0,5 ........ 0,784   ← escolhido
+# O híbrido fica (ADR-075 §7: número e sigla são tokens exatos que o vetor
+# dilui), mas como desempate: primeiro lugar lexical de um ato que só CITA a
+# sigla não pode empurrar o alvo para fora das vagas. Nenhuma variante passa o
+# portão de 0,9 — ver docs/arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md.
+PESO_VETOR = 1.0
+PESO_LEXICO = 0.5
 CANDIDATOS_POR_RAMO = 50
 ESFERAS = ("federal", "estadual", "municipal")
 
@@ -143,6 +155,48 @@ class Resultado:
 def _vazio(ctx_filtros: dict, razao: str, filtro: str | None, detalhe: str, modelo=None) -> Resultado:
     assert razao in RAZOES
     return Resultado([], Vazio(razao, filtro, detalhe), ctx_filtros, modelo, "nenhum")
+
+
+# ---------------------------------------------------------------------------
+# Ramo lexical: só tokens EXATOS
+# ---------------------------------------------------------------------------
+# O ADR-075 pede tsvector porque "número de norma, sigla e 'art. 18' são tokens
+# exatos que a similaridade dilui". Medido em 22/09 (45 sondas, dev): o lexical
+# com TODAS as palavras da pergunta em OR derrubava o recall@5 de 0,81 (só vetor)
+# para 0,62 — "reserva", "legal", "ambiental" casam com qualquer documento grande.
+# Então o ramo lexical consulta só o que é exato: números e siglas. Sem token
+# exato na pergunta, o ramo não contribui e a fusão fica só com o vetor.
+_RE_TOKEN_EXATO = re.compile(
+    r"(?<![\w])(\d+(?:[./-]\d+)*(?:-[A-Z])?|[A-ZÀ-Ú][A-ZÀ-Ú0-9]+(?:-[A-Z0-9]+)?)(?![\w])"
+)
+
+
+def tokens_exatos(pergunta: str) -> str:
+    return " ".join(dict.fromkeys(m.group(1) for m in _RE_TOKEN_EXATO.finditer(pergunta or "")))
+
+
+# Token exato COMUM (CAR, APP, LAC, "18") volta a ser ruído: medido, a sigla CAR
+# sozinha derrubava as sondas de CAR-MS e de ficha LAC. Fica no ramo lexical só o
+# token raro — presente em menos de 1% dos trechos (um IDF declarado, não calibrado
+# por sonda).
+FRACAO_MAXIMA_TOKEN = 0.01
+
+
+def tokens_raros(session: Session, pergunta: str) -> str:
+    termos = tokens_exatos(pergunta).split()
+    if not termos:
+        return ""
+    total = session.execute(text("SELECT count(*) FROM trecho_normativo")).scalar_one() or 1
+    raros = []
+    for termo in termos:
+        n = session.execute(text(
+            "SELECT count(*) FROM trecho_normativo t, "
+            "(SELECT to_tsquery('simple', coalesce(string_agg(quote_literal(lexeme), ' & '), '')) AS q "
+            " FROM unnest(to_tsvector('portuguese', :t))) c WHERE t.tsv @@ c.q"
+        ), {"t": termo}).scalar_one()
+        if 0 < n < total * FRACAO_MAXIMA_TOKEN:
+            raros.append(termo)
+    return " ".join(raros)
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +407,30 @@ def recuperar(
         return _vazio(filtros_aplicados, "falha_de_busca", None, f"{type(exc).__name__}: {exc}", modelo)
 
 
+def _resolver_ente(
+    session: Session, ctx: Contexto, ident: IdentidadeNorma, texto: str
+) -> tuple[IdentidadeNorma, str | None]:
+    """"Lei 18.104/2013" não diz o ente. Lei e decreto são numerados por ente, então
+    o candidato é a União (se a esfera federal foi pedida) e a UF do contexto (se a
+    estadual foi pedida). Um só existe no catálogo → é ele. Os dois existem → a norma
+    é ambígua e o vazio diz isso; não se escolhe por conta."""
+    if ident.ente != "br" or re.search(r"(?i)\bfederal\b", texto or "") or ident.orgao:
+        return ident, None
+    candidatos = []
+    if "federal" in ctx.esferas:
+        candidatos.append(ident)
+    if "estadual" in ctx.esferas and ctx.uf:
+        candidatos.append(IdentidadeNorma(ident.tipo, ctx.uf.lower(), "", ident.numero, ident.ano))
+    existentes = [
+        c for c in candidatos
+        if session.execute(text("SELECT 1 FROM fonte_normativa WHERE identidade = :i"), {"i": c.chave}).first()
+    ]
+    if len(existentes) > 1:
+        return ident, (f"{ident.rotulo} existe na União e em {ctx.uf}: diga a esfera "
+                       "(ex.: 'Lei GO …' ou 'Lei federal …')")
+    return (existentes or candidatos or [ident])[0], None
+
+
 def _executar(
     session: Session, ctx: Contexto, pol: Politica, filtros_aplicados: dict,
     embed_query: Callable[[str], list[float]], modelo: str,
@@ -370,7 +448,10 @@ def _executar(
     else:
         alvo = identidade_na_pergunta(ctx.pergunta, (ctx.uf or "br").lower())
     if alvo is not None:
-        return _anexar(session, ctx, pol, _por_identidade(session, ctx, pol, alvo[0], alvo[1],
+        ident, falta = _resolver_ente(session, ctx, alvo[0], ctx.norma or ctx.pergunta)
+        if falta:
+            return _vazio(filtros_aplicados, "contexto_insuficiente", "norma", falta)
+        return _anexar(session, ctx, pol, _por_identidade(session, ctx, pol, ident, alvo[1],
                                                            filtros_aplicados), embed_query)
 
     # (2) cobertura e elegível
@@ -392,8 +473,10 @@ def _executar(
     # (3) ranking híbrido só no elegível
     qv = embed_query(ctx.pergunta)
     params["q"] = _vetor_literal(qv)
-    params["texto"] = ctx.pergunta
+    params["texto"] = tokens_raros(session, ctx.pergunta)
+    filtros_aplicados["tokens_lexicos"] = params["texto"]
     params["n"] = CANDIDATOS_POR_RAMO
+    params["n_lex"] = CANDIDATOS_POR_RAMO if params["texto"] else 0
     where = " AND ".join(p for _, p in preds)
     sql = f"""
         WITH elegivel AS (
@@ -410,10 +493,10 @@ def _executar(
         lex AS (
             SELECT e.id, row_number() OVER (ORDER BY ts_rank_cd(e.tsv, c.tsq) DESC, e.id) AS r
             FROM elegivel e, consulta c WHERE e.tsv @@ c.tsq
-            ORDER BY ts_rank_cd(e.tsv, c.tsq) DESC, e.id LIMIT :n
+            ORDER BY ts_rank_cd(e.tsv, c.tsq) DESC, e.id LIMIT :n_lex
         ),
         fusao AS (
-            SELECT id, sum(1.0 / ({RRF_K} + r)) AS rrf,
+            SELECT id, sum(CASE WHEN fonte = 'v' THEN {float(PESO_VETOR):.4f} ELSE {float(PESO_LEXICO):.4f} END / ({RRF_K} + r)) AS rrf,
                    min(r) FILTER (WHERE fonte = 'v') AS rv, min(r) FILTER (WHERE fonte = 'l') AS rl
             FROM (SELECT id, r, 'v' AS fonte FROM vet UNION ALL SELECT id, r, 'l' FROM lex) u
             GROUP BY id

@@ -5,6 +5,7 @@ Cada sonda tem pergunta, contexto e, conforme o grupo:
   acerto = algum alvo entre as ``k`` vagas devolvidas, casado por identidade da
   fonte + artigo (o ``art61a`` "recuperado" por regex de hoje é falso positivo);
 - ``anexos_esperados``: interpretações que têm de vir ANEXADAS ao alvo;
+- ``ausentes``: fontes que NÃO podem aparecer (norma revogada fora da data de referência);
 - ``vazio_esperado``: razão do vazio (controle negativo).
 
 Métricas e portão fixos: recall@5 ≥ 0,9 nas positivas; controle negativo 100%
@@ -120,6 +121,10 @@ def rodar(session: Session, sondas: list[dict], *, vetores: dict[str, list[float
         ok = pos is not None
         det = f"posição {pos}" if ok else (f"vazio={r.vazio.razao}:{r.vazio.filtro_que_esvaziou}"
                                            if r.vazio else "alvo fora das 5 vagas")
+        for fonte_proibida in s.get("ausentes") or []:
+            if any(t.identidade_fonte == fonte_proibida for t in r.trechos):
+                ok = False
+                det += f"; {fonte_proibida} apareceu fora da vigência"
         for anexo in s.get("anexos_esperados") or []:
             alvo_t = next((t for t in r.trechos if t.identidade_fonte == s["alvo"][0]["fonte"]), None)
             achou = alvo_t is not None and any(

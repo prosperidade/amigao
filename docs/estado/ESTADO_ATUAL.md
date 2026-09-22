@@ -1,5 +1,15 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 22/09/2026 — Incremento 4a (zona normativa, ADR-075 + A1–A5) em PR rascunho, só dev.**
+Catálogo novo construído no dev a partir do corpus legado (legado intocado): 32 coletâneas
+desmembradas por regra fixa (sem LLM/OCR) → 420 atos com identidade, 101 segmentos não
+determinados em revisão; 868 fontes, 29.113 dispositivos, 20.059 trechos. Recuperação que filtra
+antes do ranking e nunca relaxa, citação por ID, curadoria por papel/área com hash chain global,
+A2 fechando a escrita do legado, A5 com 76 originais conferidos. **Sondas: recall@5 0,784 < 0,9,
+controle negativo 100%, groundedness 100% — portão não passou; Legislação segue desligada.**
+Produção: nada aplicado. Registro: [ZONA_NORMATIVA_INCREMENTO4A](../arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md);
+dívidas #260–#265.
+
 **Pulso 21/09/2026 — Frente B (zona normativa e RAG) encerrada.**
 Entregue e mergeado: ADR-075 + adendos A1–A5 (#178, #184), trava de citação #243 parcial
 (#181), dev × produção (#182) e confirmações em produção (#187). **Incremento 1 em produção =

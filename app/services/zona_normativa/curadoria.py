@@ -195,7 +195,11 @@ def propor(
     if texto_conferido_por not in ("hash", "validation_keyword"):
         raise TransicaoInvalida("texto conferido por 'hash' ou 'validation_keyword' (ADR-038)")
     if texto_conferido_por == "validation_keyword":
-        if not validation_keyword or validation_keyword not in v.texto:
+        # Espaço colapsado dos dois lados: o texto extraído quebra linha no meio da frase.
+        def _c(s: str) -> str:
+            return " ".join((s or "").split())
+
+        if not validation_keyword or _c(validation_keyword) not in _c(v.texto):
             raise TransicaoInvalida("validation_keyword ausente do texto da versão")
     if vigencia not in ("vigente", "revogada", "nao_sei"):
         raise TransicaoInvalida("vigência declarada: 'vigente', 'revogada' ou 'nao_sei'")

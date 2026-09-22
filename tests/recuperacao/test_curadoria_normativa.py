@@ -158,3 +158,13 @@ def test_conferencia_de_original_bloqueia_divergente_e_ausente(db_session):
     tipos = {t.tipo for t in db_session.query(TarefaRevisaoNormativa).filter(
         TarefaRevisaoNormativa.fonte_versao_id.in_([adulterada.id, sumida.id]))}
     assert tipos == {"original_divergente", "original_ausente"}
+
+
+def test_validation_keyword_ignora_quebra_de_linha(db_session, gente):
+    _admin, _isis, eng = gente
+    f = cs.fonte(db_session, "lei|go||5|2005", ente="go")
+    v = cs.versao(db_session, f, texto="Art. 29. Fica permitida a\ncompensação da reserva legal")
+    cur.propor(db_session, versao_id=v.id, user=eng, url_oficial="https://legisla.casacivil.go.gov.br/x",
+               texto_conferido_por="validation_keyword", validation_keyword="Fica permitida a compensação",
+               vigencia="nao_sei", nota="conferido")
+    assert v.status_validacao == "proposto"

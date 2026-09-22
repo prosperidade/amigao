@@ -1,0 +1,431 @@
+[
+ {
+  "passo": "login real: admin (superusuário) e consultor",
+  "status_ok": true
+ },
+ {
+  "passo": "A2: superusuário sem papel tenta escrever no corpus legado",
+  "status": 403,
+  "corpo": {
+   "detail": "Escrever no corpus normativo exige o papel de curadoria 'curar_corpus'."
+  }
+ },
+ {
+  "passo": "A2: consultor sem papel tenta indexar",
+  "status": 403,
+  "corpo": {
+   "detail": "Escrever no corpus normativo exige o papel de curadoria 'curar_corpus'."
+  }
+ },
+ {
+  "passo": "peça antes da validação: vazio com razão",
+  "status": 200,
+  "corpo": {
+   "trechos": [],
+   "interpretacoes_anexadas": {},
+   "vazio": {
+    "razao": "sem_fonte_elegivel",
+    "filtro_que_esvaziou": "status",
+    "detalhe": "filtro 'status' deixou o conjunto elegível vazio"
+   },
+   "filtros_aplicados": {
+    "uso": "peca",
+    "data_referencia": "2026-09-22",
+    "objetivo": "licenciamento",
+    "esferas": [
+     "estadual"
+    ],
+    "uf": "GO",
+    "tenant": 2,
+    "espaco_vetorial": "text-embedding-3-small",
+    "niveis": [
+     "norma",
+     "exigencia"
+    ],
+    "status": [
+     "validado"
+    ],
+    "aceita_vigencia_nao_determinada": false
+   },
+   "modelo": null,
+   "metodo": "nenhum"
+  }
+ },
+ {
+  "passo": "coletânea 13 (Licenciamento GO) desmembrada",
+  "atos": 39,
+  "determinados": 25,
+  "amostra": [
+   {
+    "rotulo": "Portaria SEMAD/GO 183/2020",
+    "pagina_inicio": 1,
+    "sinal_fronteira": "impressao",
+    "motivos_revisao": null
+   },
+   {
+    "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 2010",
+    "pagina_inicio": null,
+    "sinal_fronteira": "sem_sinal",
+    "motivos_revisao": [
+     "regiao_sem_sinal_de_fronteira",
+     "identidade_nao_determinada"
+    ]
+   },
+   {
+    "rotulo": "IN SEMAD/GO 8/2024",
+    "pagina_inicio": 3,
+    "sinal_fronteira": "impressao",
+    "motivos_revisao": [
+     "inicio_estimado"
+    ]
+   },
+   {
+    "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 28303",
+    "pagina_inicio": null,
+    "sinal_fronteira": "sem_sinal",
+    "motivos_revisao": [
+     "regiao_sem_sinal_de_fronteira",
+     "identidade_nao_determinada"
+    ]
+   }
+  ]
+ },
+ {
+  "passo": "propor lote sem papel",
+  "status": 403,
+  "corpo": {
+   "detail": "é preciso o papel 'curar_corpus' na área GO para escrever no catálogo normativo"
+  }
+ },
+ {
+  "passo": "concede curar_corpus/GO ao consultor",
+  "status": 200,
+  "corpo": {
+   "id": 1,
+   "user_id": 2,
+   "papel": "curar_corpus",
+   "area": "GO"
+  }
+ },
+ {
+  "passo": "concede validar_fonte_normativa/GO ao consultor",
+  "status": 200,
+  "corpo": {
+   "id": 2,
+   "user_id": 2,
+   "papel": "validar_fonte_normativa",
+   "area": "GO"
+  }
+ },
+ {
+  "passo": "propor lote coletânea 13",
+  "status": 200,
+  "corpo": {
+   "propostas": 15,
+   "puladas": [
+    {
+     "versao": 259,
+     "rotulo": "Resolução CEMAM/GO 259/2024",
+     "motivo": "fronteira em revisão: ['inicio_estimado']"
+    },
+    {
+     "versao": 273,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 2010",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 274,
+     "rotulo": "IN SEMAD/GO 8/2024",
+     "motivo": "fronteira em revisão: ['inicio_estimado']"
+    },
+    {
+     "versao": 275,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 28303",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 276,
+     "rotulo": "[não determinado] IN GO 17/2024 — Coletânea Licenciamento GO 2020+, offset 42252",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 277,
+     "rotulo": "Lei GO 21.062/2021",
+     "motivo": "sem URL impressa para conferir"
+    },
+    {
+     "versao": 278,
+     "rotulo": "Lei GO 21.231/2022",
+     "motivo": "sem URL impressa para conferir"
+    },
+    {
+     "versao": 282,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 347727",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 286,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 385047",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 287,
+     "rotulo": "Portaria SEMAD/GO 123/2021",
+     "motivo": "fronteira em revisão: ['inicio_estimado']"
+    },
+    {
+     "versao": 291,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 421381",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 292,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 425451",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 293,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 428385",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 295,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 991134",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 296,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 1208587",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 297,
+     "rotulo": "IN SEMAD/GO 14/2021",
+     "motivo": "fronteira em revisão: ['inicio_estimado']"
+    },
+    {
+     "versao": 302,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 1435503",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 303,
+     "rotulo": "Decreto GO 7.862/2013",
+     "motivo": "sem URL impressa para conferir"
+    },
+    {
+     "versao": 304,
+     "rotulo": "Decreto GO 9.710/2020",
+     "motivo": "sem URL impressa para conferir"
+    },
+    {
+     "versao": 306,
+     "rotulo": "IN SEMAD/GO 3/2015",
+     "motivo": "fronteira em revisão: ['inicio_estimado']"
+    },
+    {
+     "versao": 308,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 1666185",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 309,
+     "rotulo": "IN SEMAD/GO 6/2020",
+     "motivo": "fronteira em revisão: ['inicio_estimado']"
+    },
+    {
+     "versao": 310,
+     "rotulo": "[não determinado] sem cabeçalho — Coletânea Licenciamento GO 2020+, offset 1698760",
+     "motivo": "identidade ou nível não determinado"
+    },
+    {
+     "versao": 311,
+     "rotulo": "[não determinado] IN GO 8/2018 — Coletânea Licenciamento GO 2020+, offset 1705000",
+     "motivo": "identidade ou nível não determinado"
+    }
+   ]
+  }
+ },
+ {
+  "passo": "validar lote coletânea 13",
+  "status": 200,
+  "corpo": {
+   "validadas": 15,
+   "puladas": []
+  }
+ },
+ {
+  "passo": "peça depois da validação",
+  "status": 200,
+  "vazio": {
+   "razao": "sem_fonte_elegivel",
+   "filtro_que_esvaziou": "vigencia",
+   "detalhe": "filtro 'vigencia' deixou o conjunto elegível vazio"
+  },
+  "metodo": "nenhum",
+  "trechos": []
+ },
+ {
+  "passo": "cadeia do catálogo",
+  "status": 200,
+  "corpo": {
+   "integra": true,
+   "eventos": 30,
+   "ultimo_hash": "79fcb7dd16d90fe7034c9f28b4aa00b91b1d351aaeb6b9ddd99a22a6e10cb90e"
+  }
+ },
+ {
+  "passo": "tarefas de revisão abertas",
+  "abertas": {
+   "identidade_nao_determinada": 101,
+   "fronteira_ambigua": 25,
+   "original_ausente": 68,
+   "nivel_nao_determinado": 24
+  }
+ },
+ {
+  "passo": "primeira tentativa da parte 2 revelou dois defeitos, corrigidos com regressão antes de repetir",
+  "defeitos": [
+   "validation_keyword comparada sem colapsar quebra de linha → 422 indevido",
+   "'Lei 18.104/2013' sem UF resolvida como federal → consulta por identidade vazia"
+  ]
+ },
+ {
+  "passo": "propor Lei GO 18.104/2013 com vigência declarada",
+  "status": 200,
+  "corpo": {
+   "id": 31,
+   "acao": "propor",
+   "de": "bruto",
+   "para": "proposto",
+   "hash_evento": "99ac4a084e60e72cadf85e4b1d082f8db49752a897e7adcd942b43630d01ff99",
+   "hash_anterior": "79fcb7dd16d90fe7034c9f28b4aa00b91b1d351aaeb6b9ddd99a22a6e10cb90e"
+  }
+ },
+ {
+  "passo": "validar (proposto → validado)",
+  "status": 200,
+  "corpo": {
+   "id": 32,
+   "acao": "validar",
+   "de": "proposto",
+   "para": "validado",
+   "hash_evento": "190f6d5d8a1e91f19bf5d7f5399411229503ba8f1fb7767ddac663417f22c1e8",
+   "hash_anterior": "99ac4a084e60e72cadf85e4b1d082f8db49752a897e7adcd942b43630d01ff99"
+  }
+ },
+ {
+  "passo": "peça: só o validado e vigente aparece",
+  "status": 200,
+  "vazio": null,
+  "metodo": "hibrido_rrf",
+  "trechos": [
+   {
+    "caminho": "Lei GO 18.104/2013, art. 29",
+    "status_validacao": "validado",
+    "vigencia_estado": "determinada",
+    "marcas": [],
+    "fonte_versao_id": 739,
+    "artigo": "29"
+   },
+   {
+    "caminho": "Lei GO 18.104/2013, art. 28",
+    "status_validacao": "validado",
+    "vigencia_estado": "determinada",
+    "marcas": [],
+    "fonte_versao_id": 739,
+    "artigo": "28"
+   },
+   {
+    "caminho": "Lei GO 18.104/2013, art. 25",
+    "status_validacao": "validado",
+    "vigencia_estado": "determinada",
+    "marcas": [],
+    "fonte_versao_id": 739,
+    "artigo": "25"
+   },
+   {
+    "caminho": "Lei GO 18.104/2013, art. 35",
+    "status_validacao": "validado",
+    "vigencia_estado": "determinada",
+    "marcas": [],
+    "fonte_versao_id": 739,
+    "artigo": "35"
+   },
+   {
+    "caminho": "Lei GO 18.104/2013, art. 27",
+    "status_validacao": "validado",
+    "vigencia_estado": "determinada",
+    "marcas": [],
+    "fonte_versao_id": 739,
+    "artigo": "27"
+   }
+  ]
+ },
+ {
+  "passo": "consulta por identidade na pergunta",
+  "metodo": "identidade",
+  "trechos": [
+   "Lei GO 18.104/2013, art. 29"
+  ]
+ },
+ {
+  "passo": "citação válida",
+  "status": 200,
+  "corpo": {
+   "emitir": true,
+   "falhas": []
+  }
+ },
+ {
+  "passo": "menção sem ID bloqueia",
+  "status": 200,
+  "corpo": {
+   "emitir": false,
+   "falhas": [
+    {
+     "afirmacao": 0,
+     "tipo": "citacao_orfa",
+     "detalhe": "'Lei 12.651/2012' mencionada sem ID citado"
+    }
+   ]
+  }
+ },
+ {
+  "passo": "artigo mencionado sem vínculo bloqueia",
+  "status": 200,
+  "corpo": {
+   "emitir": false,
+   "falhas": [
+    {
+     "afirmacao": 0,
+     "tipo": "artigo_mencionado_sem_vinculo",
+     "detalhe": "art. 25 de 'Lei 18.104/2013' não está entre as citações"
+    }
+   ]
+  }
+ },
+ {
+  "passo": "dispositivo inexistente bloqueia",
+  "status": 200,
+  "corpo": {
+   "emitir": false,
+   "falhas": [
+    {
+     "afirmacao": 0,
+     "tipo": "dispositivo_inexistente",
+     "detalhe": "Lei GO 18.104/2013, art. 999"
+    }
+   ]
+  }
+ },
+ {
+  "passo": "cadeia do catálogo",
+  "status": 200,
+  "corpo": {
+   "integra": true,
+   "eventos": 32,
+   "ultimo_hash": "190f6d5d8a1e91f19bf5d7f5399411229503ba8f1fb7767ddac663417f22c1e8"
+  }
+ }
+]
