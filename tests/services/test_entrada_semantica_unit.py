@@ -69,7 +69,7 @@ class EntradaSemanticaTests(unittest.TestCase):
             trecho="TITULAR FALECIDO")
         declaracao = FalecimentoDeclarado(sujeito=falecido.chave, trecho="TITULAR FALECIDO")
         espolio = ParteExtraida(chave="espolio", nome="Espólio da pessoa do caso", natureza="espolio",
-            falecido_chave=falecido.chave, inventario="5286960-36.2022.8.09.0051", trecho="ESPÓLIO")
+            falecido_chave=falecido.chave, trecho="ESPÓLIO")
         self.assertEqual(falecido.natureza, "pf")
         self.assertEqual(declaracao.predicado, "falecimento_declarado")
         self.assertIsNone(declaracao.data)
@@ -277,7 +277,7 @@ def test_field_without_support_in_its_anchor_is_emptied_and_the_observation_stay
          "trecho": "A, CPF 123", "posicao_inicio": 18, "posicao_fim": 28}],
         "falecimentos_declarados": [{"sujeito": "b", "ano": 2021, "trecho": "TITULAR FALECIDO"},
                                     {"sujeito": "b", "trecho": "TITULAR FALECIDO"}],
-        "contratos": [{"objeto": "x", "referencia_processo_judicial": ["9999999-00.2022"], "trecho": "Contrato com processo"}]},
+        "contratos": [{"objeto": "x", "trecho": "Contrato com processo"}]},
         text, 0, len(text), especie="comprovante_situacao_cadastral_cpf")
     assert [p.chave for p in valid.partes] == ["b"] and len(valid.falecimentos_declarados) == 2
     assert [(r["colecao"], r["motivo"]) for r in rejected] == [
@@ -302,21 +302,36 @@ def test_identifier_absent_from_party_anchor_is_emptied_with_its_type():
     assert valid.partes[0]._campos_sem_suporte[0]["motivo"] == "Identificador ausente do trecho da parte"
 
 
-def test_contract_keeps_supported_references_and_estate_loses_only_unsupported_inventory():
-    from app.services.entrada_semantica import campos_sem_suporte, validar_proposta
-    text = "J, CPF 1. Espolio de J. Contrato do inventario 111-22.2022 com o espolio."
+def test_process_reference_is_its_own_observation_anchored_on_the_number():
+    """André, 21/09/2026: the process number is an observation of its own, not a field of the estate."""
+    from app.services.entrada_semantica import validar_proposta
+    text = "J, CPF 1. Espolio de J. Contrato do inventario 111-22.2022 com o espolio. Outro: 333-44.2023."
     valid, rejected = validar_proposta({"partes": [
         {"chave": "j", "nome": "J", "natureza": "pf", "identificador": "1", "tipo_identificador": "cpf", "trecho": "J, CPF 1"},
-        {"chave": "e", "nome": "Espolio de J", "natureza": "espolio", "falecido_chave": "j", "inventario": "111-22.2022",
-         "trecho": "Espolio de J"}],
-        "contratos": [{"contratante": ["e"], "objeto": "servico", "trecho": "Contrato do inventario 111-22.2022",
-                       "referencia_processo_judicial": ["111-22.2022", "333-44.2023"]}]},
+        {"chave": "e", "nome": "Espolio de J", "natureza": "espolio", "falecido_chave": "j", "trecho": "Espolio de J"}],
+        "referencias_processo": [
+        {"numero": "111-22.2022", "natureza": "inventario", "sujeito": "e", "trecho": "inventario 111-22.2022"},
+        {"numero": "333-44.2023", "trecho": "Contrato do inventario"},
+        {"numero": "555-66.2024", "sujeito": "x", "trecho": "Outro:"}]},
         text, 0, len(text), especie="contrato_servico_documental")
-    assert not rejected and len(valid.partes) == 2 and len(valid.contratos) == 1
-    assert valid.partes[1].inventario is None
-    assert valid.contratos[0].referencia_processo_judicial == ["111-22.2022"]
-    assert [(c["colecao"], c["campo"]) for c in campos_sem_suporte(valid)] == [
-        ("partes", "inventario"), ("contratos", "referencia_processo_judicial[1]")]
+    assert [(r.numero, r.natureza, r.sujeito) for r in valid.referencias_processo] == [("111-22.2022", "inventario", "e")]
+    assert [(r["colecao"], r["indice"], r["motivo"]) for r in rejected] == [
+        ("referencias_processo", 1, "Número do processo ausente do trecho"),
+        ("referencias_processo", 2, "Número do processo ausente do trecho")]
+
+
+def test_process_reference_outside_the_contractual_family_is_rejected_and_needs_a_known_party():
+    from app.services.entrada_semantica import validar_proposta
+    text = "Averbacao do processo 111-22.2022."
+    valid, rejected = validar_proposta({"referencias_processo": [
+        {"numero": "111-22.2022", "trecho": "processo 111-22.2022"}]}, text, 0, len(text), especie="certidao_matricula")
+    assert not valid.referencias_processo
+    assert rejected[0]["motivo"] == "Referência a processo fora da família contratual"
+    valid, rejected = validar_proposta({"referencias_processo": [
+        {"numero": "111-22.2022", "sujeito": "ghost", "trecho": "processo 111-22.2022"}]},
+        text, 0, len(text), especie="contrato_particular")
+    assert not valid.referencias_processo
+    assert rejected[0]["motivo"] == "Referência a processo vinculada a parte sem identidade extraída"
 
 
 def test_nonexistent_anchor_still_rejects_the_observation():

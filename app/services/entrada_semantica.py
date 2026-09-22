@@ -20,6 +20,7 @@ from app.schemas.entrada_semantica import (
     ObservacaoExtraida,
     ParteExtraida,
     ParticipacaoExtraida,
+    ReferenciaProcesso,
 )
 from app.schemas.evidence import EvidenceAttributes, EvidenceRef
 from app.services.documento_versao import registrar_fragmento, registrar_leitura
@@ -96,7 +97,7 @@ def conteudo_do_item(item):
 def campos_sem_suporte(entrada):
     """Emptied fields of the surviving items, for the extraction report."""
     items = [*entrada.partes, *entrada.todas_participacoes, *entrada.atos, *entrada.observacoes,
-             *entrada.contratos, *entrada.falecimentos_declarados]
+             *entrada.contratos, *entrada.falecimentos_declarados, *entrada.referencias_processo]
     return [campo for item in items for campo in item._campos_sem_suporte]
 
 
@@ -134,6 +135,7 @@ def _persistir_entrada(db, doc, entrada: EntradaExtraida, *, metodo="extrator_se
     items += [("participacao", conteudo_do_item(x), x.trecho) for x in entrada.todas_participacoes]
     items += [("contrato", {**conteudo_do_item(x), "predicado": especie}, x.trecho) for x in entrada.contratos]
     items += [("falecimento_declarado", conteudo_do_item(x), x.trecho) for x in entrada.falecimentos_declarados]
+    items += [("referencia_processo", conteudo_do_item(x), x.trecho) for x in entrada.referencias_processo]
     for tipo, item, trecho in items:
         try:
             start = localizar_trecho(version.texto, trecho, item.get("posicao_inicio"))
@@ -152,12 +154,12 @@ def _persistir_entrada(db, doc, entrada: EntradaExtraida, *, metodo="extrator_se
         if tipo == "contrato":
             if especie not in {"contrato_particular", "contrato_servico_documental"}:
                 raise HTTPException(422, "Contratação exige espécie contratual revisável")
-            if any(re.sub(r"\s+", "", numero) not in re.sub(r"\s+", "", trecho)
-                   for numero in item["referencia_processo_judicial"]):
-                raise HTTPException(422, "Referência judicial ausente do trecho contratual")
             for representacao in item["representacao_declarada"]:
                 representacao["estado_confirmacao"] = "declarado"
             item["lacunas"] = [campo for campo in ("contratante", "contratado", "objeto") if not item[campo]]
+        if tipo == "referencia_processo" and (especie not in ESPECIES_CONTRATUAIS
+                or re.sub(r"\s+", "", item["numero"]) not in re.sub(r"\s+", "", trecho)):
+            raise HTTPException(422, "Referência a processo exige família contratual e o número no trecho")
         if tipo == "participacao":
             # The model cannot promote its own declaration to confirmation.
             item["estado_confirmacao"] = "declarado"
@@ -179,7 +181,8 @@ def _persistir_entrada(db, doc, entrada: EntradaExtraida, *, metodo="extrator_se
             refs.append(row)
         target = destino_consolidavel(especie, predicate) if tipo == "observacao" else None
         # These rows are review projections, not new assertions and not Client fields.
-        sem_destino = tipo in {"parte", "participacao", "contrato", "ato_registral", "falecimento_declarado"}
+        sem_destino = tipo in {"parte", "participacao", "contrato", "ato_registral", "falecimento_declarado",
+                               "referencia_processo"}
         if (target or sem_destino) and not db.query(ExtractedFieldStaging.id).filter_by(observacao_ref=row.id).first():
             db.add(ExtractedFieldStaging(tenant_id=doc.tenant_id, process_id=doc.process_id,
                 document_id=doc.id, observacao_ref=row.id, source_doc_type=especie,
@@ -258,10 +261,11 @@ def persistir_entidades(db, doc, entrada, refs, especie):
             continue  # The observation survives; insufficient basis is not an estate identity.
         row = db.query(Espolio).filter_by(tenant_id=doc.tenant_id, fundamento_id=fundamento.id).first()
         if row is None:
-            if parte.inventario and re.sub(r"\s+", "", parte.inventario) not in re.sub(r"\s+", "", parte.trecho):
-                raise HTTPException(422, "Número de inventário não localizado no documento")
-            row = Espolio(tenant_id=doc.tenant_id, falecido_id=falecido.id,
-                fundamento_id=fundamento.id, inventario=parte.inventario)
+            # The inventory number is its own anchored observation; one link, or none.
+            inventarios = [r.numero for r in entrada.referencias_processo
+                           if r.sujeito == parte.chave and r.natureza == "inventario"]
+            row = Espolio(tenant_id=doc.tenant_id, falecido_id=falecido.id, fundamento_id=fundamento.id,
+                inventario=inventarios[0] if len(set(inventarios)) == 1 else None)
             db.add(row)
             db.flush()
         espolios[parte.chave] = row
@@ -384,7 +388,7 @@ def qualificar_observacoes(rows, *, data_referencia):
 
 ITENS = {"partes": ParteExtraida, "participacoes": ParticipacaoExtraida, "atos": AtoExtraido,
          "observacoes": ObservacaoExtraida, "contratos": ContratoExtraido,
-         "falecimentos_declarados": FalecimentoDeclarado}
+         "falecimentos_declarados": FalecimentoDeclarado, "referencias_processo": ReferenciaProcesso}
 ESPECIES_CONTRATUAIS = {"contrato_particular", "contrato_servico_documental"}
 RECEITA = "comprovante_situacao_cadastral_cpf"
 
@@ -423,6 +427,12 @@ def _ancorar(item, nome, texto, inicio_fatia, fim_fatia, especie):
         raise ValueError("Declaração de falecimento exige a espécie Receita")
     if especie == RECEITA and (nome == "participacoes" or (nome == "partes" and item.natureza == "espolio")):
         raise ValueError("Receita não fundamenta espólio ou representação")
+    if nome == "referencias_processo":
+        # The number is what this observation asserts: without it in the anchor there is no observation.
+        if especie and especie not in ESPECIES_CONTRATUAIS:
+            raise ValueError("Referência a processo fora da família contratual")
+        if _sem_espacos(item.numero) not in _sem_espacos(literal):
+            raise ValueError("Número do processo ausente do trecho")
     if nome == "falecimentos_declarados" and "titular falecido" not in literal.lower():
         raise ValueError("Falecimento declarado exige trecho TITULAR FALECIDO")
     compacto = _sem_espacos(literal)
@@ -433,15 +443,6 @@ def _ancorar(item, nome, texto, inicio_fatia, fim_fatia, especie):
     if nome == "partes" and item.identificador and _sem_espacos(item.identificador) not in compacto:
         sem_suporte("identificador", "Identificador ausente do trecho da parte")
         item.identificador = item.tipo_identificador = None  # the schema keeps value and type together
-    if nome == "partes" and item.inventario and _sem_espacos(item.inventario) not in compacto:
-        sem_suporte("inventario", "Número de inventário ausente do trecho da parte")
-        item.inventario = None
-    if nome == "contratos":
-        referencias = item.referencia_processo_judicial
-        for indice, numero in enumerate(referencias):
-            if _sem_espacos(numero) not in compacto:
-                sem_suporte(f"referencia_processo_judicial[{indice}]", "Referência judicial ausente do trecho contratual")
-        item.referencia_processo_judicial = [n for n in referencias if _sem_espacos(n) in compacto]
     if nome == "falecimentos_declarados":
         if item.ano is not None and not re.search(rf"\b{item.ano}\b", literal):
             sem_suporte("ano", "Ano de falecimento ausente do trecho")
@@ -566,6 +567,8 @@ def validar_proposta(proposta, texto, inicio_fatia, fim_fatia, *, especie=None):
                      if (m := referencia(k, chaves, chaves, "Parte contratual sem identidade extraída"))), None)
 
     itens["contratos"] = manter("contratos", itens["contratos"], partes_contratuais)
+    itens["referencias_processo"] = manter("referencias_processo", itens["referencias_processo"], lambda r:
+        r.sujeito and referencia(r.sujeito, chaves, chaves, "Referência a processo vinculada a parte sem identidade extraída"))
     for indice, contrato in itens["contratos"]:
         contrato.representacao_declarada = [item for _, item in manter(
             f"contratos[{indice}].representacao_declarada", representacoes.get(indice, []), participacao)]
@@ -645,6 +648,9 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
             contrato.contratado = [prefix + key for key in contrato.contratado]
         for declaracao in parcial.falecimentos_declarados:
             declaracao.sujeito = prefix + declaracao.sujeito
+        for referencia in parcial.referencias_processo:
+            if referencia.sujeito:
+                referencia.sujeito = prefix + referencia.sujeito
         for key in colecoes:
             colecoes[key].extend(getattr(parcial, key))
     entrada = EntradaExtraida(**colecoes)

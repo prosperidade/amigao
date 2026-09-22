@@ -84,7 +84,11 @@ def receipt(tenant_id=4):
         result['checks']['estate_without_own_identifier'] = all(not p.get('identificador') for p in items(558, 'parte')
                                                                 if p['natureza'] == 'espolio')
         result['checks']['contract_extracted'] = bool(items(558, 'contrato'))
-        result['checks']['inventory_from_contract'] = any(c.get('referencia_processo_judicial') for c in items(558, 'contrato'))
+        estates = {p['chave'] for p in items(558, 'parte') if p['natureza'] == 'espolio'}
+        references = items(558, 'referencia_processo')
+        result['checks']['process_reference'] = any(re.search(r'\d', r.get('numero') or '') for r in references)
+        result['checks']['inventory_reference_on_estate'] = any(r.get('natureza') == 'inventario'
+                                                               and r.get('sujeito') in estates for r in references)
         result['checks']['inventariante_declared'] = any(p['papel'] == 'inventariante' and p.get('representado_chave')
             and p['estado_confirmacao'] == 'declarado' for p in items(558, 'participacao'))
         result['checks']['nothing_confirmed'] = all(p.get('estado_confirmacao') != 'confirmado'
