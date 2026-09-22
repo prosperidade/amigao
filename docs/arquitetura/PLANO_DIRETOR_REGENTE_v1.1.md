@@ -654,14 +654,36 @@ por tipo de peça.
 do `gerar_proposta`.
 **ADR-074.** Esforço: grande. **Depende:** TRs (incremento 0).
 
-### INCREMENTO 6 — Migração e invalidação
-**Entrega:** conversão do legado comprovável · revisão dos dados afetados ·
-obsolescência por dependência de versão · saneamento assistido de identidade
-(#209, #210) · retenção que preserva prova (#207).
+### INCREMENTO 6 — Migração de dados
+> **Redefinido em 22/09/2026 (André).** O schema **não** é trabalho deste
+> incremento: produção migra sozinha no deploy (`preDeployCommand` do
+> `regente-api` — dump do schema `public` no R2 e depois `alembic upgrade head`;
+> confirmado em 22/09 pelo `supabase-prod-ro`: produção em `072ge001`, com as
+> tabelas dos incrementos 1 a 3 presentes e vazias). O que resta é **dado**: o
+> que já está em produção precisa chegar ao modelo novo sem fabricar evidência.
 
-**Prova:** documento novo desatualiza o que depende dele · versões anteriores
-preservadas · artefato comercial não fecha sobre fundamento superado · fontes
-acessíveis após arquivamento · nenhum backfill inferido.
+**Entrega — três frentes de dado:**
+
+| Frente | O que é | Tamanho medido em produção (22/09) | Regra |
+|---|---|---|---|
+| **Corpus** | Reconstruir o corpus normativo de produção a partir do dev: texto corrompido dos ids 16–22 (issue #185, 3,7%–4,7% de `U+FFFD`), 49 documentos federais que só o dev tem (#244), estrutura da norma e proveniência (ADR-075) | 64 normas · 28.891 chunks | Reconstrução a partir do dev, conferida por impressão digital antes e depois; nada reingerido às cegas |
+| **Extrações antigas** | Staging legado (`extracted_field_staging`) → observações do modelo novo, ou reextração dos originais onde a observação não se sustenta (página, trecho e data nunca registrados não se reconstroem — §6.3) | 342 linhas em 5 processos | Converter o comprovável, preservando ids legados; o resto é reextraído com o Luna, nunca inferido |
+| **Checksums** | Hash sha256 dos bytes originais de cada documento de caso (#259) e de cada fonte normativa (ADR-075 A5) | 72 documentos, 1 sem hash | Recalcular a partir do objeto no storage **só** quando o objeto é comprovadamente o recebido; senão marcar "hash de origem desconhecido" — nunca inventar |
+
+Continuam aqui, porque também são dado e não schema: obsolescência por
+dependência de versão · saneamento assistido de identidade (#209, #210) ·
+retenção que preserva prova (#207). A **contração** das colunas legadas
+([inventário de leitores](INVENTARIO_LEITORES_LEGADO.md)) roda depois das três
+frentes — a migration que remove a coluna sai no deploy como qualquer outra; o
+trabalho do incremento é zerar os leitores e migrar o dado antes.
+
+**Prova:** corpus de produção com a mesma impressão digital do dev, zero
+`U+FFFD` nos ids 16–22 · cada linha de staging legado tem destino declarado
+(convertida, reextraída ou marcada) · todo documento tem hash ou marca de
+origem desconhecida · documento novo desatualiza o que depende dele · versões
+anteriores preservadas · artefato comercial não fecha sobre fundamento superado
+· fontes acessíveis após arquivamento · **nenhum backfill inferido** · dump de
+pré-deploy conferido antes de cada escrita em produção.
 **Esforço:** médio-grande.
 
 ### INCREMENTO 7 — Aceite E2E e homologação
@@ -692,7 +714,7 @@ do próprio método.
 | Verificação pós-publicação | Percurso mínimo executado em produção, com resultado colado |
 | Monitoramento | Falhas, filas, custo de IA, e o que dispara alerta |
 | Atendimento ao piloto | Quem responde, em quanto tempo, por qual canal |
-| Backup | **PITR ou dump agendado — hoje produção não tem backup gerenciado** |
+| Backup | Dump do schema `public` no R2 antes de toda migration (pré-deploy, retenção 30 dias / mínimo 10). **Falta:** restore ensaiado e backup agendado independente de deploy |
 
 **Prova:** a versão aceita está no ar, verificada, com reversão ensaiada.
 
@@ -706,7 +728,7 @@ do próprio método.
 | 3 | Geometria e Auditor unificado | Medições reproduzíveis e confrontos coerentes |
 | 4 | Motor jurídico e método da Legislação | Regras e fundamentos homologados para a cobertura escolhida |
 | 5 | Diagnóstico, redação e fechamento comercial | Percurso chega a proposta sem inventar escopo |
-| 6 | Saneamento do legado e ensaio de migração | Dados antigos tratados sem fabricar evidência |
+| 6 | Migração de dados: corpus, extrações antigas, checksums (schema migra no deploy) | Dados antigos tratados sem fabricar evidência |
 | 7 | Homologação técnica integral e auditoria independente | Percurso completo aprovado, com falha e concorrência |
 | 8 | Aceite da Ísis e publicação controlada | Versão aceita e funcionamento publicado verificado |
 
