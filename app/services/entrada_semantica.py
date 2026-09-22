@@ -575,13 +575,101 @@ def validar_proposta(proposta, texto, inicio_fatia, fim_fatia, *, especie=None):
     return EntradaExtraida(limites=limites, **{nome: [item for _, item in pares] for nome, pares in itens.items()}), rejeicoes
 
 
+DEPENDENCIA = "Dependência de parte rejeitada"
+INSTRUCAO_REPARO = (
+    "\nRODADA DE REPARO (uma tentativa). Os itens abaixo foram rejeitados na validação, cada um com "
+    "o motivo. Para cada um, devolva o item corrigido conforme o schema: trecho copiado do texto "
+    "caractere por caractere, contíguo, sem reescrever, resumir, pular ou juntar pedaços; se o trecho se "
+    "repete, amplie-o até ser único ou informe offsets exatos. Quando houver 'divergencia', seu trecho "
+    "coincide com a fonte nas primeiras palavras indicadas e depois a fonte segue com 'fonte_continua': "
+    "copie essa continuação ou termine o trecho no ponto de divergência. Se o texto não sustenta o item, "
+    "devolva item null. Não altere nem acrescente outros itens. Responda só JSON, sem Markdown: "
+    '{"reparos": [{"colecao": ..., "indice": ..., "item": {...} ou null}]}.\nItens rejeitados: ')
+
+
+def divergencia(texto, trecho, janela=60):
+    """Where a non-existent anchor departs from the source, for the repair round.
+
+    The longest prefix of the anchor (whitespace-tolerant, as the resolver) found in the
+    source; the source and the anchor continuations show the model what it skipped or
+    rewrote. On 21/09/2026 the model jumped a 176-character control code to reach a date.
+    """
+    tokens = trecho.split()
+
+    def busca(n):
+        return re.search(r"\s+".join(re.escape(t) for t in tokens[:n]), texto) if n else None
+    baixo, alto = 0, len(tokens)
+    while baixo < alto:  # a prefix that matches implies every shorter one matches
+        meio = (baixo + alto + 1) // 2
+        baixo, alto = (meio, alto) if busca(meio) else (baixo, meio - 1)
+    if not baixo:
+        return {"coincide_palavras": 0, "total_palavras": len(tokens)}
+    fim = busca(baixo).end()
+    return {"coincide_palavras": baixo, "total_palavras": len(tokens),
+            "fonte_continua": texto[fim:fim + janela], "trecho_continua": " ".join(tokens[baixo:])[:janela]}
+
+
+def _item_da_proposta(proposta, colecao, indice):
+    if "[" in colecao:  # contratos[i].representacao_declarada
+        contrato = int(colecao.split("[")[1].split("]")[0])
+        return proposta["contratos"][contrato]["representacao_declarada"], indice
+    return proposta[colecao], indice
+
+
+def reparar_proposta(proposta, recusadas, pedir, texto=None):
+    """One repair round: each item rejected on its own checks returns to the model with its reason.
+
+    Dependency rejections are not sent: a repaired parent clears them on revalidation. Returns the
+    proposal with repaired items in their original places (to revalidate as a whole) and the
+    request list. ``pedir`` returns the parsed {"reparos": [...]} or raises ValueError.
+    """
+    pedidos = []
+    for r in recusadas:
+        if r["indice"] is None or r["motivo"] == DEPENDENCIA:
+            continue
+        lista, indice = _item_da_proposta(proposta, r["colecao"], r["indice"])
+        pedido = {"colecao": r["colecao"], "indice": indice, "motivo": r["motivo"], "item": lista[indice]}
+        trecho = lista[indice].get("trecho") if isinstance(lista[indice], dict) else None
+        if texto and isinstance(trecho, str) and "não existe" in r["motivo"]:
+            pedido["divergencia"] = divergencia(texto, trecho)
+        pedidos.append(pedido)
+    if not pedidos:
+        return proposta, []
+    resposta = pedir(pedidos)
+    reparada = json.loads(json.dumps(proposta))
+    solicitados = {(p["colecao"], p["indice"]) for p in pedidos}
+    devolvidos = set()
+    for reparo in (resposta.get("reparos") if isinstance(resposta, dict) else None) or []:
+        chave = (reparo.get("colecao"), reparo.get("indice")) if isinstance(reparo, dict) else None
+        if chave in solicitados and isinstance(reparo.get("item"), dict):
+            lista, indice = _item_da_proposta(reparada, *chave)
+            lista[indice] = reparo["item"]
+            devolvidos.add(chave)
+    for pedido in pedidos:
+        pedido["devolvido"] = (pedido["colecao"], pedido["indice"]) in devolvidos
+    return reparada, pedidos
+
+
+def registro_do_reparo(pedidos, recusadas_finais):
+    finais = {(r["colecao"], r["indice"]): r["motivo"] for r in recusadas_finais}
+    registro = []
+    for pedido in pedidos:
+        chave = (pedido["colecao"], pedido["indice"])
+        resultado = ("nao_devolvido" if not pedido["devolvido"] else
+                     "rejeitado" if chave in finais else "aceito")
+        registro.append({"colecao": pedido["colecao"], "indice": pedido["indice"],
+                         "motivo_original": pedido["motivo"], "resultado": resultado,
+                         **({"motivo_final": finais[chave]} if chave in finais else {})})
+    return registro
+
+
 def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     """Único parser/persistidor, compartilhado pelo agente e adaptador de staging.
 
     With ``superacoes`` the caller supersedes the previous version after writing
     the case derivations; otherwise supersession happens here.
     """
-    from app.core.ai_gateway import complete
+    from app.core.ai_gateway import AIGatewayError, complete
     from app.services.taxonomia_documental import FAMILIAS
     if manifest["status"] != "available":
         raise HTTPException(422, "Capacidade insuficiente: método obrigatório indisponível")
@@ -606,33 +694,49 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
         raise HTTPException(422, "Cobertura documental insuficiente; nenhuma extração parcial será publicada como completa")
     colecoes = {key: [] for key in EntradaExtraida.model_fields}
     modelos = []
-    rejeicoes, campos = [], []
+    rejeicoes, campos, reparos = [], [], []
     for fatia in fatias:
         texto = doc.extracted_text[fatia.inicio:fatia.fim]
-        response = complete(texto, system=system + f"\nEspécie: {especie}. Fatia {fatia.indice}; "
+        system_fatia = system + (f"\nEspécie: {especie}. Fatia {fatia.indice}; "
             f"Offsets globais em caracteres Unicode no extracted_text; fatia [{fatia.inicio}, {fatia.fim}). "
             "Informe posicao_inicio (start, base zero) e posicao_fim (end exclusivo) além do literal. "
             "Para trecho único, offsets podem ser nulos e serão localizados deterministicamente. "
             "Trecho repetido exige offsets corretos; sem eles somente a observação será rejeitada. "
             "Não estime offsets. Amplie o trecho para torná-lo único quando necessário. "
-            "Não preencha campos de famílias ausentes. Não devolva Markdown.",
-            agent_name="extrator", model=settings.AI_EXTRATOR_MODEL, allow_fallback=settings.AI_EXTRATOR_ALLOW_FALLBACK,
-            max_tokens=12000, temperature=0)
-        if on_response:
-            on_response(response, f"doc{doc.id}:{fatia.rotulo}")
-        raw = response.content.strip()
-        if raw.startswith("```"):
-            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
-        try:
-            proposta = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Resposta do extrator não é JSON: {exc.msg}") from exc
+            "Não preencha campos de famílias ausentes. Não devolva Markdown.")
+
+        def chamar(sistema, rotulo, texto=texto):
+            response = complete(texto, system=sistema, agent_name="extrator", model=settings.AI_EXTRATOR_MODEL,
+                allow_fallback=settings.AI_EXTRATOR_ALLOW_FALLBACK, max_tokens=12000, temperature=0)
+            if on_response:
+                on_response(response, rotulo)
+            modelos.append(response.model_used)
+            raw = response.content.strip()
+            if raw.startswith("```"):
+                raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Resposta do extrator não é JSON: {exc.msg}") from exc
+
+        proposta = chamar(system_fatia, f"doc{doc.id}:{fatia.rotulo}")
         parcial, recusadas = validar_proposta(proposta, doc.extracted_text, fatia.inicio, fatia.fim, especie=especie)
+        # Skill compensation (André, 21/09/2026): one repair round, result recorded per item.
+        try:
+            reparada, pedidos = reparar_proposta(proposta, recusadas, lambda itens, sistema=system_fatia,
+                rotulo=f"doc{doc.id}:{fatia.rotulo}:reparo": chamar(
+                    sistema + INSTRUCAO_REPARO + json.dumps(itens, ensure_ascii=False), rotulo), texto=texto)
+        except (ValueError, AIGatewayError) as exc:
+            reparos.append({"fatia": fatia.indice, "erro": getattr(exc, "message", None) or str(exc)})
+        else:
+            if pedidos:
+                parcial, recusadas = validar_proposta(reparada, doc.extracted_text, fatia.inicio, fatia.fim,
+                                                      especie=especie)
+                reparos.extend({**r, "fatia": fatia.indice} for r in registro_do_reparo(pedidos, recusadas))
         rejeicoes.extend({**r, "fatia": fatia.indice} for r in recusadas)
         for campo in campos_sem_suporte(parcial):
             campo["fatia"] = fatia.indice
             campos.append(campo)
-        modelos.append(response.model_used)
         # Window-local references remain scoped; same names never merge identities.
         prefix = f"f{fatia.indice}:"
         for parte in parcial.partes:
@@ -664,7 +768,8 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     # One version per extraction of the document: its observations and what it supersedes.
     relatorio = _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
             "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.3",
-                "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "observacoes_preservadas": len(rows),
+                "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "reparos": reparos,
+                    "observacoes_preservadas": len(rows),
                     "observacoes": [{"id": r.object_id, "version": r.version} for r in rows],
                     "superadas": [{"id": r.object_id, "version": r.version} for r in anteriores]}},
             "premises": [{"id": source.object_id, "version": source.version}],

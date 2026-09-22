@@ -32,3 +32,16 @@ Identificador, ano e data de consulta informados precisam constar do trecho
 do proprio item; sem isso o campo
 fica vazio, com motivo, e a observacao segue. Trecho que nao existe no texto
 rejeita a observacao. Amplie o trecho em vez de omitir o valor.
+
+Exemplo (sintetico). Texto da fonte, com quebra de linha:
+    SITUACAO: TITULAR FALECIDO
+    Ano do obito: 2021
+Certo: trecho "SITUACAO: TITULAR FALECIDO\nAno do obito: 2021" (copia exata
+e contigua; no JSON a quebra de linha vira \n), ou so "TITULAR FALECIDO" se o item nao
+informa o ano.
+Errado, e rejeitado: "Situacao: titular falecido em 2021" (reescrito: caixa,
+palavras e ordem mudaram); "TITULAR FALECIDO ... 2021" (reticencias juntando
+pedacos); o mesmo sem reticencias, pulando no meio um codigo longo ou numero de
+controle; "SITUACAO TITULAR FALECIDO" (pontuacao removida); texto que nao esta
+na fonte. Regra: selecione e copie; nunca redija o trecho. Isto vale para todos
+os itens; continue preenchendo todos os campos do schema.
