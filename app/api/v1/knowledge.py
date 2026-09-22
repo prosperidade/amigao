@@ -16,7 +16,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_internal_user, get_db
+from app.api.deps import get_curador_do_corpus, get_current_internal_user, get_db
 from app.models.user import User
 from app.schemas.knowledge import (
     KnowledgeIndexResponse,
@@ -94,7 +94,7 @@ def knowledge_search(
 def knowledge_index_text(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_curador_do_corpus),
     body: KnowledgeIndexTextRequest,
 ) -> Any:
     """Indexa texto avulso (oficio, manual, jurisprudencia)."""
@@ -132,7 +132,7 @@ def knowledge_index_text(
 @router.post("/reindex-legislation", status_code=status.HTTP_202_ACCEPTED)
 def knowledge_reindex_legislation(
     *,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_curador_do_corpus),
 ) -> dict[str, Any]:
     """Enfileira re-indexacao de todo o corpus de legislation_documents."""
     if not current_user.is_superuser:
