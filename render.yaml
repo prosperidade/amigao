@@ -47,7 +47,10 @@ services:
     # deploy para — sem cópia do estado anterior, migration não roda.
     # Retenção declarada: 30 dias, e nunca menos que os 10 dumps mais recentes
     # (BACKUP_RETENTION_DAYS / BACKUP_MIN_KEEP). Restore: RUNBOOK_OPS.md.
-    preDeployCommand: python scripts/predeploy_backup.py && alembic upgrade head
+    # O Render NÃO passa o preDeployCommand por shell: sem `sh -c`, o `&&` e o
+    # resto chegam como argumentos do script (deploy de 22/09 falhou assim, com
+    # a versão anterior mantida no ar). O `sh -c` é o que dá sentido ao `&&`.
+    preDeployCommand: sh -c "python scripts/predeploy_backup.py && alembic upgrade head"
     # Render injeta $PORT. Bind explícito; seed.py NÃO roda aqui.
     dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
