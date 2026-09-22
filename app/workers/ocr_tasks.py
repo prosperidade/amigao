@@ -431,12 +431,26 @@ def ocr_then_extract(
 
 
 def _dispatch_extrator(run_agent, doc, draft_id, tenant_id, user_id) -> None:
-    """Enfileira o agente extrator com a mesma metadata do fluxo /import original."""
+    """Enfileira o agente extrator com a mesma metadata do fluxo /import original.
+
+    O caso VAI JUNTO (22/09/2026). A execução persistida do ADR-069 começa por
+    `authorize(...)`, que procura o caso: com `process_id=None` ela levantava
+    404 e o `_connected_task` devolvia `failed` em silêncio — sem execução, sem
+    ai_job, sem marca no documento. Medido em produção: 10 OCRs gravados e
+    ZERO extrações nos casos #23 e #25. Documento sem caso (rascunho de intake)
+    não tem o que autorizar, então nem chega a ser enfileirado: fica dito no log.
+    """
+    if doc.process_id is None:
+        logger.warning(
+            "ocr_then_extract: doc=%s sem caso — extrator não enfileirado (draft=%s)",
+            doc.id, draft_id,
+        )
+        return
     run_agent.delay(
         agent_name="extrator",
         tenant_id=tenant_id,
         user_id=user_id,
-        process_id=None,
+        process_id=doc.process_id,
         metadata={
             "document_id": doc.id,
             "storage_key": doc.storage_key,

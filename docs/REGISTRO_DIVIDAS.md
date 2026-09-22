@@ -1,5 +1,25 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 22/09/2026 — reextração em produção: a cadeia não extraiu (#23 e #25)
+
+- **#268 — produção nunca executou leitura semântica; três falhas em fila, todas mudas (corrigidas, falta provar):**
+  - A rodada autorizada de 22/09 gravou 10 OCRs e **zero** extrações. Causas: (a) `_dispatch_extrator`
+    enfileirava o extrator sem `process_id`, e `authorize` respondia 404; (b) `_connected_task`
+    transformava esse 404 em `{"status": "failed"}` **sem log algum**; (c) a imagem de produção não
+    carrega `docs/arquitetura/ONTOLOGIA_REGENTE_v1.md`, que o `capability_manifest("extrator")` exige —
+    `capacidade_insuficiente` antes de ler qualquer documento.
+  - As 142 linhas de `evidence_versions` criadas na rodada são `method="staging"` (projeção do legado na
+    captura de snapshot), **não** leitura do Luna. Observação semântica em produção segue em zero.
+  - **Correção:** os três consertos entraram com teste que fica vermelho sem eles. **Falta a prova:** nova
+    rodada em produção depois do deploy, com autorização própria do André. Gate de produção **aberto**
+    (ver `docs/auditoria/GATE_INCREMENTO2.md`, seção de 22/09).
+  - **Origem:** reextração autorizada de #23 e #25; medição pelo `supabase-prod-ro`.
+
+> **PRÓXIMO NÚMERO LIVRE: 269.** (#268 aberta pela reextração em produção, 22/09.
+> **#260 a #267 são da frente 4a** — registradas em
+> [ZONA_NORMATIVA_INCREMENTO4A.md](arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md), não aqui;
+> esta dívida nasceu #260 e foi renumerada por colisão com elas.)
+
 ## Pulso 22/09/2026 — reprocessamento do KMZ real de Jobson (#195, Incremento 3)
 
 - **#259 — documento não guarda hash sha256 dos bytes originais no upload (aberta):**
@@ -17,7 +37,7 @@
     [INVENTARIO_LEITORES_LEGADO.md](arquitetura/INVENTARIO_LEITORES_LEGADO.md)).
   - **Origem:** ADR-072 §Reprocessamento com o KMZ real; PR #195.
 
-> **PRÓXIMO NÚMERO LIVRE: 260.** (#259 aberta pelo reprocessamento do KMZ real de Jobson, 22/09;
+> **Anterior: 260.** (#259 aberta pelo reprocessamento do KMZ real de Jobson, 22/09;
 > conferido `gh pr list`: só o #195 aberto.)
 > Anterior: 259 (#255 a #258 abertas pela medição real do Incremento 2, 21/09.)
 

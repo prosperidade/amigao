@@ -58,6 +58,14 @@ def _connected_task(task, tenant_id, user_id, *, execution_id=None, process_id=N
     except HTTPException as exc:
         if exc.status_code == 409:
             raise task.retry(exc=exc, countdown=5)
+        # Falha de agente em fila não tem tela para avisar ninguém: sem este log
+        # ela some (22/09/2026 — a cadeia OCR→extrator devolvia 404 "Caso não
+        # encontrado" e nada aparecia em lugar nenhum). Erro, não warning: quem
+        # pediu a extração não recebeu extração.
+        logger.error(
+            "agente %s não executou [%s]: %s (tenant=%s processo=%s execucao=%s)",
+            name or "?", exc.status_code, exc.detail, tenant_id, process_id, execution_id,
+        )
         return {"status": "failed", "error": exc.detail}
     except _DETERMINISTIC_ERRORS as exc:
         # A fresh transaction may record the failed cursor; never reuse an aborted one.
