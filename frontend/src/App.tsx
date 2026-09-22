@@ -9,6 +9,7 @@ import ClientsPage from './pages/Clients';
 import ClientHub from './pages/Clients/ClientHub';
 import ProcessesPage from './pages/Processes';
 import ProcessDetail from './pages/Processes/ProcessDetail';
+import DocumentObservationsPage from './pages/Processes/DocumentObservationsPage';
 import PropertiesPage from './pages/Properties';
 import PropertyHub from './pages/Properties/PropertyHub';
 import IntakeWizard from './pages/Intake/IntakeWizard';
@@ -46,6 +47,7 @@ export default function App() {
             {/* Telas que serão implementadas a seguir */}
             <Route path="/processes" element={<ProcessesPage />} />
             <Route path="/processes/:id" element={<ProcessDetail />} />
+            <Route path="/processes/:id/documentos-observacoes" element={<DocumentObservationsPage />} />
             <Route path="/clients" element={<ClientsPage />} />
             <Route path="/clients/:id" element={<ClientHub />} />
             <Route path="/properties" element={<PropertiesPage />} />
