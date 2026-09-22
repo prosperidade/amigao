@@ -542,11 +542,11 @@ export default function DraftDocumentUploader({
                     {d.document_type ?? 'sem tipo'}
                     {d.file_size_bytes > 0 && ` · ${Math.round(d.file_size_bytes / 1024)} KB`}
                   </div>
-                  {/* Mensagem honesta para arquivos geoespaciais (geometria):
-                      armazenados sem leitura de texto; processamento geo é o gap D1. */}
+                  {/* Arquivo geoespacial não tem leitura de texto; a geometria
+                      é lida à parte e aparece na Conferência do caso (ADR-072). */}
                   {d.ocr_status === 'not_required' && (
                     <div className="mt-0.5 text-[11px] text-cyan-700">
-                      🗺️ Geometria armazenada — processamento em breve (sem leitura de texto).
+                      🗺️ Arquivo geoespacial — a geometria é lida à parte (Conferência do caso).
                     </div>
                   )}
                   {d.ocr_status === 'failed' && (

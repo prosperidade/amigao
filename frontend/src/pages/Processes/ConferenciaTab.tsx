@@ -16,6 +16,7 @@ import ConsolidacaoPanel from './ConsolidacaoPanel';
 import CadeiaFichasPanel from './CadeiaFichasPanel';
 import RequisitosPanel from './RequisitosPanel';
 import ConfrontoIdentidade from './ConfrontoIdentidade';
+import GeometriaPanel from './GeometriaPanel';
 
 interface ConferenciaTabProps {
   processId: number;
@@ -50,6 +51,9 @@ export default function ConferenciaTab({ processId }: ConferenciaTabProps) {
         {/* Cadeia pode existir mesmo sem staging pendente (matrículas já
             consolidadas) — o painel se auto-oculta quando não há o que encadear. */}
         <CadeiaFichasPanel processId={processId} />
+        {/* Geometria também independe de staging pendente — KMZ pode chegar
+            depois da consolidação de campos, ou nunca ter staging associado. */}
+        <GeometriaPanel processId={processId} />
         <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-dashed border-gray-200 dark:border-white/10 p-8 text-center">
           <ClipboardCheck className="w-8 h-8 text-gray-300 dark:text-slate-600 mx-auto mb-2" />
           <p className="text-sm text-gray-500 dark:text-slate-400">Nada para conferir ainda.</p>
@@ -70,6 +74,7 @@ export default function ConferenciaTab({ processId }: ConferenciaTabProps) {
       <ConfrontoIdentidade processId={processId} />
       <RequisitosPanel processId={processId} />
       <CadeiaFichasPanel processId={processId} />
+      <GeometriaPanel processId={processId} />
       <ConsolidacaoPanel processId={processId} />
     </div>
   );
