@@ -87,6 +87,58 @@ def reclassificar_documento(process_id: int, document_id: int, body: Reclassific
     return result
 
 
+@router.get("/cases/{process_id}/documents/{document_id}/conferencia")
+def conferencia_documento(process_id: int, document_id: int, db: Db, user: UserDep):
+    """Documento e observações lado a lado, com o trecho de origem de cada uma.
+
+    A âncora só é devolvida com posição quando pertence à versão corrente do texto e
+    o recorte confere com o literal gravado; senão a observação aparece sem destaque.
+    """
+    import re
+
+    from app.models.document import Document
+    from app.models.entrada_semantica import DocumentoVersao
+    from app.services.entrada_semantica import classificacao_atual
+    authorize(db, user.tenant_id, user.id, process_id)
+    doc = db.query(Document).filter_by(id=document_id, tenant_id=user.tenant_id, process_id=process_id,
+                                       deleted_at=None).first()
+    if doc is None:
+        raise HTTPException(404, "Documento não encontrado no caso")
+    versao = db.query(DocumentoVersao).filter_by(tenant_id=user.tenant_id, documento_id=doc.id).order_by(
+        DocumentoVersao.numero.desc()).first()
+    texto = versao.texto if versao else (doc.extracted_text or "")
+    invalidacoes = {i.evidence_id: i.reason or {} for i in db.query(EvidenceInvalidation).filter(
+        EvidenceInvalidation.tenant_id == user.tenant_id, EvidenceInvalidation.process_id == process_id)}
+    latest = {}
+    for row in db.query(EvidenceVersion).filter(EvidenceVersion.tenant_id == user.tenant_id,
+            EvidenceVersion.process_id == process_id, EvidenceVersion.source_document_id == doc.id,
+            EvidenceVersion.kind == "observacao").order_by(EvidenceVersion.version):
+        latest[row.object_id] = row
+    observacoes = []
+    for row in latest.values():
+        attrs = row.content["attributes"]
+        pos = re.fullmatch(r"\[(\d+),(\d+)\)", attrs.get("position") or "")
+        inicio, fim = (int(pos[1]), int(pos[2])) if pos else (None, None)
+        if versao is None or attrs.get("documento_versao_id") != versao.id or texto[inicio:fim] != attrs.get("literal"):
+            inicio = fim = None
+        observacoes.append({"id": row.object_id, "version": row.version,
+            "tipo": (row.source_record or {}).get("tipo_entrada"), "predicado": attrs.get("predicate"),
+            "trecho": attrs.get("literal"), "inicio": inicio, "fim": fim, "conteudo": attrs.get("normalized"),
+            "conhecimento": (row.content.get("knowledge") or {}).get("state"),
+            "superada": "superada_por" in invalidacoes.get(row.id, {}), "desatualizada": row.id in invalidacoes})
+    observacoes.sort(key=lambda o: (o["inicio"] is None, o["inicio"] or 0, o["fim"] or 0))
+    latest_report = db.query(EvidenceVersion).filter_by(tenant_id=user.tenant_id, process_id=process_id,
+        object_id=f"extracao:rejeicoes:{doc.id}").order_by(EvidenceVersion.version.desc()).first()
+    relatorio = (latest_report.content["attributes"].get("normalized") or {}) if latest_report else {}
+    classificacao = classificacao_atual(db, doc)
+    return {"documento": {"id": doc.id, "nome": doc.original_file_name,
+                          "especie": (classificacao.tipo_revisado or classificacao.tipo_proposto) if classificacao
+                          else doc.document_type, "versao": versao.numero if versao else None,
+                          "extraction_status": doc.extraction_status},
+            "texto": texto, "observacoes": observacoes, "rejeicoes": relatorio.get("rejeicoes", []),
+            "campos_sem_suporte": relatorio.get("campos_sem_suporte", []), "reparos": relatorio.get("reparos", [])}
+
+
 @router.get("/cases/{process_id}/sources/{object_id}/versions/{version}")
 def source_version(process_id: int, object_id: str, version: int, db: Db, user: UserDep):
     # Archive does not erase authorized evidence history.

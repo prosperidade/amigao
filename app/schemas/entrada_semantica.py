@@ -59,7 +59,6 @@ class ParteExtraida(ItemAncorado):
     identificador: str | None = None
     tipo_identificador: Literal["cpf", "cnpj", "oab"] | None = None
     falecido_chave: str | None = None
-    inventario: str | None = None
     trecho: str = Field(min_length=1)
     posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
     posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
@@ -125,7 +124,6 @@ class ContratoExtraido(ItemAncorado):
     contratado: list[str] = Field(default_factory=list, description="Chaves das partes contratadas")
     objeto: str | None = None
     representacao_declarada: list[ParticipacaoExtraida] = Field(default_factory=list)
-    referencia_processo_judicial: list[str] = Field(default_factory=list)
     trecho: str = Field(min_length=1)
     posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
     posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
@@ -135,6 +133,21 @@ class ContratoExtraido(ItemAncorado):
         if any(p.papel not in {"representante", "inventariante"} for p in self.representacao_declarada):
             raise ValueError("Representação contratual exige papel representante ou inventariante")
         return self
+
+
+class ReferenciaProcesso(ItemAncorado):
+    """Observação própria, ancorada no número do processo (André, 21/09/2026).
+
+    Não é campo do espólio nem do contrato: o número tem trecho próprio, que o contém.
+    Família contratual.
+    """
+    predicado: Literal["referencia_processo"] = "referencia_processo"
+    numero: str = Field(min_length=1, description="Número do processo, literal como no texto")
+    natureza: Literal["inventario", "judicial", "administrativo", "indeterminada"] = "indeterminada"
+    sujeito: str | None = Field(default=None, description="Chave da parte a que o texto vincula o processo (ex.: espólio)")
+    trecho: str = Field(min_length=1, description="Trecho literal que contém o número do processo")
+    posicao_inicio: int | None = Field(default=None, ge=0, description="Offset global start no extracted_text, caracteres Unicode, base zero")
+    posicao_fim: int | None = Field(default=None, ge=0, description="Offset global end exclusivo no extracted_text")
 
 
 class FalecimentoDeclarado(ItemAncorado):
@@ -164,6 +177,7 @@ class EntradaExtraida(Contract):
     limites: list[str] = Field(default_factory=list)
     contratos: list[ContratoExtraido] = Field(default_factory=list)
     falecimentos_declarados: list[FalecimentoDeclarado] = Field(default_factory=list)
+    referencias_processo: list[ReferenciaProcesso] = Field(default_factory=list)
 
     @property
     def todas_participacoes(self):
@@ -190,6 +204,9 @@ class EntradaExtraida(Contract):
                 raise ValueError("Participação sem parte extraída")
             if participacao.representado_chave and participacao.representado_chave not in partes:
                 raise ValueError("Representado sem parte extraída")
+        for referencia in self.referencias_processo:
+            if referencia.sujeito and referencia.sujeito not in partes:
+                raise ValueError("Referência a processo vinculada a parte sem identidade extraída")
         if any(o.predicado == "falecimento_declarado" for o in self.observacoes):
             raise ValueError("Use falecimentos_declarados para respeitar o schema e os limites da fonte")
         return self
