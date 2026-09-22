@@ -10,12 +10,18 @@ from decimal import Decimal
 import pytest
 
 from app.services.property_audit import (
+    DENOMINADOR_MAIOR,
+    DENOMINADOR_REFERENCIA_DOCUMENTAL,
     GRADE_ALTO,
     GRADE_ATENCAO,
     GRADE_CRITICO,
     GRADE_INFORMATIVO,
+    RESULTADO_DENTRO,
+    RESULTADO_DIVERGENTE,
+    RESULTADO_NAO_CALCULAVEL,
     audit_property,
     compare_areas,
+    confrontar_areas,
     grade_area_divergence,
     grade_overlap_severity,
     has_geo_incra,
@@ -360,3 +366,57 @@ class TestCcirExercicioAnterior:
         """`ano_corrente` é explícito (função pura) — sem ele, nunca compara."""
         findings = audit_property(property_data={"exercicio_ccir": 2020})
         assert [f for f in findings if f.codigo_alerta == "CCIR_EXERCICIO_ANTERIOR"] == []
+
+
+# ---------------------------------------------------------------------------
+# ADR-072 — confronto geometria × fonte textual, denominador declarado
+# ---------------------------------------------------------------------------
+
+class TestConfrontarAreas:
+    """Caso de prova do Plano §4.5: KMZ de Jobson ≈2,7250 ha × documental
+    2,6893 ha ⇒ ~357 m², ~1,33%. O denominador é a área documental (convenção
+    da Ísis); o percentual sobre o maior valor (convenção antiga) é publicado
+    ao lado, identificado, nunca escondido."""
+
+    def test_caso_jobson_documentado(self):
+        res = confrontar_areas(Decimal("2.7250"), Decimal("2.6893"), tolerancia_pct=Decimal("1.0"))
+        assert res.denominador_regra == DENOMINADOR_REFERENCIA_DOCUMENTAL
+        assert res.denominador_ha == Decimal("2.6893")
+        assert res.delta_ha == Decimal("0.0357")
+        assert round(res.percentual, 2) == Decimal("1.33")
+        # Acima de 1% de tolerância ⇒ divergente, grau "atencao" (régua Onda C).
+        assert res.resultado == RESULTADO_DIVERGENTE
+        assert res.grau == GRADE_ATENCAO
+        # Convenção antiga (maior valor) fica identificada ao lado, não escondida.
+        assert res.percentual_sobre_maior < res.percentual
+
+    def test_denominador_maior_e_outra_convencao(self):
+        maior = confrontar_areas(Decimal("2.7250"), Decimal("2.6893"), tolerancia_pct=Decimal("1.0"),
+                                 denominador=DENOMINADOR_MAIOR)
+        doc = confrontar_areas(Decimal("2.7250"), Decimal("2.6893"), tolerancia_pct=Decimal("1.0"))
+        assert maior.denominador_ha == Decimal("2.7250")
+        assert maior.percentual != doc.percentual
+
+    def test_dentro_da_tolerancia(self):
+        res = confrontar_areas(Decimal("100"), Decimal("100.5"), tolerancia_pct=Decimal("1.0"))
+        assert res.resultado == RESULTADO_DENTRO
+        assert res.grau == GRADE_INFORMATIVO
+
+    @pytest.mark.parametrize("calculada,referencia", [
+        (None, Decimal("100")), (Decimal("100"), None),
+        (Decimal("0"), Decimal("100")), (Decimal("100"), Decimal("0")),
+        (Decimal("-5"), Decimal("100")),
+    ])
+    def test_medida_ausente_zero_ou_negativa_nao_calculavel(self, calculada, referencia):
+        res = confrontar_areas(calculada, referencia, tolerancia_pct=Decimal("1.0"))
+        assert res.resultado == RESULTADO_NAO_CALCULAVEL
+        assert res.percentual is None
+        assert res.denominador_ha is None
+
+    def test_denominador_precisa_ser_declarado(self):
+        with pytest.raises(ValueError):
+            confrontar_areas(Decimal("100"), Decimal("100"), tolerancia_pct=Decimal("1.0"), denominador="qualquer")
+
+    def test_tolerancia_negativa_rejeitada(self):
+        with pytest.raises(ValueError):
+            confrontar_areas(Decimal("100"), Decimal("100"), tolerancia_pct=Decimal("-1"))

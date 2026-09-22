@@ -159,3 +159,22 @@ produção, guardado sem abrir desde 13/09. O LLM não participa.
 
 - **Q-ISIS-04:** tolerância de reprodução da área do KMZ e se o limite de confronto entre fontes
   é o mesmo número. Até lá, 1,0% provisório e declarado em cada avaliação.
+
+## Execução (21–22/09/2026)
+
+| Item | Resultado |
+|---|---|
+| Migration `072ge001` | Aplicada em dev (`127.0.0.1:15432/amigao_db`, alvo impresso e conferido antes; alembic `071es004` → `072ge001`). Nenhuma migration em produção |
+| Triggers append-only | Smoke direto (INSERT + UPDATE dentro de transação revertida): `UPDATE arquivo_geo` rejeitado com `registro de evidencia imutavel: arquivo_geo` |
+| CHECKs de arco e estado | Smoke: `ck_medicao_arco_fonte` rejeita `feicao_calculada` com `evidence_version_id`; `ck_medicao_estado` rejeita `determinado` sem `valor_ha` |
+| Suíte (excerto no agente) | 173 testes verdes: `test_geo_leitura.py` (29, leitor puro), `test_geometria.py` (39, serviço com Postgres via Testcontainers), `test_property_audit.py` (105, inclui `TestConfrontarAreas`). Suíte completa fica para o CI |
+| Frontend | `npm run build` (o gate real) verde; 2 erros reais de `tsc -b` corrigidos no caminho (`invalidate` não lido, `title` não é prop de ícone lucide). `GeometriaPanel.test.tsx` (4) + `DraftDocumentUploader.test.tsx` (7) verdes via vitest com `--experimental-require-module` |
+| **Produção — arquivo geoespacial guardado sem abrir** | **Medido, um único caso em todo o banco:** documento 560, `MEDIDA_POLIGONO.kmz`, 832 bytes, caso **#25 (Jobson)**, tenant 1, imóvel 20 (GO/Inhumas), `ocr_status=not_required`, **sem `checksum_sha256`**, criado 13/09/2026. Casos #22 e #23 **não têm nenhum arquivo geoespacial** em produção — só documentos pessoais/CAR/matrícula. Medido via `supabase-prod-ro` (SELECT), sem abrir o arquivo |
+| **Bytes do KMZ de produção → dev** | **Não trazidos.** O acesso a produção neste projeto é SQL somente-leitura (`supabase-prod-ro`); não há canal de storage de produção nesta máquina, e trazer um binário exigiria um canal fora do escopo autorizado para esta frente. Sem os bytes reais, a prova em dev usa um **polígono próprio, calibrado no PostGIS** (`ST_Area` geodésica) para medir ≈2,7250 ha — o valor documentado do KMZ real (Plano §4.5) — e reproduz a divergência documentada (~1,33%) contra uma área documental de 2,6893 ha |
+| **Prova em dev — percurso autenticado real** (`scripts/gate_incremento3_geometria.py`) | Contra o mesmo dev confirmado, com login real (`/auth/login`), KMZ real gravado no MinIO de dev (não `dados=` de teste) e HTTP real via `TestClient`: (1) painel antes de ler mostra o arquivo "não lido"; (2) `POST .../ler` calcula **2,7250 ha** (geodésico, GRS80 — não graus²); (3) `Property.geom` projetada automaticamente (`feicao_poligonal_unica`); (4) confronto publica 2,72502007 ha × 2,6893 ha, Δ0,03572007 ha, **1,328% sobre a área documental**, tolerância 1,0% (`provisoria_regua_onda_c_pendente_q_isis_04`), resultado `divergente`, grau `atencao`; (5) recarga (novo GET) devolve a mesma leitura e o mesmo `execucao`; (6) nova sessão (novo login, novo token) devolve o mesmo resultado. 6/6 passos OK. Dados persistidos e conferidos por SQL direto: 1 `arquivo_geo`, 1 `feicao`, 2 `medicao`, 1 `confronto_area`, 1 `projecao_geometria`. Tenant de gate 29, nome prefixado `Incremento 3 geometria gate ` — deixado em dev, localizável para limpeza posterior |
+| Casos #22/#23 no percurso | Sem arquivo geoespacial em produção (ver acima), não há o que ler nesses dois — a prova do percurso ficou no #25, que é o único com KMZ |
+
+**O que falta para a prova valer com os bytes reais de Jobson:** um canal autorizado para trazer o
+binário de produção para dev (a decisão de dado > texto do Incremento 2 não cobre isto — cobre
+texto), ou o André anexar o arquivo diretamente. Sem isso, o pipeline está provado e a divergência
+documentada foi reproduzida — mas com um polígono construído, não com os 832 bytes originais.
