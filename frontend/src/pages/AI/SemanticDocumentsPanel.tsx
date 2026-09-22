@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
@@ -21,7 +22,8 @@ function Classification({ doc, processId }: { doc: SourceDocument; processId: nu
     onSuccess: () => cache.invalidateQueries(),
   });
   return <article className="border rounded p-3 space-y-2" data-document-id={doc.id}>
-    <p>{doc.filename} — documento {doc.id}</p>
+    <p>{doc.filename} — documento {doc.id} · <Link className="text-emerald-700 hover:underline"
+      to={`/processes/${processId}/documentos-observacoes?documento=${doc.id}`}>ver documento e observações</Link></p>
     <p>Classificação: {label(doc.tipo)}{doc.review_required ? ' — revisão necessária' : ''}</p>
     {doc.extraction_status && <p>{doc.extraction_status}</p>}
     {!!doc.rejeicoes?.length && <details><summary>Observações rejeitadas ({doc.rejeicoes.length})</summary>

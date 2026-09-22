@@ -164,7 +164,7 @@ def main():
     app.mount("/assets", StaticFiles(directory=dist / "assets"))
     def index():
         return FileResponse(dist / "index.html")
-    for route in ("/login", "/dashboard", "/processes/{process_id}"):
+    for route in ("/login", "/dashboard", "/processes/{process_id}", "/processes/{process_id}/documentos-observacoes"):
         app.add_api_route(route, index, include_in_schema=False)
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))

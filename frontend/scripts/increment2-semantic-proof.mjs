@@ -48,6 +48,8 @@ try {
       checks.estate_documented = items('558', 'parte').some(p => p.natureza === 'espolio' && p.falecido_chave);
       checks.inventariante_declared = items('558', 'participacao').some(p => p.papel === 'inventariante' && p.representado_chave && p.estado_confirmacao === 'declarado');
       checks.death_declaration = items('557', 'falecimento_declarado').length > 0;
+      // André, 21/09/2026: the process number is its own observation, anchored on the number.
+      checks.process_reference = items('558', 'referencia_processo').some(r => /\d/.test(r.numero || ''));
       await page.getByText('Observações documentais', { exact: true }).click();
       if (state.documents['559']) checks.transmitente_visible = await page.getByText(/declaração extraída — transmitente/).first().isVisible();
       checks.inventariante_visible = await page.getByText(/declaração extraída — inventariante/).first().isVisible();

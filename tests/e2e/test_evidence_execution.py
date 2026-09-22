@@ -694,6 +694,38 @@ def test_repair_round_recovers_a_rejected_observation_and_records_it(committed_c
         calls = json.loads(db.query(AIJob).filter_by(tenant_id=case["tenant"], agent_name="extrator").one().raw_output)
         assert [c["label"].rsplit(":", 1)[-1] for c in calls] == [calls[0]["label"].rsplit(":", 1)[-1], "reparo"]
 
+def test_process_reference_is_persisted_and_the_conference_shows_every_anchor(committed_case, monkeypatch):
+    """André, 21/09/2026: process number as its own observation; document and observations side by side."""
+    from app.models.entrada_semantica import Espolio
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "contrato"
+        doc.extracted_text = "Contrato de prestacao de servicos. Contratante: Espolio de J. Inventario 111-22.2022. J faleceu."
+        db.commit()
+    _controlled_extractions(monkeypatch, {
+        "partes": [{"chave": "j", "nome": "J", "natureza": "pf", "trecho": "J faleceu"},
+                   {"chave": "e", "nome": "Espolio de J", "natureza": "espolio", "falecido_chave": "j",
+                    "trecho": "Espolio de J"}],
+        "contratos": [{"contratante": ["e"], "objeto": "servico", "trecho": "Contrato de prestacao de servicos"}],
+        "referencias_processo": [{"numero": "111-22.2022", "natureza": "inventario", "sujeito": "e",
+                                  "trecho": "Inventario 111-22.2022"}]})
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        assert client.post("/api/v1/agents/run", headers=headers,
+                           json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+        base = f"/api/v1/evidence/cases/{case['case']}/documents"
+        conference = client.get(f"{base}/{case['doc']}/conferencia", headers=headers).json()
+        assert client.get(f"{base}/{case['doc'] + 999}/conferencia", headers=headers).status_code == 404
+    text = conference["texto"]
+    assert {o["tipo"] for o in conference["observacoes"]} == {"parte", "contrato", "referencia_processo"}
+    for observation in conference["observacoes"]:
+        assert text[observation["inicio"]:observation["fim"]] == observation["trecho"]
+    reference = next(o for o in conference["observacoes"] if o["tipo"] == "referencia_processo")
+    assert reference["predicado"] == "referencia_processo" and reference["conteudo"]["numero"] == "111-22.2022"
+    with factory() as db:
+        assert [e.inventario for e in db.query(Espolio).filter_by(tenant_id=case["tenant"])] == ["111-22.2022"]
+
 def test_case_evidence_queries_do_not_grow_with_observations(committed_case):
     """Real extractions persist ~200 observations; one review query per object took seconds."""
     from sqlalchemy import event
