@@ -37,6 +37,10 @@ def main() -> int:
     ap.add_argument("--originais", nargs="*", default=[], help="pastas com os arquivos originais (A5)")
     ap.add_argument("--relatorio", help="grava o relatório de dry-run em JSON")
     ap.add_argument("--documentos", nargs="*", type=int, help="restringe a estes legislation_documents.id")
+    ap.add_argument("--dev-descartar-validacoes", action="store_true",
+                    help="SÓ DEV: apaga validacao_norma (desligando o gatilho append-only) para "
+                         "reconstruir o catálogo. Em produção a trilha não se apaga — nova "
+                         "ingestão entra como versão nova")
     ap.add_argument("--ligar-originais-por-nome", nargs="*", metavar="PASTA",
                     help="só liga originais (A5) às fontes SEMAD pelo nome do arquivo e sai")
     args = ap.parse_args()
@@ -91,6 +95,14 @@ def main() -> int:
         from app.services.storage import get_storage_service  # noqa: PLC0415
         from app.services.zona_normativa.integridade import guardar_original  # noqa: PLC0415
 
+        if args.dev_descartar_validacoes:
+            from sqlalchemy import text as _sql  # noqa: PLC0415
+
+            n = session.execute(_sql("SELECT count(*) FROM validacao_norma")).scalar_one()
+            print(f"SÓ DEV: descartando {n} validações de prova (gatilho desligado e religado).")
+            session.execute(_sql("ALTER TABLE validacao_norma DISABLE TRIGGER USER"))
+            session.execute(_sql("DELETE FROM validacao_norma"))
+            session.execute(_sql("ALTER TABLE validacao_norma ENABLE TRIGGER USER"))
         if args.reconstruir:
             catalogo.limpar_catalogo(session)
         storage = get_storage_service()

@@ -21,9 +21,11 @@ UF, não tira objetivo, não baixa limiar. As cinco razões são as do ADR.
 Regras fixas de marcação (aplicadas antes do ranking, iguais para qualquer
 resultado — não são relaxamento):
 - vigência `nao_determinada` só entra no uso que a aceita, e sai marcada;
-- fonte sem objetivo declarado entra marcada `objetivo_nao_declarado`
-  (a classificação por objetivo ainda é parâmetro provisório; esconder a fonte
-  por falta de etiqueta seria o ADR-037 ao contrário);
+- fonte sem objetivo declarado entra marcada `objetivo_nao_declarado`, e fonte
+  cujo objetivo veio de parâmetro PROVISÓRIO entra marcada `objetivo_provisorio`:
+  filtrar por palpite tira fonte certa (medido), e esconder a fonte por falta de
+  etiqueta seria o ADR-037 ao contrário. O filtro volta a valer quando a
+  curadoria declarar o objetivo;
 - versão bloqueada por original divergente (A5) não entra em `peca` nem `interno`.
 """
 
@@ -52,17 +54,31 @@ RAZOES = (
     "contexto_insuficiente", "sem_fonte_elegivel", "fora_da_cobertura", "falha_de_busca",
     "espaco_vetorial_incompativel",
 )
+# Objetivo só FILTRA quando a classificação da fonte é curada. Hoje ela é
+# parâmetro provisório (núcleo da coletânea, demand_types do legado, fonte SEMAD),
+# e filtrar por palpite tira fonte certa: medido em 22/09, a Resolução CONAMA
+# 369/2006 (intervenção em APP) ficou fora de uma pergunta de supressão porque o
+# legado só a marcou como licenciamento/compensação, e a Lei AC 4.397/2024 herdou
+# `outorga` do núcleo hídrico da coletânea. Enquanto a origem for provisória, a
+# fonte entra MARCADA; o filtro volta a valer quando a curadoria declarar.
+ORIGENS_OBJETIVO_PROVISORIAS = (
+    "nucleo_da_coletanea(provisorio)", "demand_types_do_legado", "fonte_semad_licenciamento",
+)
+
 RRF_K = 60
 # Peso de cada ramo na fusão. Fixo e declarado; mudar exige rodada de sondas.
 # Medido em 22/09 (45 sondas, dev, alvos ainda `proposto`), recall@5:
-#   lexical = todas as palavras, peso 1 ...... 0,622
-#   só vetor ................................ 0,811
-#   lexical = tokens raros, peso 1 .......... 0,757
-#   lexical = tokens raros, peso 0,5 ........ 0,784   ← escolhido
-# O híbrido fica (ADR-075 §7: número e sigla são tokens exatos que o vetor
-# dilui), mas como desempate: primeiro lugar lexical de um ato que só CITA a
-# sigla não pode empurrar o alvo para fora das vagas. Nenhuma variante passa o
-# portão de 0,9 — ver docs/arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md.
+#   lexical = todas as palavras da pergunta, peso 1 ...... 0,622
+#   só vetor ............................................. 0,811
+#   lexical = número/sigla raros, peso 1 ................. 0,757
+#   lexical = número/sigla raros, peso 0,5 ............... 0,784
+#   + objetivo provisório deixa de filtrar ............... 0,838
+#   + lexical = TERMO raro (não só número/sigla) ......... 0,892  ← escolhido
+# Normalização do ts_rank por tamanho (flags 1, 32, 33) não mudou nada: medida e
+# descartada. O peso lexical 0,5 e 1,0 empatam em 0,892; fica 0,5, porque o
+# primeiro lugar lexical de um ato que só CITA o termo não deve empurrar o alvo
+# para fora das vagas. Ainda abaixo do portão de 0,9 —
+# ver docs/arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md.
 PESO_VETOR = 1.0
 PESO_LEXICO = 0.5
 CANDIDATOS_POR_RAMO = 50
@@ -158,32 +174,23 @@ def _vazio(ctx_filtros: dict, razao: str, filtro: str | None, detalhe: str, mode
 
 
 # ---------------------------------------------------------------------------
-# Ramo lexical: só tokens EXATOS
+# Ramo lexical: só termos RAROS
 # ---------------------------------------------------------------------------
 # O ADR-075 pede tsvector porque "número de norma, sigla e 'art. 18' são tokens
 # exatos que a similaridade dilui". Medido em 22/09 (45 sondas, dev): o lexical
 # com TODAS as palavras da pergunta em OR derrubava o recall@5 de 0,81 (só vetor)
-# para 0,62 — "reserva", "legal", "ambiental" casam com qualquer documento grande.
-# Então o ramo lexical consulta só o que é exato: números e siglas. Sem token
-# exato na pergunta, o ramo não contribui e a fusão fica só com o vetor.
-_RE_TOKEN_EXATO = re.compile(
-    r"(?<![\w])(\d+(?:[./-]\d+)*(?:-[A-Z])?|[A-ZÀ-Ú][A-ZÀ-Ú0-9]+(?:-[A-Z0-9]+)?)(?![\w])"
-)
-
-
-def tokens_exatos(pergunta: str) -> str:
-    return " ".join(dict.fromkeys(m.group(1) for m in _RE_TOKEN_EXATO.finditer(pergunta or "")))
-
-
-# Token exato COMUM (CAR, APP, LAC, "18") volta a ser ruído: medido, a sigla CAR
-# sozinha derrubava as sondas de CAR-MS e de ficha LAC. Fica no ramo lexical só o
-# token raro — presente em menos de 1% dos trechos (um IDF declarado, não calibrado
-# por sonda).
+# para 0,62 — "reserva", "legal" e "ambiental" casam com qualquer documento
+# grande; e restringir a número/sigla também não serve, porque CAR, APP e LAC são
+# comuns e "suinocultura" (o que separa uma ficha de tipologia da outra) ficava de
+# fora. O critério é a RARIDADE, que é o que carrega informação: entra no ramo
+# lexical o termo presente em menos de 1% dos trechos — um IDF declarado, e não
+# um limiar calibrado contra as sondas. Sem termo raro, a fusão é só o vetor.
 FRACAO_MAXIMA_TOKEN = 0.01
+_RE_PALAVRA = re.compile(r"[\wÀ-ú][\wÀ-ú./-]*")
 
 
 def tokens_raros(session: Session, pergunta: str) -> str:
-    termos = tokens_exatos(pergunta).split()
+    termos = [t for t in dict.fromkeys(_RE_PALAVRA.findall(pergunta or "")) if len(t) > 3]
     if not termos:
         return ""
     total = session.execute(text("SELECT count(*) FROM trecho_normativo")).scalar_one() or 1
@@ -236,6 +243,7 @@ def _filtros(ctx: Contexto, pol: Politica, modelo: str | None) -> tuple[list[tup
         "niveis": list(pol.niveis), "status": list(pol.status), "esferas": list(ctx.esferas),
         "uf": ctx.uf, "objetivo": ctx.objetivo, "data_ref": ctx.data_referencia,
         "tenant": ctx.tenant_id, "modelo": modelo,
+        "origens_provisorias": list(ORIGENS_OBJETIVO_PROVISORIAS),
     }
     preds = [
         ("tenant", "(f.tenant_id IS NULL OR f.tenant_id = :tenant) AND (t.tenant_id IS NULL OR t.tenant_id = :tenant)"),
@@ -247,7 +255,9 @@ def _filtros(ctx: Contexto, pol: Politica, modelo: str | None) -> tuple[list[tup
          "((v.vigencia_estado = 'determinada' AND (v.vigencia_inicio IS NULL OR v.vigencia_inicio <= :data_ref) "
          "AND (v.vigencia_fim IS NULL OR v.vigencia_fim >= :data_ref))"
          + (" OR v.vigencia_estado = 'nao_determinada')" if pol.aceita_vigencia_nao_determinada else ")")),
-        ("objetivo", "(f.objetivos IS NULL OR 'transversal' = ANY(f.objetivos) OR :objetivo = ANY(f.objetivos))"),
+        ("objetivo",
+         "(f.objetivos IS NULL OR f.objetivos_origem = ANY(:origens_provisorias) "
+         "OR 'transversal' = ANY(f.objetivos) OR :objetivo = ANY(f.objetivos))"),
     ]
     if not pol.aceita_bloqueada:
         preds.append(("bloqueio_original", "v.bloqueio_citacao IS NULL"))
@@ -314,6 +324,7 @@ _SELECT_TRECHO = (
     "SELECT t.id AS trecho_id, f.id AS fonte_id, v.id AS versao_id, t.dispositivo_id, "
     "coalesce(d.caminho, t.cabecalho) AS caminho, d.artigo, f.rotulo, f.identidade, "
     "f.nivel_autoridade, v.status_validacao, v.vigencia_estado, v.vigencia_fim, f.objetivos, "
+    "f.objetivos_origem, "
     "v.bloqueio_citacao, t.texto "
 )
 
@@ -326,6 +337,10 @@ def _marcas(row, ctx: Contexto) -> list[str]:
         m.append("historica")
     if row.objetivos is None:
         m.append("objetivo_nao_declarado")
+    elif row.objetivos_origem in ORIGENS_OBJETIVO_PROVISORIAS:
+        m.append("objetivo_provisorio")
+    elif ctx.objetivo not in row.objetivos and "transversal" not in row.objetivos:
+        m.append("objetivo_outro")
     if row.status_validacao == "bruto":
         m.append("bruto_sem_selo_de_citavel")
     elif row.status_validacao == "proposto":

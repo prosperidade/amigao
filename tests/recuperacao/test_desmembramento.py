@@ -141,3 +141,33 @@ def test_artigo_quebrado_em_linha_e_hifen_de_frase():
         "Art. 80 - O órgão.\nArt. 80-A. Acrescido.\n"
     )
     assert [d.artigo for d in ds if d.tipo == "artigo"] == ["1", "2", "79", "80", "80-A"]
+
+
+def test_impressao_com_dois_atos_e_cortada():
+    # Medido: a EC MT 115/2023 vinha com o texto da LC MT 592/2017 dentro da mesma
+    # impressão; marcar não bastava, quem buscava a LC achava a EC.
+    t = (
+        _pagina("EMENDA CONSTITUCIONAL Nº 115, DE 2023\nESTADO DE MATO GROSSO\nDispõe sobre o CAR.\nArt. 1º Fica.",
+                "EC 115", "https://app1.sefaz.mt.gov.br/x", 1, 2)
+        + _pagina("ESTADO DE MATO GROSSO\nLEI COMPLEMENTAR Nº 592, DE 26 DE MAIO DE 2017\n"
+                  "Dispõe sobre o PRA.\nArt. 10 O Cadastro Ambiental Rural não autoriza atividade.",
+                  "EC 115", "https://app1.sefaz.mt.gov.br/x", 2, 2)
+    )
+    segs = desmembrar(t, "mt")
+    assert [s.identidade.chave for s in segs] == ["emenda_constitucional|mt||115|2023",
+                                                  "lei_complementar|mt||592|2017"]
+    assert all("multiplos_atos_na_impressao" in s.motivos for s in segs)
+
+
+def test_segmento_absorvedor_perde_a_identidade():
+    # Medido: o cabeçalho "RESOLUÇÃO CMN Nº 5.193" abriu um segmento de 565 mil
+    # caracteres no MT-NUC07 (a resolução real tem 11,8 mil) e disputava vagas.
+    cabeca = ("ESTADO DE MATO GROSSO\nRESOLUÇÃO CMN Nº 5.193, DE 19 DE DEZEMBRO DE 2024\n"
+              "Dispõe sobre crédito rural.\nArt. 1º Fica instituído.\n")
+    engolido = "Tabela de operações de crédito rural sem articulação nenhuma. " * 900
+    grande = next(s for s in desmembrar(cabeca + engolido, "mt") if s.sinal == "cabecalho_formal")
+    assert "segmento_absorvedor" in grande.motivos and not grande.determinado
+    # O mesmo cabeçalho, com o ato articulado, continua com identidade.
+    ok = cabeca + "".join(f"Art. {n} texto do artigo com algum conteúdo.\n" for n in range(2, 60))
+    articulado = next(s for s in desmembrar(ok, "mt") if s.sinal == "cabecalho_formal")
+    assert articulado.identidade.chave == "resolucao|br|cmn|5193|2024" and articulado.motivos == []

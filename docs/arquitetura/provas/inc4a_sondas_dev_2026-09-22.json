@@ -1,7 +1,7 @@
 {
- "recall_at_5": 0.784,
+ "recall_at_5": 0.892,
  "positivas": 37,
- "acertos": 29,
+ "acertos": 33,
  "controle_negativo": 1.0,
  "negativas": 8,
  "groundedness_falhas": 0,
@@ -11,27 +11,27 @@
    "id": "fed-6514-art18-embargo",
    "grupo": "norma_federal",
    "ok": true,
-   "detalhe": "posição 1",
-   "posicao": 1,
+   "detalhe": "posição 2",
+   "posicao": 2,
    "vagas": [
-    "decreto|br||6514|2008#79",
     "in|br|ibama|19|2023#52",
-    "decreto|br||6514|2008#108",
     "decreto|br||6514|2008#18",
-    "decreto|br||6514|2008#15-A"
+    "lei|br||15042|2024#37",
+    "lei|br||9605|1998#60",
+    "lei|br||9605|1998#72"
    ]
   },
   {
    "id": "fed-12651-art61a-consolidada",
    "grupo": "norma_federal",
    "ok": true,
-   "detalhe": "posição 2",
-   "posicao": 2,
+   "detalhe": "posição 3",
+   "posicao": 3,
    "vagas": [
+    "lei|br||12727|2012#61-A",
     "lei|br||12651|2012#63",
     "lei|br||12651|2012#61-A",
-    "resolucao|br|cmn|5193|2024#3",
-    "resolucao|br|cmn|5193|2024#5",
+    "decreto|br||7830|2012#19",
     "lei|br||12651|2012#11"
    ]
   },
@@ -39,14 +39,14 @@
    "id": "fed-9605-art71-prazo-defesa",
    "grupo": "norma_federal",
    "ok": true,
-   "detalhe": "posição 3",
-   "posicao": 3,
+   "detalhe": "posição 1",
+   "posicao": 1,
    "vagas": [
-    "in|br|ibama|19|2023#94",
-    "decreto|br||6514|2008#115",
+    "lei|br||9605|1998#71",
     "decreto|br||6514|2008#113",
+    "in|br|ibama|19|2023#94",
     "in|br|ibama|19|2023#88",
-    "lei|br||9605|1998#71"
+    "in|br|icmbio|9|2023#23"
    ]
   },
   {
@@ -58,8 +58,8 @@
    "vagas": [
     "lei|br||12651|2012#12",
     "lei|br||12651|2012#15",
-    "lei|br||12651|2012#67",
     "lei|br||12651|2012#13",
+    "lei|br||12727|2012#12",
     "lei|br||12651|2012#68"
    ]
   },
@@ -71,10 +71,10 @@
    "posicao": 1,
    "vagas": [
     "lei|br||12651|2012#4",
-    "lei|br||12651|2012#62",
     "lei|br||12651|2012#61-A",
     "decreto|br||7830|2012#19",
-    "lei|br||12651|2012#3"
+    "lei|br||12727|2012#1-A",
+    "lei|br||12727|2012#61-A"
    ]
   },
   {
@@ -99,24 +99,24 @@
    "posicao": 1,
    "vagas": [
     "lei_complementar|br||140|2011#13",
-    "resolucao|br|conama|237|1997#5",
-    "resolucao|br|conama|237|1997#6",
     "lei_complementar|br||140|2011#12",
-    "resolucao|br|conama|237|1997#12"
+    "lei_complementar|br||140|2011#2",
+    "lei_complementar|br||140|2011#17",
+    "resolucao|br|conama|237|1997#5"
    ]
   },
   {
    "id": "fed-conama369-art3-intervencao-app",
    "grupo": "norma_federal",
-   "ok": false,
-   "detalhe": "alvo fora das 5 vagas",
-   "posicao": null,
+   "ok": true,
+   "detalhe": "posição 1",
+   "posicao": 1,
    "vagas": [
-    "in|br|ibama|21|2014#15",
-    "resolucao|br|cmn|5193|2024#3",
-    "in|br|ibama|21|2014#17",
-    "in|br|ibama|21|2014#22",
-    "in|br|ibama|21|2014#63"
+    "resolucao|br|conama|369|2006#3",
+    "resolucao|br|conama|369|2006#11",
+    "decreto|br||6660|2008#30",
+    "decreto|br||6660|2008#39",
+    "resolucao|br|conama|369|2006#7"
    ]
   },
   {
@@ -144,7 +144,7 @@
     "decreto|br||8235|2014#17",
     "lei|br||12651|2012#67",
     "lei|br||12651|2012#61-B",
-    "in|br|mma|2|2014#54"
+    "lei|br||12727|2012#61-B"
    ]
   },
   {
@@ -155,24 +155,24 @@
    "posicao": 1,
    "vagas": [
     "lei|br||9784|1999#56",
-    "lei|br||9784|1999#58",
     "decreto|br||6514|2008#127",
-    "decreto|br||6514|2008#127-A",
-    "in|br|icmbio|9|2023#91"
+    "in|br|ibama|19|2023#111",
+    "in|br|icmbio|9|2023#91",
+    "decreto|br||6514|2008#130"
    ]
   },
   {
    "id": "go-18104-art29-compensacao-rl",
    "grupo": "norma_estadual",
    "ok": true,
-   "detalhe": "posição 1",
-   "posicao": 1,
+   "detalhe": "posição 2",
+   "posicao": 2,
    "vagas": [
+    "lei|go||21231|2022#-",
     "lei|go||18104|2013#29",
     "lei|go||18104|2013#28",
-    "lei|go||18104|2013#27",
-    "lei|go||18104|2013#35",
-    "lei|go||18104|2013#25"
+    "in|go|semad|1|2024#-",
+    "lei|go||21231|2022#14"
    ]
   },
   {
@@ -193,28 +193,28 @@
    "id": "go-in-semad-3-2023-outorga",
    "grupo": "norma_estadual",
    "ok": true,
-   "detalhe": "posição 1",
-   "posicao": 1,
+   "detalhe": "posição 3",
+   "posicao": 3,
    "vagas": [
+    "lei|go||11548|1991#7",
+    "in|go|semad|3|2023#2",
     "in|go|semad|3|2023#1",
     "in|go|semad|3|2023#-",
-    "in|go|semad|3|2023#2",
-    "lei|go||11548|1991#7",
-    "decreto|go||10280|2023#-"
+    "in|go|semad|5|2023#-"
    ]
   },
   {
    "id": "go-9710-art27-registro-eletronico",
    "grupo": "norma_estadual",
    "ok": true,
-   "detalhe": "posição 2",
-   "posicao": 2,
+   "detalhe": "posição 3",
+   "posicao": 3,
    "vagas": [
+    "portaria|go|semad|501|2024#-",
     "decreto|go||9710|2020#25",
     "lei|go||20694|2019#22",
     "decreto|go||9710|2020#24",
-    "decreto|go||9710|2020#23",
-    "lei|go||20694|2019#21"
+    "decreto|go||9710|2020#23"
    ]
   },
   {
@@ -235,28 +235,28 @@
    "id": "mt-1473-car-automatizado",
    "grupo": "norma_estadual",
    "ok": true,
-   "detalhe": "posição 1",
-   "posicao": 1,
+   "detalhe": "posição 2",
+   "posicao": 2,
    "vagas": [
-    "decreto|mt||1473|2025#1",
     "decreto|mt||1473|2025#6",
+    "decreto|mt||1473|2025#1",
+    "decreto|mt||1473|2025#5",
     "decreto|mt||1473|2025#14",
-    "decreto|mt||1473|2025#9",
-    "decreto|mt||1473|2025#-"
+    "decreto|mt||1473|2025#7"
    ]
   },
   {
    "id": "mt-592-art10-car-nao-autoriza",
    "grupo": "norma_estadual",
-   "ok": false,
-   "detalhe": "alvo fora das 5 vagas",
-   "posicao": null,
+   "ok": true,
+   "detalhe": "posição 1",
+   "posicao": 1,
    "vagas": [
+    "lei_complementar|mt||592|2017#10",
+    "emenda_constitucional|mt||115|2023#10",
     "decreto|mt||1313|2022#66",
     "lei_complementar|mt||233|2005#65-A",
-    "lei_complementar|mt||592|2017#14",
-    "decreto|mt||1184|2024#1",
-    "decreto|mt||1313|2022#72"
+    "lei_complementar|mt||592|2017#14"
    ]
   },
   {
@@ -280,11 +280,11 @@
    "detalhe": "alvo fora das 5 vagas",
    "posicao": null,
    "vagas": [
-    "decreto|ms||13977|2014#4",
+    "resolucao|ms|semade|28|2016#26",
+    "resolucao|ms|semadesciagroimasul|2|2025#32",
     "decreto|ms||13977|2014#53",
-    "decreto|ms||14272|2015#1",
-    "decreto|ms||13977|2014#3",
-    "decreto|ms||13977|2014#5"
+    "decreto|ms||13977|2014#4",
+    "resolucao|ms|semade|28|2016#37"
    ]
   },
   {
@@ -295,37 +295,37 @@
    "posicao": 1,
    "vagas": [
     "decreto|ms||16588|2025#31",
+    "resolucao|ms|semadesciagroimasul|2|2025#21",
+    "resolucao|ms|semadesciagroimasul|2|2025#25",
     "decreto|ms||16588|2025#2",
-    "decreto|ms||16588|2025#27",
-    "decreto|ms||16588|2025#16",
-    "decreto|ms||16588|2025#26"
+    "decreto|ms||16588|2025#27"
    ]
   },
   {
    "id": "ac-2308-sisa",
    "grupo": "norma_estadual",
    "ok": true,
-   "detalhe": "posição 5",
-   "posicao": 5,
+   "detalhe": "posição 3",
+   "posicao": 3,
    "vagas": [
-    "lei|ac||2025|2008#12",
     "lei|ac||2308|2010#7",
     "lei|ac||2308|2010#-",
+    "lei|ac||2308|2010#1",
     "lei|ac||3749|2021#7",
-    "lei|ac||2308|2010#1"
+    "lei|ac||2308|2010#18"
    ]
   },
   {
    "id": "ac-4397-art100-dispensa",
    "grupo": "norma_estadual",
-   "ok": false,
-   "detalhe": "alvo fora das 5 vagas",
-   "posicao": null,
+   "ok": true,
+   "detalhe": "posição 3",
+   "posicao": 3,
    "vagas": [
     "lei|ac||1117|1994#-",
+    "lei|ac||4397|2024#-",
+    "lei|ac||4397|2024#100",
     "resolucao|ac|cemaf|5|2025#4",
-    "resolucao|ac|cemaf|5|2025#-",
-    "resolucao|ac|cemaf|5|2025#28",
     "resolucao|ac|cemaf|5|2025#-"
    ]
   },
@@ -337,10 +337,10 @@
    "posicao": 1,
    "vagas": [
     "decreto|br||6514|2008#21",
-    "lei|br||9605|1998#71",
     "in|br|ibama|19|2023#64",
-    "decreto|br||6514|2008#124",
-    "in|br|ibama|19|2023#65"
+    "in|br|ibama|19|2023#65",
+    "in|br|icmbio|9|2023#66",
+    "in|br|ibama|19|2023#63"
    ]
   },
   {
@@ -350,11 +350,11 @@
    "detalhe": "alvo fora das 5 vagas",
    "posicao": null,
    "vagas": [
-    "in|br|ibama|19|2023#66",
     "decreto|br||6514|2008#21",
+    "in|br|ibama|19|2023#66",
+    "in|br|ibama|19|2023#119",
     "in|br|ibama|19|2023#64",
-    "in|br|icmbio|9|2023#29",
-    "in|br|ibama|19|2023#119"
+    "in|br|icmbio|9|2023#68"
    ]
   },
   {
@@ -379,24 +379,24 @@
    "posicao": 1,
    "vagas": [
     "lei|go||20694|2019#40",
+    "in|go|semad|6|2020#13",
+    "in|go|semad|6|2020#-",
     "decreto|go||9710|2020#50",
-    "portaria|go|semad|183|2020#-",
-    "portaria|go|semad|182|2020#-",
-    "decreto|go||9710|2020#-"
+    "portaria|go|semad|183|2020#-"
    ]
   },
   {
    "id": "exi-ficha-suinos-lac",
    "grupo": "exigencia_procedimento",
-   "ok": false,
-   "detalhe": "alvo fora das 5 vagas",
-   "posicao": null,
+   "ok": true,
+   "detalhe": "posição 1",
+   "posicao": 1,
    "vagas": [
+    "ficha_tipologia|go||a3-6-suinos-ciclo-completo-licenca-ambiental-por-adesao-e-compromisso-lac-1-pdf|#-",
+    "ficha_tipologia|go||a3-6-suinos-ciclo-completo-licenca-ambiental-por-adesao-e-compromisso-lac-pdf|#-",
     "ficha_tipologia|go||a3-1-criacao-de-bovinos-bubalinos-muares-e-equinos-em-sistema-confinado-licenca-ambiental-por-adesao-e-compromisso-lac-pdf|#-",
     "ficha_tipologia|go||a1-1-3-pdf|#-",
-    "ficha_tipologia|go||a1-1-3-conversao-do-uso-do-solo-asv-em-areas-rurais-de-vegetacao-nativa-pdf|#-",
-    "ficha_tipologia|go||a1-1-3-conversao-do-uso-do-solo-asv-classe-5-pdf|#-",
-    "ficha_tipologia|go||a3-1-criacao-de-bovinos-bubalinos-muares-e-equinos-em-sistema-confinado-licenca-ambiental-unica-lau-pdf|#-"
+    "ficha_tipologia|go||a1-1-3-conversao-do-uso-do-solo-asv-em-areas-rurais-de-vegetacao-nativa-pdf|#-"
    ]
   },
   {
@@ -406,11 +406,11 @@
    "detalhe": "alvo fora das 5 vagas",
    "posicao": null,
    "vagas": [
+    "decreto|go||7862|2013#18",
+    "decreto|go||7862|2013#-",
     "decreto|go||7862|2013#47",
     "decreto|go||7862|2013#57",
-    "decreto|go||7862|2013#26",
-    "decreto|go||7862|2013#11",
-    "decreto|go||7862|2013#18"
+    "decreto|go||7862|2013#26"
    ]
   },
   {
@@ -423,8 +423,8 @@
     "termo_referencia|go||termo-de-referencia-de-elaboracao-de-manejo-de-fauna-para-resgate-salvamento-e-afugentamento-pdf|#-",
     "termo_referencia|go||termo-de-referencia-faunapdf-1-pdf|#-",
     "termo_referencia|go||termo-de-referencia-faunapdf-pdf|#-",
-    "in|go|semad|17|2023#-",
-    "in|go|semad|17|2023#-"
+    "ficha_tipologia|go||a1-1-1-conversao-do-uso-do-solo-asv-e-reg-pdf|#-",
+    "ficha_tipologia|go||a1-1-3-conversao-do-uso-do-solo-asv-em-areas-rurais-de-vegetacao-nativa-mesmo-que-seja-campestre-reg-pdf|#-"
    ]
   },
   {
@@ -450,9 +450,9 @@
    "vagas": [
     "manual_ipe|go||manual-de-autorizacao-para-averbacao-de-servidao-ambiental-pdf|#-",
     "termo_referencia|go||termo-de-referencia-compensacao-por-servidao-ambiental-perpetua-pdf|#-",
+    "in|go|semad|3|2025#15",
     "ficha_tipologia|go||a4-5-piscicultura-com-cultivo-de-especies-exoticas-licenca-previa-lp-pdf|#-",
-    "manual_ipe|go||guia-dai-final-pdf|#-",
-    "ficha_tipologia|go||a1-1-3-conversao-do-uso-do-solo-asv-em-areas-rurais-de-vegetacao-nativa-pdf|#-"
+    "manual_ipe|go||guia-dai-final-pdf|#-"
    ]
   },
   {
@@ -465,21 +465,21 @@
     "manual_ipe|go||manual-alteracao-de-empreendedor-pdf|#-",
     "manual_ipe|go||manual-de-queima-controlada-pdf|#-",
     "manual_ipe|go||manual-de-dispensa-d-1-pdf|#-",
-    "manual_ipe|go||manual-ampliacao-alteracao-pdf|#-",
-    "manual_ipe|go||guia-dai-final-pdf|#-"
+    "decreto|go||9308|2018#15",
+    "manual_ipe|go||manual-ampliacao-alteracao-pdf|#-"
    ]
   },
   {
    "id": "vig-3179-fato-2007",
    "grupo": "vigencia",
    "ok": true,
-   "detalhe": "posição 1",
-   "posicao": 1,
+   "detalhe": "posição 4",
+   "posicao": 4,
    "vagas": [
-    "decreto|br||3179|1999#25",
-    "lei|br||9605|1998#38",
     "decreto|br||6514|2008#43",
+    "lei|br||9605|1998#38",
     "decreto|br||6514|2008#49",
+    "decreto|br||3179|1999#25",
     "decreto|br||6514|2008#50"
    ]
   },
@@ -487,14 +487,14 @@
    "id": "vig-3179-fato-hoje",
    "grupo": "vigencia",
    "ok": true,
-   "detalhe": "posição 2",
-   "posicao": 2,
+   "detalhe": "posição 1",
+   "posicao": 1,
    "vagas": [
-    "lei|br||9605|1998#38",
     "decreto|br||6514|2008#43",
+    "lei|br||9605|1998#38",
     "decreto|br||6514|2008#49",
     "decreto|br||6514|2008#50",
-    "decreto|br||6514|2008#53"
+    "decreto|br||6514|2008#51"
    ]
   },
   {
@@ -506,9 +506,9 @@
    "vagas": [
     "lei|br||4771|1965#2",
     "lei|br||12651|2012#4",
-    "lei|br||12651|2012#61-A",
-    "lei|br||12651|2012#3",
-    "decreto|br||7830|2012#19"
+    "lei|br||12727|2012#1-A",
+    "decreto|br||7830|2012#19",
+    "lei|br||12727|2012#61-A"
    ]
   },
   {
@@ -519,10 +519,10 @@
    "posicao": 1,
    "vagas": [
     "lei|br||12651|2012#4",
-    "lei|br||12651|2012#61-A",
-    "lei|br||12651|2012#3",
+    "lei|br||12727|2012#1-A",
     "decreto|br||7830|2012#19",
-    "lei|br||12651|2012#6"
+    "lei|br||12727|2012#61-A",
+    "lei|br||12651|2012#61-A"
    ]
   },
   {
