@@ -295,7 +295,7 @@ def confirm_upload(
 
     # Guard geoespacial: KML/KMZ/SHP/GeoJSON/GPX são GEOMETRIA, não documento.
     # Ficam armazenados (not_required) vinculados ao processo/imóvel, sem entrar
-    # no OCR. Consumo real (parser → Property.geom) é o gap D1 (próxima frente geo).
+    # no OCR. A leitura da geometria (ADR-072) roda no worker `processar_geometria`.
     from app.services.geo_files import GEOSPATIAL_DOCUMENT_TYPE, is_geospatial  # noqa: PLC0415
     if is_geospatial(body.filename, body.content_type):
         from app.models.document import OcrStatus  # noqa: PLC0415
@@ -308,9 +308,11 @@ def confirm_upload(
             "client_portal" if access_context.is_client_portal else "internal", "success"
         )
         logger.info(
-            "Documento #%s é geoespacial — armazenado sem OCR (gap D1) | '%s'",
+            "Documento #%s é geoespacial — sem OCR; leitura de geometria enfileirada | '%s'",
             db_doc.id, body.filename,
         )
+        from app.workers.geo_tasks import enfileirar_geometria  # noqa: PLC0415
+        enfileirar_geometria(db_doc.id, db_doc.tenant_id)
         return _with_lifecycle(db, db_doc)
 
     # Áudio tem leitura PRÓPRIA: transcrição (dívida #103 · ADR-060). A gravação da

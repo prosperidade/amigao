@@ -301,6 +301,12 @@ class Settings(BaseSettings):
     DIAGNOSTICO_DOCS_TRECHO_TOTAL_CHARS: int = 60_000
     # Custo máximo por job (USD) — proteção contra prompt injection gigante
     AI_MAX_COST_PER_JOB_USD: float = 0.10
+    # ADR-072 — confronto de áreas pelo auditor determinístico. Tolerância em
+    # PERCENTUAL sobre o denominador declarado. 1,0 é PROVISÓRIO: o limite
+    # "informativo" da régua Onda C; a Ísis fixa o valor na Q-ISIS-04. Cada
+    # avaliação grava valor e origem, então trocar aqui não reescreve histórico.
+    AUDITOR_AREA_TOLERANCIA_PCT: float = 1.0
+    AUDITOR_AREA_TOLERANCIA_ORIGEM: str = "provisoria_regua_onda_c_pendente_q_isis_04"
     # Sprint R — teto mensal padrão por tenant (USD). 0 = ilimitado.
     # Override por tenant em Tenant.ai_monthly_budget_usd.
     AI_BUDGET_USD_MONTHLY_PER_TENANT_DEFAULT: float = 0.0

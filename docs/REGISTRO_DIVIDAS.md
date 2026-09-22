@@ -1,5 +1,26 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 22/09/2026 — reprocessamento do KMZ real de Jobson (#195, Incremento 3)
+
+- **#259 — documento não guarda hash sha256 dos bytes originais no upload (aberta):**
+  - O reprocessamento do KMZ real de Jobson (doc 560, produção) expôs que
+    `documents.checksum_sha256` **pode ficar `NULL`** — esse documento específico não tem
+    checksum gravado. Sem hash do original, não há como conferir identidade bit a bit entre o
+    que está no storage e o que foi de fato recebido; a única conferência possível foi o
+    tamanho em bytes (`file_size_bytes`), que confirma mas não prova. Mesmo princípio do
+    ADR-075 A5 (fonte normativa guarda hash dos bytes originais + chave do objeto, com
+    conferência periódica de adulteração) — aqui aplicado a documento de caso, não a fonte
+    normativa.
+  - **Correção:** todo upload de documento calcula e grava `checksum_sha256` dos bytes
+    recebidos, sem exceção; documentos legados sem hash ficam identificados como tal, não
+    retroativamente inventados. **Alvo: Incremento 6** (junto da contração de colunas legadas,
+    [INVENTARIO_LEITORES_LEGADO.md](arquitetura/INVENTARIO_LEITORES_LEGADO.md)).
+  - **Origem:** ADR-072 §Reprocessamento com o KMZ real; PR #195.
+
+> **PRÓXIMO NÚMERO LIVRE: 260.** (#259 aberta pelo reprocessamento do KMZ real de Jobson, 22/09;
+> conferido `gh pr list`: só o #195 aberto.)
+> Anterior: 259 (#255 a #258 abertas pela medição real do Incremento 2, 21/09.)
+
 ## Pulso 21/09/2026 — medição real do Incremento 2 (#188)
 
 A medição dos nove textos em dev expôs quatro problemas fora do escopo do #188. Ficam

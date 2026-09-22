@@ -283,7 +283,7 @@ describe('DraftDocumentUploader — arquivo geoespacial (fix/intake-geo-routing)
     render(<DraftDocumentUploader draftId={DRAFT_ID} />);
     await waitFor(() => expect(screen.getByText('imovel.kml')).toBeInTheDocument());
     expect(screen.getByText('Armazenado')).toBeInTheDocument();
-    expect(screen.getByText(/Geometria armazenada/)).toBeInTheDocument();
+    expect(screen.getByText(/Arquivo geoespacial — a geometria é lida à parte/)).toBeInTheDocument();
   });
 });
 

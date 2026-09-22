@@ -275,6 +275,8 @@ class StorageService:
         """Baixa um objeto do storage para a memória.
 
         Retorna ``b""`` SOMENTE quando o objeto realmente não existe (NoSuchKey).
+        Bucket inexistente é configuração/indisponibilidade, não arquivo ausente
+        (#228): levanta ``StorageDownloadError`` como as demais falhas.
         Qualquer outra falha (SignatureDoesNotMatch, AccessDenied, rede/timeout)
         é logada em ERROR com o código e **re-levantada** como
         ``StorageDownloadError`` — antes, todo erro virava ``b""`` silencioso e
@@ -285,7 +287,7 @@ class StorageService:
             return response["Body"].read()
         except ClientError as e:
             code = e.response.get("Error", {}).get("Code", "")
-            if code in ("NoSuchKey", "404", "NoSuchBucket"):
+            if code in ("NoSuchKey", "404"):
                 return b""
             logger.error(
                 "download_bytes: erro %s ao baixar %s do storage: %s",

@@ -188,6 +188,68 @@ def compare_areas(
 
 
 # ---------------------------------------------------------------------------
+# Confronto geometria × fonte textual (ADR-072)
+# ---------------------------------------------------------------------------
+
+# O denominador é declarado em cada avaliação. `referencia_documental` é a
+# convenção da Ísis (a área do documento); `maior` é a convenção antiga de
+# `compare_areas`, publicada ao lado só para que as duas fiquem identificadas.
+DENOMINADOR_REFERENCIA_DOCUMENTAL = "referencia_documental"
+DENOMINADOR_MAIOR = "maior"
+RESULTADO_DENTRO = "dentro_da_tolerancia"
+RESULTADO_DIVERGENTE = "divergente"
+RESULTADO_NAO_CALCULAVEL = "nao_calculavel"
+
+
+@dataclass(frozen=True)
+class ConfrontoAreaResultado:
+    calculada_ha: Decimal | None
+    referencia_ha: Decimal | None
+    delta_ha: Decimal | None
+    denominador_regra: str
+    denominador_ha: Decimal | None
+    percentual: Decimal | None            # em %, sobre o denominador declarado
+    percentual_sobre_maior: Decimal | None  # em %, convenção antiga (informativo)
+    tolerancia_pct: Decimal               # em %
+    resultado: str
+    grau: str
+
+
+def confrontar_areas(
+    calculada_ha: Any,
+    referencia_ha: Any,
+    *,
+    tolerancia_pct: Any,
+    denominador: str = DENOMINADOR_REFERENCIA_DOCUMENTAL,
+) -> ConfrontoAreaResultado:
+    """Área calculada da geometria × área de uma fonte textual, sem arredondar.
+
+    ``tolerancia_pct`` é percentual (1.0 = 1%). Medida ausente, zero ou negativa
+    não vira "igual" nem "divergente": é ``nao_calculavel``.
+    """
+    if denominador not in (DENOMINADOR_REFERENCIA_DOCUMENTAL, DENOMINADOR_MAIOR):
+        raise ValueError(f"Denominador não declarado: {denominador!r}")
+    tol = _to_decimal(tolerancia_pct)
+    if tol is None or tol < 0:
+        raise ValueError("Tolerância do confronto precisa ser um percentual ≥ 0")
+    a = _to_decimal(calculada_ha)
+    b = _to_decimal(referencia_ha)
+    if a is None or b is None or a <= 0 or b <= 0:
+        return ConfrontoAreaResultado(a, b, None, denominador, None, None, None, tol,
+                                      RESULTADO_NAO_CALCULAVEL, GRADE_ATENCAO)
+    delta = abs(a - b)
+    base = b if denominador == DENOMINADOR_REFERENCIA_DOCUMENTAL else max(a, b)
+    pct = delta / base * 100
+    pct_maior = delta / max(a, b) * 100
+    return ConfrontoAreaResultado(
+        calculada_ha=a, referencia_ha=b, delta_ha=delta, denominador_regra=denominador,
+        denominador_ha=base, percentual=pct, percentual_sobre_maior=pct_maior, tolerancia_pct=tol,
+        resultado=RESULTADO_DENTRO if pct <= tol else RESULTADO_DIVERGENTE,
+        grau=grade_area_divergence(pct / 100, tolerance_pct=tol / 100),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Detecção GEO INCRA (H1 da skill)
 # ---------------------------------------------------------------------------
 
