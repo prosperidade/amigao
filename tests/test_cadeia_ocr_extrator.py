@@ -10,7 +10,8 @@ extrações. Três buracos em fila, cada um mudo:
 
 import logging
 import re
-from pathlib import Path
+from fnmatch import fnmatch
+from pathlib import Path, PurePosixPath
 
 import pytest
 from fastapi import HTTPException
@@ -79,14 +80,38 @@ def test_falha_de_agente_em_fila_vai_para_o_log(monkeypatch, caplog):
     assert any(rec.levelno >= logging.ERROR for rec in caplog.records)
 
 
+def _ignorado_no_build(caminho: str) -> bool:
+    """Simula o .dockerignore: última regra que casa decide (como no Docker)."""
+    regras = [linha.strip() for linha in (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
+              if linha.strip() and not linha.lstrip().startswith("#")]
+    partes = PurePosixPath(caminho).parts
+    prefixos = ["/".join(partes[:i]) for i in range(1, len(partes) + 1)]
+    decisao = False
+    for regra in regras:
+        negada = regra.startswith("!")
+        padrao = regra[1:] if negada else regra
+        if any(fnmatch(prefixo, padrao) for prefixo in prefixos):
+            decisao = not negada
+    return decisao
+
+
 def test_imagem_de_producao_carrega_o_que_o_manifesto_exige():
-    """Todo arquivo fora de `app/` que o manifesto exige tem de ir na imagem."""
+    """Todo arquivo fora de `app/` que o manifesto exige tem de CHEGAR na imagem.
+
+    Duas metades, e a segunda foi a que faltou em 22/09: o `Dockerfile` copiava
+    a ontologia, mas o `.dockerignore` excluía `docs` inteiro, então não havia o
+    que copiar e o extrator seguiu em "capacidade_insuficiente" em produção.
+    Conferir só o COPY dava verde com a imagem errada (dívida #268).
+    """
     manifesto = capability_manifest("extrator", {})
     assert manifesto["status"] == "available", manifesto["missing"]
 
+    exigidos = ["docs/arquitetura/ONTOLOGIA_REGENTE_v1.md"]
     dockerfile = (RAIZ / "Dockerfile").read_text(encoding="utf-8")
     copiados = re.findall(r"^COPY\s+(\S+)", dockerfile, re.MULTILINE)
-    assert "docs/arquitetura/ONTOLOGIA_REGENTE_v1.md" in copiados
+    for alvo in exigidos:
+        assert alvo in copiados, f"{alvo} não é copiado pelo Dockerfile"
+        assert not _ignorado_no_build(alvo), f"{alvo} é excluído pelo .dockerignore"
 
 
 @pytest.mark.parametrize("familia", ["registral", "cadastral", "pessoal",

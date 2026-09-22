@@ -5,6 +5,11 @@ __pycache__
 .vscode
 venv
 docs
+# ...menos a ontologia: o `capability_manifest("extrator")` exige este arquivo e
+# guarda o hash dele no manifesto do job. Ignorar `docs` inteiro fazia o COPY do
+# Dockerfile não ter o que copiar, e o extrator morria em
+# "capacidade_insuficiente" (dívida #268, medido em produção em 22/09/2026).
+!docs/arquitetura/ONTOLOGIA_REGENTE_v1.md
 tests
 frontend
 mobile

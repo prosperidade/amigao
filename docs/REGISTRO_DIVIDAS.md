@@ -14,8 +14,18 @@
     rodada em produção depois do deploy, com autorização própria do André. Gate de produção **aberto**
     (ver `docs/auditoria/GATE_INCREMENTO2.md`, seção de 22/09).
   - **Origem:** reextração autorizada de #23 e #25; medição pelo `supabase-prod-ro`.
+  - **Desdobramento (22/09, mesma noite):** o conserto da ontologia **não subiu**: o `.dockerignore`
+    excluía `docs` inteiro, então o `COPY` do Dockerfile falhou e o build do #204 no Render morreu
+    (`"/docs/arquitetura/ONTOLOGIA_REGENTE_v1.md": not found`) — imagem antiga seguiu no ar. Corrigido
+    com exceção no `.dockerignore`, provado construindo a imagem e perguntando ao manifesto lá dentro
+    (`status: available`). O teste que eu tinha escrito conferia só o `Dockerfile` e passava verde com
+    a imagem errada; agora confere as duas metades.
+  - **#269 — o CI não constrói a imagem de produção (aberta):** erro de empacotamento (arquivo
+    ignorado, caminho errado, camada faltando) só aparece no build do Render ou em produção. Dois
+    episódios em 22/09. **Correção:** job de `docker build` no CI, e nele perguntar ao
+    `capability_manifest` se está `available`.
 
-> **PRÓXIMO NÚMERO LIVRE: 269.** (#268 aberta pela reextração em produção, 22/09.
+> **PRÓXIMO NÚMERO LIVRE: 270.** (#268 e #269 abertas em 22/09 pela reextração em produção.
 > **#260 a #267 são da frente 4a** — registradas em
 > [ZONA_NORMATIVA_INCREMENTO4A.md](arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md), não aqui;
 > esta dívida nasceu #260 e foi renumerada por colisão com elas.)
