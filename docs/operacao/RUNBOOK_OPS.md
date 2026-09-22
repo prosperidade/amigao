@@ -126,7 +126,7 @@ docker compose up -d --build
 
 ### O que acontece no deploy (automático desde 2026-06-06)
 
-- **Render (prod):** o serviço **`regente-api`** tem `preDeployCommand: alembic upgrade head` (em `render.yaml`). Roda na imagem recém-buildada, **antes** da nova versão entrar no ar — então o schema já está migrado quando API e worker sobem. **Só a API** roda migration (o worker não — evita corrida entre serviços). Idempotente (no-op quando já está em `head`). Usa `MIGRATE_DATABASE_URL` (conexão direta, porta 5432) via `alembic/env.py`.
+- **Render (prod):** o serviço **`regente-api`** tem `preDeployCommand: python scripts/predeploy_backup.py && alembic upgrade head` (em `render.yaml`). Desde 22/09/2026 o dump do schema `public` vai para o R2 **antes** da migration; sem dump conferido, a migration não roda (ver "Backup de pré-deploy" abaixo). Roda na imagem recém-buildada, **antes** da nova versão entrar no ar — então o schema já está migrado quando API e worker sobem. **Só a API** roda migration (o worker não — evita corrida entre serviços). Idempotente (no-op quando já está em `head`). Usa `MIGRATE_DATABASE_URL` (conexão direta, porta 5432) via `alembic/env.py`.
 - **Dev (docker-compose):** o serviço `api` roda `python -m app.db.init_db` no boot, que aplica `alembic upgrade head`. Paridade com prod garantida.
 
 ### Como verificar (pós-deploy)
@@ -354,6 +354,70 @@ em `/api/v1/messaging/whatsapp/webhook`.
 - **Postgres:** dump diário cheio + WAL contínuo (point-in-time recovery)
 - **MinIO:** replicação para bucket secundário em provider/região diferente
 - **`.env` de prod:** versionado em vault (HashiCorp Vault, 1Password, AWS Secrets Manager) — **nunca** em git
+
+### Backup de pré-deploy (em vigor desde 22/09/2026)
+
+Todo deploy da API em produção roda, **antes** do `alembic upgrade head`,
+`scripts/predeploy_backup.py` (ver `preDeployCommand` no `render.yaml`):
+
+| Item | Valor |
+|---|---|
+| O quê | `pg_dump --format=custom --schema=public --no-owner --no-privileges` |
+| Conexão | `MIGRATE_DATABASE_URL` (direta, 5432) — a mesma do alembic |
+| Destino | R2, bucket privado `regente-backups` (`BACKUP_BUCKET`), prefixo `predeploy/` |
+| Nome | `predeploy/<UTC>_<commit12>_<alembic_antes>.dump` |
+| Metadados do objeto | `sha256`, `alembic-version`, `git-commit`, `schema`, `tabelas-com-dados` |
+| Conferência | `pg_restore --list` antes do upload; tamanho do objeto remoto = local |
+| Retenção | 30 dias (`BACKUP_RETENTION_DAYS`), **e nunca menos que os 10 mais recentes** (`BACKUP_MIN_KEEP`) |
+| Falha | dump/conferência/upload falhou ⇒ `exit 1` ⇒ migration **não** roda ⇒ deploy abortado. Falha só na retenção ⇒ log `ERRO_retencao`, deploy segue |
+| Cliente | `postgresql-client-17` (PGDG) na imagem; subir `PG_CLIENT_MAJOR` no Dockerfile junto com upgrade de major do Supabase |
+
+Não entram: schemas do Supabase (`auth`, `storage`, `realtime`, `vault`…) — o
+Regente não os usa — e as extensões, que moram em `extensions`.
+
+A trilha de cada dump é o log do preDeploy no Render (linhas JSON `inicio`,
+`backup_ok`, `retencao`). Dump manual, fora do deploy (mesmo destino, sem
+apagar nada): `python scripts/predeploy_backup.py --no-retention` num shell
+do serviço `regente-api`.
+
+### Restore de um dump de pré-deploy
+
+Nunca direto em produção sem autorização do André por operação. Ensaio em
+banco isolado:
+
+```bash
+# 1) baixar o objeto (aws-cli/rclone apontando para o endpoint R2) e conferir
+sha256sum regente.dump        # tem de bater com o metadado sha256 do objeto
+pg_restore --list regente.dump | head
+
+# 2) banco vazio com as extensões que o schema public referencia
+psql "$ALVO" -c 'CREATE SCHEMA IF NOT EXISTS extensions;
+  CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
+  CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+  CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+  CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;'
+
+# 3) restaurar (o schema public do alvo tem de estar vazio)
+pg_restore --no-owner --no-privileges --dbname="$ALVO" regente.dump
+psql "$ALVO" -c 'select version_num from alembic_version'   # = metadado alembic-version
+```
+
+As extensões têm de estar **no mesmo schema da origem**: o dump referencia os
+tipos qualificados (`extensions.geometry`, `extensions.vector` em produção). No
+dev elas moram em `public` — ensaio com dump de dev cria as extensões em
+`public`. Com schema trocado, o restore perde dezenas de tabelas (medido:
+62 erros, `knowledge_catalog` ausente).
+
+Erros **esperados** (o restore segue e está íntegro): `schema "public" already
+exists`; e, só quando o servidor de destino é PG < 17,
+`unrecognized configuration parameter "transaction_timeout"`. Qualquer outro
+erro = restore incompleto.
+
+**Ensaio de 22/09/2026 (dev):** imagem de produção (`pg_dump 17.11`), dump de
+117 MB do `amigao_db` enviado ao MinIO, baixado, sha256 conferido com o
+metadado, restaurado em banco descartável: 77/77 tabelas, `alembic_version`
+igual, contagens de `processes`, `documents` e `knowledge_catalog` idênticas à
+origem; só os dois erros esperados.
 
 ### Teste de restore (a fazer)
 
