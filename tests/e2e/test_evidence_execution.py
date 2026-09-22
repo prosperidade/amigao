@@ -485,9 +485,11 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
         assert response.json()["status"] == "completed"
     with factory() as db:
         job = db.query(AIJob).filter_by(tenant_id=case["tenant"], agent_name="extrator").one()
-        assert (job.tokens_in, job.tokens_out, job.model_used) == (17, 11, "controlled")
-        assert job.cost_usd == 0.002
-        assert json.loads(job.raw_output)[0]["raw"] == raw
+        # First call plus the repair round (the same controlled answer repairs nothing).
+        assert (job.tokens_in, job.tokens_out, job.model_used) == (34, 22, "controlled")
+        assert job.cost_usd == 0.004
+        calls = json.loads(job.raw_output)
+        assert calls[0]["raw"] == raw and calls[1]["label"].endswith(":reparo")
         assert db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").count() == 1
 
     with factory() as db:
@@ -599,6 +601,34 @@ def test_field_without_support_in_its_anchor_is_persisted_empty_with_reason(comm
         assert normalized["campos_sem_suporte"][0]["motivo"] == "Identificador ausente do trecho da parte"
         assert party.content["knowledge"]["state"] == "nao_determinado"
 
+
+def test_repair_round_recovers_a_rejected_observation_and_records_it(committed_case, monkeypatch):
+    """André, 21/09/2026: the rejected item returns once with its reason; the result is audited."""
+    from app.models.ai_job import AIJob
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry. Area one. Area two."
+        db.commit()
+    bad = {"predicado": "area_documental_ha", "valor": 2, "trecho": "Area 2 (rewritten)"}
+    _controlled_extractions(monkeypatch,
+        {"observacoes": [{"predicado": "area_documental_ha", "valor": 1, "trecho": "Area one."}, bad]},
+        {"reparos": [{"colecao": "observacoes", "indice": 1, "item": {**bad, "trecho": "Area two."}}]})
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        assert client.post("/api/v1/agents/run", headers=headers,
+                           json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+    with factory() as db:
+        literals = {r.content["attributes"]["literal"] for r in db.query(EvidenceVersion).filter_by(
+            tenant_id=case["tenant"], kind="observacao")}
+        assert literals == {"Area one.", "Area two."}
+        report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+            object_id=f"extracao:rejeicoes:{case['doc']}").one().content["attributes"]["normalized"]
+        assert report["rejeicoes"] == []
+        assert [(r["colecao"], r["indice"], r["resultado"]) for r in report["reparos"]] == [("observacoes", 1, "aceito")]
+        calls = json.loads(db.query(AIJob).filter_by(tenant_id=case["tenant"], agent_name="extrator").one().raw_output)
+        assert [c["label"].rsplit(":", 1)[-1] for c in calls] == [calls[0]["label"].rsplit(":", 1)[-1], "reparo"]
 
 def test_case_evidence_queries_do_not_grow_with_observations(committed_case):
     """Real extractions persist ~200 observations; one review query per object took seconds."""

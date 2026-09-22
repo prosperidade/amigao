@@ -4,7 +4,8 @@ import { api } from '@/lib/api';
 
 interface SourceDocument { id: number; filename: string; tipo: string; classificacao_versao: number; review_required: boolean;
   extraction_status?: string; rejeicoes?: { colecao: string; indice: number | null; fatia?: number; motivo: string }[];
-  campos_sem_suporte?: { colecao: string; indice: number; fatia?: number; campo: string; motivo: string }[] }
+  campos_sem_suporte?: { colecao: string; indice: number; fatia?: number; campo: string; motivo: string }[];
+  reparos?: { colecao?: string; indice?: number; fatia?: number; motivo_original?: string; resultado?: string; motivo_final?: string; erro?: string }[] }
 const species = ['certidao_matricula', 'escritura_publica', 'contrato_particular', 'contrato_servico_documental',
   'documento_pessoal', 'documento_representacao', 'comprovante_situacao_cadastral_cpf', 'car', 'ccir', 'itr', 'sigef', 'rat', 'peca_orgao', 'arquivo_geoespacial', 'indeterminada'];
 const label = (value: string) => value.replace(/_/g, ' ');
@@ -25,6 +26,9 @@ function Classification({ doc, processId }: { doc: SourceDocument; processId: nu
     {doc.extraction_status && <p>{doc.extraction_status}</p>}
     {!!doc.rejeicoes?.length && <details><summary>Observações rejeitadas ({doc.rejeicoes.length})</summary>
       <ul>{doc.rejeicoes.map((r, i) => <li key={i}>{r.fatia != null && `fatia ${r.fatia + 1} · `}{r.colecao}{r.indice != null && ` — item ${r.indice + 1}`}: {r.motivo}</li>)}</ul>
+    </details>}
+    {!!doc.reparos?.length && <details><summary>Rodada de reparo — {doc.reparos.filter(r => r.resultado === 'aceito').length} de {doc.reparos.length} aceitos</summary>
+      <ul>{doc.reparos.map((r, i) => <li key={i}>{r.fatia != null && `fatia ${r.fatia + 1} · `}{r.erro ? `falhou: ${r.erro}` : `${r.colecao} — item ${(r.indice ?? 0) + 1}: ${r.resultado} (${r.motivo_final || r.motivo_original})`}</li>)}</ul>
     </details>}
     {!!doc.campos_sem_suporte?.length && <details><summary>Campos sem suporte no trecho — vazios, conhecimento não determinado ({doc.campos_sem_suporte.length})</summary>
       <ul>{doc.campos_sem_suporte.map((c, i) => <li key={i}>{c.fatia != null && `fatia ${c.fatia + 1} · `}{c.colecao} — item {c.indice + 1} — {c.campo}: {c.motivo}</li>)}</ul>

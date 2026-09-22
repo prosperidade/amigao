@@ -405,3 +405,45 @@ de staging aponta para observação superada. Nessa execução, o falecimento do
 sido rejeitado.
 
 Custo real de IA desta medição (jobs 168–177): US$ 0,2923.
+
+## 21/09/2026 (madrugada) — Luna mantido, compensação na skill e nova medição do #25
+
+Decisão do André: o extrator permanece no `gpt-5.6-luna`. A compensação vem da skill: regra do
+trecho literal reforçada com exemplo positivo e negativo, e uma rodada de reparo em que a
+observação rejeitada volta ao modelo com o item e o motivo, numa tentativa, com o resultado
+registrado. Meta: 3/3 nas três provas da Isis no #25 (557 e 558, Luna fixo, mesmo protocolo).
+
+### Implementação (branch `feat/extrator-reparo-ancora`)
+
+- Skills do extrator: exemplo sintético do que é certo (copiar contíguo) e do que é errado
+  (reescrever, juntar pedaços com ou sem reticências, pular no meio um código longo, tirar
+  pontuação), com o lembrete de continuar preenchendo todos os campos.
+- Rodada de reparo, uma por fatia. Volta ao modelo cada item rejeitado pelas próprias checagens;
+  as dependências não voltam, porque o pai reparado as libera. O item devolvido entra na posição
+  original e a proposta inteira é revalidada. Para trecho inexistente, o pedido leva a
+  divergência: quantas palavras coincidem, como a fonte continua e como o trecho continua. O
+  registro por item fica em `extracao:rejeicoes:{doc}.reparos` (aceito, rejeitado com o motivo
+  final, não devolvido) e aparece no painel. A proposta auditada não é reescrita.
+
+### Medição (tenants dev 17–22, Luna fixo)
+
+| Execução | Falecimento | Espólio | Inventariante | Rejeitadas | Reparo | Campos vazios | Tokens entrada/saída | US$ | s |
+|---|---|---|---|---:|---|---|---|---:|---:|
+| R1 (reparo sem divergência) | ❌ | ✅ | ✅ | 2 | 2 tentados, 0 aceitos | ref. judicial | 14.758 / 7.052 | 0,0114 | 70 |
+| R2 | ✅ | ✅ | ✅ | 0 | — | data da consulta; ref. judicial | 9.938 / 6.221 | 0,0077 | 54 |
+| R3 | ✅ (reparado) | ✅ | ✅ | 0 | 1 tentado, 1 aceito | ano; data da consulta | 14.569 / 7.682 | 0,0103 | 62 |
+| D1 (versão final) | ✅ | ✅ | ✅ | 0 | — | data da consulta; ref. judicial | 9.978 / 7.061 | 0,0105 | 64 |
+| D2 | ✅ | ✅ | ✅ | 0 | — | ref. judicial | 9.978 / 6.637 | 0,0082 | 64 |
+| D3 | ✅ | ✅ | ✅ | 0 | — | data da consulta; ref. judicial | 9.978 / 7.431 | 0,0091 | 65 |
+
+- **Versão final (D1–D3): 3/3 nas três provas da Isis, com zero rejeições.** A rodada de reparo
+  não foi acionada nessas três execuções; o resultado veio da primeira passada, com a skill
+  reforçada. O diagnóstico de divergência está coberto por teste, ainda sem caso real.
+- Na rodada anterior (R1–R3, sem a divergência e sem a frase sobre código longo) o resultado foi
+  2/3, e o reparo recuperou o falecimento da R3. Na R1 o modelo pulou 176 caracteres de um código
+  de controle para alcançar a data e repetiu o salto no reparo. É o caso que motivou a divergência.
+- A referência judicial do contrato ficou vazia por falta de suporte no trecho em 5 das 6
+  execuções. Não é uma das três provas, mas é lacuna recorrente.
+- Custo real: US$ 0,0572 nas seis execuções (média US$ 0,0095, ~64 s). Contra a medição anterior
+  do Luna (0/3), o custo por execução subiu de US$ 0,0082 para US$ 0,0095. Três execuções é
+  amostra pequena.
