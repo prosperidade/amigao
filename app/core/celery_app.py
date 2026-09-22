@@ -80,6 +80,11 @@ celery_app.conf.update(
             # de e-mail entrar (dívida P2), reavaliar.
             "schedule": crontab(minute=0, hour="*/2"),
         },
+        # ADR-075 A5 — hash do original normativo contra o storage (no-op sem catálogo).
+        "zona-normativa-conferir-originais-daily": {
+            "task": "workers.zona_normativa.conferir_originais",
+            "schedule": crontab(hour=4, minute=15),
+        },
         # Sprint F Bloco 3 — expira rascunhos de cadastro após 15 dias.
         "cleanup-expired-intake-drafts": {
             "task": "workers.cleanup_expired_intake_drafts",

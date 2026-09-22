@@ -150,3 +150,23 @@ def get_current_internal_user(
             detail="Acesso restrito ao portal do cliente",
         )
     return current_user
+
+
+def get_curador_do_corpus(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+) -> User:
+    """Escrita no corpus normativo exige o papel `curar_corpus` (ADR-075 A2).
+
+    O corpus é leitura para o tenant: ingerir, corrigir e reindexar é papel de
+    curadoria, delegável por área — não é "qualquer usuário interno" (D6 da
+    auditoria Codex) nem é automático por ser superusuário.
+    """
+    from app.services.zona_normativa.curadoria import tem_papel  # noqa: PLC0415
+
+    if not tem_papel(db, current_user, "curar_corpus"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Escrever no corpus normativo exige o papel de curadoria 'curar_corpus'.",
+        )
+    return current_user

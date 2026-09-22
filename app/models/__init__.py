@@ -59,3 +59,14 @@ from app.models.task import Task
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.workflow_template import WorkflowTemplate
+from app.models.zona_normativa import (
+    Dispositivo,
+    FonteNormativa,
+    FonteNormativaProveniencia,
+    FonteNormativaVersao,
+    InterpretacaoNorma,
+    PapelCuradoria,
+    TarefaRevisaoNormativa,
+    TrechoNormativo,
+    ValidacaoNorma,
+)

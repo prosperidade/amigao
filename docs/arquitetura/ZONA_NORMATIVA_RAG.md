@@ -5,6 +5,7 @@
 [ADR-070](../adr/070-modelo-de-dados-alvo.md) (não refeito aqui)
 **Base:** `origin/main` @ `175ecfa`; banco dev `amigao_db` (alembic `c7e1a94d2f60`) e produção
 (Supabase), só SELECT. **Nenhuma ingestão, reindexação ou schema alterado.**
+**Execução (Incremento 4a, 22/09):** [ZONA_NORMATIVA_INCREMENTO4A.md](ZONA_NORMATIVA_INCREMENTO4A.md).
 **Medições reproduzíveis:** [provas/adr075_medir_coletaneas.py](provas/adr075_medir_coletaneas.py)
 e [saída](provas/adr075_medicao_coletaneas.txt).
 

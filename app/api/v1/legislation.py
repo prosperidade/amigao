@@ -10,7 +10,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_internal_user, get_db
+from app.api.deps import get_curador_do_corpus, get_current_internal_user, get_db
 from app.models.legislation import LegislationDocument
 from app.models.user import User
 from app.schemas.legislation import (
@@ -33,7 +33,7 @@ def create_legislation_document(
     *,
     db: Session = Depends(get_db),
     body: LegislationDocumentCreate,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_curador_do_corpus),
 ) -> Any:
     """Registra um novo documento legislativo com texto direto."""
     doc = LegislationDocument(
@@ -68,7 +68,7 @@ def upload_legislation_pdf(
     *,
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_curador_do_corpus),
 ) -> Any:
     """Upload de PDF para um documento legislativo existente."""
     doc = db.query(LegislationDocument).filter(LegislationDocument.id == doc_id).first()
@@ -147,7 +147,7 @@ def search_legislation_endpoint(
 def reindex_legislation_document(
     doc_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_curador_do_corpus),
 ) -> Any:
     """Re-processa o texto de um documento legislativo."""
     doc = db.query(LegislationDocument).filter(LegislationDocument.id == doc_id).first()

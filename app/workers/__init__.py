@@ -27,3 +27,4 @@ from app.workers.waitlist_tasks import (  # noqa: F401
     sync_resend_audience,
 )
 from app.workers.webhook_tasks import send_webhook_alert  # noqa: F401
+from app.workers.zona_normativa_tasks import conferir_originais_normativos  # noqa: F401
