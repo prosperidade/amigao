@@ -1,14 +1,14 @@
 # Incremento 2 — estado do gate
 
 18/09/2026 · branch `feat/entrada-semantica-cartorario` · implementação em andamento.
-**Decisão do André, 21/09/2026 (madrugada): as provas de sistema (mecanismo) estão fechadas.**
-Extração LLM, persistência semântica, rejeição por item, campos sem suporte, reextração como
-nova versão e as quatro provas da Isis sobre o material real do #25 (falecimento, espólio,
-inventariante, referência a processo) foram comprovadas com o extrator no `gpt-5.6-luna`, 3/3
-execuções. Seguem sem material medido: duas fontes de conteúdo idêntico, baixa/aditivo com
-vínculo, quatro confrontos de área (todos exigem texto real do #23 ainda não exercitado nesse
-recorte) e a correção de observação pela tela (rejeição já comprovada; correção versionada
-não exercitada nesta medição). Ver a medição completa abaixo, de 21/09.
+**Decisão do André, 21/09/2026: "seis provas de leitura" fechadas.** Escritura não prova estado
+atual; transmitente não vira cliente/titular; quatro matrículas independentes; PJ preserva
+CNPJ; falecimento/espólio/inventariante/referência a processo; e as provas de mecanismo
+(extração LLM, persistência, rejeição por item, reextração como nova versão, reclassificação)
+— todas comprovadas com o extrator no `gpt-5.6-luna`. Nesta rodada fecham também duas fontes de
+conteúdo idêntico, baixa/aditivo com vínculo e correção de observação pela tela (esta última
+expôs e corrigiu uma lacuna real de UI). **Diferido para o Incremento 3:** quatro confrontos de
+área. Ver a medição completa abaixo, de 21/09.
 
 ## 19/09/2026 — autorização e modelo atualizados
 
@@ -495,3 +495,57 @@ referência (natureza `inventario`, `sujeito` no espólio), nunca lido do trecho
 **3/3 nas quatro provas da Isis**, incluindo a referência a processo nova. O vínculo do
 inventário ao espólio (`inventory_reference_on_estate`) também fechou 3/3. Custo real:
 US$ 0,0315 nas três execuções.
+
+## 21/09/2026 (madrugada, fechamento) — duas fontes idênticas, baixa/aditivo, correção pela tela
+
+Decisão do André: registrar o gate como **seis provas de leitura fechadas**; quatro confrontos
+de área ficam para o **Incremento 3**.
+
+### Duas fontes de conteúdo idêntico — COMPROVADO
+
+Medido com material real do #23 (tenant dev 30, sem nova leitura MCP): 11 grupos de conteúdo
+normalizado idêntico persistidos a partir de documentos distintos, o maior com 3 observações
+(mesma PJ, três certidões de matrícula diferentes: documentos 133, 135, 137), cada uma com
+`object_id`, `premises` e `fragmento_id` próprios — nunca uma linha só. `identidade_observacao`
+inclui `documento_id` na chave, então a garantia é estrutural, não uma coincidência da medição.
+Regressão sintética adicionada: `test_identical_content_from_two_documents_persists_two_independent_sources`.
+
+### Baixa/aditivo preservam ato e vínculo — COMPROVADO
+
+Mesmo material (documento 548, matrícula 3.313): **6 vínculos reais** de baixa persistidos em
+`RelacaoAto` — AV.27→R-21, AV.28→R-22, AV.29→R-23, AV.30→R-24, AV.31→R-25, AV.32→R-26. O ato de
+origem (R-XX) sobrevive como `AtoRegistral` independente da baixa. Regressão sintética
+adicionada: `test_baixa_preserves_the_act_and_the_link_to_what_it_alters`.
+
+### Correção de observação pela tela — COMPROVADO (lacuna de UI corrigida)
+
+Ao tentar exercitar, achamos que o painel (`EvidencePanel.tsx`) só expunha os botões de
+aprovar/corrigir/rejeitar para `kind === 'conclusao'` — observações (o que o extrator produz)
+não tinham nenhuma ação na tela, embora o backend (`review_object`) já aceitasse `kind ==
+'observacao'` desde a origem. Corrigido: a mesma ação agora atualiza `attributes.literal` da
+observação (nunca `statement`, que é exclusivo de conclusão). Exercitado de verdade, pela tela,
+contra o documento 557 real (tenant dev 30, `increment2-correcao-pela-tela.mjs`): correção de
+v1 para v2 `pendente`, v1 permanece recuperável pelo endpoint de versão. Teste de componente
+adicionado (`EvidencePanel.test.tsx`, 3 casos, inclusive que a correção nunca sai `confirmado`
+nem mexe em `statement`).
+
+### Matriz obrigatória — estado final
+
+| Prova | Estado |
+|---|---|
+| Escritura não prova estado atual | COMPROVADO |
+| Transmitente não vira cliente/titular | COMPROVADO (Ivair/Elda; Sonia no R-11 não verificada) |
+| Quatro matrículas independentes | COMPROVADO |
+| PJ preserva CNPJ | COMPROVADO |
+| Falecimento, espólio, inventariante, referência a processo | COMPROVADO (3/3, ver seção anterior) |
+| Inventariante confirmado só com fundamento | COMPROVADO estruturalmente |
+| **Duas fontes de conteúdo idêntico** | **COMPROVADO** (nesta seção) |
+| **Baixa/aditivo preservam ato e vínculo** | **COMPROVADO** (nesta seção) |
+| Reclassificação invalida e exige revisão | COMPROVADO |
+| **Correção de observação pela tela** | **COMPROVADO** (nesta seção; lacuna de UI corrigida) |
+| Rejeição de observação pela tela (botão "Rejeitar") | Backend idêntico ao de correção; ação de UI não exercitada nesta rodada (mesmo componente, mesmo caminho) |
+| Quatro confrontos de área | **Diferido para o Incremento 3** (decisão do André, 21/09) |
+
+Decisão do André: registrar como **"seis provas de leitura fechadas"** o conjunto acima de
+provas COMPROVADAS sobre o conteúdo real dos documentos — a contagem e o agrupamento exatos
+são dele; esta tabela é o detalhe linha a linha por trás do rótulo.

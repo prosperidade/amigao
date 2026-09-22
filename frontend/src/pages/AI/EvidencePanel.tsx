@@ -8,7 +8,7 @@ interface EvidenceObject {
   version: number;
   kind: string;
   statement: string | null;
-  attributes: { predicate?: string; literal?: unknown; role?: string; document_id?: number };
+  attributes: { predicate?: string; literal?: unknown; role?: string; document_id?: number; [key: string]: unknown };
   knowledge: { state: string; justification?: string };
   premises: { id: string; version: number }[];
 }
@@ -39,15 +39,22 @@ const labels: Record<string, string> = {
   nao_aplicavel: 'Não aplicável',
 };
 
-function ReviewCard({ row, latest, processId }: { row: EvidenceRow; latest: boolean; processId: number }) {
+export function ReviewCard({ row, latest, processId }: { row: EvidenceRow; latest: boolean; processId: number }) {
   const cache = useQueryClient();
   const [justification, setJustification] = useState('');
-  const [correction, setCorrection] = useState(row.object.statement || '');
+  const isObservacao = row.object.kind === 'observacao';
+  const [correction, setCorrection] = useState(
+    isObservacao ? String(row.object.attributes.literal ?? '') : row.object.statement || '');
+  // Correção de observação atualiza o trecho lido (attributes.literal), nunca o statement
+  // (campo exclusivo de conclusão). O backend valida o objeto completo do mesmo kind.
+  const buildCorrection = () => isObservacao
+    ? { ...row.object, attributes: { ...row.object.attributes, literal: correction } }
+    : { ...row.object, statement: correction };
   const mutation = useMutation({
     mutationFn: async (action: string) => api.post(
       `/evidence/cases/${processId}/objects/${encodeURIComponent(row.object.id)}/review`, {
         expected_version: row.object.version, expected_revision: row.revision, action, justification,
-        ...(action === 'corrigir' ? { correction: { ...row.object, statement: correction } } : {}),
+        ...(action === 'corrigir' ? { correction: buildCorrection() } : {}),
       }),
     onSuccess: () => cache.invalidateQueries({ queryKey: ['case-evidence', processId] }),
   });
@@ -68,11 +75,11 @@ function ReviewCard({ row, latest, processId }: { row: EvidenceRow; latest: bool
       <SourceButton processId={processId} reference={row.object} />
       {row.object.premises.map(ref => <SourceButton key={`${ref.id}:${ref.version}`} processId={processId} reference={ref} />)}
     </details>
-    {latest && row.object.kind === 'conclusao' && <>
+    {latest && (row.object.kind === 'conclusao' || isObservacao) && <>
       <label className="block text-sm">Justificativa
         <textarea aria-label="Justificativa da revisão" value={justification} onChange={e => setJustification(e.target.value)} className="block w-full rounded border p-2 text-gray-900" />
       </label>
-      <label className="block text-sm">Texto corrigido (cria versão pendente de aprovação)
+      <label className="block text-sm">{isObservacao ? 'Trecho corrigido (cria versão pendente de aprovação)' : 'Texto corrigido (cria versão pendente de aprovação)'}
         <textarea aria-label="Texto corrigido" value={correction} onChange={e => setCorrection(e.target.value)} className="block w-full rounded border p-2 text-gray-900" />
       </label>
       <div className="flex flex-wrap gap-2">

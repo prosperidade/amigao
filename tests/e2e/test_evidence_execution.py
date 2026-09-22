@@ -511,6 +511,70 @@ def _controlled_extractions(monkeypatch, *responses):
         tokens_in=1, tokens_out=1, cost_usd=0.001, duration_ms=1))
 
 
+def test_identical_content_from_two_documents_persists_two_independent_sources(committed_case, monkeypatch):
+    """André, 21/09/2026: mesmo valor em dois documentos vira duas observações, nunca uma.
+
+    Medido com material real do #23 (21/09): a mesma PJ aparece em 3 certidões distintas com
+    3 observações independentes, cada uma com seu próprio fundamento. Aqui, sintético.
+    """
+    factory, case = committed_case
+    with factory() as db:
+        doc1 = db.get(Document, case["doc"])
+        doc1.document_type = "certidao_matricula"
+        doc1.extracted_text = "Certidao 1. Proprietaria: ELODI AGROPECUARIA LTDA, CNPJ 11.222.333/0001-81."
+        doc2 = Document(tenant_id=case["tenant"], process_id=case["case"], original_file_name="fixture2.txt",
+                        filename="fixture2.txt", storage_key="fixture2", content_type="text/plain",
+                        document_type="certidao_matricula", extracted_text="Certidao 2. Proprietaria: ELODI AGROPECUARIA LTDA, CNPJ 11.222.333/0001-81.",
+                        checksum_sha256="b" * 64)
+        db.add(doc2)
+        db.commit()
+        doc2_id = doc2.id
+    party = {"chave": "elodi", "nome": "ELODI AGROPECUARIA LTDA", "natureza": "pj",
+             "identificador": "11.222.333/0001-81", "tipo_identificador": "cnpj", "trecho": "ELODI AGROPECUARIA LTDA, CNPJ 11.222.333/0001-81"}
+    _controlled_extractions(monkeypatch, {"partes": [party]}, {"partes": [party]})
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        assert client.post("/api/v1/agents/run", headers=headers,
+                           json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+    with factory() as db:
+        rows = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao").all()
+        parties = [r for r in rows if (r.source_record or {}).get("tipo_entrada") == "parte"]
+        assert {p.source_document_id for p in parties} == {case["doc"], doc2_id}
+        assert len({p.object_id for p in parties}) == 2  # two independent sources, never deduplicated
+        assert [p.content["attributes"]["normalized"]["identificador"] for p in parties] == ["11.222.333/0001-81"] * 2
+        assert [p.content["premises"][0]["id"] for p in parties] == [f"document:{case['doc']}", f"document:{doc2_id}"]
+
+
+def test_baixa_preserves_the_act_and_the_link_to_what_it_alters(committed_case, monkeypatch):
+    """André, 21/09/2026: baixa/aditivo preservam o ato de origem e o vínculo com o que alteram.
+
+    Medido com material real do #23 (doc 548, matrícula 3.313): 6 baixas reais, AV.27→R-21 até
+    AV.32→R-26. Aqui, sintético, um único par.
+    """
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "R-21: hipoteca. AV.27: baixa da hipoteca de R-21."
+        db.commit()
+    _controlled_extractions(monkeypatch, {"atos": [
+        {"rotulo": "R-21", "matricula": "3.313", "serventia": "CRI Teste", "especie": "registro",
+         "natureza": "hipoteca", "ordem": 0, "trecho": "R-21: hipoteca."},
+        {"rotulo": "AV.27", "matricula": "3.313", "serventia": "CRI Teste", "especie": "averbacao",
+         "natureza": "baixa de hipoteca", "ordem": 1, "relacao": "baixa", "altera_rotulo": "R-21",
+         "trecho": "AV.27: baixa da hipoteca de R-21."}]})
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        assert client.post("/api/v1/agents/run", headers=headers,
+                           json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+    with factory() as db:
+        from app.models.entrada_semantica import AtoRegistral, RelacaoAto
+        atos = {a.rotulo: a for a in db.query(AtoRegistral).filter_by(tenant_id=case["tenant"])}
+        assert set(atos) == {"R-21", "AV.27"}  # the origin act survives, not just the baixa
+        relacao = db.query(RelacaoAto).filter_by(tenant_id=case["tenant"]).one()
+        assert (relacao.tipo, relacao.origem_id, relacao.destino_id) == ("baixa", atos["AV.27"].id, atos["R-21"].id)
+
+
 def test_reextraction_supersedes_the_previous_version_except_decided_observations(committed_case, monkeypatch):
     """#258, ADR-070: a new extraction is a new version and the previous one is superseded.
 
