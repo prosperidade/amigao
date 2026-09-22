@@ -42,6 +42,11 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 COPY scripts ./scripts
+# A ontologia é MÉTODO, não documentação: `capability_manifest("extrator")`
+# exige o vocabulário e guarda o hash dele no manifesto do job. Fora da imagem,
+# o extrator morre em "capacidade_insuficiente" antes de ler qualquer
+# documento — medido em produção em 22/09/2026, casos #23 e #25 (dívida #260).
+COPY docs/arquitetura/ONTOLOGIA_REGENTE_v1.md ./docs/arquitetura/
 COPY seed.py ./
 
 RUN useradd --create-home --shell /bin/bash appuser \

@@ -549,3 +549,70 @@ nem mexe em `statement`).
 Decisão do André: registrar como **"seis provas de leitura fechadas"** o conjunto acima de
 provas COMPROVADAS sobre o conteúdo real dos documentos — a contagem e o agrupamento exatos
 são dele; esta tabela é o detalhe linha a linha por trás do rótulo.
+
+---
+
+## 22/09/2026 — reextração autorizada em produção (#23 e #25): a cadeia não extraiu
+
+**Autorização:** André, após conferir o primeiro dump de pré-deploy
+(`predeploy/20260922T192516Z_…_072ge001.dump`, 107 MB). Uma rodada, casos #23 e
+#25, tenant 1, extrator no `gpt-5.6-luna` (fallback Gemini 3.7 Flash ligado, que
+é a configuração operacional). Ambiente conferido antes do disparo: host do
+Supabase, `ENVIRONMENT=production`.
+
+### O que a rodada produziu
+
+| Etapa | Resultado medido (`supabase-prod-ro`) |
+|---|---|
+| OCR | 10 documentos, `completed` — 8 por `pypdf`, 2 por `gemini/gemini-2.5-flash`, US$ 0,0087 |
+| `documento_versao` | 10 versões de texto criadas |
+| Extrator (1ª tentativa, via `ocr_then_extract` com `force`) | **nada**: zero execução, zero job, zero staging novo |
+| Extrator (2ª tentativa, despacho por caso) | 2 execuções persistidas, ambas `capacidade_insuficiente`; 2 jobs `failed`, sem modelo, custo zero |
+| `evidence_versions` | 142 linhas — **nenhuma é leitura do Luna** |
+
+**As 142 não são prova.** São `method = "staging"`, sem modelo: projeção do
+staging legado feita na captura de snapshot, mais `fonte_primaria` carimbando o
+método de OCR e a derivação cartorária. Observação de leitura semântica em
+produção continua em **zero**.
+
+### Três buracos, todos mudos
+
+1. **A cadeia perde o caso.** `_dispatch_extrator` enfileirava o extrator com
+   `process_id=None`. `authorize` responde 404 "Caso não encontrado".
+2. **O 404 sumia.** `_connected_task` devolvia `{"status": "failed"}` sem log:
+   sem execução, sem `ai_job`, sem marca no documento. Dez OCRs gravados e
+   nenhuma extração — e nada em lugar nenhum dizia isso.
+3. **A imagem de produção não carrega a ontologia.** O `Dockerfile` copia
+   `alembic`, `app`, `scripts` e `seed.py`; o `capability_manifest("extrator")`
+   exige `docs/arquitetura/ONTOLOGIA_REGENTE_v1.md` e guarda o hash dele no
+   manifesto do job. Sem o arquivo, `missing = [ontologia_entrada_semantica]` e
+   o extrator morre **antes** de ler qualquer documento. As seis skills de
+   família estavam presentes; só o vocabulário faltava. Prova: o manifesto
+   gravado no `ai_jobs.result` do job 1532.
+
+Os três foram corrigidos no PR do dia, com teste que fica vermelho sem o
+conserto.
+
+### Matrícula e CAR passam pela entrada semântica — a dúvida era outra
+
+`executar_extracao` chama `extrair_documento` para **todo** documento com texto,
+sem filtrar por família (`entrada_semantica.py`). O filtro por tipo contratual
+que existe em `ficha01_extraction` é de outro ponto de entrada, o do staging
+legado. Então não há roteamento por família a corrigir.
+
+**Por qual caminho o dev gerou as observações da ELODI:** tenant 34, processo 67
+(“Caso real 23”), **247 observações** (`kind='observacao'`; 275 com fontes e
+derivação, 6 documentos). Vieram do caminho do agente com o caso — há
+`agent_executions` persistidas dos processos 67 e 68, ambas `completed`, e os
+`ai_jobs` correspondentes (`job_type=extract_document`, `model_used=gpt-5.6-luna`,
+`entity=process:67`, contexto do caso no payload). Mesmo código de serviço que a
+tela aciona; o gesto veio do servidor do gate de dev, pela API autenticada — não
+é escrita direta no banco.
+
+### Estado do gate
+
+- **Dev:** inalterado. As provas fechadas em 21/09 seguem válidas.
+- **Produção:** **aberto.** Nenhuma prova de leitura foi verificada lá. O que se
+  provou hoje é o contrário: a cadeia não chega ao extrator. Verificar em
+  produção exige o deploy do conserto e **nova rodada** — que precisa de
+  autorização própria do André, por operação.
