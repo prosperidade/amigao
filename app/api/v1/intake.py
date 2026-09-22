@@ -967,6 +967,7 @@ def import_draft_documents(
 
     task_ids: list[str] = []
     skipped_geo = 0
+    geo_ids: list[int] = []
     from app.services.audio_files import is_audio  # noqa: PLC0415
     from app.services.geo_files import GEOSPATIAL_DOCUMENT_TYPE, is_geospatial  # noqa: PLC0415
     from app.workers.audio_tasks import transcribe_audio_document  # noqa: PLC0415
@@ -995,15 +996,16 @@ def import_draft_documents(
         # Guard geoespacial: KML/KMZ/SHP/GeoJSON/GPX são GEOMETRIA, não documento.
         # Roteamos para fora do OCR — antes deste guard um .kml caía na cascata
         # pypdf→Gemini→OpenAI e estourava "Unsupported MIME type". O arquivo fica
-        # armazenado (not_required) vinculado ao draft; o consumo real (parser →
-        # Property.geom) é o gap D1 (próxima frente geo).
+        # armazenado (not_required) vinculado ao draft; a leitura da geometria
+        # (ADR-072) vai para o worker e é medida quando o documento ganha caso.
         if is_geospatial(doc.filename, doc.mime_type):
             doc.ocr_status = OcrStatus.not_required
             doc.document_type = doc.document_type or GEOSPATIAL_DOCUMENT_TYPE
             db.add(doc)
             skipped_geo += 1
+            geo_ids.append(doc.id)
             logger.info(
-                "import: doc_id=%s é geoespacial (%s) — roteado para fora do OCR (gap D1)",
+                "import: doc_id=%s é geoespacial (%s) — fora do OCR; geometria enfileirada",
                 doc.id, doc.filename,
             )
             continue
@@ -1023,6 +1025,9 @@ def import_draft_documents(
         except Exception as exc:
             logger.warning("Falha ao enfileirar ocr_then_extract para doc_id=%s: %s", doc.id, exc)
     db.commit()
+    from app.workers.geo_tasks import enfileirar_geometria  # noqa: PLC0415
+    for geo_id in geo_ids:
+        enfileirar_geometria(geo_id, current_user.tenant_id)
 
     return IntakeImportResponse(
         draft_id=draft_id,

@@ -18,6 +18,7 @@ from app.models.document import Document
 from app.models.entrada_semantica import DocumentoVersao, Fragmento
 from app.models.evidence import AgentExecution, CaseSnapshot, EvidenceInvalidation, EvidenceReview, EvidenceVersion
 from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
+from app.models.geometria import ArquivoGeo, ConfrontoArea, Feicao, Medicao, ProjecaoGeometria
 from app.models.intake_classification_feedback import IntakeClassificationFeedback
 from app.models.intake_draft import IntakeDraft, IntakeDraftState
 from app.models.knowledge_catalog import KnowledgeChunk, SourceType

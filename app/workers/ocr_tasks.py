@@ -104,8 +104,8 @@ def ocr_then_extract(
 
         # 0) Guard geoespacial — KML/KMZ/SHP/GeoJSON/GPX são GEOMETRIA, não
         # documento. Falha LIMPA aqui (sem cascata pypdf→Gemini→OpenAI, que antes
-        # estourava "Unsupported MIME type: application/octet-stream"). O arquivo
-        # fica armazenado; o consumo real é o gap D1. O roteamento já barra isso
+        # estourava "Unsupported MIME type: application/octet-stream"). A geometria
+        # vai para `processar_geometria` (ADR-072). O roteamento já barra isso
         # no /import, mas o guard protege qualquer dispatch direto da task.
         from app.services.geo_files import GEOSPATIAL_DOCUMENT_TYPE, is_geospatial  # noqa: PLC0415
         if is_geospatial(doc.filename, doc.mime_type):
@@ -114,9 +114,11 @@ def ocr_then_extract(
             db.add(doc)
             db.commit()
             logger.info(
-                "ocr_then_extract: doc=%s é geoespacial (%s) — OCR dispensado (gap D1)",
+                "ocr_then_extract: doc=%s é geoespacial (%s) — OCR dispensado; geometria enfileirada",
                 doc_id, doc.filename,
             )
+            from app.workers.geo_tasks import enfileirar_geometria  # noqa: PLC0415
+            enfileirar_geometria(doc.id, tenant_id)
             emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="not_required", method="geoespacial",
@@ -209,9 +211,13 @@ def ocr_then_extract(
             db.add(doc)
             db.commit()
             logger.info(
-                "ocr_then_extract: doc=%s é shapefile zipado (%s) — OCR dispensado (gap D1)",
+                "ocr_then_extract: doc=%s é shapefile zipado (%s) — OCR dispensado; geometria enfileirada",
                 doc_id, doc.filename,
             )
+            # Shapefile ainda não é lido: a leitura grava `formato_nao_suportado`
+            # visível, em vez de "armazenado, em breve" (ADR-072 §2).
+            from app.workers.geo_tasks import enfileirar_geometria  # noqa: PLC0415
+            enfileirar_geometria(doc.id, tenant_id)
             emit_leitura_event(
                 publish_realtime_event, tenant_id, doc,
                 status_label="not_required", method="geoespacial",

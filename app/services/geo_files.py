@@ -9,11 +9,9 @@ rasterização falhava. KML/KMZ/SHP/GeoJSON/GPX são **geometria**: descrevem
 polígonos do imóvel, não texto a ser transcrito. O pipeline de OCR nunca deveria
 recebê-los.
 
-Este módulo só **detecta e roteia**. O consumo real desses arquivos (parser →
-``Property.geom`` → PostGIS) é o gap **D1** (próxima frente geo) e NÃO é feito
-aqui. Por enquanto o arquivo é aceito, fica no storage vinculado ao
-processo/imóvel, e a UI comunica honestamente "armazenado — processamento de
-geometria em breve".
+Este módulo só **detecta e roteia**. A leitura (KMZ/KML → feições → medição →
+``Property.geom``) é de ``geo_leitura``/``geometria`` (ADR-072), disparada pelo
+worker ``processar_geometria``.
 """
 
 from __future__ import annotations
@@ -29,9 +27,8 @@ logger = logging.getLogger(__name__)
 # OCR. Mapeia para a categoria "espaciais" via document_categories.normalize_category.
 GEOSPATIAL_DOCUMENT_TYPE = "geoespacial"
 
-# Mensagem honesta exibida ao consultor enquanto o consumo geoespacial (D1) não
-# existe. Sem stack técnico — o arquivo está salvo, só não há leitura de texto.
-GEOSPATIAL_STORED_MESSAGE = "Armazenado — processamento de geometria em breve."
+# Arquivo geoespacial não tem leitura de TEXTO; a geometria é lida à parte.
+GEOSPATIAL_STORED_MESSAGE = "Arquivo geoespacial — geometria lida na Conferência do caso."
 
 # Extensões que SEMPRE são geometria (vetor geoespacial), nunca documento de texto.
 # .zip fica fora desta lista de propósito: um .zip pode ser shapefile OU qualquer
