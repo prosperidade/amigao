@@ -20,10 +20,14 @@
     com exceção no `.dockerignore`, provado construindo a imagem e perguntando ao manifesto lá dentro
     (`status: available`). O teste que eu tinha escrito conferia só o `Dockerfile` e passava verde com
     a imagem errada; agora confere as duas metades.
-  - **#269 — o CI não constrói a imagem de produção (aberta):** erro de empacotamento (arquivo
-    ignorado, caminho errado, camada faltando) só aparece no build do Render ou em produção. Dois
-    episódios em 22/09. **Correção:** job de `docker build` no CI, e nele perguntar ao
-    `capability_manifest` se está `available`.
+  - **#269 — o CI não constrói a imagem de produção (FECHADA em 22/09):** erro de empacotamento
+    (arquivo ignorado, caminho errado, camada faltando) só aparecia no build do Render ou em
+    produção — dois episódios no mesmo dia, com o CI todo verde. **Corrigida:** job `Imagem — Build
+    + manifesto dentro dela` no CI, que constrói e roda `scripts/verificar_imagem.py` DENTRO do
+    artefato: manifesto `available`, as seis skills de família, hash da ontologia, scripts de
+    pré-deploy presentes e `pg_dump` da major do servidor. Reprova com `exit 1` sem ontologia, sem
+    skills ou sem pg_dump (os três conferidos). Antes do Incremento 4b tocar em imagem, por decisão
+    do André.
 
 > **PRÓXIMO NÚMERO LIVRE: 270.** (#268 e #269 abertas em 22/09 pela reextração em produção.
 > **#260 a #267 são da frente 4a** — registradas em
