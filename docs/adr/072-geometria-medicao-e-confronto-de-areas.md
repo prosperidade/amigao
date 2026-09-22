@@ -1,7 +1,12 @@
 # ADR-072 — Geometria: arquivo, feição, medição e confronto de áreas
 
-- **Data:** 21/09/2026
-- **Estado:** proposta em implementação (Incremento 3, branch `feat/inc3-geometria`), sem merge.
+- **Data:** 21/09/2026. **Gate do Incremento 3 fechado nas provas de sistema em 22/09/2026**
+  (decisão do André, na revisão do PR #195): migration, triggers, CHECKs, suíte, KMZ real
+  reprocessado com recarga e nova sessão. **Q-ISIS-04 (tolerância de reprodução geométrica)
+  continua pendente com a Ísis** — não bloqueia o fechamento de sistema, mas o parâmetro
+  `AUDITOR_AREA_TOLERANCIA_PCT` permanece provisório até ela responder.
+- **Estado:** implementado, gate de sistema fechado, merge autorizado (PR #195, branch
+  `feat/inc3-geometria`).
 - **Autoridades:** [Plano Diretor v1.1 §4.5 e Incremento 3](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md#45-serviço-geoespacial),
   [Arquitetura de Dados §3.6](../arquitetura/ARQUITETURA_DADOS_RAG_REGENTE_v1.md#36-geometria),
   [Mergulho §5.5 (ruptura 5)](../arquitetura/MERGULHO_ESTRUTURAL_REGENTE_2026-09-17.md#55-geometria-percurso-mínimo-obrigatório-do-mvp),
