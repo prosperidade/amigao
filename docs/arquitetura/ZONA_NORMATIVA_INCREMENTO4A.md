@@ -51,6 +51,11 @@ Regra: (1) **troca de URL no rodapé de impressão ou paginação voltando a 1**
 | Dispositivos / trechos | 29.113 / 20.059 (19.006 embarcados, 1.053 vetores SEMAD reaproveitados) |
 | Custo de embedding | ~7,4 M tokens ≈ US$ 0,15 (`text-embedding-3-small`, 768d) |
 
+Os números desta tabela são da **primeira** construção. Depois dos dois cortes novos da segunda
+rodada (§8.1) o catálogo foi reconstruído: **878 fontes** (768 com identidade, 744 buscáveis),
+972 versões, 1.177 proveniências, 29.157 dispositivos, 19.330 trechos, 421 atos distintos.
+A conciliação com a estimativa do ADR está no §8.6.
+
 Relatório por coletânea (sem texto de norma, só cabeçalhos, páginas e motivos):
 [provas/inc4a_desmembramento_dryrun_2026-09-22.json](provas/inc4a_desmembramento_dryrun_2026-09-22.json).
 
@@ -66,7 +71,9 @@ medição e corrigidos com regressão: `Art. \n79.` (o art. 79 do Decreto 6.514 
 | Ficha de tipologia SEMAD | `exigencia` | `hierarquia.NIVEL_TIPOLOGIA_SEMAD` | Q-ISIS-18 |
 | Objetivo de ato desmembrado | do núcleo da coletânea | `hierarquia._OBJETIVOS_NUCLEO` | curadoria na validação |
 | Fonte sem objetivo declarado | entra marcada `objetivo_nao_declarado` | `recuperacao._filtros` | — |
-| Lexical na fusão | só tokens raros (< 1% dos trechos), peso 0,5 | `recuperacao.PESO_LEXICO`, `FRACAO_MAXIMA_TOKEN` | rodada de sondas |
+| Objetivo de origem provisória | **não filtra**; entra marcado `objetivo_provisorio` (§8.2) | `recuperacao.ORIGENS_OBJETIVO_PROVISORIAS` | curadoria declarar o objetivo |
+| Lexical na fusão | só **termo raro** (< 1% dos trechos), peso 0,5 (§8.3) | `recuperacao.PESO_LEXICO`, `FRACAO_MAXIMA_TOKEN` | rodada de sondas |
+| Segmento absorvedor | acima de 10.000 caracteres por artigo, corte por cabeçalho perde a identidade (§8.1) | `desmembramento.LIMITE_CHARS_POR_ARTIGO` | revisão humana |
 | Validação em lote | proposta usa a URL impressa como fonte oficial e vigência "não sei" | `curadoria.propor_lote_coletanea` | Ísis |
 
 Q-ISIS-19 (índice das coletâneas) continua aberta: a lista de atos da Ísis encurtaria a revisão
@@ -106,7 +113,7 @@ isso — não são validação da Ísis.
 
 | Métrica | Portão | Medido |
 |---|---|---|
-| recall@5 | ≥ 0,9 | **0,784** (29/37) |
+| recall@5 | ≥ 0,9 | **0,784** (29/37); depois da segunda rodada (§8): **0,892** (33/37) |
 | controle negativo | 100% | **100%** (8/8) |
 | groundedness (vaga resolve por ID) | 100% | **100%** (0 falhas) |
 | citação órfã | 0 | 0 |
@@ -145,12 +152,118 @@ Lei 9.784. A sonda de anexo mira o art. 21, e passa.
 
 | # | Dívida |
 |---|---|
-| #260 | Sondas vermelhas: recall@5 0,784 < 0,9. 3 alvos a decidir com a Ísis, 5 falhas de ranking (documento gigante dominando; EC MT 115 com texto da LC 592). Legislação segue desligada |
+| #260 | Sondas vermelhas: recall@5 **0,892** < 0,9 depois da segunda rodada (§8). Sobram 3 alvos a decidir com a Ísis (Q-ISIS-21) e 1 falha de ranking. Legislação segue desligada |
 | #261 | Revisão humana das fronteiras: 101 segmentos não determinados (15% do texto das coletâneas) e 25 fronteiras ambíguas em `tarefa_revisao_normativa`; Q-ISIS-19 encurta |
 | #262 | A5 sem original: coletâneas de MS e MT (19), normas federais baixadas do Planalto e 251 das 282 fontes SEMAD (o `MANUAIS_SEMAD.rar` cobriu 31). Sem original a versão não pode ser validada |
 | #263 | Vigência não determinada em quase todo o catálogo: peça fica vazia até a curadoria declarar vigência ao propor |
 | #264 | As quatro naturezas do §6 com tabela própria, a partir dos insumos da `RegenteLandpage` |
 | #265 | Extrator de artigos: citação sem aspas de número maior abre artigo; revisar normas de alteração antes de validar |
+| #266 | Dispositivo curto perde nos dois ramos: o art. 22 do Decreto 6.514/2008 (436 caracteres) fica em 78º por vetor e 66º por lexical |
+| #267 | Deduplicar por hash de texto: 20 textos idênticos sob identidades diferentes (3 arquivos repetidos da SEMAD, 17 segmentos `nao_determinado` do DOE-MT em duas coletâneas) |
 
 Numeradas a partir do maior número visto em todas as branches (#259) em 22/09; a frente 4b
 corre em paralelo — se houver colisão, renumerar no merge.
+
+## 8. Segunda rodada (22/09, depois do merge do #201)
+
+Frente aberta pelo André: os cinco erros de ranking, os três de alvo e a conciliação dos
+números. Nada aqui muda o ADR; muda o que o dado mostrou.
+
+### 8.1 Dois eram defeito do corte, não do ranking
+
+| Achado | O que era | O que passou a valer |
+|---|---|---|
+| **Segmento absorvedor** | o cabeçalho "RESOLUÇÃO CMN Nº 5.193" abriu um segmento de **565 mil caracteres** dentro do MT-NUC07 (a resolução real tem 11,8 mil) e disputava vagas de perguntas alheias | corte por cabeçalho não tem fim confirmado; acima de **10.000 caracteres por artigo** o segmento perde a identidade e vai para revisão. Tamanho sozinho não serve (a Constituição de MT tem 356 mil e é legítima): o critério é a **densidade de articulação** — medida nos segmentos de norma: mediana 898, p95 6.498. **9 segmentos** marcados |
+| **Mais de um ato na mesma impressão** | a EC MT 115/2023 vinha com o texto da LC MT 592/2017 dentro; o parser marcava e seguia | a impressão passa a ser **cortada** em cada cabeçalho interno de ato diferente com contexto de abertura |
+
+### 8.2 Dois eram o filtro de objetivo cortando a fonte certa
+
+A Resolução CONAMA 369/2006 (intervenção em APP) ficou fora de uma pergunta de **supressão**
+porque o legado só a marcou como licenciamento/compensação; a Lei AC 4.397/2024 (dispensa de
+licenciamento) herdou `outorga` do núcleo hídrico da coletânea. **Filtrar por palpite tira fonte
+certa.** Agora o objetivo só filtra quando a classificação **não** é provisória; enquanto for, a
+fonte entra marcada `objetivo_provisorio`. O filtro segue no contrato, valendo assim que a
+curadoria declarar o objetivo.
+
+### 8.3 O ramo lexical: o critério é raridade, não formato
+
+Restringir o lexical a número e sigla (rodada anterior) deixava de fora justamente a palavra que
+separa uma ficha de tipologia da outra ("suinocultura") e deixava entrar sigla comum (CAR, APP,
+LAC). Agora entra no ramo lexical **o termo raro** — presente em menos de 1% dos trechos, um IDF
+declarado. A normalização do `ts_rank` por tamanho (flags 1, 32, 33) foi medida e **não mudou nada**.
+
+| Variante (mesmas 45 sondas, dev) | recall@5 |
+|---|---|
+| lexical com todas as palavras, peso 1 | 0,622 |
+| só vetor | 0,811 |
+| lexical = número/sigla raros, peso 1 | 0,757 |
+| lexical = número/sigla raros, peso 0,5 | 0,784 |
+| + objetivo provisório deixa de filtrar | 0,838 |
+| **+ lexical = termo raro, peso 0,5** | **0,892** |
+
+### 8.4 Onde parou
+
+**recall@5 0,892 (33/37)** — o portão de 0,9 exige 34. Controle negativo 100%, groundedness 100%,
+zero citação órfã. Por grupo: federal 11/11 · estadual 11/12 · interpretação anexada 3/4 ·
+exigência/procedimento 4/6 · vigência 4/4. **A Legislação continua desligada.**
+
+As quatro que faltam: **três são escolha de alvo** e vão para a Ísis como **Q-ISIS-21** (§8.5);
+**uma é falha real de ranking** — o art. 22 do Decreto 6.514/2008 ("Interrompe-se a prescrição",
+436 caracteres) fica em 78º por vetor e 66º por lexical: dispositivo curto perde para trecho longo
+nos dois ramos, e 65 trechos de INs do IBAMA e do ICMBio repetem a matéria com correspondência
+mais densa. Registrada como dívida #266, sem remendo.
+
+### 8.5 Q-ISIS-21 — três alvos de sonda para a Ísis decidir
+
+Em cada caso a recuperação trouxe a fonte certa (ou uma equivalente); o que está em jogo é qual
+dispositivo ou fonte conta como resposta:
+
+| Sonda | O que o sistema devolveu | Pergunta para a Ísis |
+|---|---|---|
+| `ms-13977-car-ms` ("CAR-MS e o PRA do estado") | arts. 3, 4, 5 e 53 do Decreto MS 13.977/2014 e a Resolução SEMADE 28/2016 | o alvo é o art. 1º, ou qualquer dispositivo do ato que institui o CAR-MS serve? |
+| `exi-ficha-piscicultura-reg` ("piscicultura em tanque escavado, registro eletrônico") | Decreto GO 7.862/2013 (arts. 11, 18, 26, 47, 57), em vez da ficha de tipologia A4.1 | para o consultor, a resposta é a ficha do IPÊ ou o decreto que a fundamenta? |
+| `proc-queima-controlada` ("como solicitar autorização de queima controlada no IPÊ") | IN SEMAD 3/2020 (arts. 3, 4, 6) e a ficha Y1.4 de queima controlada, não o Manual | manual, ficha ou IN: qual é o alvo de um procedimento? |
+
+### 8.6 Conciliação: 878 fontes × 258–449 estimadas no ADR-075
+
+O ADR estimou **258 a 449 documentos de legislação** (81 avulsos + 177 a 368 atos) e **540 a 731
+fontes** (com as 282 da SEMAD). Medido, o catálogo tem **878 fontes**:
+
+| Parcela | Fontes |
+|---|---:|
+| Atos vindos das coletâneas | 531 |
+| Fontes SEMAD-GO (só existiam como chunk) | 275 |
+| Normas avulsas do legado | 81 |
+| (−) atos presentes nos dois lugares, que são UMA fonte com duas proveniências | −9 |
+| **Total** | **878** |
+
+Contra a estimativa: **493 documentos de legislação com identidade** (81 avulsos + 421 atos − 9
+sobrepostos) contra 258–449 — **44 acima do topo**; e 768 fontes com identidade contra 540–731,
+mais **110 fontes `nao_determinado`**, que o ADR não previa como linha (ele supunha o não
+identificado fora do catálogo; aqui ele entra como fila de revisão, sem nível e sem trecho, logo
+sem participar de busca).
+
+**A diferença é granularidade, não duplicata:**
+
+1. **71 emendas constitucionais** entraram como atos próprios — a medição do ADR excluiu
+   explicitamente as 217 linhas de `EMENDA CONSTITUCIONAL` da contagem larga.
+2. **Atos administrativos do Diário Oficial de MT de 26/09/2018**, que está inteiro dentro de
+   MT-NUC02 e MT-NUC05 (portarias de SEDUC, SEJUDH, SINFRA, DETRAN): são atos reais e o corte os
+   trata como tal, embora não sejam matéria ambiental. Boa parte das 68 portarias estaduais.
+3. **Atos federais impressos dentro de coletâneas estaduais** (Lei 6.938/1981 e LC 140/2011 dentro
+   do MS-NUC04), que a conta de "atos estaduais" do ADR não previa.
+
+**Duplicata real existe e é pequena: 20 textos idênticos sob identidades diferentes** — 3 são
+arquivos repetidos do lote SEMAD (o catálogo da Ísis avisa dos `(1)`/`(3)`) e 17 são segmentos
+`nao_determinado` da edição do Diário Oficial de MT presente em duas coletâneas, cuja chave é por
+documento e posição. Nenhum participa de busca. Deduplicar por hash é a dívida #267.
+
+### 8.7 Dois furos fechados no caminho
+
+- **`TRUNCATE` burlava o append-only.** Os gatilhos de imutabilidade são `FOR EACH ROW`; um
+  `TRUNCATE` apagaria a trilha inteira sem disparar nada. A migration `074zn001` põe o gatilho de
+  statement nas **20 tabelas** que se declaram imutáveis (validação do catálogo, evidência,
+  geometria, entrada semântica).
+- **FK sem índice.** `trecho_normativo.dispositivo_id` e `dispositivo.parent_id` derrubaram a
+  reconstrução do catálogo por `statement_timeout`. Varri a classe inteira: **12 índices** de FK
+  criados nas tabelas da zona normativa.

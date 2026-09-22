@@ -96,6 +96,7 @@ class FonteNormativa(Base):
             name="ck_fonte_precedente_privado_por_padrao",
         ),
         Index("ix_fonte_normativa_nivel", "nivel_autoridade"),
+        Index("ix_fonte_normativa_tenant_id", "tenant_id"),
         Index("ix_fonte_normativa_uf", "uf"),
     )
 
@@ -136,6 +137,7 @@ class FonteNormativaVersao(Base):
             name="ck_versao_hashes",
         ),
         Index("ix_fonte_normativa_versao_fonte", "fonte_id"),
+        Index("ix_fonte_normativa_versao_substitui_versao_id", "substitui_versao_id"),
     )
 
 
@@ -201,6 +203,7 @@ class Dispositivo(Base):
         UniqueConstraint("fonte_versao_id", "caminho", name="uq_dispositivo_caminho"),
         CheckConstraint("tipo IN ('preambulo','artigo','paragrafo','anexo')", name="ck_dispositivo_tipo"),
         Index("ix_dispositivo_versao_artigo", "fonte_versao_id", "artigo"),
+        Index("ix_dispositivo_parent_id", "parent_id"),
     )
 
 
@@ -231,6 +234,9 @@ class TrechoNormativo(Base):
     __table_args__ = (
         UniqueConstraint("fonte_versao_id", "ordem", name="uq_trecho_versao_ordem"),
         Index("ix_trecho_normativo_versao", "fonte_versao_id"),
+        # FK sem índice faz cada remoção do lado referido varrer esta tabela inteira.
+        Index("ix_trecho_normativo_dispositivo_id", "dispositivo_id"),
+        Index("ix_trecho_normativo_tenant_id", "tenant_id"),
         Index("ix_trecho_normativo_tsv", "tsv", postgresql_using="gin"),
     )
 
@@ -254,6 +260,7 @@ class InterpretacaoNorma(Base):
         ),
         CheckConstraint(_in("status_validacao", STATUS_VALIDACAO), name="ck_interp_status"),
         Index("ix_interpretacao_norma_alvo", "norma_fonte_id", "artigo"),
+        Index("ix_interpretacao_norma_interpretacao_fonte_id", "interpretacao_fonte_id"),
     )
 
 
@@ -286,6 +293,7 @@ class ValidacaoNorma(Base):
         CheckConstraint("decisao IN ('aprovado','devolvido')", name="ck_validacao_decisao"),
         CheckConstraint("length(trim(nota)) > 0", name="ck_validacao_nota"),
         Index("ix_validacao_norma_versao", "fonte_versao_id"),
+        Index("ix_validacao_norma_validador_id", "validador_id"),
     )
 
 
@@ -309,6 +317,8 @@ class PapelCuradoria(Base):
             "papel IN ('validar_fonte_normativa','curar_corpus')", name="ck_papel_curadoria_papel"
         ),
         Index("ix_papel_curadoria_user", "user_id"),
+        Index("ix_papel_curadoria_concedido_por_id", "concedido_por_id"),
+        Index("ix_papel_curadoria_revogado_por_id", "revogado_por_id"),
     )
 
 
@@ -336,4 +346,7 @@ class TarefaRevisaoNormativa(Base):
             name="ck_tarefa_revisao_tipo",
         ),
         Index("ix_tarefa_revisao_aberta", "tipo", "resolvida_em"),
+        Index("ix_tarefa_revisao_normativa_fonte_versao_id", "fonte_versao_id"),
+        Index("ix_tarefa_revisao_normativa_legislation_document_id", "legislation_document_id"),
+        Index("ix_tarefa_revisao_normativa_resolvida_por_id", "resolvida_por_id"),
     )

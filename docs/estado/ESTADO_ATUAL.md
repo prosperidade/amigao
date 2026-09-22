@@ -1,5 +1,7 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 22/09/2026 (noite) — segunda rodada do Incremento 4a.** #201 mergeado (9972a58). Dos cinco erros de ranking: dois eram corte (segmento absorvedor de 565 mil caracteres e impressão com dois atos) e dois eram o filtro de objetivo cortando fonte certa por classificação provisória; o ramo lexical passou a usar termo raro, não número/sigla. **recall@5 0,784 → 0,892** (33/37), controle negativo 100%, groundedness 100%; o portão de 0,9 exige 34, então a **Legislação segue desligada**. Sobram 3 alvos de sonda para a Ísis (**Q-ISIS-21**) e 1 falha real (dispositivo curto, dívida #266). Catálogo reconstruído no dev: 878 fontes — conciliação com as 258–449 do ADR está no registro (granularidade: 71 emendas constitucionais, o DOE-MT inteiro dentro de duas coletâneas, atos federais impressos em coletânea estadual; duplicata real são 20 textos, dívida #267). Fechados no caminho: `TRUNCATE` burlava o append-only das 20 tabelas imutáveis e 12 FKs estavam sem índice (migration `074zn001`). Dívidas #260–#267.
+
 **Pulso 22/09/2026 — Incremento 4a (zona normativa, ADR-075 + A1–A5) em PR rascunho, só dev.**
 Catálogo novo construído no dev a partir do corpus legado (legado intocado): 32 coletâneas
 desmembradas por regra fixa (sem LLM/OCR) → 420 atos com identidade, 101 segmentos não

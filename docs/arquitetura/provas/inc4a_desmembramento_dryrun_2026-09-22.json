@@ -1,25 +1,25 @@
 {
  "resumo": {
-  "fontes": 868,
-  "fontes_identidade_determinada": 767,
-  "versoes": 960,
-  "proveniencias": 1165,
+  "fontes": 878,
+  "fontes_identidade_determinada": 768,
+  "versoes": 972,
+  "proveniencias": 1177,
   "por_nivel": {
-   "norma": 481,
-   "nao_determinado": 125,
-   "interpretacao": 5,
+   "norma": 483,
+   "nao_determinado": 134,
+   "interpretacao": 4,
    "radar": 1,
    "exigencia": 249,
    "procedimento": 7
   },
-  "fontes_buscaveis": 743,
-  "fontes_com_mais_de_uma_proveniencia": 204,
+  "fontes_buscaveis": 744,
+  "fontes_com_mais_de_uma_proveniencia": 203,
   "documentos_com_original": 46
  },
  "embedding": {
-  "trechos_a_embarcar": 19006,
-  "tokens": 7378940,
-  "custo_estimado_usd": 0.1476,
+  "trechos_a_embarcar": 18277,
+  "tokens": 6715000,
+  "custo_estimado_usd": 0.1343,
   "trechos_com_vetor_reaproveitado": 1053
  },
  "originais": {
@@ -2088,10 +2088,11 @@
     "sem_sinal": 3,
     "cabecalho_formal": 3
    },
-   "identidade_determinada": 10,
+   "identidade_determinada": 9,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 3,
-    "identidade_nao_determinada": 3
+    "identidade_nao_determinada": 4,
+    "segmento_absorvedor": 1
    },
    "atos": [
     {
@@ -2158,12 +2159,15 @@
       null,
       null
      ],
-     "identidade": "decreto|ms||15312|2019",
-     "rotulo": "Decreto MS 15.312/2019",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MS-NUC03-florestal_car_pra, offset 47924",
      "cabecalho": "DECRETO Nº 15.312, DE 26 DE NOVEMBRO DE 2019.",
      "titulo_aba": null,
      "caracteres": 67234,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -2336,10 +2340,11 @@
     "sem_sinal": 3,
     "cabecalho_formal": 11
    },
-   "identidade_determinada": 19,
+   "identidade_determinada": 18,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 3,
-    "identidade_nao_determinada": 4,
+    "identidade_nao_determinada": 5,
+    "segmento_absorvedor": 1,
     "inicio_estimado": 1
    },
    "atos": [
@@ -2600,12 +2605,15 @@
       null,
       null
      ],
-     "identidade": "portaria|ms|imasul|1575|2025",
-     "rotulo": "Portaria IMASUL/MS 1.575/2025",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MS-NUC04-licenciamento, offset 1608546",
      "cabecalho": "PORTARIA IMASUL N. 1.575 DE 25 DE JUNHO DE 2025.",
      "titulo_aba": null,
      "caracteres": 20567,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -2758,11 +2766,12 @@
     "impressao": 3,
     "cabecalho_formal": 5
    },
-   "identidade_determinada": 7,
+   "identidade_determinada": 6,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 3,
-    "identidade_nao_determinada": 4,
-    "inicio_estimado": 1
+    "identidade_nao_determinada": 5,
+    "inicio_estimado": 1,
+    "segmento_absorvedor": 1
    },
    "atos": [
     {
@@ -2940,12 +2949,15 @@
       null,
       null
      ],
-     "identidade": "resolucao|ms|semagro|774|2022",
-     "rotulo": "Resolução SEMAGRO/MS 774/2022",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MS-NUC05-hidrico_saneamento, offset 927861",
      "cabecalho": "RESOLUÇÃO SEMAGRO N. 774, DE 21 DE MARÇO DE 2022.",
      "titulo_aba": null,
      "caracteres": 116206,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -3841,17 +3853,18 @@
    "documento_id": 34,
    "coletanea": "MT-NUC01-constitucional_institucional_e_competencial",
    "uf": "MT",
-   "segmentos": 92,
+   "segmentos": 93,
    "por_sinal": {
     "impressao": 18,
-    "cabecalho_formal": 73,
+    "cabecalho_formal": 74,
     "sem_sinal": 1
    },
    "identidade_determinada": 91,
    "motivos": {
+    "segmento_absorvedor": 1,
+    "identidade_nao_determinada": 2,
     "regiao_sem_sinal_de_fronteira": 1,
-    "identidade_nao_determinada": 1,
-    "multiplos_atos_na_impressao": 1
+    "multiplos_atos_na_impressao": 2
    },
    "atos": [
     {
@@ -3949,12 +3962,15 @@
       null,
       null
      ],
-     "identidade": "lei|mt||11088|2020",
-     "rotulo": "Lei MT 11.088/2020",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MT-NUC01-constitucional_institucional_e_competencial, offset 649185",
      "cabecalho": "LEI Nº 11.088, DE 09 DE MARÇO DE 2020 - D.O. 10.03.20.",
      "titulo_aba": null,
      "caracteres": 40707,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -5288,7 +5304,7 @@
     {
      "offset": [
       2603715,
-      2657560
+      2605552
      ],
      "sinal": "impressao",
      "paginas": [
@@ -5299,7 +5315,26 @@
      "rotulo": "EC MT 115/2023",
      "cabecalho": "EMENDA CONSTITUCIONAL Nº 115, DE 2023 - DOEAL/MT 26.12.2023 e D.O. 26.12.2023.",
      "titulo_aba": "app1.sefaz.mt.gov.br/0425762e005567c5/9733a1d3f5bb1ab384256710004d4754/2934486634343a9c8425812f005b9c6e",
-     "caracteres": 50014,
+     "caracteres": 1836,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      2605552,
+      2657560
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      460,
+      475
+     ],
+     "identidade": "lei_complementar|mt||592|2017",
+     "rotulo": "LC MT 592/2017",
+     "cabecalho": "LEI COMPLEMENTAR Nº 592, DE 26 DE MAIO DE 2017.",
+     "titulo_aba": null,
+     "caracteres": 48177,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -5435,10 +5470,11 @@
     "sem_sinal": 1,
     "cabecalho_formal": 53
    },
-   "identidade_determinada": 48,
+   "identidade_determinada": 47,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 1,
-    "identidade_nao_determinada": 15
+    "identidade_nao_determinada": 16,
+    "segmento_absorvedor": 1
    },
    "atos": [
     {
@@ -6485,12 +6521,15 @@
       null,
       null
      ],
-     "identidade": "lei|mt||10765|2018",
-     "rotulo": "Lei MT 10.765/2018",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MT-NUC02-territorial, offset 1501443",
      "cabecalho": "LEI Nº 10.765, DE 21 DE SETEMBRO DE 2018.",
      "titulo_aba": null,
      "caracteres": 181949,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -7112,18 +7151,19 @@
    "documento_id": 38,
    "coletanea": "MT-NUC05-hidrico",
    "uf": "MT",
-   "segmentos": 63,
+   "segmentos": 64,
    "por_sinal": {
     "impressao": 6,
-    "sem_sinal": 2,
-    "cabecalho_formal": 55
+    "cabecalho_formal": 56,
+    "sem_sinal": 2
    },
    "identidade_determinada": 47,
    "motivos": {
-    "multiplos_atos_na_impressao": 1,
+    "multiplos_atos_na_impressao": 2,
     "titulo_da_aba_diverge_do_cabecalho": 1,
     "regiao_sem_sinal_de_fronteira": 2,
-    "identidade_nao_determinada": 16
+    "identidade_nao_determinada": 17,
+    "segmento_absorvedor": 1
    },
    "atos": [
     {
@@ -7180,7 +7220,7 @@
     {
      "offset": [
       33562,
-      73872
+      35167
      ],
      "sinal": "impressao",
      "paginas": [
@@ -7191,10 +7231,29 @@
      "rotulo": "Lei MT 13.253/2026",
      "cabecalho": "LEI Nº 13.253, DE 25 DE MARÇO DE 2026 - D.O. 26.03.2026.",
      "titulo_aba": "Resolução CEHIDRO Nº 163 DE 11/05/2023 - Estadual - Mato Grosso - LegisWeb",
-     "caracteres": 39278,
+     "caracteres": 1600,
      "motivos": [
       "multiplos_atos_na_impressao",
       "titulo_da_aba_diverge_do_cabecalho"
+     ]
+    },
+    {
+     "offset": [
+      35167,
+      73872
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      12,
+      18
+     ],
+     "identidade": "resolucao|mt|cehidro|163|2023",
+     "rotulo": "Resolução CEHIDRO/MT 163/2023",
+     "cabecalho": "RESOLUÇÃO CEHIDRO Nº 163 DE 11/05/2023",
+     "titulo_aba": null,
+     "caracteres": 37676,
+     "motivos": [
+      "multiplos_atos_na_impressao"
      ]
     },
     {
@@ -8227,12 +8286,15 @@
       null,
       null
      ],
-     "identidade": "lei|mt||10765|2018",
-     "rotulo": "Lei MT 10.765/2018",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MT-NUC05-hidrico, offset 407223",
      "cabecalho": "LEI Nº 10.765, DE 21 DE SETEMBRO DE 2018.",
      "titulo_aba": null,
      "caracteres": 181243,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     }
    ]
   },
@@ -8457,13 +8519,16 @@
    "documento_id": 40,
    "coletanea": "MT-NUC07-credito_pd",
    "uf": "MT",
-   "segmentos": 32,
+   "segmentos": 33,
    "por_sinal": {
     "impressao": 27,
-    "cabecalho_formal": 5
+    "cabecalho_formal": 6
    },
    "identidade_determinada": 32,
-   "motivos": {},
+   "motivos": {
+    "segmento_absorvedor": 1,
+    "identidade_nao_determinada": 1
+   },
    "atos": [
     {
      "offset": [
@@ -8689,7 +8754,7 @@
     {
      "offset": [
       474905,
-      1041180
+      487656
      ],
      "sinal": "cabecalho_formal",
      "paginas": [
@@ -8700,8 +8765,28 @@
      "rotulo": "Resolução CMN 5.193/2024",
      "cabecalho": "RESOLUÇÃO CMN Nº 5.193, DE 19 DE DEZEMBRO DE 2024",
      "titulo_aba": null,
-     "caracteres": 565531,
+     "caracteres": 12632,
      "motivos": []
+    },
+    {
+     "offset": [
+      487656,
+      1041180
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      null,
+      null
+     ],
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MT-NUC07-credito_pd, offset 487656",
+     "cabecalho": "RESOLUÇÃO CMN Nº 5.193, DE 19 DE DEZEMBRO DE 2024",
+     "titulo_aba": null,
+     "caracteres": 552897,
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -9021,10 +9106,11 @@
     "cabecalho_formal": 78,
     "impressao": 24
    },
-   "identidade_determinada": 102,
+   "identidade_determinada": 101,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 1,
-    "identidade_nao_determinada": 1,
+    "identidade_nao_determinada": 2,
+    "segmento_absorvedor": 1,
     "inicio_estimado": 1
    },
    "atos": [
@@ -10673,12 +10759,15 @@
       null,
       null
      ],
-     "identidade": "decreto|mt||1606|2022",
-     "rotulo": "Decreto MT 1.606/2022",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — MT-NUC08-biomas, offset 2060002",
      "cabecalho": "DECRETO Nº 1.606, DE 29 DE DEZEMBRO DE 2022.",
      "titulo_aba": null,
      "caracteres": 541712,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -12006,17 +12095,17 @@
    "documento_id": 55,
    "coletanea": "AC-N10-politica_ambiental_sisa",
    "uf": "AC",
-   "segmentos": 21,
+   "segmentos": 24,
    "por_sinal": {
     "sem_sinal": 3,
-    "cabecalho_formal": 8,
+    "cabecalho_formal": 11,
     "impressao": 10
    },
-   "identidade_determinada": 18,
+   "identidade_determinada": 21,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 3,
     "identidade_nao_determinada": 3,
-    "multiplos_atos_na_impressao": 2
+    "multiplos_atos_na_impressao": 5
    },
    "atos": [
     {
@@ -12266,7 +12355,7 @@
     {
      "offset": [
       267910,
-      278753
+      268584
      ],
      "sinal": "impressao",
      "paginas": [
@@ -12277,7 +12366,45 @@
      "rotulo": "Decreto AC 2/2023",
      "cabecalho": "DECRETO Nº 2�433-P, DE 13 DE MARÇO DE 2023 pondente�",
      "titulo_aba": null,
-     "caracteres": 9967,
+     "caracteres": 673,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      268584,
+      270300
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      21,
+      22
+     ],
+     "identidade": "decreto|ac||4|2023",
+     "rotulo": "Decreto AC 4/2023",
+     "cabecalho": "DECRETO Nº 4�507-P, DE 20 DE JULHO DE 2023",
+     "titulo_aba": null,
+     "caracteres": 1631,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      270300,
+      278753
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      21,
+      22
+     ],
+     "identidade": "decreto|ac||11372|2023",
+     "rotulo": "Decreto AC 11.372/2023",
+     "cabecalho": "DECRETO Nº 11.372, DE 28 DE NOVEMBRO DE 2023",
+     "titulo_aba": null,
+     "caracteres": 7661,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -12339,7 +12466,7 @@
     {
      "offset": [
       297642,
-      305900
+      299175
      ],
      "sinal": "impressao",
      "paginas": [
@@ -12350,7 +12477,26 @@
      "rotulo": "Decreto AC 7.160-P/2024",
      "cabecalho": "DECRETO Nº 7.160-P, DE 21 DE JUNHO DE 2024",
      "titulo_aba": null,
-     "caracteres": 7384,
+     "caracteres": 1448,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      299175,
+      305900
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      27,
+      28
+     ],
+     "identidade": "decreto|ac||11535|2024",
+     "rotulo": "Decreto AC 11.535/2024",
+     "cabecalho": "DECRETO Nº 11.535, DE 19 DE AGOSTO DE 2024",
+     "titulo_aba": null,
+     "caracteres": 5935,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -12395,17 +12541,17 @@
    "documento_id": 56,
    "coletanea": "AC-N12-regularizacao_servicos_ambientais",
    "uf": "AC",
-   "segmentos": 15,
+   "segmentos": 18,
    "por_sinal": {
     "sem_sinal": 1,
-    "cabecalho_formal": 8,
+    "cabecalho_formal": 11,
     "impressao": 6
    },
-   "identidade_determinada": 12,
+   "identidade_determinada": 15,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 1,
     "identidade_nao_determinada": 3,
-    "multiplos_atos_na_impressao": 3
+    "multiplos_atos_na_impressao": 6
    },
    "atos": [
     {
@@ -12499,7 +12645,7 @@
     {
      "offset": [
       26857,
-      70448
+      31033
      ],
      "sinal": "impressao",
      "paginas": [
@@ -12510,7 +12656,26 @@
      "rotulo": "Lei AC 3.880/2021",
      "cabecalho": "LEI Nº 3.880, DE 17 DE DEZEMBRO DE 2021",
      "titulo_aba": null,
-     "caracteres": 42726,
+     "caracteres": 3740,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      31033,
+      70448
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      1,
+      6
+     ],
+     "identidade": "lei|ac||4395|2024",
+     "rotulo": "Lei AC 4.395/2024",
+     "cabecalho": "LEI Nº 4395 DE 19/08/2024",
+     "titulo_aba": null,
+     "caracteres": 38984,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -12518,18 +12683,37 @@
     {
      "offset": [
       70448,
-      84174
+      77325
      ],
      "sinal": "impressao",
      "paginas": [
       7,
-      10
+      7
      ],
      "identidade": "lei|ac||4507|2024",
      "rotulo": "Lei AC 4.507/2024",
      "cabecalho": "LEI Nº 4.507, DE 20 DE DEZEMBRO DE 2024",
      "titulo_aba": null,
-     "caracteres": 12553,
+     "caracteres": 6195,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      77325,
+      84174
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      8,
+      10
+     ],
+     "identidade": "lei|ac||4516|2025",
+     "rotulo": "Lei AC 4.516/2025",
+     "cabecalho": "LEI Nº 4.516, DE 3 DE JANEIRO DE 2025",
+     "titulo_aba": null,
+     "caracteres": 6356,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -12643,7 +12827,7 @@
     {
      "offset": [
       169013,
-      226613
+      174789
      ],
      "sinal": "impressao",
      "paginas": [
@@ -12654,7 +12838,26 @@
      "rotulo": "Lei AC 2.025/2008",
      "cabecalho": "LEI ORDINÁRIA Nº 2025, DE 20 DE OUTUBRO 2008",
      "titulo_aba": null,
-     "caracteres": 56903,
+     "caracteres": 5753,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      174789,
+      226613
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      23,
+      30
+     ],
+     "identidade": "lei|ac||2308|2010",
+     "rotulo": "Lei AC 2.308/2010",
+     "cabecalho": "LEI Nº 2.308 DE 22/10/2010",
+     "titulo_aba": null,
+     "caracteres": 51148,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -13215,10 +13418,11 @@
     "cabecalho_formal": 17,
     "sem_sinal": 2
    },
-   "identidade_determinada": 20,
+   "identidade_determinada": 19,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 2,
-    "identidade_nao_determinada": 2
+    "identidade_nao_determinada": 3,
+    "segmento_absorvedor": 1
    },
    "atos": [
     {
@@ -13475,12 +13679,15 @@
       null,
       null
      ],
-     "identidade": "parecer|ac|sejusp|296|2025",
-     "rotulo": "Parecer SEJUSP/AC 296/2025",
+     "identidade": null,
+     "rotulo": "[não determinado] sem cabeçalho — AC-N04-licenciamento, offset 265812",
      "cabecalho": "PARECER Nº 296/2025/CONJUR/SEJUSP",
      "titulo_aba": null,
      "caracteres": 138732,
-     "motivos": []
+     "motivos": [
+      "segmento_absorvedor",
+      "identidade_nao_determinada"
+     ]
     },
     {
      "offset": [
@@ -14148,17 +14355,17 @@
    "documento_id": 62,
    "coletanea": "AC-N08-biomas_ucs",
    "uf": "AC",
-   "segmentos": 8,
+   "segmentos": 9,
    "por_sinal": {
     "sem_sinal": 1,
-    "cabecalho_formal": 4,
+    "cabecalho_formal": 5,
     "impressao": 3
    },
-   "identidade_determinada": 7,
+   "identidade_determinada": 8,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 1,
     "identidade_nao_determinada": 1,
-    "multiplos_atos_na_impressao": 1
+    "multiplos_atos_na_impressao": 2
    },
    "atos": [
     {
@@ -14235,7 +14442,7 @@
     {
      "offset": [
       68870,
-      79184
+      72082
      ],
      "sinal": "impressao",
      "paginas": [
@@ -14246,7 +14453,26 @@
      "rotulo": "Lei AC 1.780/2006",
      "cabecalho": "LEI Nº 1.780, DE 20 DE JUNHO DE 2006",
      "titulo_aba": null,
-     "caracteres": 9662,
+     "caracteres": 2615,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      72082,
+      79184
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      8,
+      8
+     ],
+     "identidade": "lei|ac||1787|2006",
+     "rotulo": "Lei AC 1.787/2006",
+     "cabecalho": "LEI Nº 1.787, DE 03 DE JULHO DE 2006",
+     "titulo_aba": null,
+     "caracteres": 7045,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -14308,17 +14534,17 @@
    "documento_id": 63,
    "coletanea": "AC-N09-infracoes_sanidade",
    "uf": "AC",
-   "segmentos": 15,
+   "segmentos": 17,
    "por_sinal": {
     "impressao": 6,
     "sem_sinal": 1,
-    "cabecalho_formal": 8
+    "cabecalho_formal": 10
    },
-   "identidade_determinada": 14,
+   "identidade_determinada": 16,
    "motivos": {
     "regiao_sem_sinal_de_fronteira": 1,
     "identidade_nao_determinada": 1,
-    "multiplos_atos_na_impressao": 2
+    "multiplos_atos_na_impressao": 4
    },
    "atos": [
     {
@@ -14514,7 +14740,7 @@
     {
      "offset": [
       873859,
-      919010
+      875397
      ],
      "sinal": "impressao",
      "paginas": [
@@ -14525,7 +14751,26 @@
      "rotulo": "Lei AC 141/1967",
      "cabecalho": "LEI Nº 141, DE 30 DE NOVEMBRO DE 1967",
      "titulo_aba": null,
-     "caracteres": 44198,
+     "caracteres": 1454,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      875397,
+      919010
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      101,
+      107
+     ],
+     "identidade": "resolucao|ac|cemaf|5|2025",
+     "rotulo": "Resolução CEMAF/AC 5/2025",
+     "cabecalho": "RESOLUÇÃO CEMAF Nº 5 DE 11/12/2025",
+     "titulo_aba": null,
+     "caracteres": 42742,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]
@@ -14550,7 +14795,7 @@
     {
      "offset": [
       935819,
-      944717
+      938358
      ],
      "sinal": "impressao",
      "paginas": [
@@ -14561,7 +14806,26 @@
      "rotulo": "Decreto AC 1.579/2019",
      "cabecalho": "DECRETO Nº 1.579, DE 29 DE MARÇO DE 2019",
      "titulo_aba": null,
-     "caracteres": 8022,
+     "caracteres": 2454,
+     "motivos": [
+      "multiplos_atos_na_impressao"
+     ]
+    },
+    {
+     "offset": [
+      938358,
+      944717
+     ],
+     "sinal": "cabecalho_formal",
+     "paginas": [
+      108,
+      109
+     ],
+     "identidade": "decreto|ac||11338|2023",
+     "rotulo": "Decreto AC 11.338/2023",
+     "cabecalho": "DECRETO Nº 11.338, DE 05 DE OUTUBRO DE 2023",
+     "titulo_aba": null,
+     "caracteres": 5567,
      "motivos": [
       "multiplos_atos_na_impressao"
      ]

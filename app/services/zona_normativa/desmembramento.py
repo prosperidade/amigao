@@ -393,6 +393,39 @@ def _identidade(seg: Segmento, bruto: str, uf: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Guarda de segmento absorvedor (mesma família da guarda de fatia do chunking, #117)
+# ---------------------------------------------------------------------------
+# Corte por cabeçalho não tem FIM confirmado: se o próximo cabeçalho com abertura
+# nunca vem, o segmento engole o resto da região. Medido em 22/09: o cabeçalho
+# "RESOLUÇÃO CMN Nº 5.193" abriu um segmento de 565 mil caracteres dentro do
+# MT-NUC07 — a resolução real tem 11,8 mil —, e esse bloco disputava (e ganhava)
+# vagas de perguntas que nada tinham a ver com ela.
+#
+# Tamanho sozinho não separa: a Constituição de MT tem 356 mil caracteres e é
+# legítima. O que separa é a DENSIDADE DE ARTICULAÇÃO. Medido nos segmentos de
+# `norma` das 32 coletâneas: mediana de um artigo a cada 898 caracteres, p95 em
+# 6.498. Acima de 10.000 o texto não é aquele ato — é aquele ato mais o que veio
+# depois. O segmento não é descartado: perde a identidade e vai para a revisão.
+LIMITE_CHARS_POR_ARTIGO = 10_000
+MINIMO_PARA_JULGAR = 20_000
+MOTIVO_ABSORVEDOR = "segmento_absorvedor"
+
+
+def _guarda_absorvedor(s: Segmento) -> None:
+    if s.sinal != SINAL_CABECALHO or len(s.texto) < MINIMO_PARA_JULGAR or not s.determinado:
+        return
+    from app.services.zona_normativa.dispositivos import RE_ARTIGO  # noqa: PLC0415
+
+    artigos = len(RE_ARTIGO.findall(s.texto))
+    if len(s.texto) / max(artigos, 1) <= LIMITE_CHARS_POR_ARTIGO:
+        return
+    s.motivos.append(MOTIVO_ABSORVEDOR)
+    if MOTIVO_IDENTIDADE_ND not in s.motivos:
+        s.motivos.append(MOTIVO_IDENTIDADE_ND)
+    s.identidade = None   # o cabeçalho continua no texto; a identidade é que não se afirma
+
+
+# ---------------------------------------------------------------------------
 # Corte
 # ---------------------------------------------------------------------------
 
@@ -458,15 +491,39 @@ def desmembrar(texto: str, uf: str) -> list[Segmento]:
             impresso_em=primeiro.impresso_em, pagina_inicio=ordinal[id(primeiro)],
             pagina_fim=ordinal[id(ultimo)], titulo_aba=primeiro.titulo, motivos=motivos,
         )
-        internos = cabecalhos_de_abertura(texto, inicio, ultimo.fim)
-        ids = {
-            (x.tipo, x.numero)
-            for _, lin in internos
+        # Uma impressão pode trazer mais de um ato (medido: a EC MT 115/2023 vinha com o
+        # texto da LC MT 592/2017 dentro). Marcar não bastava: quem buscava a LC achava a
+        # EC. Corta-se em cada cabeçalho interno de ATO DIFERENTE, com contexto de abertura.
+        internos = [
+            (pos, lin, x)
+            for pos, lin in cabecalhos_de_abertura(texto, inicio, ultimo.fim)
             if (x := identidade_de_cabecalho(lin, ente_padrao=uf.lower())) is not None
-        }
-        if len(ids) > 1:
-            seg.motivos.append(MOTIVO_MULTIPLOS_ATOS)
-        segs.append(seg)
+        ]
+        cortes = []
+        atual = None
+        for pos, _lin, x in internos:
+            chave = (x.tipo, x.numero)
+            if atual is None:
+                atual = chave
+                continue
+            if chave != atual:
+                atual = chave
+                cortes.append(pos)
+        if cortes:
+            fronteiras = [inicio, *cortes, ultimo.fim]
+            for i, (a, b) in enumerate(zip(fronteiras, fronteiras[1:], strict=False)):
+                paginas = [ordinal[id(r)] for r in g if a <= r.inicio < b]
+                pedaco = Segmento(
+                    a, b, SINAL_IMPRESSAO if i == 0 else SINAL_CABECALHO, url=primeiro.url,
+                    impresso_em=primeiro.impresso_em,
+                    pagina_inicio=paginas[0] if paginas else seg.pagina_inicio,
+                    pagina_fim=paginas[-1] if paginas else seg.pagina_fim,
+                    titulo_aba=primeiro.titulo if i == 0 else None,
+                    motivos=[*dict.fromkeys([*motivos, MOTIVO_MULTIPLOS_ATOS])],
+                )
+                segs.append(pedaco)
+        else:
+            segs.append(seg)
         cursor = ultimo.fim
     segs.extend(_segmentar_regiao(texto, cursor, len(texto)))
 
@@ -485,6 +542,7 @@ def desmembrar(texto: str, uf: str) -> list[Segmento]:
     for s in fundidos:
         s.texto = limpar_mobiliario(texto[s.inicio : s.fim])
         _identidade(s, texto, uf)
+        _guarda_absorvedor(s)
 
     # Ficha do portal seguida do texto do mesmo ato (LEGIS/AC: "LEI ORDINÁRIA Nº
     # 1022…" e logo abaixo "LEI N. 1.022…") é UM ato: vizinhos com a mesma

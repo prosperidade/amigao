@@ -220,3 +220,22 @@ def test_identidade_ambigua_entre_uniao_e_uf_nao_escolhe(db_session):
     ctx = _ctx(pergunta="art. 1 da Lei 7/2001", objetivo="car", esferas=("federal", "estadual"), uf="GO")
     r = _buscar(db_session, ctx)
     assert r.vazio.razao == "contexto_insuficiente" and "diga a esfera" in r.vazio.detalhe
+
+
+def test_objetivo_provisorio_nao_filtra_mas_marca(db_session):
+    # Medido em 22/09: a Resolução CONAMA 369/2006 (intervenção em APP) ficava fora de
+    # uma pergunta de supressão porque o legado só a marcou como licenciamento.
+    prov = cs.fonte(db_session, "resolucao|br|conama|369|2006", objetivos=["licenciamento"])
+    db_session.query(type(prov)).filter_by(id=prov.id).update(
+        {"objetivos_origem": "demand_types_do_legado"})
+    v = cs.versao(db_session, prov, status="validado")
+    cs.trecho(db_session, v, cs.dispositivo(db_session, v, "3"), "intervenção em APP", 0)
+    curado = cs.fonte(db_session, "lei|br||9|2000", objetivos=["licenciamento"])
+    db_session.query(type(curado)).filter_by(id=curado.id).update({"objetivos_origem": "curadoria"})
+    vc = cs.versao(db_session, curado, status="validado")
+    cs.trecho(db_session, vc, cs.dispositivo(db_session, vc, "1"), "intervenção em APP", 0)
+    r = _buscar(db_session, _ctx(objetivo="supressao", uso="peca"))
+    achadas = {t.identidade_fonte for t in r.trechos}
+    assert prov.identidade in achadas          # provisório entra…
+    assert curado.identidade not in achadas    # …curado com outro objetivo, não
+    assert "objetivo_provisorio" in next(t for t in r.trechos if t.fonte_id == prov.id).marcas
