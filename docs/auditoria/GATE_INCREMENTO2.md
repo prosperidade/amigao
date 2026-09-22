@@ -1,9 +1,14 @@
 # Incremento 2 — estado do gate
 
 18/09/2026 · branch `feat/entrada-semantica-cartorario` · implementação em andamento.
-**Gate aberto.** Em 21/09 a extração com LLM e a persistência semântica foram comprovadas
-pela tela nos nove textos. Continuam abertos falecimento da Receita, espólio e inventariante
-(557/558). Ver [a medição de 21/09](#21092026--medição-real-dos-nove-textos-branch-featinc2-ancoras-offset-188).
+**Decisão do André, 21/09/2026 (madrugada): as provas de sistema (mecanismo) estão fechadas.**
+Extração LLM, persistência semântica, rejeição por item, campos sem suporte, reextração como
+nova versão e as quatro provas da Isis sobre o material real do #25 (falecimento, espólio,
+inventariante, referência a processo) foram comprovadas com o extrator no `gpt-5.6-luna`, 3/3
+execuções. Seguem sem material medido: duas fontes de conteúdo idêntico, baixa/aditivo com
+vínculo, quatro confrontos de área (todos exigem texto real do #23 ainda não exercitado nesse
+recorte) e a correção de observação pela tela (rejeição já comprovada; correção versionada
+não exercitada nesta medição). Ver a medição completa abaixo, de 21/09.
 
 ## 19/09/2026 — autorização e modelo atualizados
 
@@ -310,7 +315,7 @@ IA desta sessão (jobs 161–167): US$ 0,2306.
 | #25 | Inventariante declarado | ❌ | ❌ |
 | #25 | Falecimento declarado pela Receita | ❌ (offsets) | ❌ (data fora do trecho) |
 
-### Matriz obrigatória — estado após esta medição
+### Matriz obrigatória — estado após a medição final de 21/09
 
 | Prova | Estado |
 |---|---|
@@ -318,14 +323,15 @@ IA desta sessão (jobs 161–167): US$ 0,2306.
 | Transmitente não vira cliente/titular | COMPROVADO para Ivair/Elda (559). Sonia no R-11 não verificada |
 | Quatro matrículas independentes | COMPROVADO |
 | PJ preserva CNPJ | COMPROVADO: cadastro e Ficha |
-| Falecimento da Receita com fonte e tempo qualificado | ABERTO: o item cai por âncora em cada execução (offsets; depois data). Suficiência PENDENTE-ISIS |
-| Espólio, inventário e inventariante declarado | ABERTO: espólio rejeitado em cada execução (CPF próprio; depois trecho inexistente) |
-| Inventariante confirmado só com fundamento | ABERTO; nenhuma observação sai confirmada (código e medição) |
-| Duas fontes de conteúdo idêntico | ABERTO, não medido |
-| Baixa/aditivo preservam ato e vínculo | ABERTO, não medido |
+| Falecimento da Receita com fonte e tempo qualificado | **COMPROVADO** (skill reforçada + rodada de reparo, Luna, tenants 20–22 e 23/24/27): 3/3 execuções com falecimento, ano e data da consulta. Suficiência documental do dado segue PENDENTE-ISIS (é decisão de domínio, não de sistema) |
+| Espólio, inventário e inventariante declarado | **COMPROVADO**: 3/3 execuções com espólio, inventariante e — desde a modelagem em observação própria — a referência ao inventário vinculada ao espólio |
+| Referência a processo como observação própria, ancorada no número | **COMPROVADO** (nova prova, 21/09): 3/3 execuções, `ReferenciaProcesso` persistida com âncora e vínculo ao espólio quando declarado |
+| Inventariante confirmado só com fundamento | COMPROVADO estruturalmente: `estado_confirmacao` nunca sai `confirmado` da extração (schema); nenhuma observação saiu confirmada em nenhuma medição |
+| Duas fontes de conteúdo idêntico | ABERTO, não medido (exige material real do #23 fora do recorte 557/558) |
+| Baixa/aditivo preservam ato e vínculo | ABERTO, não medido (idem) |
 | Reclassificação invalida e exige revisão | COMPROVADO: 18/18 e 19/19 dependentes desatualizados |
-| Quatro confrontos de área | ABERTO, não medido |
-| Rejeição, correção versionada, recarga e nova sessão | PARCIAL: recarga e nova sessão comprovadas; rejeição e correção pela tela não exercitadas nesta medição |
+| Quatro confrontos de área | ABERTO, não medido (idem) |
+| Rejeição, correção versionada, recarga e nova sessão | PARCIAL: recarga, nova sessão e reextração/superação (#258) comprovadas; rejeição e correção pela tela (não pelo LLM) não exercitadas nesta medição |
 
 ### O que falta para fechar
 
@@ -447,3 +453,45 @@ registrado. Meta: 3/3 nas três provas da Isis no #25 (557 e 558, Luna fixo, mes
 - Custo real: US$ 0,0572 nas seis execuções (média US$ 0,0095, ~64 s). Contra a medição anterior
   do Luna (0/3), o custo por execução subiu de US$ 0,0082 para US$ 0,0095. Três execuções é
   amostra pequena.
+
+## 21/09/2026 (madrugada, continuação) — referência a processo como observação própria; 4/4 no #25
+
+Decisão do André: a referência a processo (inventário, judicial, administrativa) deixa de ser
+campo dentro da observação de espólio ou de contrato e vira **observação própria**, família
+contratual, com âncora no próprio número. `Espolio.inventario` passa a ser derivado por essa
+referência (natureza `inventario`, `sujeito` no espólio), nunca lido do trecho da parte.
+
+### Implementação (branch `feat/inc2-referencia-processo-conferencia`)
+
+- Schema: `ReferenciaProcesso` (predicado `referencia_processo`, `numero`, `natureza`,
+  `sujeito` opcional, trecho e offsets próprios). Removidos `ParteExtraida.inventario` e
+  `ContratoExtraido.referencia_processo_judicial`.
+- Persistência: cada referência é observação com fundamento próprio; o vínculo do espólio ao
+  inventário é resolvido nas referências com `sujeito` == chave do espólio, não mais lido do
+  trecho da parte.
+- Validação por item: número ausente do próprio trecho rejeita a observação (é o que ela
+  afirma); espécie fora da família contratual rejeita; `sujeito` que não referencia parte
+  conhecida rejeita, com a mesma cascata de dependência das demais observações.
+- Skills, recibo de medição (`incremento2_semantic_receipt.py`) e roteiro da Isis
+  (`increment2-semantic-proof.mjs`) atualizados com a nova prova `process_reference`.
+
+### Tela de conferência (sessão com a Isis, casos #23 e #25)
+
+- `GET /evidence/cases/{id}/documents/{doc}/conferencia`: texto da versão corrente do
+  documento e cada observação com seu span `[início, fim)`, só quando a âncora bate contra o
+  texto atual (mesma `documento_versao_id` e o recorte confere com o literal gravado).
+- Página nova: documento de um lado com os trechos de origem destacados, observações do
+  outro, clique sincroniza a seleção nos dois lados. Link a partir do painel de documentos
+  semânticos (`/processes/{id}/documentos-observacoes?documento={doc}`).
+
+### Medição (tenants dev 23, 24, 27; Luna fixo; mesmo protocolo do #25)
+
+| Execução | Falecimento | Espólio | Inventariante | **Referência a processo** | Rejeitadas | Reparo | US$ | s |
+|---|---|---|---|---|---:|---|---:|---:|
+| P1 | ✅ | ✅ | ✅ | ✅ | 0 | não acionado | 0,0097 | 91 |
+| P2 | ✅ | ✅ | ✅ | ✅ | 1 | 1 tentado (recuperou) | 0,0113 | 117 |
+| P3 | ✅ | ✅ | ✅ | ✅ | 0 | não acionado | 0,0105 | 106 |
+
+**3/3 nas quatro provas da Isis**, incluindo a referência a processo nova. O vínculo do
+inventário ao espólio (`inventory_reference_on_estate`) também fechou 3/3. Custo real:
+US$ 0,0315 nas três execuções.
