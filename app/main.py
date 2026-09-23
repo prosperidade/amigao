@@ -32,6 +32,7 @@ from app.api.v1 import (
     legislation,
     legislation_alerts,
     messaging,
+    motor_juridico,
     processes,
     properties,
     proposals,
@@ -185,6 +186,8 @@ app.include_router(legislation.router, prefix=f"{settings.API_V1_STR}/legislatio
 app.include_router(legislation_alerts.router, prefix=f"{settings.API_V1_STR}/legislation", tags=["Alertas Legislativos"])
 app.include_router(knowledge.router, prefix=f"{settings.API_V1_STR}/knowledge", tags=["Knowledge Catalog (RAG)"])
 app.include_router(acervo_normativo.router, prefix=f"{settings.API_V1_STR}/acervo-normativo", tags=["Acervo normativo (ADR-075)"])
+app.include_router(motor_juridico.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Motor jurídico (ADR-073)"])
+app.include_router(motor_juridico.regras_router, prefix=f"{settings.API_V1_STR}/motor-juridico", tags=["Motor jurídico (ADR-073)"])
 app.include_router(waitlist.router, prefix=f"{settings.API_V1_STR}/waitlist", tags=["Waitlist (Regente)"])
 app.include_router(websocket_router, tags=["Tempo Real"])
 # Também sob o prefixo /api/v1 (2026-06-01): em produção o front deriva a URL do

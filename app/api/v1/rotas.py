@@ -399,10 +399,19 @@ def editar_passo(
 def remover_passo(
     rota_id: int,
     passo_id: int,
+    motivo: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> None:
     passo = _get_passo_or_404(db, rota_id, passo_id, current_user.tenant_id)
+    motivo = (motivo or "").strip() or None
+    if passo.origem == RotaPassoOrigem.motor and motivo is None:
+        # ADR-073 §6: passo de regra homologada sai da Rota com motivo — ex.: a
+        # norma que o fundamenta não está no catálogo e a curadoria não a trará.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passo do motor jurídico só sai da rota com motivo.",
+        )
     # Apagar passo é irreversível e era MUDO — na reconstituição de 30/07 dois
     # passos do caso 15 tinham sumido e não havia como saber quem, quando nem
     # qual era o conteúdo. O que sai da rota fica na trilha.
@@ -417,6 +426,7 @@ def remover_passo(
             f"passo {passo.id} · ordem {passo.ordem} · origem "
             f"{passo.origem.value if passo.origem else '—'} · status "
             f"{passo.status.value if passo.status else '—'}"
+            + (f" · motivo: {motivo}" if motivo else "")
         ),
     )
     # Lápide, não DELETE: a linha fica com a `dedupe_key` ocupada, e é isso que
@@ -489,6 +499,17 @@ def validar_passo(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Classifique o passo (item de proposta ou direção) antes de validar.",
         )
+    if passo.origem == RotaPassoOrigem.motor:
+        # ADR-073 §7: passo do motor só valida com fundamento por ID, reverificado
+        # AGORA — a fonte pode ter sido devolvida ou bloqueada desde a geração.
+        from app.services.motor_juridico.fundamento import verificar_passo  # noqa: PLC0415
+
+        falhas = verificar_passo(db, passo, data_referencia=datetime.now(UTC).date())
+        if falhas:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Fundamento do passo não verificado: " + "; ".join(falhas),
+            )
     passo.status = RotaPassoStatus.validado
 
     # Transições da rota: primeira validação sai de 'proposta' para 'em_validacao';
@@ -544,6 +565,19 @@ def fechar_rota(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{len(pendentes)} passo(s) ainda não validado(s). Valide todos antes de fechar.",
         )
+    # ADR-073 §5: alerta crítico do motor não impede avanço, mas a Rota não fecha
+    # sem a ciência registrada — da execução CORRENTE do caso.
+    from app.services.motor_juridico.avaliador import alertas_sem_ciencia, ultima_execucao  # noqa: PLC0415
+
+    execucao = ultima_execucao(db, process_id=rota.process_id, tenant_id=current_user.tenant_id)
+    if execucao is not None:
+        sem_ciencia = alertas_sem_ciencia(db, execucao_id=execucao.id, tenant_id=current_user.tenant_id)
+        if sem_ciencia:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(f"{len(sem_ciencia)} alerta(s) crítico(s) do motor sem ciência registrada "
+                        f"(avaliações {[a.id for a in sem_ciencia]}). Registre a ciência antes de fechar."),
+            )
 
     rota.status = RotaStatus.validada
     rota.validated_by = current_user.id

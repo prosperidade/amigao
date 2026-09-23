@@ -46,6 +46,10 @@ class RotaPassoOut(BaseModel):
     # NULL é legítimo (passo manual, passo de rito, ou passo anterior ao ADR).
     origem_issue_id: int | None = None
     origem_acao_id: int | None = None
+    # ADR-073 §7 — passo do motor: avaliação que o gerou e fundamento por ID.
+    origem_avaliacao_id: int | None = None
+    fundamento_fonte_versao_id: int | None = None
+    fundamento_dispositivo_id: int | None = None
     status: RotaPassoStatus
     created_at: datetime | None
     updated_at: datetime | None

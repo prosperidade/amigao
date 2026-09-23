@@ -7,7 +7,7 @@
 
 export type RotaStatus = 'proposta' | 'em_validacao' | 'validada' | 'desatualizada';
 export type RotaPassoClassificacao = 'item_proposta' | 'direcao';
-export type RotaPassoOrigem = 'ia' | 'manual';
+export type RotaPassoOrigem = 'ia' | 'manual' | 'motor';
 export type RotaPassoStatus = 'proposto' | 'validado';
 
 /** SourceRef do contrato #70 (`stage_output.py`). Leitura tolerante. */
@@ -34,6 +34,10 @@ export interface RotaPasso {
   classificacao: RotaPassoClassificacao | null;
   origem: RotaPassoOrigem;
   origem_manual_nota: string | null;
+  /** ADR-073: passo do motor jurídico — avaliação e fundamento por ID. */
+  origem_avaliacao_id?: number | null;
+  fundamento_fonte_versao_id?: number | null;
+  fundamento_dispositivo_id?: number | null;
   status: RotaPassoStatus;
   created_at: string | null;
   updated_at: string | null;
