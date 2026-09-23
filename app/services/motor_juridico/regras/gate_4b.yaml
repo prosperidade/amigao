@@ -1,0 +1,242 @@
+# Tradução formal das regras do gate do Incremento 4b (ADR-073 §13).
+#
+# A planilha da Ísis é a fonte de AUTORIA; esta tradução é da engenharia e nasce
+# `rascunho`. Só avalia depois de homologada por quem tem o papel `homologar_regra`
+# (Q-ISIS-22) e de entrar num conjunto ativo. Nenhum LLM traduziu nem ativa regra.
+#
+# `fundamento.fonte` é a identidade canônica do ADR-075 (tipo|ente|orgao|numero|ano),
+# curada à mão: o mapeamento automático NOR-* → identidade errou o órgão de todas as
+# IN da SEMAD ("semadgosemad"). `origem_dispositivo`:
+#   - matriz              → o artigo está na planilha;
+#   - proposta_engenharia → a planilha não traz artigo; a engenharia propôs e a Ísis homologa.
+#
+# `recorte` declara quando a tradução cobre só um ramo do texto da matriz.
+
+planilhas:
+  car_v05:
+    arquivo: 1.Matriz_Regulatoria_CAR_Preenchida_Federal_GO_SP_MG_MT_v05_2026-08-05.xlsx
+    sha256: 3a1615a8786a9f82b75b5661743901311a42d8344e41e234527d2b9d056bc344
+    versao_planilha: v05
+    matriz: "1"
+    aba: 06_Regras_Negocio
+  fundiaria_v03:
+    arquivo: Matriz_Fundiaria_Cadastral_Federal_GO_SP_MG_MT_Preenchida_v03_2026-08-05.xlsx
+    pacote: Pacote_Matrizes_Regente_v03_2026-08-05.zip
+    sha256: 903232f96d74dc63860f134540ae6c9ec0b920ae8779c3bda000a37cd464e470
+    versao_planilha: v03
+    matriz: "2"
+    aba: 12_Regras_Regente
+
+regras:
+  - rule_id: REG-BR-CAR-001
+    planilha: car_v05
+    linha: 5
+    eixo: CAR (Regulatória)
+    familia: car
+    descricao: Todo imóvel rural deve possuir inscrição no CAR.
+    texto_condicao: Imóvel classificado como rural e CAR não localizado
+    texto_resultado: Gerar pendência crítica
+    mensagem: CAR não localizado. Verifique inscrição, duplicidade ou migração antes de avançar.
+    severidade: critica
+    decisao_profissional: {matriz: "Não"}
+    aplicabilidade: {ufs: null, esferas: null, objetivos: null}
+    condicao:
+      todos:
+        - {fato: imovel.natureza, op: eq, valor: rural}
+        - {nao: {fato: car.no_dossie, op: verdadeiro}}
+    consequencia:
+      efeitos:
+        - tipo: passo_rota
+          titulo: Verificar inscrição no CAR e inscrever o imóvel
+          descricao: >-
+            CAR não localizado nos autos. Verificar inscrição, duplicidade ou migração
+            antes de avançar; não confundir ausência de acesso com ausência de cadastro.
+          orgao: null
+          fase: cadastro_ambiental
+    fundamento:
+      fonte: lei|br||12651|2012
+      artigo: "29"
+      paragrafo: null
+      origem_dispositivo: matriz
+      chave_planilha: NOR-FED-001
+      dispositivo_planilha: Art. 29
+
+  - rule_id: REG-BR-CAR-002
+    planilha: car_v05
+    linha: 6
+    eixo: CAR (Regulatória)
+    familia: car
+    descricao: O CAR não constitui título de propriedade ou posse.
+    texto_condicao: Usuário tenta concluir titularidade apenas pelo CAR
+    texto_resultado: >-
+      Emitir alerta crítico: o CAR não comprova domínio ou posse. Solicitar matrícula
+      ou instrumento jurídico e registrar a decisão do consultor.
+    mensagem: O CAR é declaratório ambiental e não comprova domínio ou posse.
+    severidade: critica
+    decisao_profissional: {matriz: "Não"}
+    recorte: >-
+      "Concluir titularidade apenas pelo CAR" formalizado como o retrato que torna essa
+      conclusão possível: há CAR nos autos e nenhuma matrícula.
+    aplicabilidade: {ufs: null, esferas: null, objetivos: null}
+    condicao:
+      todos:
+        - {fato: car.no_dossie, op: verdadeiro}
+        - {fato: dominio.matriculas_no_dossie, op: eq, valor: 0}
+    consequencia:
+      efeitos:
+        - tipo: alerta_critico
+          titulo: O CAR não comprova domínio ou posse
+          descricao: >-
+            Os autos têm CAR e nenhuma matrícula. O CAR é declaratório ambiental: a
+            titularidade exige trilha dominial própria.
+        - tipo: coleta
+          titulo: Solicitar matrícula ou instrumento jurídico do imóvel
+          descricao: Trilha dominial própria; registrar a decisão do consultor.
+          orgao: null
+          fase: dominio
+    fundamento:
+      fonte: lei|br||12651|2012
+      artigo: "29"
+      paragrafo: null
+      origem_dispositivo: matriz
+      chave_planilha: NOR-FED-001
+      dispositivo_planilha: Art. 29
+
+  - rule_id: REG-BR-CAR-007
+    planilha: car_v05
+    linha: 11
+    eixo: CAR (Regulatória)
+    familia: car
+    descricao: Multipartes, múltiplas matrículas e posses devem ser explicitamente qualificadas.
+    texto_condicao: AGI multiparte ou mais de um documento dominial
+    texto_resultado: Solicitar esclarecimento e mapear componentes
+    mensagem: >-
+      Informe se os componentes correspondem a um imóvel descontínuo, múltiplas
+      matrículas ou cadastros distintos.
+    severidade: alta
+    decisao_profissional: {matriz: "Sim"}
+    recorte: >-
+      Só o ramo "mais de um documento dominial" (matrículas nos autos); AGI multiparte
+      depende do motor geométrico e fica fora do vocabulário do gate.
+    aplicabilidade: {ufs: null, esferas: null, objetivos: null}
+    condicao: {fato: dominio.matriculas_no_dossie, op: ge, valor: 2}
+    consequencia:
+      efeitos:
+        - tipo: coleta
+          titulo: Mapear os componentes do imóvel (matrículas, posses e cadastros)
+          descricao: >-
+            Informar se os componentes correspondem a um imóvel descontínuo, múltiplas
+            matrículas ou cadastros distintos. Evita unificação indevida.
+          orgao: null
+          fase: dominio
+    fundamento:
+      fonte: in|br|mma|2|2014
+      artigo: "2"
+      paragrafo: null
+      origem_dispositivo: proposta_engenharia
+      chave_planilha: NOR-FED-004
+      dispositivo_planilha: Dados do imóvel
+
+  - rule_id: REG-FUN-002
+    planilha: fundiaria_v03
+    linha: 6
+    eixo: Fundiária/Cadastral
+    familia: fundiaria
+    descricao: CCIR ausente, vencido ou com taxa não quitada gera ação de emissão/regularização.
+    texto_condicao: CCIR ausente, vencido ou taxa não quitada.
+    texto_resultado: Gerar ação para emissão/regularização.
+    mensagem: O CCIR não está válido para o exercício consultado.
+    severidade: alta
+    decisao_profissional: {matriz: "Não"}
+    recorte: >-
+      Só o ramo "CCIR ausente" nos autos; vencimento e quitação da taxa não estão no
+      vocabulário do gate.
+    aplicabilidade: {ufs: null, esferas: null, objetivos: null}
+    condicao:
+      todos:
+        - {fato: imovel.natureza, op: eq, valor: rural}
+        - {nao: {fato: ccir.no_dossie, op: verdadeiro}}
+    consequencia:
+      efeitos:
+        - tipo: passo_rota
+          titulo: Emitir ou regularizar o CCIR do imóvel
+          descricao: CCIR ausente dos autos. Registrar exercício e quitação.
+          orgao: INCRA
+          fase: cadastro_fundiario
+    fundamento:
+      fonte: lei|br||5868|1972
+      artigo: "2"
+      paragrafo: null
+      origem_dispositivo: proposta_engenharia
+      chave_planilha: Orientações INCRA
+      dispositivo_planilha: null
+
+  - rule_id: REG-FUN-012
+    planilha: fundiaria_v03
+    linha: 16
+    eixo: Fundiária/Cadastral
+    familia: fundiaria
+    descricao: Pessoa na posse que não corresponde ao titular indica cessão, sucessão ou ocupação.
+    texto_condicao: Pessoa na posse não corresponde ao beneficiário/titular do instrumento.
+    texto_resultado: Classificar possível cessão, sucessão ou ocupação irregular.
+    mensagem: A pessoa que ocupa ou negociou a área não corresponde ao beneficiário registrado.
+    severidade: critica
+    decisao_profissional: {matriz: "Sim/jurídica"}
+    recorte: >-
+      Disparada só pelo falecimento declarado do titular, um gatilho suficiente de
+      sucessão. Os demais ramos (cessão, ocupação) ficam fora do vocabulário do gate.
+    aplicabilidade: {ufs: null, esferas: null, objetivos: null}
+    condicao: {fato: titular.falecimento_declarado, op: verdadeiro}
+    consequencia:
+      efeitos:
+        - tipo: alerta_critico
+          titulo: Titular com falecimento declarado — classificar possível sucessão
+          descricao: >-
+            Quem responde pelo imóvel não é o titular registrado. Classificar cessão,
+            sucessão ou ocupação é decisão jurídica.
+        - tipo: coleta
+          titulo: Reunir a prova da sucessão (óbito, inventário ou partilha)
+          descricao: O comprovante da Receita não sustenta data, sucessão nem inventário.
+          orgao: null
+          fase: dominio
+    fundamento:
+      fonte: lei|br||10406|2002
+      artigo: "1784"
+      paragrafo: null
+      origem_dispositivo: proposta_engenharia
+      chave_planilha: Regras de titulação
+      dispositivo_planilha: null
+
+  - rule_id: REG-GO-CAR-001
+    planilha: car_v05
+    linha: 15
+    eixo: CAR (Regulatória)
+    familia: car
+    descricao: Em Goiás, o sistema operacional atual é o SIGCAR integrado ao SICAR.
+    texto_condicao: UF = GO
+    texto_resultado: Direcionar ao SIGCAR/Portal Ambiental
+    mensagem: Use o SIGCAR para inscrição, complementação, retificação e acompanhamento.
+    severidade: alta
+    decisao_profissional: {matriz: "Não"}
+    recorte: Acrescenta imóvel rural à condição "UF = GO", porque o CAR só existe para ele.
+    aplicabilidade: {ufs: [GO], esferas: null, objetivos: null}
+    condicao:
+      todos:
+        - {fato: caso.uf, op: eq, valor: GO}
+        - {fato: imovel.natureza, op: eq, valor: rural}
+    consequencia:
+      efeitos:
+        - tipo: passo_rota
+          titulo: Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)
+          descricao: >-
+            Inscrição, complementação, retificação e acompanhamento pelo SIGCAR; não
+            orientar exclusivamente pela Central nacional.
+          orgao: SEMAD-GO
+          fase: cadastro_ambiental
+    fundamento:
+      fonte: in|go|semad|22|2025
+      artigo: "1"
+      paragrafo: null
+      origem_dispositivo: proposta_engenharia
+      chave_planilha: NOR-GO-008
+      dispositivo_planilha: IN SEMAD 22/2025

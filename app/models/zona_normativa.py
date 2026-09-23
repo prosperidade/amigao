@@ -314,7 +314,7 @@ class PapelCuradoria(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "papel IN ('validar_fonte_normativa','curar_corpus')", name="ck_papel_curadoria_papel"
+            "papel IN ('validar_fonte_normativa','curar_corpus','homologar_regra')", name="ck_papel_curadoria_papel"
         ),
         Index("ix_papel_curadoria_user", "user_id"),
         Index("ix_papel_curadoria_concedido_por_id", "concedido_por_id"),

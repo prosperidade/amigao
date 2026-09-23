@@ -26,6 +26,15 @@ from app.models.legislation import LegislationDocument
 from app.models.legislation_alert import LegislationAlert
 from app.models.macroetapa import MacroetapaChecklist
 from app.models.matricula import Matricula
+from app.models.motor_juridico import (
+    AvaliacaoRegra,
+    CienciaAlerta,
+    ConjuntoRegras,
+    ConjuntoRegrasItem,
+    ExecucaoMotor,
+    Regra,
+    RegraVersao,
+)
 from app.models.pre_cadastro import PreCadastro
 from app.models.process import Process
 from app.models.process_decision import ProcessDecision

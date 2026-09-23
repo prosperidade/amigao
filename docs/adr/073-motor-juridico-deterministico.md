@@ -233,9 +233,18 @@ do gate e entra **por família**, com importador recorrente.
 | REG-BR-CAR-001 | `imovel.natureza = rural` e não `car.no_dossie` | `passo_rota`: verificar inscrição e inscrever no CAR | Lei 12.651/2012, art. 29 (matriz) |
 | REG-BR-CAR-002 | `car.no_dossie` e `dominio.matriculas_no_dossie = 0` | `alerta_critico` + `coleta` da matrícula | Lei 12.651/2012, art. 29 (matriz) |
 | REG-BR-CAR-007 | `dominio.matriculas_no_dossie ≥ 2` | `coleta`: mapear componentes do imóvel | IN MMA 2/2014, art. 2º (proposto; matriz diz "Dados do imóvel") |
-| REG-FUN-002 | `imovel.natureza = rural` e não `ccir.no_dossie` | `passo_rota`: emitir/regularizar o CCIR | Lei 5.868/1972, art. 22 (proposto; matriz diz "Orientações INCRA") |
-| REG-FUN-012 | `titular.falecimento_declarado` | `passo_rota`: regularizar a representação do espólio | fonte não resolvida no catálogo (prova do caminho "norma ausente") |
+| REG-FUN-002 | `imovel.natureza = rural` e não `ccir.no_dossie` | `passo_rota`: emitir/regularizar o CCIR | Lei 5.868/1972, art. 2º (proposto; matriz diz "Orientações INCRA") |
+| REG-FUN-012 | `titular.falecimento_declarado` | `alerta_critico` (possível sucessão: classificar cessão, sucessão ou ocupação) + `coleta` da prova da sucessão | Código Civil, art. 1.784 (proposto; matriz diz "Regras de titulação") — **ausente do catálogo** (prova do caminho "norma ausente") |
 | REG-GO-CAR-001 | `caso.uf = GO` e `imovel.natureza = rural` | `passo_rota`: operar o CAR no SIGCAR (SEMAD-GO) | IN SEMAD 22/2025 — **ausente do catálogo** |
+
+**Formalização parcial, declarada.** Quatro das seis traduções cobrem só um ramo do texto da
+matriz, e o YAML diz qual: REG-BR-CAR-002 ("usuário tenta concluir titularidade apenas pelo CAR")
+vira "há CAR e nenhuma matrícula nos autos", o retrato que torna essa conclusão possível;
+REG-FUN-002 cobre o CCIR **ausente**, não o vencido nem a taxa não quitada (fatos fora do
+vocabulário do gate); REG-FUN-012 ("pessoa na posse não corresponde ao titular") dispara pelo
+**falecimento declarado do titular**, um gatilho suficiente de sucessão, e não pelos demais;
+REG-GO-CAR-001 ("UF = GO") acrescenta imóvel rural, porque o CAR só existe para ele. A
+homologação da Ísis (Q-ISIS-22) decide se cada recorte serve.
 
 **Prova:** positivo, negativo, desconhecido, não aplicável e norma ausente. Regras aplicadas aos três
 casos em dev, com percurso autenticado até a Rota fechada com fundamento por ID em todo passo

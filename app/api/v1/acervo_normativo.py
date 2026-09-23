@@ -306,7 +306,7 @@ def validar_lote(documento_id: int, body: LoteRequest, db: Db, user: UserDep):
 
 class ConcederRequest(BaseModel):
     user_id: int
-    papel: Literal["validar_fonte_normativa", "curar_corpus"]
+    papel: Literal["validar_fonte_normativa", "curar_corpus", "homologar_regra"]
     area: str = Field(min_length=1, max_length=20)
     motivo: str | None = None
 
