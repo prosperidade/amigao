@@ -5,12 +5,15 @@
 | Frente | Estado |
 |---|---|
 | Incrementos 2 e 3 | **provados em dev** (provas de 21/09 e ADR-072) |
-| Leitura semântica em produção | **cinco das seis provas fechadas** (23/09); quatro matrículas pendente — fecha pela #271, não por repetição |
+| Leitura semântica em produção | **as seis provas fechadas** (23/09): 984 observações `extrator_semantico`, 897 objetos, 203 em versão > 1, zero sem âncora. As quatro matrículas saíram independentes (3.181, 3.313, 3.673, 4.387) |
 | Incremento 4a (zona normativa) | **encerrada** (#201); recall@5 **0,892 (33/37)**, portão exige 34 ⇒ **Legislação segue desligada**; 3 alvos com a Ísis (Q-ISIS-21) |
 | Incremento 4b | **a abrir** |
 | Backup de produção | **ativo no pré-deploy**: dump do schema `public` no R2 antes de toda migration, retenção de 30 dias com mínimo de 10 (#197, #200, #202) |
 | Imagem | o CI **constrói** e pergunta ao manifesto dentro dela (#206) |
-| Dívidas | abertas até **#271**; próximo número livre **272** |
+| Dívidas | abertas até **#272**; próximo número livre **273** |
+
+**A sexta prova fechou na madrugada, por força bruta:** 2 h 20 e US$ 0,9172 no dia, com três jobs
+acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#272**).
 
 **Primeira coisa de amanhã:** a **#271** como frente própria — ADR curto do fatiamento por ato
 registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de chamada declarado, com

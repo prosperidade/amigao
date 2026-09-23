@@ -27,13 +27,28 @@
     o teto existe para proteger, então tende a cortar a extração no meio.
   - **Decisão do André (22/09): sem ajuste de `AI_TIMEOUT_SECONDS`.** Aumentar o tempo mascara o
     tamanho da chamada e encarece o documento, em vez de resolver.
+  - **Desfecho (23/09, madrugada):** as quatro tarefas por documento terminaram sozinhas e a sexta
+    prova fechou — **por força bruta**: 2 h 20 de relógio e **US$ 0,9172** no dia, com um ciclo de
+    timeout e truncagem por matrícula grande. A dívida não cai: fatiar por ato registral é o que
+    torna tempo, custo e tamanho de chamada previsíveis.
   - **Não é caso de retry** (decisão do André): repetir a mesma chamada gigante repete a falha.
     **Desenho:** fatiar a matrícula **por ato registral (R/AV)** antes do extrator, com âncora por
     fragmento — cada ato vira uma chamada do tamanho do ato, e a âncora aponta o fragmento, não o
     documento inteiro.
   - **Origem:** rodada autorizada de 23/09; log do worker e `ai_jobs` 1533.
 
-> **PRÓXIMO NÚMERO LIVRE: 272.** (#270 e #271 abertas pela leitura semântica em produção, 23/09.)
+- **#272 — o teto de custo é por chamada, não por job (aberta):**
+  - O CLAUDE.md declara `AI_MAX_COST_PER_JOB_USD` como *hard limit* por job, mas a checagem em
+    `ai_gateway.complete()` (`ai_gateway.py:447-463`) compara o custo **daquela chamada** com o teto.
+    Um documento que exige dezenas de chamadas soma muito acima sem nenhuma checagem reprovar.
+  - **Medido em produção (23/09):** três jobs do extrator acima do teto de US$ 0,10 — **1535
+    (US$ 0,26)**, **1536 (US$ 0,3622)** e **1537 (US$ 0,146)**; total do dia **US$ 0,9172**.
+  - **Correção:** acumular o custo por job (o `ai_job` já existe e é o escopo natural) e reprovar
+    quando o acumulado passar do teto, com a chamada que estourou nomeada. Corrigir junto a redação
+    do CLAUDE.md, que hoje descreve uma garantia que o código não dá.
+  - **Origem:** rodada autorizada de #23 e #25; `ai_jobs` em produção.
+
+> **PRÓXIMO NÚMERO LIVRE: 273.** (#270 a #272 abertas pela leitura semântica em produção, 23/09.)
 
 ## Pulso 22/09/2026 — reextração em produção: a cadeia não extraiu (#23 e #25)
 

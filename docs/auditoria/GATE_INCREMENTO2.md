@@ -675,7 +675,7 @@ rejeições nomeadas.
 | PJ preserva CNPJ | **COMPROVADA** | pessoa 18 (ISIS TERRA…ME, `pj`) com CNPJ 59.508.731/0001-95; ELODI com 29.091.958/0001-17 |
 | Falecimento, espólio, inventariante, referência a processo | **COMPROVADA** | "TITULAR FALECIDO" (doc 557); 1 `espolio`; inventariante MÁRCIO ANTONIO NUNES com trecho de fundamento (doc 558); inventário 5286960-36.2022.8.09.0051 como **observação própria** |
 | Inventariante confirmado só com fundamento | **COMPROVADA** | os 16 `pessoa_identificador` estão `declarado`; nenhum promovido a `confirmado` |
-| Quatro matrículas independentes | **PENDENTE — não fecha por repetição** | a rodada por documento (23/09) mostrou que o doc 548, de 57 mil caracteres, cai no mesmo ciclo do 547: Luna estoura, Gemini trunca, a repetição custa US$ 0,078 contra teto de US$ 0,10 por job. Fecha pelo desenho da **#271** (fatiar por ato registral), não por nova tentativa |
+| Quatro matrículas independentes | **COMPROVADA** (23/09, madrugada) | as quatro saíram independentes: **3.181** (926,3654 ha), **3.313** (725,4663 ha), **3.673** (212,3553 ha) e **4.387** (316,2053 ha), cada uma com número, área e serventia próprios, sem fusão. Ver a seção seguinte: fechou, mas ao preço que motiva a #271 e a #272 |
 
 Gate de família funcionando em produção: duas observações **rejeitadas com
 motivo** — "Objeto contratual não sustentado pela espécie documental" e
@@ -690,3 +690,42 @@ motivo** — "Objeto contratual não sustentado pela espécie documental" e
   que separa uma da outra é `content->'attributes'->>'method'`.
 - Dívidas abertas nesta medição: **#270** (CPF não normalizado duplica pessoa) e
   **#271** (matrícula grande em chamada única derruba a extração).
+
+
+## 23/09/2026 (madrugada) — a sexta prova fecha, e cobra o preço
+
+As quatro tarefas por documento do #23 terminaram sozinhas, sem novo disparo:
+execuções `completed` às 01:48, 02:24 e 02:39, jobs 1535 a 1538.
+
+**Estado final da leitura em produção:** **984 observações `extrator_semantico`**,
+897 objetos distintos, **203 em versão > 1** (a releitura superou a anterior em vez
+de duplicar) e **zero sem âncora**. Por documento: 546=57, 547=225, 548=370,
+549=158, 550=121, 551=8, 557=8, 558=15, 559=14, 561=8.
+
+**Quatro matrículas independentes — COMPROVADA.** Números, áreas e serventias
+próprios, sem fusão entre elas:
+
+| Documento | Matrícula | Área declarada |
+|---|---|---|
+| 547 | 3.181 | 926,3654 ha |
+| 548 | 3.313 | 725,4663 ha |
+| 549 | 3.673 | 212,3553 ha |
+| 550 | 4.387 | 316,2053 ha |
+
+**O preço.** O extrator gastou **US$ 0,9172** em produção nesse dia, e três jobs
+passaram do teto declarado de US$ 0,10: **1535 (US$ 0,26)**, **1536 (US$ 0,3622)**
+e **1537 (US$ 0,146)**, todos com a cadeia `gemini/gemini-3.7-flash,gpt-5.6-luna`.
+Isso não é violação de regra — é a regra sendo outra coisa: o teto é conferido
+**por chamada** dentro de `ai_gateway.complete()`, nunca pelo acumulado do job
+(`ai_gateway.py:447-463`). Um documento que exige dezenas de chamadas passa longe
+do teto sem nenhuma checagem reprovar. Dívida **#272**.
+
+**O que isso faz com a #271:** não a cancela, confirma. A prova fechou por força
+bruta — duas horas e vinte de relógio, US$ 0,92 e um ciclo de timeout e truncagem
+a cada matrícula grande. Fatiar por ato registral continua sendo o desenho que
+torna isso previsível em tempo, custo e tamanho de chamada.
+
+### Estado do gate
+
+- **Produção: as seis provas de leitura fechadas.**
+- Dívidas desta medição: **#270**, **#271** e **#272**.
