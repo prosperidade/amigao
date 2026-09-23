@@ -1,5 +1,38 @@
 # Estado Atual — Regente Ambiental
 
+**HANDOFF — fim do dia 22/09/2026.** Onde tudo está, para a retomada:
+
+| Frente | Estado |
+|---|---|
+| Incrementos 2 e 3 | **provados em dev** (provas de 21/09 e ADR-072) |
+| Leitura semântica em produção | **as seis provas fechadas** (23/09): 984 observações `extrator_semantico`, 897 objetos, 203 em versão > 1, zero sem âncora. As quatro matrículas saíram independentes (3.181, 3.313, 3.673, 4.387) |
+| Incremento 4a (zona normativa) | **encerrada** (#201); recall@5 **0,892 (33/37)**, portão exige 34 ⇒ **Legislação segue desligada**; 3 alvos com a Ísis (Q-ISIS-21) |
+| Incremento 4b | **a abrir** |
+| Backup de produção | **ativo no pré-deploy**: dump do schema `public` no R2 antes de toda migration, retenção de 30 dias com mínimo de 10 (#197, #200, #202) |
+| Imagem | o CI **constrói** e pergunta ao manifesto dentro dela (#206) |
+| Dívidas | abertas até **#272**; próximo número livre **273** |
+
+**A sexta prova fechou na madrugada, por força bruta:** 2 h 20 e US$ 0,9172 no dia, com três jobs
+acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#272**).
+
+**Primeira coisa de amanhã:** a **#271** como frente própria — ADR curto do fatiamento por ato
+registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de chamada declarado, com
+prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
+pendente; a última tarefa do #23 foi deixada terminar sozinha.
+
+**Pulso 23/09/2026 — leitura semântica em produção, cinco provas fechadas.** Segunda rodada
+autorizada nos casos #23 e #25 com o extrator no `gpt-5.6-luna`: **105 observações
+`extrator_semantico`**, todas ancoradas na versão corrente do documento (fragmento + versão, zero
+órfãs). Comprovadas em produção: escritura não prova estado atual; transmitente não vira cliente
+nem titular; PJ preserva CNPJ; falecimento, espólio, inventariante e referência a processo;
+inventariante só com fundamento. **Pendente:** quatro matrículas independentes — o #23 leu 2 de 6
+documentos porque a matrícula de 82 mil caracteres esgotou Luna e Gemini na mesma chamada
+(dívida #271). O caminho até aqui custou três consertos no mesmo dia: a cadeia OCR→extrator não
+entregava o caso e a falha era muda (#204, dívida #268), a ontologia não ia na imagem e o
+`.dockerignore` derrubou o build (#205), e o CI passou a construir a imagem e a perguntar a ela se
+serve (#206, dívida #269). Dívidas novas: **#270** (CPF não normalizado duplica pessoa) e **#271**.
+
+
 **Pulso 22/09/2026 (noite) — segunda rodada do Incremento 4a.** #201 mergeado (9972a58). Dos cinco erros de ranking: dois eram corte (segmento absorvedor de 565 mil caracteres e impressão com dois atos) e dois eram o filtro de objetivo cortando fonte certa por classificação provisória; o ramo lexical passou a usar termo raro, não número/sigla. **recall@5 0,784 → 0,892** (33/37), controle negativo 100%, groundedness 100%; o portão de 0,9 exige 34, então a **Legislação segue desligada**. Sobram 3 alvos de sonda para a Ísis (**Q-ISIS-21**) e 1 falha real (dispositivo curto, dívida #266). Catálogo reconstruído no dev: 878 fontes — conciliação com as 258–449 do ADR está no registro (granularidade: 71 emendas constitucionais, o DOE-MT inteiro dentro de duas coletâneas, atos federais impressos em coletânea estadual; duplicata real são 20 textos, dívida #267). Fechados no caminho: `TRUNCATE` burlava o append-only das 20 tabelas imutáveis e 12 FKs estavam sem índice (migration `074zn001`). Dívidas #260–#267.
 
 **Pulso 22/09/2026 — Incremento 4a (zona normativa, ADR-075 + A1–A5) em PR rascunho, só dev.**

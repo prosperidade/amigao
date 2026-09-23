@@ -1,5 +1,55 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 23/09/2026 — leitura semântica em produção (segunda rodada, #23 e #25)
+
+- **#270 — CPF não normalizado duplica pessoa (aberta):**
+  - Medido na rodada de 23/09 em produção: `JOBSON ROSA DAS MERCES` virou **4 linhas** em `pessoa`
+    e `ELODI AGROPECUÁRIA` virou **2**, porque o mesmo CPF entrou em formatos diferentes —
+    `633.123.791-72`, `633.123.791 -72` (espaço antes do dígito, do OCR) e `633123791-72`.
+    O dedupe compara a string crua do identificador, não o valor normalizado.
+  - **Correção:** chave de identidade por identificador **normalizado** (só dígitos, tipo + valor),
+    preservando o literal de cada documento como veio. Nenhuma fusão automática de linhas já
+    gravadas sem decisão humana — identidade corrompida exige escolha (§6.3 do Plano Diretor).
+  - **Origem:** `pessoa` e `pessoa_identificador` em produção, casos #23 e #25.
+
+- **#271 — matrícula grande em chamada única derruba a extração (aberta):**
+  - **Medido em dois documentos, não em um.** O doc 547 (82.117 caracteres) consumiu o job 1533
+    inteiro: o Luna respondeu cinco chamadas e passou a dar `APITimeoutError`; o fallback Gemini 3.7
+    Flash voltou **truncado** (11.996 de 12.000 tokens), repetiu com `max_tokens=24000` e deu timeout
+    de conexão três vezes — "Todos os providers falharam". O caso #23 ficou com 2 de 6 documentos.
+  - Na rodada por documento (23/09, 01:20–01:41), o doc **548, de 57.090 caracteres**, repetiu o
+    mesmo ciclo: três `APITimeoutError` do Luna (≈90 s cada) → fallback → Gemini truncado em
+    11.996/12.000 → repetição com 24.000, que respondeu **15.751 tokens de saída a US$ 0,078 numa
+    única chamada** — contra teto de **US$ 0,10 por job** (`AI_MAX_COST_PER_JOB_USD`). Depois o Luna
+    respondeu uma vez em 122 s e voltou a estourar. Vinte e um minutos na primeira de quatro tarefas.
+  - **O gargalo é o tamanho do prompt, não o documento específico.** Duas matrículas diferentes, o
+    mesmo desenho de falha; e uma matrícula grande sozinha quase consome o teto de custo do job —
+    o teto existe para proteger, então tende a cortar a extração no meio.
+  - **Decisão do André (22/09): sem ajuste de `AI_TIMEOUT_SECONDS`.** Aumentar o tempo mascara o
+    tamanho da chamada e encarece o documento, em vez de resolver.
+  - **Desfecho (23/09, madrugada):** as quatro tarefas por documento terminaram sozinhas e a sexta
+    prova fechou — **por força bruta**: 2 h 20 de relógio e **US$ 0,9172** no dia, com um ciclo de
+    timeout e truncagem por matrícula grande. A dívida não cai: fatiar por ato registral é o que
+    torna tempo, custo e tamanho de chamada previsíveis.
+  - **Não é caso de retry** (decisão do André): repetir a mesma chamada gigante repete a falha.
+    **Desenho:** fatiar a matrícula **por ato registral (R/AV)** antes do extrator, com âncora por
+    fragmento — cada ato vira uma chamada do tamanho do ato, e a âncora aponta o fragmento, não o
+    documento inteiro.
+  - **Origem:** rodada autorizada de 23/09; log do worker e `ai_jobs` 1533.
+
+- **#272 — o teto de custo é por chamada, não por job (aberta):**
+  - O CLAUDE.md declara `AI_MAX_COST_PER_JOB_USD` como *hard limit* por job, mas a checagem em
+    `ai_gateway.complete()` (`ai_gateway.py:447-463`) compara o custo **daquela chamada** com o teto.
+    Um documento que exige dezenas de chamadas soma muito acima sem nenhuma checagem reprovar.
+  - **Medido em produção (23/09):** três jobs do extrator acima do teto de US$ 0,10 — **1535
+    (US$ 0,26)**, **1536 (US$ 0,3622)** e **1537 (US$ 0,146)**; total do dia **US$ 0,9172**.
+  - **Correção:** acumular o custo por job (o `ai_job` já existe e é o escopo natural) e reprovar
+    quando o acumulado passar do teto, com a chamada que estourou nomeada. Corrigir junto a redação
+    do CLAUDE.md, que hoje descreve uma garantia que o código não dá.
+  - **Origem:** rodada autorizada de #23 e #25; `ai_jobs` em produção.
+
+> **PRÓXIMO NÚMERO LIVRE: 273.** (#270 a #272 abertas pela leitura semântica em produção, 23/09.)
+
 ## Pulso 22/09/2026 — reextração em produção: a cadeia não extraiu (#23 e #25)
 
 - **#268 — produção nunca executou leitura semântica; três falhas em fila, todas mudas (corrigidas, falta provar):**
