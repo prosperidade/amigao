@@ -1,5 +1,30 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 23/09/2026 — leitura semântica em produção (segunda rodada, #23 e #25)
+
+- **#270 — CPF não normalizado duplica pessoa (aberta):**
+  - Medido na rodada de 23/09 em produção: `JOBSON ROSA DAS MERCES` virou **4 linhas** em `pessoa`
+    e `ELODI AGROPECUÁRIA` virou **2**, porque o mesmo CPF entrou em formatos diferentes —
+    `633.123.791-72`, `633.123.791 -72` (espaço antes do dígito, do OCR) e `633123791-72`.
+    O dedupe compara a string crua do identificador, não o valor normalizado.
+  - **Correção:** chave de identidade por identificador **normalizado** (só dígitos, tipo + valor),
+    preservando o literal de cada documento como veio. Nenhuma fusão automática de linhas já
+    gravadas sem decisão humana — identidade corrompida exige escolha (§6.3 do Plano Diretor).
+  - **Origem:** `pessoa` e `pessoa_identificador` em produção, casos #23 e #25.
+
+- **#271 — matrícula grande em chamada única derruba a extração (aberta):**
+  - O doc 547 (82.117 caracteres) consumiu o job 1533 inteiro: o Luna respondeu cinco chamadas e
+    passou a dar `APITimeoutError`; o fallback Gemini 3.7 Flash voltou **truncado** (11.996 de
+    12.000 tokens), repetiu com `max_tokens=24000` e deu timeout de conexão três vezes —
+    "Todos os providers falharam". O caso #23 ficou com 2 de 6 documentos lidos.
+  - **Não é caso de retry** (decisão do André): repetir a mesma chamada gigante repete a falha.
+    **Desenho:** fatiar a matrícula **por ato registral (R/AV)** antes do extrator, com âncora por
+    fragmento — cada ato vira uma chamada do tamanho do ato, e a âncora aponta o fragmento, não o
+    documento inteiro.
+  - **Origem:** rodada autorizada de 23/09; log do worker e `ai_jobs` 1533.
+
+> **PRÓXIMO NÚMERO LIVRE: 272.** (#270 e #271 abertas pela leitura semântica em produção, 23/09.)
+
 ## Pulso 22/09/2026 — reextração em produção: a cadeia não extraiu (#23 e #25)
 
 - **#268 — produção nunca executou leitura semântica; três falhas em fila, todas mudas (corrigidas, falta provar):**

@@ -619,3 +619,74 @@ tela aciona; o gesto veio do servidor do gate de dev, pela API autenticada — n
 
 Dívida **#268** aberta com esta medição (nasceu #260; renumerada por colisão com a
 faixa #260–#267 da frente 4a).
+
+---
+
+## 23/09/2026 — leitura semântica em produção: cinco provas fechadas
+
+Segunda rodada autorizada pelo André, depois de #204 (cadeia entrega o caso;
+falha de agente vira log), #205 (a ontologia entra na imagem — o `.dockerignore`
+excluía `docs` e o build do #204 tinha falhado) e #206 (o CI constrói a imagem e
+pergunta a ela se serve). Portão conferido no Shell antes do disparo:
+`capability_manifest("extrator")` = `available`, seis skills, hash da ontologia.
+
+### O que a rodada produziu
+
+| | #23 (ELODI) | #25 (Jobson) |
+|---|---|---|
+| Execução persistida | `failed` | **`completed`** |
+| `ai_job` | 1533 | 1534 |
+| `model_used` | `gpt-5.6-luna` | `gpt-5.6-luna` |
+| Tokens (in/out) | 94.075 / 12.448 | 35.995 / 13.682 |
+| Custo | US$ 0,0343 | US$ 0,0254 |
+| Documentos lidos | 2 de 6 | 4 de 5 |
+| Observações `extrator_semantico` | 60 | 45 |
+
+**Por que o #23 falhou:** timeout de provedor, **não** tempo de tarefa (não houve
+`SoftTimeLimitExceeded`; com `--pool=solo` o soft limit nem se aplica, e a tarefa
+rodou 654 s até terminar sozinha). O Luna respondeu cinco chamadas, passou a dar
+`APITimeoutError`, o gateway caiu no fallback Gemini 3.7 Flash, que voltou
+**truncado** (11.996 de 12.000 tokens), repetiu com `max_tokens=24000` e deu
+timeout de conexão três vezes: "Todos os providers falharam". O documento que
+derruba é a matrícula de 82.117 caracteres (doc 547). Dívida **#271**.
+
+### Âncoras — a conferência que a tela faz
+
+**105 observações, todas ancoradas.** Cada uma com `fragmento_id` e
+`documento_versao_id` igual à **versão corrente** do documento; zero sem versão,
+zero órfã. A extração também gravou derivações `validacao_ancoras` com reparos e
+rejeições nomeadas.
+
+| Caso | Documento | Espécie | Observações | Versão ancorada = corrente |
+|---|---|---|---|---|
+| 23 | 546 | CAR | 13 | sim (1) |
+| 23 | 547 | matrícula | 47 | sim (2) |
+| 25 | 557 | CPF cadastral | 8 | sim (7) |
+| 25 | 558 | contrato | 15 | sim (8) |
+| 25 | 559 | escritura | 14 | sim (9) |
+| 25 | 561 | RG/CPF | 8 | sim (10) |
+
+### As seis provas, contra conteúdo real de produção
+
+| Prova | Estado em produção | Evidência |
+|---|---|---|
+| Escritura não prova estado atual | **COMPROVADA** | doc 559, `posse_declarada_pelos_outorgantes` ancorada em "me foi dito que são senhores e legítimos possuidores"; `knowledge_state = nao_determinado` |
+| Transmitente não vira cliente nem titular | **COMPROVADA** | clientes seguem ELODI AGROPECUÁRIA (#23) e Jobson (#25); IVAIR (pessoa 19) e ELDA (20) entraram como `pessoa` com papel `transmitente` |
+| PJ preserva CNPJ | **COMPROVADA** | pessoa 18 (ISIS TERRA…ME, `pj`) com CNPJ 59.508.731/0001-95; ELODI com 29.091.958/0001-17 |
+| Falecimento, espólio, inventariante, referência a processo | **COMPROVADA** | "TITULAR FALECIDO" (doc 557); 1 `espolio`; inventariante MÁRCIO ANTONIO NUNES com trecho de fundamento (doc 558); inventário 5286960-36.2022.8.09.0051 como **observação própria** |
+| Inventariante confirmado só com fundamento | **COMPROVADA** | os 16 `pessoa_identificador` estão `declarado`; nenhum promovido a `confirmado` |
+| Quatro matrículas independentes | **PENDENTE** | o #23 leu CAR + 1ª matrícula; faltam docs 548, 549 e 550. Rodada por documento autorizada para fechar |
+
+Gate de família funcionando em produção: duas observações **rejeitadas com
+motivo** — "Objeto contratual não sustentado pela espécie documental" e
+"Referência a processo fora da família contratual".
+
+### Estado do gate
+
+- **Dev:** inalterado; provas de 21/09 válidas.
+- **Produção:** **cinco provas fechadas.** A das quatro matrículas fica pendente
+  até a rodada por documento do #23. As 142 linhas da tentativa anterior seguem
+  sendo projeção do staging legado (`method="staging"`), nunca leitura — o filtro
+  que separa uma da outra é `content->'attributes'->>'method'`.
+- Dívidas abertas nesta medição: **#270** (CPF não normalizado duplica pessoa) e
+  **#271** (matrícula grande em chamada única derruba a extração).

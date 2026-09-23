@@ -1,5 +1,18 @@
 # Estado Atual — Regente Ambiental
 
+**Pulso 23/09/2026 — leitura semântica em produção, cinco provas fechadas.** Segunda rodada
+autorizada nos casos #23 e #25 com o extrator no `gpt-5.6-luna`: **105 observações
+`extrator_semantico`**, todas ancoradas na versão corrente do documento (fragmento + versão, zero
+órfãs). Comprovadas em produção: escritura não prova estado atual; transmitente não vira cliente
+nem titular; PJ preserva CNPJ; falecimento, espólio, inventariante e referência a processo;
+inventariante só com fundamento. **Pendente:** quatro matrículas independentes — o #23 leu 2 de 6
+documentos porque a matrícula de 82 mil caracteres esgotou Luna e Gemini na mesma chamada
+(dívida #271). O caminho até aqui custou três consertos no mesmo dia: a cadeia OCR→extrator não
+entregava o caso e a falha era muda (#204, dívida #268), a ontologia não ia na imagem e o
+`.dockerignore` derrubou o build (#205), e o CI passou a construir a imagem e a perguntar a ela se
+serve (#206, dívida #269). Dívidas novas: **#270** (CPF não normalizado duplica pessoa) e **#271**.
+
+
 **Pulso 22/09/2026 (noite) — segunda rodada do Incremento 4a.** #201 mergeado (9972a58). Dos cinco erros de ranking: dois eram corte (segmento absorvedor de 565 mil caracteres e impressão com dois atos) e dois eram o filtro de objetivo cortando fonte certa por classificação provisória; o ramo lexical passou a usar termo raro, não número/sigla. **recall@5 0,784 → 0,892** (33/37), controle negativo 100%, groundedness 100%; o portão de 0,9 exige 34, então a **Legislação segue desligada**. Sobram 3 alvos de sonda para a Ísis (**Q-ISIS-21**) e 1 falha real (dispositivo curto, dívida #266). Catálogo reconstruído no dev: 878 fontes — conciliação com as 258–449 do ADR está no registro (granularidade: 71 emendas constitucionais, o DOE-MT inteiro dentro de duas coletâneas, atos federais impressos em coletânea estadual; duplicata real são 20 textos, dívida #267). Fechados no caminho: `TRUNCATE` burlava o append-only das 20 tabelas imutáveis e 12 FKs estavam sem índice (migration `074zn001`). Dívidas #260–#267.
 
 **Pulso 22/09/2026 — Incremento 4a (zona normativa, ADR-075 + A1–A5) em PR rascunho, só dev.**
