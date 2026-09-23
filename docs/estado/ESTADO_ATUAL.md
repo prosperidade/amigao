@@ -1,5 +1,22 @@
 # Estado Atual — Regente Ambiental
 
+**HANDOFF — fim do dia 22/09/2026.** Onde tudo está, para a retomada:
+
+| Frente | Estado |
+|---|---|
+| Incrementos 2 e 3 | **provados em dev** (provas de 21/09 e ADR-072) |
+| Leitura semântica em produção | **cinco das seis provas fechadas** (23/09); quatro matrículas pendente — fecha pela #271, não por repetição |
+| Incremento 4a (zona normativa) | **encerrada** (#201); recall@5 **0,892 (33/37)**, portão exige 34 ⇒ **Legislação segue desligada**; 3 alvos com a Ísis (Q-ISIS-21) |
+| Incremento 4b | **a abrir** |
+| Backup de produção | **ativo no pré-deploy**: dump do schema `public` no R2 antes de toda migration, retenção de 30 dias com mínimo de 10 (#197, #200, #202) |
+| Imagem | o CI **constrói** e pergunta ao manifesto dentro dela (#206) |
+| Dívidas | abertas até **#271**; próximo número livre **272** |
+
+**Primeira coisa de amanhã:** a **#271** como frente própria — ADR curto do fatiamento por ato
+registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de chamada declarado, com
+prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
+pendente; a última tarefa do #23 foi deixada terminar sozinha.
+
 **Pulso 23/09/2026 — leitura semântica em produção, cinco provas fechadas.** Segunda rodada
 autorizada nos casos #23 e #25 com o extrator no `gpt-5.6-luna`: **105 observações
 `extrator_semantico`**, todas ancoradas na versão corrente do documento (fragmento + versão, zero

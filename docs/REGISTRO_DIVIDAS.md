@@ -13,10 +13,20 @@
   - **Origem:** `pessoa` e `pessoa_identificador` em produção, casos #23 e #25.
 
 - **#271 — matrícula grande em chamada única derruba a extração (aberta):**
-  - O doc 547 (82.117 caracteres) consumiu o job 1533 inteiro: o Luna respondeu cinco chamadas e
-    passou a dar `APITimeoutError`; o fallback Gemini 3.7 Flash voltou **truncado** (11.996 de
-    12.000 tokens), repetiu com `max_tokens=24000` e deu timeout de conexão três vezes —
-    "Todos os providers falharam". O caso #23 ficou com 2 de 6 documentos lidos.
+  - **Medido em dois documentos, não em um.** O doc 547 (82.117 caracteres) consumiu o job 1533
+    inteiro: o Luna respondeu cinco chamadas e passou a dar `APITimeoutError`; o fallback Gemini 3.7
+    Flash voltou **truncado** (11.996 de 12.000 tokens), repetiu com `max_tokens=24000` e deu timeout
+    de conexão três vezes — "Todos os providers falharam". O caso #23 ficou com 2 de 6 documentos.
+  - Na rodada por documento (23/09, 01:20–01:41), o doc **548, de 57.090 caracteres**, repetiu o
+    mesmo ciclo: três `APITimeoutError` do Luna (≈90 s cada) → fallback → Gemini truncado em
+    11.996/12.000 → repetição com 24.000, que respondeu **15.751 tokens de saída a US$ 0,078 numa
+    única chamada** — contra teto de **US$ 0,10 por job** (`AI_MAX_COST_PER_JOB_USD`). Depois o Luna
+    respondeu uma vez em 122 s e voltou a estourar. Vinte e um minutos na primeira de quatro tarefas.
+  - **O gargalo é o tamanho do prompt, não o documento específico.** Duas matrículas diferentes, o
+    mesmo desenho de falha; e uma matrícula grande sozinha quase consome o teto de custo do job —
+    o teto existe para proteger, então tende a cortar a extração no meio.
+  - **Decisão do André (22/09): sem ajuste de `AI_TIMEOUT_SECONDS`.** Aumentar o tempo mascara o
+    tamanho da chamada e encarece o documento, em vez de resolver.
   - **Não é caso de retry** (decisão do André): repetir a mesma chamada gigante repete a falha.
     **Desenho:** fatiar a matrícula **por ato registral (R/AV)** antes do extrator, com âncora por
     fragmento — cada ato vira uma chamada do tamanho do ato, e a âncora aponta o fragmento, não o

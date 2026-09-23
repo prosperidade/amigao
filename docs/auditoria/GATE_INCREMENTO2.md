@@ -675,7 +675,7 @@ rejeições nomeadas.
 | PJ preserva CNPJ | **COMPROVADA** | pessoa 18 (ISIS TERRA…ME, `pj`) com CNPJ 59.508.731/0001-95; ELODI com 29.091.958/0001-17 |
 | Falecimento, espólio, inventariante, referência a processo | **COMPROVADA** | "TITULAR FALECIDO" (doc 557); 1 `espolio`; inventariante MÁRCIO ANTONIO NUNES com trecho de fundamento (doc 558); inventário 5286960-36.2022.8.09.0051 como **observação própria** |
 | Inventariante confirmado só com fundamento | **COMPROVADA** | os 16 `pessoa_identificador` estão `declarado`; nenhum promovido a `confirmado` |
-| Quatro matrículas independentes | **PENDENTE** | o #23 leu CAR + 1ª matrícula; faltam docs 548, 549 e 550. Rodada por documento autorizada para fechar |
+| Quatro matrículas independentes | **PENDENTE — não fecha por repetição** | a rodada por documento (23/09) mostrou que o doc 548, de 57 mil caracteres, cai no mesmo ciclo do 547: Luna estoura, Gemini trunca, a repetição custa US$ 0,078 contra teto de US$ 0,10 por job. Fecha pelo desenho da **#271** (fatiar por ato registral), não por nova tentativa |
 
 Gate de família funcionando em produção: duas observações **rejeitadas com
 motivo** — "Objeto contratual não sustentado pela espécie documental" e
