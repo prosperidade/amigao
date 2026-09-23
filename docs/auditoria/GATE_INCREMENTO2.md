@@ -694,6 +694,15 @@ motivo** — "Objeto contratual não sustentado pela espécie documental" e
 
 ## 23/09/2026 (madrugada) — a sexta prova fecha, e cobra o preço
 
+> **Correção (23/09, tarde — frente #271/#272):** as "tarefas por documento" descritas
+> abaixo **não foram por documento**. O `run_agent` ignora o `metadata`: a execução
+> conectada do ADR-069 monta o próprio contexto só com UF e objetivo
+> (`connected_agents.py:161`), sem `document_id`. Cada uma das quatro tarefas **releu o
+> caso #23 inteiro** — seis documentos. Isso explica o custo por job (US$ 0,26, 0,36…),
+> as contagens do 546 e do 547 crescendo e as 203 observações em versão > 1. As provas
+> seguem válidas (observações ancoradas, matrículas independentes); o custo por job
+> medido é de caso inteiro repetido, não de documento. Dívida **#279**.
+
 As quatro tarefas por documento do #23 terminaram sozinhas, sem novo disparo:
 execuções `completed` às 01:48, 02:24 e 02:39, jobs 1535 a 1538.
 

@@ -1,5 +1,43 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 23/09/2026 (tarde) — frente #271/#272: fatiamento por ato e teto acumulado
+
+- **#279 — a fila não extrai um documento só: `run_agent` ignora o `metadata` (aberta):**
+  - `run_agent(metadata={"document_id": ...})` chama `_connected_task` sem o `metadata`, e a execução
+    conectada do ADR-069 monta o próprio contexto só com UF e objetivo (`connected_agents.py:161`).
+    O `executar_extracao` então lê **todos** os documentos do caso.
+  - **Medido em produção (23/09, madrugada):** o disparo "um documento por tarefa" do #23 releu o
+    caso inteiro quatro vezes — jobs 1535 a 1538, US$ 0,26 / 0,36 / 0,146 / 0,089; observações de
+    546 e 547 crescendo; 203 em versão > 1. O gate do Incremento 2 foi corrigido com isso.
+  - **Efeito que vai além daquela noite:** `POST /processes/{id}/extract` sem `force` enfileira **uma
+    tarefa por documento com texto**; cada uma relê o caso. Caso com N documentos → N leituras
+    completas.
+  - **Correção:** carregar o `document_id` na execução persistida (entra na chave de idempotência e
+    no snapshot) — ou o endpoint passar a enfileirar **uma** execução por caso. Decisão de desenho
+    do André, porque mexe no contrato do ADR-069.
+  - **Origem:** frente #271/#272, lendo o caminho de execução para a prova em dev.
+  - **Pesa mais desde o ADR-077:** uma leitura completa da ELODI passa a ser ~90 chamadas e ~45 min.
+    A cadeia OCR → extrator (#204) enfileira o extrator **por documento** depois de cada OCR, e cada um
+    relê o caso: subir os 6 documentos da ELODI dispararia 6 leituras completas — ~4 h 30 do worker
+    (`--pool=solo`) e ~US$ 2,20. Cada job fica sob o teto de US$ 0,75, mas o teto é por job, não por caso.
+
+- **#271 — FECHADA (ADR-077, 23/09):** matrícula vai ao extrator ato a ato (atos até 4.000
+  caracteres, abertura até 6.000), com streaming no extrator — o timeout de 30 s passa a medir
+  provedor travado, não geração longa. Prova do caso ELODI inteiro em dev: **91 de 91 chamadas no
+  Luna, zero fallback, zero truncadas**; **755 de 755 âncoras** conferidas contra o texto da versão;
+  quatro matrículas independentes (as citações cruzadas são confrontantes); US$ 0,3672 no caso;
+  recall da 3.181 de 42 para 242 observações.
+
+- **#272 — FECHADA (23/09):** o teto de custo passou a ser **acumulado por job**, somando cada chamada
+  paga ao provedor — inclusive a truncada que é refeita, que antes sumia do `cost_usd` do job. Tetos
+  por agente em `settings.teto_de_custo_por_job`; o do extrator é **US$ 0,75** = custo medido da
+  ELODI (US$ 0,3672) × margem declarada de 2×. Diagnóstico (0,50) e legislação (0,30) já tinham teto
+  próprio e ficam muito acima do máximo real em produção (0,1054 e 0,0191 em 90 dias). CLAUDE.md
+  corrigido.
+
+> **PRÓXIMO NÚMERO LIVRE: 280.** (#273 a #278 reservadas pela frente 4b — motor jurídico, PR #208;
+> #279 aberta pela frente #271/#272, 23/09.)
+
 ## Pulso 23/09/2026 — leitura semântica em produção (segunda rodada, #23 e #25)
 
 - **#270 — CPF não normalizado duplica pessoa (aberta):**
@@ -48,7 +86,7 @@
     do CLAUDE.md, que hoje descreve uma garantia que o código não dá.
   - **Origem:** rodada autorizada de #23 e #25; `ai_jobs` em produção.
 
-> **PRÓXIMO NÚMERO LIVRE: 273.** (#270 a #272 abertas pela leitura semântica em produção, 23/09.)
+> **Anterior: 273.** (#270 a #272 abertas pela leitura semântica em produção, 23/09.)
 
 ## Pulso 22/09/2026 — reextração em produção: a cadeia não extraiu (#23 e #25)
 

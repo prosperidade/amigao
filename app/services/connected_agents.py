@@ -195,19 +195,27 @@ def run_step(db, execution, step, user_id):
                 "tokens_in": response.tokens_in, "tokens_out": response.tokens_out, "cost_usd": response.cost_usd,
                 "raw": response.content, "finish_reason": response.finish_reason})
         token = attempt_sink.set(provider_attempts)
+        from app.core.ai_trace import orcamento_do_job
+        from app.core.config import settings
         try:
-            result = executar_extracao(ctx, on_response=record, ai_job_id=job.id)
+            with orcamento_do_job(settings.teto_de_custo_por_job("extrator"), job_id=job.id,
+                                  agente="extrator") as orcamento:
+                result = executar_extracao(ctx, on_response=record, ai_job_id=job.id)
         finally:
             # Validation failure must retain the paid response and actual provider attempts.
             attempt_sink.reset(token)
             job.tokens_in = sum(a["tokens_in"] for a in attempts)
             job.tokens_out = sum(a["tokens_out"] for a in attempts)
-            job.cost_usd = sum(a["cost_usd"] for a in attempts)
+            # #272: o custo do job é o que foi PAGO — soma de cada chamada ao provedor,
+            # inclusive a truncada que foi refeita e não aparece na resposta final.
+            job.cost_usd = (orcamento["gasto_usd"] if orcamento["chamadas_pagas"]
+                            else sum(a["cost_usd"] for a in attempts))
             job.model_used = ",".join(sorted({a["model"] for a in attempts})) or None
             job.provider = ",".join(sorted({a["provider"] for a in attempts})) or None
             job.raw_output = json.dumps(attempts, ensure_ascii=False) if attempts else None
             job.input_payload = {**job.input_payload, "attempts": provider_attempts,
-                "extractions": [{k: v for k, v in a.items() if k != "raw"} for a in attempts]}
+                "extractions": [{k: v for k, v in a.items() if k != "raw"} for a in attempts],
+                "orcamento": {k: orcamento[k] for k in ("limite_usd", "gasto_usd", "chamadas_pagas", "sem_custo")}}
         job.result = result
         job.status = AIJobStatus.completed
         job.finished_at = datetime.now(UTC)
@@ -243,14 +251,19 @@ def run_step(db, execution, step, user_id):
         from app.core.ai_gateway import complete
         check_tenant_cost_limit(execution.tenant_id, db)
         check_tenant_monthly_budget(execution.tenant_id, db)
-        from app.core.ai_trace import attempt_sink
+        from app.core.ai_trace import attempt_sink, orcamento_do_job
+        from app.core.config import settings
         attempts = []
         token = attempt_sink.set(attempts)
         try:
-            response = complete(prompt, system=system, user_preferences=agent._resolve_user_ai_preferences(), **parameters)
+            with orcamento_do_job(settings.teto_de_custo_por_job(step["agent"]), job_id=job.id,
+                                  agente=step["agent"]) as orcamento:
+                response = complete(prompt, system=system, user_preferences=agent._resolve_user_ai_preferences(),
+                                    **parameters)
         finally:
             attempt_sink.reset(token)
-            job.input_payload = {**job.input_payload, "attempts": attempts}
+            job.input_payload = {**job.input_payload, "attempts": attempts,
+                "orcamento": {k: orcamento[k] for k in ("limite_usd", "gasto_usd", "chamadas_pagas", "sem_custo")}}
         job.model_used, job.provider = response.model_used, response.provider
         job.tokens_in, job.tokens_out, job.cost_usd = response.tokens_in, response.tokens_out, response.cost_usd
         job.raw_output = response.content
