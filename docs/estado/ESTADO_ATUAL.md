@@ -7,10 +7,10 @@
 | Incrementos 2 e 3 | **provados em dev** (provas de 21/09 e ADR-072) |
 | Leitura semântica em produção | **as seis provas fechadas** (23/09): 984 observações `extrator_semantico`, 897 objetos, 203 em versão > 1, zero sem âncora. As quatro matrículas saíram independentes (3.181, 3.313, 3.673, 4.387) |
 | Incremento 4a (zona normativa) | **encerrada** (#201); recall@5 **0,892 (33/37)**, portão exige 34 ⇒ **Legislação segue desligada**; 3 alvos com a Ísis (Q-ISIS-21) |
-| Incremento 4b | **a abrir** |
+| Incremento 4b (motor jurídico) | **PR rascunho, só dev** (ADR-073): seis regras do gate, Rota **validada** com fundamento por ID em #22, #23 e #25 de dev; homologação real com a Ísis (**Q-ISIS-22**) |
 | Backup de produção | **ativo no pré-deploy**: dump do schema `public` no R2 antes de toda migration, retenção de 30 dias com mínimo de 10 (#197, #200, #202) |
 | Imagem | o CI **constrói** e pergunta ao manifesto dentro dela (#206) |
-| Dívidas | abertas até **#272**; próximo número livre **273** |
+| Dívidas | abertas até **#278**; próximo número livre **279** |
 
 **A sexta prova fechou na madrugada, por força bruta:** 2 h 20 e US$ 0,9172 no dia, com três jobs
 acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#272**).
@@ -19,6 +19,16 @@ acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#27
 registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de chamada declarado, com
 prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
 pendente; a última tarefa do #23 foi deixada terminar sozinha.
+
+**Pulso 23/09/2026 — Incremento 4b (motor jurídico, ADR-073) em PR rascunho, só dev.** Regra
+como dado versionado (migration `075mj001`), linguagem restrita com lógica de três valores,
+fundamento resolvido por identidade no catálogo da 4a com a política `interno`, nenhum LLM. Percurso
+autenticado em dev: #23 e #25 (casos do Inc2) e um #22 de dev montado com os metadados de produção
+chegaram a **Rota validada**, todo passo validado com fonte e dispositivo por ID; o #22 virou Rota de
+coleta (natureza do imóvel desconhecida). 5 de 10 passos não validaram por **norma ausente** (IN SEMAD
+22/2025 e Código Civil) e saíram com motivo. Homologação feita como **prova de engenharia**; a real é
+da Ísis (**Q-ISIS-22**). Dívidas **#273–#278**. Registro:
+[MOTOR_JURIDICO_INCREMENTO4B.md](../arquitetura/MOTOR_JURIDICO_INCREMENTO4B.md).
 
 **Pulso 23/09/2026 — leitura semântica em produção, cinco provas fechadas.** Segunda rodada
 autorizada nos casos #23 e #25 com o extrator no `gpt-5.6-luna`: **105 observações

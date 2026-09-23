@@ -11,6 +11,7 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.recuperacao import catalogo_sintetico as cs
 
 from app.models.client import Client, ClientStatus, ClientType
 from app.models.document import Document
@@ -26,7 +27,6 @@ from app.services.motor_juridico.avaliador import SemConjuntoAtivo, avaliar_regr
 from app.services.motor_juridico.fatos import montar_fatos
 from app.services.motor_juridico.rota import gerar_rota_pelo_motor
 from app.services.zona_normativa.curadoria import CuradoriaNegada, TransicaoInvalida, conceder_papel
-from tests.recuperacao import catalogo_sintetico as cs
 
 HOJE = date(2026, 9, 23)
 SENHA = "x"  # catalogo_sintetico.usuario usa a senha "x"

@@ -1,5 +1,46 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 23/09/2026 — Incremento 4b, motor jurídico (ADR-073, só dev)
+
+Registro da frente: [MOTOR_JURIDICO_INCREMENTO4B.md](arquitetura/MOTOR_JURIDICO_INCREMENTO4B.md).
+
+- **#273 — fonte com duas versões correntes (aberta):** 69 fontes do catálogo de dev têm duas
+  versões sem relação de substituição — a mesma norma vinda avulsa e de coletânea (ex.: Lei
+  12.651/2012, v1313 avulsa e v1314 da MT-NUC12). O motor desempata de forma determinística (mais
+  curada, depois mais nova), mas qual versão vale é decisão de curadoria (`substitui_versao_id`).
+  Vizinha da #267 (duplicata por hash). **Origem:** resolução de fundamento do gate 4b.
+
+- **#274 — remissão a outra lei cortada como artigo da fonte (aberta):** "Art. 29 da Lei número
+  5.172…", remissão dentro do art. 6º da Lei 5.868/1972, virou **art. 29 da própria 5.868**. Classe
+  medida no dev: **11 dispositivos espúrios em 7 fontes** (texto do artigo começando por "Art. N
+  da/do Lei|Decreto|Constituição…"). Uma regra que cite o artigo espúrio resolve por identidade para
+  o texto errado com todas as travas verdes — o risco é do motor, não só da busca.
+  **Correção:** o corte de dispositivo não abre artigo quando o "Art. N" é seguido de "da/do
+  <espécie normativa>"; revisar os 11. **Origem:** conferência do art. 22 da Lei 5.868 no gate.
+
+- **#275 — IN MMA 2/2014 do catálogo é cópia de trabalho, sem URL oficial (aberta):** o texto começa
+  com o cabeçalho de um arquivo Word do MMA (`est3049 - h:\in car sicar 24-04-2014.doc`) e a
+  proveniência não tem URL. Em dev foi proposta (prova) com o domínio que o próprio texto cita e nota
+  dizendo isso. **Validar exige o original do DOU** (A5). Fundamenta a REG-BR-CAR-007.
+
+- **#276 — norma ausente do catálogo trava passo real da Rota (aberta):** das 10 propostas de passo
+  nas três Rotas do gate, 5 não validaram por fonte ausente — **IN SEMAD 22/2025** (SIGCAR, todo caso
+  de GO) e **Código Civil** (sucessão). O motor fez o certo (não substituiu por semelhança; o passo
+  saiu com motivo), mas o passo do SIGCAR é real. **Correção:** trazer as duas fontes ao catálogo
+  pela curadoria; a lista de índice das coletâneas (Q-ISIS-19) pode dizer se a IN já está num
+  segmento `nao_determinado`.
+
+- **#277 — cadastro do imóvel não é fato do motor (aberta, depende da Ísis):** o #22 de produção tem
+  código de CAR no cadastro do imóvel e nenhum CAR nos autos; o motor lê os autos e pede "Confirmar:
+  natureza do imóvel". Se o cadastro prova natureza rural entra na Q-ISIS-22; se sim, vira fato com
+  `origem = cadastro` e `revisao = nao_revisada`.
+
+- **#278 — a tela não conhece o motor (aberta):** o painel mostra passos `motor`, mas não tem "gerar
+  pelo motor", relatório da execução, ciência de alerta crítico nem motivo na remoção — o botão de
+  remover atual recebe **400** num passo do motor. O percurso do gate foi por API.
+
+> **PRÓXIMO NÚMERO LIVRE: 279.** (#273 a #278 abertas pelo Incremento 4b, 23/09.)
+
 ## Pulso 23/09/2026 — leitura semântica em produção (segunda rodada, #23 e #25)
 
 - **#270 — CPF não normalizado duplica pessoa (aberta):**
