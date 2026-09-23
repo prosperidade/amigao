@@ -257,3 +257,31 @@ jobs:
 
       - name: TypeScript check
         run: npx tsc --noEmit
+
+  # ─────────────────────────────────────────────────
+  # IMAGEM: constrói o artefato e pergunta A ELE se serve
+  # ─────────────────────────────────────────────────
+  # Dívida #269, aberta em 22/09/2026. Naquele dia dois erros de empacotamento
+  # atravessaram um CI inteiramente verde: a ontologia ficou fora da imagem (o
+  # extrator morreu em "capacidade_insuficiente" em produção) e, na correção, o
+  # `.dockerignore` derrubou o build no Render — nenhuma imagem nova subiu.
+  # Lint e teste auditam a receita; só construir audita o bolo.
+  image-ci:
+    name: "Imagem — Build + manifesto dentro dela"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build da imagem de produção
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: regente:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: A imagem responde pelo que promete
+        run: docker run --rm regente:ci python scripts/verificar_imagem.py
