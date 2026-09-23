@@ -95,6 +95,9 @@ class RotaPassoOrigem(str, enum.Enum):
 
     ia = "ia"
     manual = "manual"
+    # ``motor`` — nasceu de uma regra homologada do motor jurídico (ADR-073);
+    # fundamento por ID do catálogo normativo; upsert por ``dedupe_key``.
+    motor = "motor"
 
 
 class RotaPassoStatus(str, enum.Enum):
@@ -344,6 +347,20 @@ class RotaPasso(Base):
         ForeignKey("acoes.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+
+    # ── Proveniência do motor jurídico (ADR-073 §9) ─────────────────────────
+    # Passo ``origem=motor`` aponta a avaliação que o gerou e o fundamento
+    # resolvido por identidade no catálogo (versão + dispositivo). Sem os dois,
+    # o passo não valida. SET NULL: a rota assinada sobrevive à origem.
+    origem_avaliacao_id = Column(
+        Integer, ForeignKey("avaliacao_regra.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    fundamento_fonte_versao_id = Column(
+        Integer, ForeignKey("fonte_normativa_versao.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    fundamento_dispositivo_id = Column(
+        Integer, ForeignKey("dispositivo.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     status = Column(

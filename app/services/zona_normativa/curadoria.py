@@ -40,7 +40,7 @@ from app.models.zona_normativa import (
     ValidacaoNorma,
 )
 
-PAPEIS = ("validar_fonte_normativa", "curar_corpus")
+PAPEIS = ("validar_fonte_normativa", "curar_corpus", "homologar_regra")
 _LOCK_CADEIA = 750_075  # pg_advisory_xact_lock — serializa a cadeia global
 
 

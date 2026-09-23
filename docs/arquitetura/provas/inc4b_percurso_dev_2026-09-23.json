@@ -1,0 +1,589 @@
+[
+ {
+  "passo": "preparacao",
+  "execucao_do_script": 1,
+  "tenant": 33,
+  "gate_user_id": 38,
+  "casos": {
+   "#23": 65,
+   "#25": 66,
+   "#22": 69
+  }
+ },
+ {
+  "passo": "papel_concedido",
+  "execucao_do_script": 1,
+  "papel": "curar_corpus",
+  "area": "federal",
+  "id": 3,
+  "a": "consultor@amigao.com",
+  "nota": "PROVA; não é a concessão à Ísis"
+ },
+ {
+  "passo": "papel_concedido",
+  "execucao_do_script": 1,
+  "papel": "homologar_regra",
+  "area": "*",
+  "id": 4,
+  "a": "consultor@amigao.com",
+  "nota": "PROVA; não é a concessão à Ísis"
+ },
+ {
+  "passo": "fonte_proposta",
+  "execucao_do_script": 1,
+  "versao": 1313,
+  "rotulo": "Lei 12.651/2012",
+  "evento": 33,
+  "hash_evento": "32a88c4dbe1e9e2ef69359c757befaa03bfc3417c212c0eb2bce2bef36f737fd",
+  "hash_anterior": null
+ },
+ {
+  "passo": "fonte_proposta",
+  "execucao_do_script": 1,
+  "versao": 1216,
+  "rotulo": "IN MMA 2/2014",
+  "evento": 34,
+  "hash_evento": "4637d187bd860f750312efa4db3e6d48656a6ff1f9bfa1098f0ff8ecd703541f",
+  "hash_anterior": "32a88c4dbe1e9e2ef69359c757befaa03bfc3417c212c0eb2bce2bef36f737fd"
+ },
+ {
+  "passo": "fonte_proposta",
+  "execucao_do_script": 1,
+  "versao": 1875,
+  "rotulo": "Lei 5.868/1972",
+  "evento": 35,
+  "hash_evento": "cd961488f65df86ee336f4fd956c911f916d7ab42023649ebaa636da8f164ec4",
+  "hash_anterior": "4637d187bd860f750312efa4db3e6d48656a6ff1f9bfa1098f0ff8ecd703541f"
+ },
+ {
+  "passo": "gate_importado",
+  "execucao_do_script": 1,
+  "criadas": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ],
+  "mantidas": []
+ },
+ {
+  "passo": "regras_homologadas",
+  "execucao_do_script": 1,
+  "versoes": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ],
+  "nota": "PROVA DE ENGENHARIA — não é a homologação da Ísis (Q-ISIS-22)"
+ },
+ {
+  "passo": "conjunto_ativo",
+  "execucao_do_script": 1,
+  "id": 1,
+  "estado": "ativo",
+  "regra_versao_ids": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ]
+ },
+ {
+  "passo": "rota_gerada",
+  "execucao_do_script": 1,
+  "caso": "#23",
+  "process_id": 65,
+  "rota_id": 1,
+  "created": 4,
+  "execucao": 1,
+  "contagem": {
+   "aplicavel_nao_disparou": 2,
+   "aplicavel_disparou": 3,
+   "indeterminado": 1
+  }
+ },
+ {
+  "passo": "passo_validado",
+  "execucao_do_script": 1,
+  "caso": "#23",
+  "titulo": "Mapear os componentes do imóvel (matrículas, posses e cadastros)",
+  "fonte_versao": 1216,
+  "dispositivo": 38936,
+  "norma": "IN MMA 2/2014, art. 2º",
+  "nota": "o script parou logo depois, num erro do próprio log (chave duplicada); retomado com RETOMAR=1"
+ },
+ {
+  "passo": "preparacao",
+  "tenant": 33,
+  "gate_user_id": 38,
+  "casos": {
+   "#23": 65,
+   "#25": 66,
+   "#22": 69
+  },
+  "nota": "usuário e caso #22 criados direto no banco de dev; documentos do #22 só com metadados",
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "retomada",
+  "nota": "passos 1-3 já feitos na primeira execução; o script parou num erro de log do próprio script",
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_gerada",
+  "caso": "#23",
+  "process_id": 65,
+  "rota_id": 1,
+  "created": 0,
+  "execucao": 2,
+  "contagem": {
+   "aplicavel_nao_disparou": 2,
+   "aplicavel_disparou": 3,
+   "indeterminado": 1
+  },
+  "fatos": {
+   "caso.uf": [
+    "GO",
+    "determinado"
+   ],
+   "car.no_dossie": [
+    true,
+    "determinado"
+   ],
+   "dominio.matriculas_no_dossie": [
+    4,
+    "determinado"
+   ],
+   "ccir.no_dossie": [
+    false,
+    "determinado"
+   ],
+   "imovel.natureza": [
+    "rural",
+    "determinado"
+   ],
+   "titular.falecimento_declarado": [
+    null,
+    "desconhecido"
+   ]
+  },
+  "avaliacoes": [
+   [
+    "REG-BR-CAR-001",
+    "aplicavel_nao_disparou",
+    [],
+    null
+   ],
+   [
+    "REG-BR-CAR-002",
+    "aplicavel_nao_disparou",
+    [],
+    null
+   ],
+   [
+    "REG-BR-CAR-007",
+    "aplicavel_disparou",
+    [],
+    "IN MMA 2/2014, art. 2º"
+   ],
+   [
+    "REG-FUN-002",
+    "aplicavel_disparou",
+    [],
+    "Lei 5.868/1972, art. 2º"
+   ],
+   [
+    "REG-FUN-012",
+    "indeterminado",
+    [
+     "titular.falecimento_declarado"
+    ],
+    "fonte_ausente"
+   ],
+   [
+    "REG-GO-CAR-001",
+    "aplicavel_disparou",
+    [],
+    "fonte_ausente"
+   ]
+  ],
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_validado",
+  "caso": "#23",
+  "titulo": "Emitir ou regularizar o CCIR do imóvel",
+  "fonte_versao": 1875,
+  "dispositivo": 65677,
+  "norma": "Lei 5.868/1972, art. 2º",
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_recusado_e_removido",
+  "caso": "#23",
+  "titulo": "Confirmar: situação do titular (falecimento)",
+  "validar": 409,
+  "detalhe": "Fundamento do passo não verificado: passo do motor sem fundamento resolvido por ID: traga a fonte pela curadoria e gere de novo, ou remova o passo com motivo",
+  "remover_sem_motivo": 400,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_recusado_e_removido",
+  "caso": "#23",
+  "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+  "validar": 409,
+  "detalhe": "Fundamento do passo não verificado: passo do motor sem fundamento resolvido por ID: traga a fonte pela curadoria e gere de novo, ou remova o passo com motivo",
+  "remover_sem_motivo": 400,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_regenerada",
+  "caso": "#23",
+  "created": 0,
+  "matched": 2,
+  "suprimidos": 2,
+  "versao_preservada": 2,
+  "execucao": 3,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "fechar_antes_da_ciencia",
+  "caso": "#23",
+  "status": 200,
+  "detalhe": null,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_fechada",
+  "caso": "#23",
+  "status": 200,
+  "rota_status": "validada",
+  "passos": [
+   [
+    "Mapear os componentes do imóvel (matrículas, posses e cadastros)",
+    "validado",
+    1216,
+    38936,
+    "IN MMA 2/2014, art. 2º"
+   ],
+   [
+    "Emitir ou regularizar o CCIR do imóvel",
+    "validado",
+    1875,
+    65677,
+    "Lei 5.868/1972, art. 2º"
+   ]
+  ],
+  "detalhe": null,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_gerada",
+  "caso": "#25",
+  "process_id": 66,
+  "rota_id": 2,
+  "created": 4,
+  "execucao": 4,
+  "contagem": {
+   "aplicavel_disparou": 4,
+   "aplicavel_nao_disparou": 2
+  },
+  "fatos": {
+   "caso.uf": [
+    "GO",
+    "determinado"
+   ],
+   "car.no_dossie": [
+    false,
+    "determinado"
+   ],
+   "dominio.matriculas_no_dossie": [
+    0,
+    "determinado"
+   ],
+   "ccir.no_dossie": [
+    false,
+    "determinado"
+   ],
+   "imovel.natureza": [
+    "rural",
+    "determinado"
+   ],
+   "titular.falecimento_declarado": [
+    true,
+    "determinado"
+   ]
+  },
+  "avaliacoes": [
+   [
+    "REG-BR-CAR-001",
+    "aplicavel_disparou",
+    [],
+    "Lei 12.651/2012, art. 29"
+   ],
+   [
+    "REG-BR-CAR-002",
+    "aplicavel_nao_disparou",
+    [],
+    null
+   ],
+   [
+    "REG-BR-CAR-007",
+    "aplicavel_nao_disparou",
+    [],
+    null
+   ],
+   [
+    "REG-FUN-002",
+    "aplicavel_disparou",
+    [],
+    "Lei 5.868/1972, art. 2º"
+   ],
+   [
+    "REG-FUN-012",
+    "aplicavel_disparou",
+    [],
+    "fonte_ausente"
+   ],
+   [
+    "REG-GO-CAR-001",
+    "aplicavel_disparou",
+    [],
+    "fonte_ausente"
+   ]
+  ],
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_validado",
+  "caso": "#25",
+  "titulo": "Verificar inscrição no CAR e inscrever o imóvel",
+  "fonte_versao": 1313,
+  "dispositivo": 41702,
+  "norma": "Lei 12.651/2012, art. 29",
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_validado",
+  "caso": "#25",
+  "titulo": "Emitir ou regularizar o CCIR do imóvel",
+  "fonte_versao": 1875,
+  "dispositivo": 65677,
+  "norma": "Lei 5.868/1972, art. 2º",
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_recusado_e_removido",
+  "caso": "#25",
+  "titulo": "Reunir a prova da sucessão (óbito, inventário ou partilha)",
+  "validar": 409,
+  "detalhe": "Fundamento do passo não verificado: passo do motor sem fundamento resolvido por ID: traga a fonte pela curadoria e gere de novo, ou remova o passo com motivo",
+  "remover_sem_motivo": 400,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_recusado_e_removido",
+  "caso": "#25",
+  "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+  "validar": 409,
+  "detalhe": "Fundamento do passo não verificado: passo do motor sem fundamento resolvido por ID: traga a fonte pela curadoria e gere de novo, ou remova o passo com motivo",
+  "remover_sem_motivo": 400,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_regenerada",
+  "caso": "#25",
+  "created": 0,
+  "matched": 2,
+  "suprimidos": 2,
+  "versao_preservada": 1,
+  "execucao": 5,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "fechar_antes_da_ciencia",
+  "caso": "#25",
+  "status": 409,
+  "detalhe": "1 alerta(s) crítico(s) do motor sem ciência registrada (avaliações [29]). Registre a ciência antes de fechar.",
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "ciencia",
+  "caso": "#25",
+  "avaliacao": 29,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_fechada",
+  "caso": "#25",
+  "status": 200,
+  "rota_status": "validada",
+  "passos": [
+   [
+    "Verificar inscrição no CAR e inscrever o imóvel",
+    "validado",
+    1313,
+    41702,
+    "Lei 12.651/2012, art. 29"
+   ],
+   [
+    "Emitir ou regularizar o CCIR do imóvel",
+    "validado",
+    1875,
+    65677,
+    "Lei 5.868/1972, art. 2º"
+   ]
+  ],
+  "detalhe": null,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_gerada",
+  "caso": "#22",
+  "process_id": 69,
+  "rota_id": 3,
+  "created": 2,
+  "execucao": 6,
+  "contagem": {
+   "indeterminado": 4,
+   "aplicavel_nao_disparou": 2
+  },
+  "fatos": {
+   "caso.uf": [
+    "GO",
+    "determinado"
+   ],
+   "car.no_dossie": [
+    false,
+    "determinado"
+   ],
+   "dominio.matriculas_no_dossie": [
+    0,
+    "determinado"
+   ],
+   "ccir.no_dossie": [
+    false,
+    "determinado"
+   ],
+   "imovel.natureza": [
+    null,
+    "desconhecido"
+   ],
+   "titular.falecimento_declarado": [
+    null,
+    "desconhecido"
+   ]
+  },
+  "avaliacoes": [
+   [
+    "REG-BR-CAR-001",
+    "indeterminado",
+    [
+     "imovel.natureza"
+    ],
+    "Lei 12.651/2012, art. 29"
+   ],
+   [
+    "REG-BR-CAR-002",
+    "aplicavel_nao_disparou",
+    [],
+    null
+   ],
+   [
+    "REG-BR-CAR-007",
+    "aplicavel_nao_disparou",
+    [],
+    null
+   ],
+   [
+    "REG-FUN-002",
+    "indeterminado",
+    [
+     "imovel.natureza"
+    ],
+    "Lei 5.868/1972, art. 2º"
+   ],
+   [
+    "REG-FUN-012",
+    "indeterminado",
+    [
+     "titular.falecimento_declarado"
+    ],
+    "fonte_ausente"
+   ],
+   [
+    "REG-GO-CAR-001",
+    "indeterminado",
+    [
+     "imovel.natureza"
+    ],
+    "fonte_ausente"
+   ]
+  ],
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_validado",
+  "caso": "#22",
+  "titulo": "Confirmar: natureza do imóvel (rural ou urbano)",
+  "fonte_versao": 1313,
+  "dispositivo": 41702,
+  "norma": "Lei 12.651/2012, art. 29",
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "passo_recusado_e_removido",
+  "caso": "#22",
+  "titulo": "Confirmar: situação do titular (falecimento)",
+  "validar": 409,
+  "detalhe": "Fundamento do passo não verificado: passo do motor sem fundamento resolvido por ID: traga a fonte pela curadoria e gere de novo, ou remova o passo com motivo",
+  "remover_sem_motivo": 400,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_regenerada",
+  "caso": "#22",
+  "created": 0,
+  "matched": 1,
+  "suprimidos": 1,
+  "versao_preservada": 1,
+  "execucao": 7,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "fechar_antes_da_ciencia",
+  "caso": "#22",
+  "status": 200,
+  "detalhe": null,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "rota_fechada",
+  "caso": "#22",
+  "status": 200,
+  "rota_status": "validada",
+  "passos": [
+   [
+    "Confirmar: natureza do imóvel (rural ou urbano)",
+    "validado",
+    1313,
+    41702,
+    "Lei 12.651/2012, art. 29"
+   ]
+  ],
+  "detalhe": null,
+  "execucao_do_script": 2
+ },
+ {
+  "passo": "isolamento_tenant",
+  "status_de_outro_tenant": 404,
+  "execucao_do_script": 2
+ }
+]

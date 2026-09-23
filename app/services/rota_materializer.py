@@ -404,7 +404,9 @@ def _upsert_rota(
 
 
 def _reconcile_passos(
-    *, rota: Rota, tenant_id: int, etapas: list[Etapa], contexto: Any = None
+    *, rota: Rota, tenant_id: int, etapas: list[Etapa], contexto: Any = None,
+    origem: RotaPassoOrigem = RotaPassoOrigem.ia,
+    proveniencia_motor: dict[int, dict[str, Any]] | None = None,
 ) -> tuple[int, int, bool, int]:
     """Reconcilia as ``etapas`` da IA contra os ``RotaPasso`` existentes.
 
@@ -415,6 +417,10 @@ def _reconcile_passos(
     - passo ``origem=manual`` → NUNCA tocado (chave própria, nunca casa aqui);
     - passo que o consultor REMOVEU → não volta (lápide; ver abaixo);
     - remoção pela IA não apaga passo existente (mediado por humano).
+
+    ``origem`` diz de quem é a proposta (``ia`` ou ``motor``, ADR-073 §7): o diff e o
+    casamento por identidade só olham passos DESSA origem. ``proveniencia_motor``
+    (por ``id(etapa)``) carrega avaliação e fundamento por ID do passo do motor.
 
     Retorna ``(created, matched, is_diff, suprimidos)``.
     """
@@ -443,7 +449,7 @@ def _reconcile_passos(
     # duplicaria a rota inteira uma última vez — exatamente o que o fix combate.
     por_identidade = {
         _identidade_passo(p.orgao, p.titulo): p for p in rota.passos
-        if p.origem == RotaPassoOrigem.ia and p.deleted_at is None
+        if p.origem == origem and p.deleted_at is None
     }
     max_ordem = max((p.ordem for p in rota.passos), default=0)
 
@@ -486,10 +492,13 @@ def _reconcile_passos(
                 prazo_fonte=etapa.prazo_fonte,
                 sources=[s.model_dump() for s in etapa.sources],
                 norma_ref=norma,
-                origem=RotaPassoOrigem.ia,
+                origem=origem,
                 status=RotaPassoStatus.proposto,
                 dedupe_key=key,
             )
+            if proveniencia_motor is not None:
+                for campo, valor in proveniencia_motor.get(id(etapa), {}).items():
+                    setattr(passo, campo, valor)
             # ADR-039 — proveniência: de qual achado e/ou ação este passo nasceu.
             # Só referência que casa com o que EXISTE neste caso é aceita; o
             # resto é descartado com log. Passo sem origem é honesto; passo com
@@ -513,10 +522,17 @@ def _reconcile_passos(
         else:
             matched += 1
             # NÃO sobrescreve: preserva ordem/edição/classificação do consultor.
+            # Exceção do motor: a PROVENIÊNCIA (avaliação e fundamento por ID) de um
+            # passo ainda não validado acompanha a execução corrente — a curadoria pode
+            # ter trazido a fonte desde a última. Conteúdo do passo não muda.
+            if (proveniencia_motor is not None and match.origem == RotaPassoOrigem.motor
+                    and match.status != RotaPassoStatus.validado):
+                for campo, valor in proveniencia_motor.get(id(etapa), {}).items():
+                    setattr(match, campo, valor)
 
     # Diff = a IA trouxe passo novo, OU sumiu com algum passo IA antes presente.
     ia_keys_antes = {
-        k for k, p in existing.items() if p.origem == RotaPassoOrigem.ia
+        k for k, p in existing.items() if p.origem == origem
     }
     removed_by_ia = ia_keys_antes - seen
     # `suprimidos` de propósito FORA do diff: um passo que o consultor removeu e
