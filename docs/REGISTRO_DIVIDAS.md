@@ -10,13 +10,27 @@ Registro da frente: [MOTOR_JURIDICO_INCREMENTO4B.md](arquitetura/MOTOR_JURIDICO_
   curada, depois mais nova), mas qual versão vale é decisão de curadoria (`substitui_versao_id`).
   Vizinha da #267 (duplicata por hash). **Origem:** resolução de fundamento do gate 4b.
 
-- **#274 — remissão a outra lei cortada como artigo da fonte (aberta):** "Art. 29 da Lei número
-  5.172…", remissão dentro do art. 6º da Lei 5.868/1972, virou **art. 29 da própria 5.868**. Classe
-  medida no dev: **11 dispositivos espúrios em 7 fontes** (texto do artigo começando por "Art. N
-  da/do Lei|Decreto|Constituição…"). Uma regra que cite o artigo espúrio resolve por identidade para
-  o texto errado com todas as travas verdes — o risco é do motor, não só da busca.
-  **Correção:** o corte de dispositivo não abre artigo quando o "Art. N" é seguido de "da/do
-  <espécie normativa>"; revisar os 11. **Origem:** conferência do art. 22 da Lei 5.868 no gate.
+- **#274 — remissão a outra norma cortada como artigo da fonte (FECHADA em dev, 23/09):** "Art. 29
+  da Lei número 5.172…", remissão dentro do art. 6º da Lei 5.868/1972, virou **art. 29 da própria
+  5.868** — e, pela regra de ordem, engoliu os arts. 7 a 28 reais. A primeira medição (11 em 7
+  fontes, só pelo começo do texto do artigo) subestimava a classe.
+  - **Varredura do catálogo inteiro (550 versões articuladas):** 60 cabeçalhos seguidos de
+    minúscula ou vírgula em 29 versões — a maioria **artigo real** ("Art. 10. as pessoas",
+    "Art. 7º revogar", "Art. 1 o Estabelecer", "Art. 124. à Justiça"); minúscula não é sinal.
+    **Regra adotada:** sem separador depois do número e, em seguida, palavra de ligação ("da",
+    "do", "desta", "e", "inciso", "caput", "parágrafos"), vírgula ou "§" ("e)" é alínea).
+  - **O que mudou no dev:** 12 versões; **16 artigos espúrios saem e 94 artigos reais voltam** (o
+    pior: o preâmbulo "Art 9º, inciso II, da Lei nº 6.938" do Decreto 4.297/2002, ZEE, engolia os
+    arts. 1º a 8º). Dispositivos: **210 mantêm o ID**, 63 saem, 194 entram; 129 trechos removidos,
+    189 novos, embarcados. Nenhum dispositivo que saiu estava citado pelo motor ou pela Rota; o
+    art. 2º da 5.868 (fundamento do CCIR) manteve o ID.
+  - **Sondas:** 0,892 (33/37) antes e depois, nenhuma posição mudou; uma vaga de uma sonda trocou
+    (5ª vaga da `exi-ficha-suinos-lac`, alvo segue em 1º).
+  - **Correção no lugar, não reconstrução:** `catalogo.reaplicar_dispositivos` e
+    `scripts/zona_normativa_recortar.py` (mede por padrão; recusa se o que sai estiver citado).
+    Prova: `arquitetura/provas/inc274_recorte_dev_2026-09-23.json`. Resto conhecido: o Decreto MT
+    468/2016 é impressão quebrada (cabeçalho separado do corpo, "Art. 3º⏎Art. 3º") e continua mal
+    cortado com as duas regras — é caso de revisão de fronteira, não de regra de corte.
 
 - **#275 — IN MMA 2/2014 do catálogo é cópia de trabalho, sem URL oficial (aberta):** o texto começa
   com o cabeçalho de um arquivo Word do MMA (`est3049 - h:\in car sicar 24-04-2014.doc`) e a
@@ -28,7 +42,8 @@ Registro da frente: [MOTOR_JURIDICO_INCREMENTO4B.md](arquitetura/MOTOR_JURIDICO_
   de GO) e **Código Civil** (sucessão). O motor fez o certo (não substituiu por semelhança; o passo
   saiu com motivo), mas o passo do SIGCAR é real. **Correção:** trazer as duas fontes ao catálogo
   pela curadoria; a lista de índice das coletâneas (Q-ISIS-19) pode dizer se a IN já está num
-  segmento `nao_determinado`.
+  segmento `nao_determinado`. **Encaminhamento (André, 23/09):** curadoria com a Ísis, junto da
+  Q-ISIS-22 e da fonte da IN SEMAD 22/2025.
 
 - **#277 — cadastro do imóvel não é fato do motor (aberta, depende da Ísis):** o #22 de produção tem
   código de CAR no cadastro do imóvel e nenhum CAR nos autos; o motor lê os autos e pede "Confirmar:
@@ -38,6 +53,7 @@ Registro da frente: [MOTOR_JURIDICO_INCREMENTO4B.md](arquitetura/MOTOR_JURIDICO_
 - **#278 — a tela não conhece o motor (aberta):** o painel mostra passos `motor`, mas não tem "gerar
   pelo motor", relatório da execução, ciência de alerta crítico nem motivo na remoção — o botão de
   remover atual recebe **400** num passo do motor. O percurso do gate foi por API.
+  **Registrada no Plano Diretor (André, 23/09) como condição de entrada do Incremento 7.**
 
 > **PRÓXIMO NÚMERO LIVRE: 279.** (#273 a #278 abertas pelo Incremento 4b, 23/09.)
 

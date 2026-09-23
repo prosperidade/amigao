@@ -52,15 +52,18 @@ Você está autorizado a executar SEM pedir confirmação:
   aplicar. Migration em banco errado não se desfaz com git.
 - Rodar a suíte de testes (pytest, tsc)
 - Commit e push na sua branch
-- Abrir o PR
+- Abrir o PR e, com o CI verde e a autorização do André, marcá-lo pronto (ready)
 - Diagnósticos, mergulhos, smokes em ambiente DEV
-- Limpeza da própria worktree/branch após merge
+- Limpeza da própria worktree/branch depois que o André mergear
 
-ÚNICO ponto que EXIGE autorização explícita do André:
-- O MERGE do PR na main.
+**Merge é exclusivo do André (decisão do André, 23/09/2026).** O agente prepara
+o PR — CI verde, marcado pronto (ready) — e aguarda. O agente **nunca** executa
+o merge (`gh pr merge`, botão, API ou qualquer outro caminho), nem com
+"autorizado", "pode mergear" ou equivalente: essas palavras liberam o PR para o
+André mergear, não passam o merge ao agente. Depois do merge feito por ele, o
+agente confere o CI da `main` e limpa a própria branch e worktree.
 
-Pare no PR aberto, reporte o resultado, e aguarde o "pode mergear". Tudo antes
-disso é livre — não pergunte, execute e reporte ao final.
+Tudo antes do merge é livre — não pergunte, execute e reporte ao final.
 
 Exceções que ainda pedem confirmação (segurança, não fluxo):
 - Apagar dados/tabelas em produção

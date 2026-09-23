@@ -724,3 +724,124 @@ def ligar_originais_por_nome(
     ), {"n": restantes})
     session.flush()
     return {"candidatas": len(rows), "ligadas": ligadas, "ainda_sem_original": restantes}
+
+
+# ---------------------------------------------------------------------------
+# Correção de corte no lugar (dívida #274)
+# ---------------------------------------------------------------------------
+
+# Quem aponta para um dispositivo por ID fora do próprio catálogo. `rota_passos` é
+# SET NULL: apagar o dispositivo zeraria o fundamento de um passo validado em silêncio.
+REFERENCIAS_EXTERNAS = (
+    ("avaliacao_regra", "fundamento_dispositivo_id"),
+    ("rota_passos", "fundamento_dispositivo_id"),
+)
+
+
+class DispositivoCitado(RuntimeError):
+    """Um dispositivo que o corte novo remove está citado por ID fora do catálogo."""
+
+
+@dataclass
+class Recorte:
+    versao_id: int
+    mantidos: int = 0
+    saem: list[int] = field(default_factory=list)
+    entram: list[str] = field(default_factory=list)
+    trechos_removidos: int = 0
+    trechos_novos: int = 0
+
+
+def _extraidos_planos(texto: str) -> list[tuple[DispositivoExtraido, DispositivoExtraido | None]]:
+    out: list[tuple[DispositivoExtraido, DispositivoExtraido | None]] = []
+    for d in extrair_dispositivos(texto):
+        out.append((d, None))
+        out.extend((f, d) for f in d.filhos)
+    return out
+
+
+def reaplicar_dispositivos(
+    session: Session, versao_id: int, *, rotulo: str, texto: str,
+    embed: Callable[[list[str]], list[list[float]]] | None, modelo_embedding: str | None,
+    aplicar: bool = False,
+) -> Recorte:
+    """Recorta os dispositivos de UMA versão com a regra atual, preservando IDs.
+
+    Dispositivo com o mesmo caminho e o mesmo hash continua com o mesmo ID (e os
+    mesmos trechos e vetores); só ``ordem`` e ``parent_id`` são atualizados. O que sai é
+    apagado com seus trechos; o que entra é criado, cortado em trechos e embarcado.
+    Sem ``aplicar``, só mede. Recusa (``DispositivoCitado``) se algo que sai estiver
+    citado pelo motor ou pela Rota — isso é decisão de curadoria, não de corte.
+    """
+    atuais = session.execute(text(
+        "SELECT id, caminho, hash, parent_id FROM dispositivo WHERE fonte_versao_id = :v"
+    ), {"v": versao_id}).all()
+    por_chave = {(r.caminho, r.hash): r for r in atuais}
+    novos = _extraidos_planos(texto)
+    chaves_novas = {(d.caminho(rotulo, pai)[:300], d.hash) for d, pai in novos}
+    rec = Recorte(versao_id=versao_id)
+    rec.saem = sorted(r.id for k, r in por_chave.items() if k not in chaves_novas)
+    rec.entram = [d.caminho(rotulo, pai)[:300] for d, pai in novos
+                  if (d.caminho(rotulo, pai)[:300], d.hash) not in por_chave]
+    rec.mantidos = len(novos) - len(rec.entram)
+    if rec.saem:
+        for tabela, coluna in REFERENCIAS_EXTERNAS:
+            citados = session.execute(text(
+                f"SELECT DISTINCT {coluna} FROM {tabela} WHERE {coluna} = ANY(:ids)"  # noqa: S608
+            ), {"ids": rec.saem}).scalars().all()
+            if citados:
+                raise DispositivoCitado(f"versão {versao_id}: dispositivos {sorted(citados)} citados em {tabela}")
+    if not aplicar or (not rec.saem and not rec.entram):
+        return rec
+    if embed is None or not modelo_embedding:
+        raise ValueError("aplicar exige embed e modelo_embedding")
+
+    if rec.saem:
+        rec.trechos_removidos = session.execute(text(
+            "DELETE FROM trecho_normativo WHERE dispositivo_id = ANY(:ids)"), {"ids": rec.saem}).rowcount
+        # parent_id é RESTRICT: solta quem fica e aponta para quem sai (é refeito abaixo),
+        # depois apaga filhos antes dos pais.
+        session.execute(text("UPDATE dispositivo SET parent_id = NULL WHERE parent_id = ANY(:ids) "
+                             "AND NOT (id = ANY(:ids))"), {"ids": rec.saem})
+        session.execute(text("DELETE FROM dispositivo WHERE id = ANY(:ids) AND parent_id IS NOT NULL"),
+                        {"ids": rec.saem})
+        session.execute(text("DELETE FROM dispositivo WHERE id = ANY(:ids)"), {"ids": rec.saem})
+
+    ordem_trecho = session.execute(text(
+        "SELECT coalesce(max(ordem), -1) + 1 FROM trecho_normativo WHERE fonte_versao_id = :v"
+    ), {"v": versao_id}).scalar_one()
+    ids: dict[tuple[str, str], int] = {k: r.id for k, r in por_chave.items() if k in chaves_novas}
+    fila: list[tuple[int, str]] = []
+    for d, pai in novos:
+        chave = (d.caminho(rotulo, pai)[:300], d.hash)
+        pai_id = ids[(pai.caminho(rotulo)[:300], pai.hash)] if pai is not None else None
+        if chave in ids:
+            session.execute(text("UPDATE dispositivo SET ordem = :o, parent_id = :p WHERE id = :id"),
+                            {"o": d.ordem, "p": pai_id, "id": ids[chave]})
+            continue
+        ids[chave] = session.execute(text(
+            "INSERT INTO dispositivo (fonte_versao_id, caminho, tipo, artigo, paragrafo, parent_id, ordem, texto, "
+            "hash) VALUES (:v, :c, :t, :a, :p, :pid, :o, :x, :h) RETURNING id"
+        ), {"v": versao_id, "c": chave[0], "t": d.tipo, "a": d.artigo if pai is None else pai.artigo,
+            "p": d.paragrafo, "pid": pai_id, "o": d.ordem, "x": d.texto, "h": d.hash}).scalar_one()
+        if pai is not None:
+            continue  # trecho de busca é do artigo (pai), como em `aplicar`
+        for t, n in trechos_do_dispositivo(d):
+            tid = session.execute(text(
+                "INSERT INTO trecho_normativo (fonte_versao_id, dispositivo_id, ordem, cabecalho, texto, tokens, "
+                "content_hash) VALUES (:v, :d, :o, :c, :t, :n, :h) RETURNING id"
+            ), {"v": versao_id, "d": ids[chave], "o": ordem_trecho, "c": chave[0], "t": t, "n": n,
+                "h": hashlib.sha256(t.encode()).hexdigest()}).scalar_one()
+            ordem_trecho += 1
+            fila.append((tid, f"{chave[0]}\n{t}"))
+    if fila:
+        vetores = embed([t for _, t in fila])
+        if len(vetores) != len(fila):
+            raise RuntimeError("embedding devolveu quantidade diferente da pedida")
+        for (tid, _), vec in zip(fila, vetores, strict=True):
+            session.execute(text(
+                "UPDATE trecho_normativo SET embedding = CAST(:e AS vector), embedding_model = :m WHERE id = :id"
+            ), {"e": _vetor_literal(vec), "m": modelo_embedding, "id": tid})
+    rec.trechos_novos = len(fila)
+    session.flush()
+    return rec

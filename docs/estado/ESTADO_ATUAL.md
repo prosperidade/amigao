@@ -7,7 +7,7 @@
 | Incrementos 2 e 3 | **provados em dev** (provas de 21/09 e ADR-072) |
 | Leitura semântica em produção | **as seis provas fechadas** (23/09): 984 observações `extrator_semantico`, 897 objetos, 203 em versão > 1, zero sem âncora. As quatro matrículas saíram independentes (3.181, 3.313, 3.673, 4.387) |
 | Incremento 4a (zona normativa) | **encerrada** (#201); recall@5 **0,892 (33/37)**, portão exige 34 ⇒ **Legislação segue desligada**; 3 alvos com a Ísis (Q-ISIS-21) |
-| Incremento 4b (motor jurídico) | **PR rascunho, só dev** (ADR-073): seis regras do gate, Rota **validada** com fundamento por ID em #22, #23 e #25 de dev; homologação real com a Ísis (**Q-ISIS-22**) |
+| Incremento 4b (motor jurídico) | **mergeado** (#208, ADR-073): seis regras do gate, Rota **validada** com fundamento por ID em #22, #23 e #25 de dev; homologação real com a Ísis (**Q-ISIS-22**) |
 | Backup de produção | **ativo no pré-deploy**: dump do schema `public` no R2 antes de toda migration, retenção de 30 dias com mínimo de 10 (#197, #200, #202) |
 | Imagem | o CI **constrói** e pergunta ao manifesto dentro dela (#206) |
 | Dívidas | abertas até **#278**; próximo número livre **279** |
@@ -19,6 +19,13 @@ acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#27
 registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de chamada declarado, com
 prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
 pendente; a última tarefa do #23 foi deixada terminar sozinha.
+
+**Pulso 23/09/2026 (tarde) — #274 fechada em dev.** #208 mergeado. Remissão a outra norma ("Art. 29 da
+Lei nº 5.172…") deixou de abrir artigo: na varredura das 550 versões articuladas, 12 mudaram — 16
+artigos espúrios saíram e **94 artigos reais voltaram** (o Decreto 4.297/2002 perdia os arts. 1º a
+8º). Correção no lugar, 210 dispositivos com o mesmo ID, nada citado pelo motor mudou. **Sondas
+inalteradas (0,892)**. #276 vai para a curadoria com a Ísis; #278 é condição de entrada do
+Incremento 7 no Plano Diretor.
 
 **Pulso 23/09/2026 — Incremento 4b (motor jurídico, ADR-073) em PR rascunho, só dev.** Regra
 como dado versionado (migration `075mj001`), linguagem restrita com lógica de três valores,
