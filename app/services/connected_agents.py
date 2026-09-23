@@ -37,7 +37,12 @@ DEPENDENCIES = {"diagnostico": ["auditor_imovel", "legislacao"],
                 "redator": ["diagnostico"], "orcamento": ["diagnostico", "redator"]}
 
 
-def start_execution(db, tenant_id, user_id, process_id, name, key=None):
+def start_execution(db, tenant_id, user_id, process_id, name, key=None, documento_id=None):
+    """``documento_id`` (dívida #279) restringe o passo do extrator a um documento do caso.
+
+    Fica gravado no passo da execução persistida, então sobrevive a uma retomada.
+    Sem ele, o extrator lê o caso inteiro, como sempre.
+    """
     authorize(db, tenant_id, user_id, process_id)
     lock_case(db, tenant_id, process_id, wait=False)
     names = CHAINS.get(name, [name])
@@ -53,7 +58,9 @@ def start_execution(db, tenant_id, user_id, process_id, name, key=None):
     snapshot = capture_snapshot(db, tenant_id, user_id, process_id)
     execution = AgentExecution(id=uuid4().hex, tenant_id=tenant_id, process_id=process_id,
         created_by_user_id=user_id, snapshot_id=snapshot.id, idempotency_key=key or uuid4().hex,
-        chain_name=name, steps=[{"agent": n, "status": "pending", "depends_on": DEPENDENCIES.get(n, [])} for n in names])
+        chain_name=name, steps=[{"agent": n, "status": "pending", "depends_on": DEPENDENCIES.get(n, []),
+                                 **({"document_id": documento_id} if documento_id and n == "extrator" else {})}
+                                for n in names])
     db.add(execution)
     db.flush()
     registrar_snapshot(db, execution, snapshot.id)
@@ -159,6 +166,8 @@ def run_step(db, execution, step, user_id):
 
     envelope = build_envelope(db, execution.tenant_id, user_id, execution.process_id, execution.snapshot_id)
     metadata = {"uf": envelope.case.get("uf"), "demand_type": envelope.objective}
+    if step.get("document_id"):
+        metadata["document_id"] = step["document_id"]  # dívida #279: leitura de um documento só
     manifest = capability_manifest(step["agent"], metadata)
     manifest_hash = canonical_hash(manifest)
     from sqlalchemy.dialects.postgresql import insert

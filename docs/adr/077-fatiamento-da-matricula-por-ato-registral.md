@@ -149,7 +149,53 @@ fallback; a transação foi desfeita e a execução ficou marcada como pendente.
 - O teto de custo por job (dívida #272) entra no mesmo PR, mas é decisão
   própria: acumulado por `ai_job`, com o teto do extrator calibrado por esta
   medição (US$ 0,3672 × margem de 2× = **US$ 0,75**).
-- Extrair só um documento pela fila: `run_agent` ignora o `metadata` e a
-  execução conectada relê o caso inteiro (dívida **#279**). **Com este ADR ela
-  pesa mais**: uma leitura completa do caso passa a ser ~90 chamadas e ~45 min
-  para a ELODI, e o endpoint sem `force` enfileira uma execução por documento.
+- A paralelização das fatias de um caso no worker (dívida **#280**), depois da
+  homologação: não muda resultado, só tempo.
+
+## Junto com este ADR: a fila lê um documento (dívida #279)
+
+`run_agent` descartava o `metadata`, e a execução conectada relia o **caso
+inteiro** a cada tarefa. Com o fatiamento, isso ficaria caro: a cadeia OCR →
+extrator enfileira uma tarefa por documento, e seis documentos seriam seis
+leituras completas. Decisão do André (23/09): corrigir no mesmo PR.
+
+- O `document_id` atravessa a fila (`run_agent` → `_connected_task` →
+  `start_execution`) e fica gravado **no passo** da execução persistida, então
+  sobrevive a uma retomada; o `run_step` o põe no contexto do extrator.
+- A **qualificação cartorária continua sendo do caso**: numa leitura de um
+  documento, ela é montada sobre as observações correntes de todos os documentos
+  (a última extração de cada um, pelo relatório de cada documento), nunca só
+  sobre o documento recém-lido.
+- Documento fora do caso (ou apagado, ou saída de IA) falha **dito**, em vez de
+  virar uma rodada vazia.
+
+### Prova em dev: subir seis documentos gera seis leituras parciais
+
+Cadeia do upload reproduzida documento a documento (tarefa de OCR pelo caminho
+de cache → extrator), com o código desta mudança, Celery em modo *eager*,
+caso ELODI (tenant 34, processo 67). Script: `medir_fatiamento_ato.py
+--simular-upload`. "Documentos lidos" vem dos rótulos das chamadas gravadas no
+job, não do que o script supõe.
+
+| Documento | Documentos lidos pelo job | Chamadas | Custo | Tempo |
+|---|---|---|---|---|
+| 154 · CAR | [154] | 1 | US$ 0,0041 | 62 s |
+| 155 · matrícula 3.313 | [155] | 24 | US$ 0,1060 | 529 s |
+| 156 · matrícula 3.181 | [156] | 29 | US$ 0,1094 | 763 s |
+| 157 · matrícula 3.673 | [157] | 17 | US$ 0,0667 | 577 s |
+| 158 · CNH | [158] | 1 | US$ 0,0018 | 32 s |
+| 159 · matrícula 4.387 | [159] | 14 | US$ 0,0657 | 448 s |
+| **Total** | **6 leituras de um documento** | **86** | **US$ 0,3537** | **2.411 s (40 min)** |
+
+Sem a correção, seriam **seis leituras completas** — ~US$ 2,20 e ~4 h 30 de
+worker. Com ela, o upload do caso custa uma leitura completa.
+
+Depois da última leitura parcial, a qualificação cartorária do caso tem **700
+premissas vindas dos 6 documentos**, e as âncoras seguem **700 de 700**.
+
+*Variação entre rodadas:* o número de observações por documento varia de uma
+leitura para outra (o CAR foi de 20 para 5; a 4.387, de 158 para 124). O
+caminho do CAR não muda nesta decisão; o Luna só aceita temperatura 1, então
+duas leituras do mesmo texto não produzem a mesma lista. É registro, não
+conclusão: medir a estabilidade do recall é trabalho próprio.
+

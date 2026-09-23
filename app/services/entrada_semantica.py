@@ -872,6 +872,36 @@ def superar(db, doc, anteriores, relatorio):
     invalidate_dependents(db, doc.tenant_id, doc.process_id)
 
 
+def observacoes_correntes_do_caso(db, tenant_id, process_id):
+    """A leitura corrente do caso: a última extração de cada documento (dívida #279).
+
+    Cada extração grava ``extracao:rejeicoes:<doc>`` listando as observações que ela
+    preservou. A união dessas listas, na versão mais nova de cada relatório, é o que
+    uma leitura do caso inteiro teria produzido — sem reler documento nenhum.
+    """
+    from sqlalchemy import func
+
+    from app.models.evidence import EvidenceVersion
+    ultimas = (db.query(EvidenceVersion.object_id, func.max(EvidenceVersion.version).label("v"))
+               .filter(EvidenceVersion.tenant_id == tenant_id, EvidenceVersion.process_id == process_id,
+                       EvidenceVersion.object_id.like("extracao:rejeicoes:%"))
+               .group_by(EvidenceVersion.object_id).subquery())
+    relatorios = (db.query(EvidenceVersion)
+                  .join(ultimas, (EvidenceVersion.object_id == ultimas.c.object_id)
+                        & (EvidenceVersion.version == ultimas.c.v))
+                  .filter(EvidenceVersion.tenant_id == tenant_id, EvidenceVersion.process_id == process_id)
+                  .order_by(EvidenceVersion.object_id).all())
+    pares = [(o["id"], o["version"]) for r in relatorios
+             for o in ((r.content.get("attributes") or {}).get("normalized") or {}).get("observacoes", [])]
+    if not pares:
+        return []
+    from sqlalchemy import tuple_
+    return (db.query(EvidenceVersion)
+            .filter(EvidenceVersion.tenant_id == tenant_id, EvidenceVersion.process_id == process_id,
+                    tuple_(EvidenceVersion.object_id, EvidenceVersion.version).in_(pares))
+            .order_by(EvidenceVersion.id).all())
+
+
 def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
     from app.services.agent_capabilities import capability_manifest
     if ctx.process_id is None:
@@ -882,8 +912,12 @@ def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
         return {"status": "capacidade_insuficiente", "manifest": manifest}
     query = ctx.session.query(Document).filter_by(tenant_id=ctx.tenant_id, process_id=ctx.process_id,
         deleted_at=None).filter((Document.source.is_(None)) | (Document.source != DocumentSource.generated_ai))
-    if ctx.metadata.get("document_id"):
-        query = query.filter(Document.id == ctx.metadata["document_id"])
+    escopo = ctx.metadata.get("document_id")
+    if escopo:
+        query = query.filter(Document.id == escopo)
+        if query.count() == 0:
+            # Documento de outro caso, apagado ou saída de IA: dito, não uma rodada vazia.
+            raise ValueError(f"Documento {escopo} não pertence ao caso ou não é fonte extraível")
     rows, documentos_sem_texto, superacoes = [], [], []
     for doc in query.order_by(Document.id).all():
         if not (doc.extracted_text or "").strip() and ctx.metadata.get("document_id") == doc.id and ctx.metadata.get("text"):
@@ -908,13 +942,17 @@ def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
         ctx.session.flush()
     from app.services.ficha01_extraction import data_referencia_do_processo
     reference = data_referencia_do_processo(ctx.session, ctx.tenant_id, ctx.process_id)
-    preview = projetar_preview(rows, data_referencia=reference)
+    # Dívida #279: numa leitura de um documento só, a qualificação cartorária continua
+    # sendo do CASO — as observações correntes de todos os documentos, cada um pela sua
+    # última extração —, nunca a do documento que acabou de ser lido.
+    base = observacoes_correntes_do_caso(ctx.session, ctx.tenant_id, ctx.process_id) if escopo else rows
+    preview = projetar_preview(base, data_referencia=reference)
     if rows:
         derivacao = _capture(ctx.session, ctx.tenant_id, ctx.process_id, "cartorario:material", "derivacao", {
             "origin": "motor_cartorario", "attributes": {"method": "cartorario", "method_version": "071.1",
                 "reference_date": reference.isoformat() if reference else None,
                 "normalized": preview["qualificacao_cartoraria"]},
-            "premises": [{"id": r.object_id, "version": r.version} for r in rows],
+            "premises": [{"id": r.object_id, "version": r.version} for r in base],
             "limits": ["Qualificação do material; não certifica titularidade atual ou poderes externos."],
         })
         preview["derivacao_cartoraria"] = {"id": derivacao.object_id, "version": derivacao.version}

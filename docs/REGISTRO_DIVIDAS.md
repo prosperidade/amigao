@@ -2,7 +2,7 @@
 
 ## Pulso 23/09/2026 (tarde) — frente #271/#272: fatiamento por ato e teto acumulado
 
-- **#279 — a fila não extrai um documento só: `run_agent` ignora o `metadata` (aberta):**
+- **#279 — a fila não extrai um documento só: `run_agent` ignora o `metadata` (FECHADA no PR #210):**
   - `run_agent(metadata={"document_id": ...})` chama `_connected_task` sem o `metadata`, e a execução
     conectada do ADR-069 monta o próprio contexto só com UF e objetivo (`connected_agents.py:161`).
     O `executar_extracao` então lê **todos** os documentos do caso.
@@ -20,6 +20,12 @@
     A cadeia OCR → extrator (#204) enfileira o extrator **por documento** depois de cada OCR, e cada um
     relê o caso: subir os 6 documentos da ELODI dispararia 6 leituras completas — ~4 h 30 do worker
     (`--pool=solo`) e ~US$ 2,20. Cada job fica sob o teto de US$ 0,75, mas o teto é por job, não por caso.
+  - **Fechada (23/09, decisão do André: corrigir no mesmo PR):** o `document_id` atravessa a fila e
+    fica gravado no passo da execução persistida; a qualificação cartorária continua sendo do caso
+    (montada sobre a última extração de cada documento); documento fora do caso falha dito. **Prova
+    em dev:** subir os 6 documentos da ELODI gerou **6 leituras de um documento só** — 86 chamadas,
+    **US$ 0,3537, 40 min** (uma leitura completa), contra ~US$ 2,20 e ~4 h 30 sem a correção;
+    qualificação do caso com 700 premissas dos 6 documentos; 700 de 700 âncoras.
 
 - **#271 — FECHADA (ADR-077, 23/09):** matrícula vai ao extrator ato a ato (atos até 4.000
   caracteres, abertura até 6.000), com streaming no extrator — o timeout de 30 s passa a medir
@@ -35,8 +41,19 @@
   próprio e ficam muito acima do máximo real em produção (0,1054 e 0,0191 em 90 dias). CLAUDE.md
   corrigido.
 
-> **PRÓXIMO NÚMERO LIVRE: 280.** (#279 aberta pela frente #271/#272, 23/09; #273 a #278 são do
-> Incremento 4b, logo abaixo.)
+- **#280 — paralelizar as fatias de um caso no worker (aberta; depois da homologação):**
+  - Com o ADR-077 a leitura é previsível, mas **sequencial**: a ELODI inteira leva ~45 min em ~90
+    chamadas de 25 s na mediana, uma atrás da outra, num worker `--pool=solo`. As fatias de um
+    documento são independentes entre si (a âncora é global; a chave de parte é prefixada por
+    fatia), então podem ir ao provedor em paralelo.
+  - **Correção:** fatias de um documento em paralelo, com teto de concorrência declarado e o
+    orçamento acumulado do job (#272) valendo para o conjunto; ou mais de um worker, com a trava
+    do caso (`lock_case`) segurando uma execução por caso.
+  - **Quando:** **depois da homologação** (decisão do André, 23/09) — não muda resultado, só tempo.
+  - **Origem:** prova do ADR-077 em dev.
+
+> **PRÓXIMO NÚMERO LIVRE: 281.** (#279 e #280 abertas pela frente #271/#272, 23/09; #273 a #278 são
+> do Incremento 4b, logo abaixo.)
 
 ## Pulso 23/09/2026 — Incremento 4b, motor jurídico (ADR-073, só dev)
 

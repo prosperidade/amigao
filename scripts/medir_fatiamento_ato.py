@@ -59,6 +59,54 @@ def extrair(tenant, processo, usuario):
     return resultado, time.monotonic() - inicio
 
 
+def simular_upload(tenant, processo, usuario):
+    """Dívida #279: a cadeia do upload, documento a documento, como em produção.
+
+    Para cada documento com texto, roda a tarefa de OCR pelo caminho de cache (o
+    documento já tem texto, como no reprocessamento de um upload) e deixa ela
+    despachar o extrator. O Celery roda em modo eager: o despacho executa inline,
+    com o código desta branch. Mede, por documento, quantos documentos a execução
+    leu de fato (pelos rótulos das chamadas), custo e tempo.
+    """
+    from sqlalchemy import text
+
+    from app.core.celery_app import celery_app
+    from app.db.session import SessionLocal
+    from app.workers.ocr_tasks import ocr_then_extract
+
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+    with SessionLocal() as db:
+        docs = db.execute(text(
+            "select id, document_type, length(extracted_text) from documents where tenant_id=:t "
+            "and process_id=:p and deleted_at is null and coalesce(extracted_text,'')<>'' order by id"),
+            {"t": tenant, "p": processo}).all()
+        ultimo_job = db.execute(text("select coalesce(max(id),0) from ai_jobs where tenant_id=:t"),
+                                {"t": tenant}).scalar()
+    linhas, inicio_total = [], time.monotonic()
+    for doc_id, tipo, chars in docs:
+        t0 = time.monotonic()
+        ocr_then_extract.apply(kwargs={"doc_id": doc_id, "tenant_id": tenant, "user_id": usuario,
+                                       "draft_id": None, "force": False})
+        segundos = time.monotonic() - t0
+        with SessionLocal() as db:
+            job = db.execute(text(
+                "select id, status, cost_usd, input_payload->'extractions' from ai_jobs where tenant_id=:t "
+                "and agent_name='extrator' and entity_id=:p and id>:u order by id desc limit 1"),
+                {"t": tenant, "p": processo, "u": ultimo_job}).first()
+        lidos = sorted({int(e["label"].split(":")[0][3:]) for e in (job[3] or [])}) if job else []
+        linhas.append({"doc": doc_id, "tipo": tipo, "chars": chars, "job": job[0] if job else None,
+                       "status": str(job[1]) if job else None, "documentos_lidos": lidos,
+                       "chamadas": len(job[3] or []) if job else 0,
+                       "custo_usd": round(job[2] or 0, 4) if job else 0, "segundos": round(segundos)})
+        if job:
+            ultimo_job = job[0]
+        print("upload", linhas[-1], flush=True)
+    return {"por_documento": linhas, "segundos_total": round(time.monotonic() - inicio_total),
+            "custo_total_usd": round(sum(x["custo_usd"] for x in linhas), 4),
+            "leituras_de_um_documento_so": sum(1 for x in linhas if x["documentos_lidos"] == [x["doc"]])}
+
+
 def medir(tenant, processo):
     from sqlalchemy import text
 
@@ -162,10 +210,18 @@ def main():
     ap.add_argument("--processo", type=int, required=True)
     ap.add_argument("--usuario", type=int, required=True)
     ap.add_argument("--so-medir", action="store_true", help="não extrai; só mede o que está gravado")
+    ap.add_argument("--simular-upload", action="store_true",
+                    help="dívida #279: cadeia do upload documento a documento (OCR em cache → extrator)")
     ap.add_argument("--json", help="grava a medição completa neste arquivo")
     args = ap.parse_args()
 
     conferir_alvo()
+    if args.simular_upload:
+        resultado = simular_upload(args.tenant, args.processo, args.usuario)
+        print("upload_resumo", {k: v for k, v in resultado.items() if k != "por_documento"})
+        if args.json:
+            Path(args.json).write_text(json.dumps(resultado, ensure_ascii=False, indent=2), encoding="utf-8")
+        return
     if not args.so_medir:
         resultado, segundos = extrair(args.tenant, args.processo, args.usuario)
         print(f"execução: status={resultado.get('status')} em {segundos:.0f} s")
