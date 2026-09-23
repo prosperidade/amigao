@@ -85,7 +85,9 @@ nenhuma regra falhou). Os dois estão nos testes de contrato (`test_regra_de_go_
 3. **Citação a outra lei virou artigo da fonte.** Na Lei 5.868/1972, "Art. 29 da Lei número 5.172…"
    (uma remissão dentro do art. 6º) foi cortado como **art. 29 da própria Lei 5.868**. Classe medida
    no catálogo de dev: **11 dispositivos espúrios em 7 fontes**. Uma regra que citasse esse artigo
-   resolveria para o texto errado — por identidade, com todas as travas verdes. Dívida **#274**.
+   resolveria para o texto errado — por identidade, com todas as travas verdes. Dívida **#274**. *(Fechada em
+   23/09: a varredura completa achou 16 espúrios e 94 artigos reais engolidos em 12 versões — ver o
+   registro de dívidas.)*
 4. **A IN MMA 2/2014 do catálogo é cópia de trabalho**, não a edição do DOU: o texto começa com o
    cabeçalho de um arquivo Word do MMA (`est3049 - h:\in car sicar 24-04-2014.doc`) e não tem URL na
    proveniência. Foi proposta em dev com o domínio oficial que o próprio texto cita e nota dizendo

@@ -10,6 +10,14 @@ lei, redação anterior impressa pelo Planalto) e continua dentro do dispositivo
 corrente. Sem essa regra, a lei que altera outra "ganharia" os artigos da
 alterada.
 
+Remissão não é cabeçalho (dívida #274). "Art. 29 da Lei número 5.172…" no começo de
+uma linha é a continuação de uma frase que cita OUTRA norma — o PDF quebrou a linha
+antes do "Art.". Com a regra de ordem, esse falso "art. 29" ainda engolia os artigos
+reais seguintes de número menor. Sinal: nenhum separador depois do número e, em
+seguida, palavra de ligação ("da", "do", "desta", "e", "inciso", "caput"), vírgula ou
+"§" ("e)" é alínea, não conjunção). Artigo real tem separador ("Art. 10. as pessoas") ou começa a frase ("Art. 7º
+revogar", "Art. 1 o Estabelecer") — minúscula sozinha não serve de sinal.
+
 Anexo (linha "ANEXO …" em maiúsculas depois do articulado) é dispositivo próprio:
 tabela de anexo não é parágrafo do último artigo.
 """
@@ -31,6 +39,11 @@ RE_ARTIGO = re.compile(
     r"(?:-(?P<letra>[A-Z])(?=\.|[ \t]+[A-ZÀ-Ú]|[ \t]*$))?",
     re.M,
 )
+# Depois do número (e do sufixo), sem separador, a frase continua citando outra norma.
+RE_REMISSAO = re.compile(
+    r"(?:[ \t]*,|[ \t]*§|[ \t\n]+(?:da|do|das|dos|desta|deste|dessa|desse|esta|este|e(?!\))|inciso|incisos|caput|"
+    r"par[áa]grafos?|al[íi]nea)\b)"
+)
 RE_PARAGRAFO = re.compile(
     r"^[ \t]*(?:§[ \t]*(?P<num>\d+)[ \t]*[º°o]?|(?P<unico>Par[áa]grafo[ \t]+[úu]nico))", re.M | re.I
 )
@@ -42,6 +55,11 @@ RE_ANEXO = re.compile(r"^[ \t]*ANEXO(?:[ \t]+(?P<id>[IVXLC\d]+|[ÚU]NICO))?\b[^\
 MAX_TRECHO_TOKENS = 1200
 JANELA_TOKENS = 900
 SOBREPOSICAO_TOKENS = 120
+
+
+def e_remissao(texto: str, m: re.Match) -> bool:
+    """O "Art. N" casado é citação dentro de frase, não cabeçalho de artigo."""
+    return RE_REMISSAO.match(texto, m.end()) is not None
 
 
 def _chave_artigo(num: str, letra: str | None) -> tuple[int, str]:
@@ -113,6 +131,8 @@ def extrair_dispositivos(texto: str) -> list[DispositivoExtraido]:
     cortes: list[tuple[int, str, str | None]] = []   # (pos, tipo, id)
     atual: tuple[int, str] | None = None
     for m in RE_ARTIGO.finditer(texto):
+        if e_remissao(texto, m):
+            continue
         chave = _chave_artigo(m.group("num"), m.group("letra"))
         if atual is not None and chave <= atual:
             continue

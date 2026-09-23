@@ -171,3 +171,38 @@ def test_segmento_absorvedor_perde_a_identidade():
     ok = cabeca + "".join(f"Art. {n} texto do artigo com algum conteúdo.\n" for n in range(2, 60))
     articulado = next(s for s in desmembrar(ok, "mt") if s.sinal == "cabecalho_formal")
     assert articulado.identidade.chave == "resolucao|br|cmn|5193|2024" and articulado.motivos == []
+
+
+def test_remissao_a_outra_norma_nao_abre_artigo():
+    # Dívida #274, medido no dev: na Lei 5.868/1972 a remissão "Art. 29 da Lei número
+    # 5.172", quebrada no começo da linha, virava art. 29 e engolia os arts. 7 a 28; no
+    # Decreto 4.297/2002 o preâmbulo "Art 9º, inciso II, da Lei nº 6.938" engolia os
+    # arts. 1º a 8º.
+    ds = extrair_dispositivos(
+        "DECRETO, no uso da atribuição do\nArt 9º,\n inciso II, da Lei nº 6.938, DECRETA:\n"
+        "Art. 1º Um.\nArt. 6º Para fim do imposto a que se refere o\n"
+        "Art. 29 da Lei número 5.172, considera-se rural.\n"
+        "Art. 7º Sete, na forma do\nArt. 50 e parágrafos 1 a 4, da Lei 4.504.\n"
+        "Art. 8º Oito, conforme o\nArt.\n39 da Lei 4.771.\n"
+        "Art. 9º Nove, nos termos do\nArt. 8º desta Resolução.\n"
+        "Tabela:\nArt. 5°, § 1°\nArt. 8°, caput\nArt. 12, incisos III e V, da Constituição.\n"
+        "Art. 10. Dez.\n"
+    )
+    assert [d.artigo for d in ds if d.tipo == "artigo"] == ["1", "6", "7", "8", "9", "10"]
+    assert "Art. 29 da Lei número 5.172" in next(d for d in ds if d.artigo == "6").texto
+
+
+def test_artigo_real_que_comeca_em_minuscula_continua_artigo():
+    # Varredura do catálogo inteiro: estes cabeçalhos são reais e começam em minúscula
+    # (Lei MS 90/1980, CF, IN SEMAD/GO 1/2024, IN MMA 2/2014). Minúscula não é sinal.
+    ds = extrair_dispositivos(
+        "Art. 1 o Estabelecer procedimentos.\nArt. 7º revogar a Portaria nº 662.\n"
+        "Art. 10. as pessoas físicas.\nArt. 124. à Justiça Militar compete.\n"
+        "Art. 130. Da decisão cabe recurso.\n"
+    )
+    assert [d.artigo for d in ds if d.tipo == "artigo"] == ["1", "7", "10", "124", "130"]
+
+
+def test_alinea_e_depois_do_cabecalho_nao_e_conjuncao():
+    ds = extrair_dispositivos("Art. 1º Um.\nArt. 2º\n\n e) Earth Innovation Institute;\n")
+    assert [d.artigo for d in ds if d.tipo == "artigo"] == ["1", "2"]

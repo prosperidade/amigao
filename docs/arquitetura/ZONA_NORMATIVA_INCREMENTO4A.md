@@ -267,3 +267,14 @@ documento e posição. Nenhum participa de busca. Deduplicar por hash é a dívi
 - **FK sem índice.** `trecho_normativo.dispositivo_id` e `dispositivo.parent_id` derrubaram a
   reconstrução do catálogo por `statement_timeout`. Varri a classe inteira: **12 índices** de FK
   criados nas tabelas da zona normativa.
+
+## 9. Terceira rodada (23/09): remissão cortada como artigo (dívida #274)
+
+Achado do Incremento 4b: "Art. 29 da Lei número 5.172…", remissão quebrada no começo da linha,
+virava artigo da própria Lei 5.868/1972 e, pela regra de ordem, engolia os artigos reais seguintes.
+Varredura das 550 versões articuladas: 12 afetadas, **16 artigos espúrios saem e 94 artigos reais
+voltam**; 210 dispositivos mantêm o ID. Corrigido no lugar (`catalogo.reaplicar_dispositivos`),
+porque o catálogo já tem IDs citados pelo motor e pela curadoria e não pode mais ser reconstruído
+do zero. **Sondas inalteradas: 0,892 (33/37)**, nenhuma posição mudou. Detalhe em
+[REGISTRO_DIVIDAS](../REGISTRO_DIVIDAS.md) (#274) e na prova
+[inc274_recorte_dev_2026-09-23.json](provas/inc274_recorte_dev_2026-09-23.json).

@@ -694,6 +694,14 @@ casos originais.
 etapa · falha, retry e concorrência · nenhuma evidência estrangeira ao tenant ·
 proposta desatualizada não aceita · os cinco eixos de estado coerentes após nova
 sessão.
+
+**Condição de entrada (André, 23/09/2026) — a tela conhece o motor jurídico
+(dívida #278).** O Incremento 4b provou o motor por API; o percurso do Incremento
+7 é pela tela. Antes dele, o painel precisa: gerar a Rota pelo motor, mostrar o
+relatório da execução (avaliadas, não aplicáveis, indeterminadas com os fatos
+faltantes, fundamento por ID ou a razão de não ter), registrar ciência de alerta
+crítico com justificativa e pedir motivo ao remover passo do motor — hoje o botão
+de remover recebe 400 num passo de origem `motor`.
 **Esforço:** médio. **Não é opcional.**
 
 ### INCREMENTO 8 — Aceite da Ísis e publicação controlada
@@ -729,7 +737,7 @@ do próprio método.
 | 4 | Motor jurídico e método da Legislação | Regras e fundamentos homologados para a cobertura escolhida |
 | 5 | Diagnóstico, redação e fechamento comercial | Percurso chega a proposta sem inventar escopo |
 | 6 | Migração de dados: corpus, extrações antigas, checksums (schema migra no deploy) | Dados antigos tratados sem fabricar evidência |
-| 7 | Homologação técnica integral e auditoria independente | Percurso completo aprovado, com falha e concorrência |
+| 7 | Homologação técnica integral e auditoria independente | Percurso completo aprovado, com falha e concorrência · **entra só com a tela do motor jurídico (#278)** |
 | 8 | Aceite da Ísis e publicação controlada | Versão aceita e funcionamento publicado verificado |
 
 **Sobre prazo:** isto é uma sequência com esforço relativo, não um cronograma.
