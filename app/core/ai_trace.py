@@ -23,7 +23,8 @@ def orcamento_do_job(limite_usd: float, *, job_id=None, agente=None):
         job_budget.reset(token)
 
 
-def tracked_completion(completion, *, model, messages, max_tokens, temperature, timeout, api_key, stream=False):
+def tracked_completion(completion, *, model, messages, max_tokens, temperature, timeout, api_key, stream=False,
+                       token_param="max_tokens"):
     """Uma chamada ao provedor, registrada.
 
     ``stream=True`` (ADR-077): a resposta chega em pedaços e é remontada aqui. O
@@ -34,14 +35,14 @@ def tracked_completion(completion, *, model, messages, max_tokens, temperature, 
     """
     attempts = attempt_sink.get()
     entry = {"model": model, "provider": model.split("/")[0] if "/" in model else "openai",
-             "parameters": {"max_tokens": max_tokens, "temperature": temperature, "timeout": timeout,
+             "parameters": {token_param: max_tokens, "temperature": temperature, "timeout": timeout,
                             **({"stream": True} if stream else {})},
              "status": "running"}
     if attempts is not None:
         attempts.append(entry)
     try:
-        kwargs = dict(model=model, messages=messages, max_tokens=max_tokens,
-                      temperature=temperature, timeout=timeout, api_key=api_key)
+        kwargs = dict(model=model, messages=messages, temperature=temperature, timeout=timeout, api_key=api_key)
+        kwargs[token_param] = max_tokens
         if stream:
             kwargs.update(stream=True, stream_options={"include_usage": True})
         response = completion(**kwargs)

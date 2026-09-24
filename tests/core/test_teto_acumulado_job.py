@@ -159,3 +159,40 @@ def test_stream_entra_no_orcamento_do_job(fake_litellm):
         complete("ato", model="gpt-4o-mini", stream=True)
     assert orc["chamadas_pagas"] == 1
     assert orc["gasto_usd"] == pytest.approx(0.02)
+
+
+# ---------------------------------------------------------------------------
+# gpt-6-luna (23/09): recusa max_tokens e exige max_completion_tokens
+# ---------------------------------------------------------------------------
+
+
+class _Recusa(Exception):
+    pass
+
+
+def test_recusa_de_max_tokens_troca_o_parametro_e_o_processo_lembra(fake_litellm):
+    from app.core import ai_gateway
+
+    fake_litellm.BadRequestError = _Recusa
+    ai_gateway._SO_MAX_COMPLETION_TOKENS.discard("gpt-novo")
+    recusa = _Recusa("Unsupported parameter: 'max_tokens' is not supported with this model. "
+                     "Use 'max_completion_tokens' instead.")
+    fake_litellm.completion.side_effect = [recusa, _resposta(), _resposta()]
+    fake_litellm.completion_cost.return_value = 0.001
+    with patch("app.core.config.settings", _settings()):
+        complete("x", model="gpt-novo")
+        complete("y", model="gpt-novo")
+    chamadas = [c.kwargs for c in fake_litellm.completion.call_args_list]
+    assert "max_tokens" in chamadas[0] and "max_completion_tokens" not in chamadas[0]
+    assert "max_completion_tokens" in chamadas[1] and "max_tokens" not in chamadas[1]
+    assert "max_completion_tokens" in chamadas[2]  # a segunda chamada já sai certa: sem nova recusa
+    ai_gateway._SO_MAX_COMPLETION_TOKENS.discard("gpt-novo")
+
+
+def test_recusa_que_nao_e_de_parametro_propaga(fake_litellm):
+    fake_litellm.BadRequestError = _Recusa
+    fake_litellm.completion.side_effect = _Recusa("context length exceeded")
+    with patch("app.core.config.settings", _settings()), pytest.raises(AIGatewayError):
+        complete("x", model="gpt-outro")
+    # Chegou ao provedor uma vez só: recusa que não é de parâmetro não ganha "ajuste".
+    assert fake_litellm.completion.call_count == 1

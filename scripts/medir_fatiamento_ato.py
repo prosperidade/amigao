@@ -188,14 +188,16 @@ def medir(tenant, processo):
 
 
 def resumir(med):
+    from app.core.config import settings
     chamadas = med["chamadas"]
-    primario = [c for c in chamadas if c.get("modelo") == "gpt-5.6-luna"]
-    fallback = [c for c in chamadas if c.get("modelo") != "gpt-5.6-luna"]
+    pedido = settings.AI_EXTRATOR_MODEL  # o primário desta rodada, não um nome fixo
+    primario = [c for c in chamadas if c.get("modelo") == pedido]
+    fallback = [c for c in chamadas if c.get("modelo") != pedido]
     truncadas = [c for c in chamadas if c.get("finish_reason") == "length"]
     ms = sorted(c.get("ms") or 0 for c in chamadas)
     out = sorted(c.get("tokens_out") or 0 for c in chamadas)
     return {
-        "chamadas": len(chamadas), "no_primario": len(primario), "no_fallback": len(fallback),
+        "modelo_pedido": pedido, "chamadas": len(chamadas), "no_primario": len(primario), "no_fallback": len(fallback),
         "truncadas": len(truncadas),
         "custo_total_usd": round(sum(c.get("custo_usd") or 0 for c in chamadas), 4),
         "custo_max_por_chamada_usd": round(max((c.get("custo_usd") or 0 for c in chamadas), default=0), 4),

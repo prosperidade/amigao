@@ -1,5 +1,26 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 23/09/2026 (noite) — releitura e comparação de modelos (#281, ADR-078)
+
+- **#281 — variância entre leituras × superação automática = perda de evidência (FECHADA, ADR-078):**
+  - O Luna só aceita temperatura 1, e a superação automática do ADR-070 invalidava toda observação
+    que a releitura não produzisse de novo. **Medido** (3 leituras do CAR e das 4 matrículas da
+    ELODI, sem gravar): **~41% dos fatos aparecem em só uma de três leituras**, nos dois modelos
+    testados; por releitura, ~30% da leitura anterior não é reencontrada — era isso que se perdia em
+    silêncio.
+  - **Correção (desenho do André):** observação não reencontrada **não é superada** — fica corrente,
+    marcada "não reencontrada" no relatório e na tela de conferência, e o consultor decide. Só a
+    reencontrada é superada automaticamente, com `reencontrada_em` e `valor_diferente` no relatório.
+  - **Regra de reencontro calibrada pela medição:** mesmo tipo e discriminante, trecho sobreposto e,
+    para observação, mesmo predicado **ou** mesmo valor lido. Exigir o predicado marcava rótulo trocado
+    como sumido; dispensá-lo fundia fatos distintos da mesma frase (292 de 485 pares).
+  - **Comparação gpt-5.6-luna × gpt-6-luna** registrada no ADR-078 (dado, não decisão): seis provas
+    de leitura 6/6 nos dois; o gpt-6-luna lê ~35% menos itens, custa ~1/3 e não teve timeout. O
+    padrão segue gpt-5.6-luna até decisão do André.
+
+> **PRÓXIMO NÚMERO LIVRE: 286.** (#281 aberta e fechada por esta frente; **#282 a #285 são do PR #211**,
+> Incremento 5 — renumeradas lá em 23/09 depois de colidirem com #280 e #281.)
+
 ## Pulso 23/09/2026 (tarde) — frente #271/#272: fatiamento por ato e teto acumulado
 
 - **#279 — a fila não extrai um documento só: `run_agent` ignora o `metadata` (FECHADA no PR #210):**
@@ -52,7 +73,7 @@
   - **Quando:** **depois da homologação** (decisão do André, 23/09) — não muda resultado, só tempo.
   - **Origem:** prova do ADR-077 em dev.
 
-> **PRÓXIMO NÚMERO LIVRE: 281.** (#279 e #280 abertas pela frente #271/#272, 23/09; #273 a #278 são
+> **Anterior: 281.** (#279 e #280 abertas pela frente #271/#272, 23/09; #273 a #278 são
 > do Incremento 4b, logo abaixo.)
 
 ## Pulso 23/09/2026 — Incremento 4b, motor jurídico (ADR-073, só dev)

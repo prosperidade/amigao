@@ -663,11 +663,12 @@ def registro_do_reparo(pedidos, recusadas_finais):
     return registro
 
 
-def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
-    """Único parser/persistidor, compartilhado pelo agente e adaptador de staging.
+def ler_documento(db, doc, *, manifest, on_response=None):
+    """A leitura, sem persistir: fatiar, chamar o extrator, ancorar e validar.
 
-    With ``superacoes`` the caller supersedes the previous version after writing
-    the case derivations; otherwise supersession happens here.
+    Devolve o que a persistência usa. Separada de ``extrair_documento`` para que a
+    leitura possa ser medida (dívida #281: variância entre leituras) sem disparar a
+    superação da leitura anterior.
     """
     from app.core.ai_gateway import AIGatewayError, complete
     from app.services.taxonomia_documental import FAMILIAS
@@ -786,31 +787,142 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
         raise HTTPException(422, "Extração contratual incompleta: contratos ausentes; não publicar sucesso vazio")
     if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados and not rejeicoes:
         raise HTTPException(422, "Extração cadastral incompleta: declaração de falecimento não preservada")
+    return {"entrada": entrada, "especie": especie, "family": family, "modelos": modelos,
+            "fatias": fatias, "metodo_fatiamento": metodo_fatiamento, "chamadas": chamadas,
+            "rejeicoes": rejeicoes, "campos": campos, "reparos": reparos}
+
+
+def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
+    """Único parser/persistidor, compartilhado pelo agente e adaptador de staging.
+
+    With ``superacoes`` the caller supersedes the previous version after writing
+    the case derivations; otherwise supersession happens here.
+    """
+    leitura = ler_documento(db, doc, manifest=manifest, on_response=on_response)
+    entrada, modelos = leitura["entrada"], leitura["modelos"]
+    fatias, metodo_fatiamento, chamadas = leitura["fatias"], leitura["metodo_fatiamento"], leitura["chamadas"]
+    rejeicoes, campos, reparos = leitura["rejeicoes"], leitura["campos"], leitura["reparos"]
     rows = persistir_entrada(db, doc, entrada, modelo=",".join(sorted(set(modelos))))
     anteriores = extracao_anterior(db, doc, {r.id for r in rows})
+    # Dívida #281: a leitura varia (o Luna só aceita temperatura 1). Observação anterior
+    # que a releitura NÃO reencontrou não é superada — seria perda de evidência por
+    # variância —, fica corrente e marcada para o consultor decidir. Só a reencontrada
+    # (mesmo fato, mesmo trecho) é superada pela nova, com o valor igual ou corrigido.
+    reencontradas, nao_reencontradas = separar_por_reencontro(anteriores, rows)
+    superadas = [velha for velha, _nova, _diferente in reencontradas]
     source = fonte_documental(db, doc)
     fatiamento = _registrar_fatias(db, doc, fatias, metodo_fatiamento, chamadas)
     # One version per extraction of the document: its observations and what it supersedes.
     relatorio = _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
-            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.3",
+            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.4",
                 "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "reparos": reparos,
                     "fatiamento": fatiamento,
                     "observacoes_preservadas": len(rows),
                     "observacoes": [{"id": r.object_id, "version": r.version} for r in rows],
-                    "superadas": [{"id": r.object_id, "version": r.version} for r in anteriores]}},
+                    "superadas": [{"id": v.object_id, "version": v.version,
+                                   "reencontrada_em": {"id": n.object_id, "version": n.version},
+                                   "valor_diferente": diferente} for v, n, diferente in reencontradas],
+                    "nao_reencontradas": [{"id": r.object_id, "version": r.version,
+                                           "predicado": (r.content.get("attributes") or {}).get("predicate"),
+                                           "trecho": (r.content.get("attributes") or {}).get("literal")}
+                                          for r in nao_reencontradas]}},
             "premises": [{"id": source.object_id, "version": source.version}],
-            "limits": ["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [],
+            "limits": (["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [])
+                      + (["Observacoes da leitura anterior nao reencontradas: decisao do consultor."]
+                         if nao_reencontradas else []),
         })
     if superacoes is None:
-        superar(db, doc, anteriores, relatorio)
+        superar(db, doc, superadas, relatorio)
     else:
-        superacoes.append((doc, anteriores, relatorio))
-    doc.review_required = doc.review_required or bool(rows) or bool(rejeicoes) or bool(campos)
+        superacoes.append((doc, superadas, relatorio))
+    doc.review_required = (doc.review_required or bool(rows) or bool(rejeicoes) or bool(campos)
+                           or bool(nao_reencontradas))
     doc.extraction_status = "observações extraídas; revisão necessária" if rows else "extração sem observações"
     if rejeicoes or campos:
         doc.extraction_status = (f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por "
                                  f"ancora/dependencia; {len(campos)} campos sem suporte no trecho; revisar")
+    if nao_reencontradas:
+        doc.extraction_status += (f"; {len(nao_reencontradas)} observação(ões) da leitura anterior não "
+                                  "reencontrada(s) — decidir")
     return rows
+
+
+# Chaves que o modelo inventa para ligar itens entre si: não são o valor lido (#281).
+_CHAVES_DE_REFERENCIA = {"chave", "parte_chave", "representado_chave", "falecido_chave", "sujeito",
+                         "contratante", "contratado", "posicao_inicio", "posicao_fim", "trecho", "confianca"}
+
+
+def _identidade_de_fato(row):
+    """(tipo, predicado, discriminante), versão do texto, trecho [início, fim) e literal."""
+    atributos = row.content.get("attributes") or {}
+    normalizado = atributos.get("normalized") or {}
+    tipo = (row.source_record or {}).get("tipo_entrada")
+    if tipo == "parte":
+        disc = re.sub(r"\D", "", str(normalizado.get("identificador") or "")) or _sem_espacos(
+            str(normalizado.get("nome") or "")).upper()
+    elif tipo == "ato_registral":
+        disc = re.sub(r"[\s.\-]", "", str(normalizado.get("rotulo") or "")).upper()
+    elif tipo == "participacao":
+        disc = atributos.get("role")
+    elif tipo == "referencia_processo":
+        disc = re.sub(r"\D", "", str(normalizado.get("numero") or ""))
+    else:
+        disc = None
+    posicao = re.match(r"\[(\d+),(\d+)\)", atributos.get("position") or "")
+    trecho = (int(posicao[1]), int(posicao[2])) if posicao else None
+    return ((tipo, atributos.get("predicate"), disc), atributos.get("documento_versao_id"), trecho,
+            atributos.get("literal"))
+
+
+def _valor_da_observacao(row):
+    normalizado = (row.content.get("attributes") or {}).get("normalized") or {}
+    return _sem_espacos(str(normalizado.get("valor") or "")).upper()
+
+
+def _mesmo_fato(velha, nova):
+    """Mesmo fato: mesmo tipo e discriminante, trecho sobreposto, e — para observação —
+    mesmo predicado OU mesmo valor lido.
+
+    Medido na #281 (3 leituras × 5 documentos da ELODI): metade da variância aparente
+    é só rótulo — o mesmo trecho, o mesmo valor, predicado com outro nome — e deve
+    casar. Mas casar só pelo trecho funde fatos distintos da mesma frase (área e
+    município): 292 de 485 pares no gpt-5.6-luna tinham predicado E valor diferentes.
+    """
+    (tipo_v, pred_v, disc_v), versao_v, trecho_v, literal_v = _identidade_de_fato(velha)
+    (tipo_n, pred_n, disc_n), versao_n, trecho_n, literal_n = _identidade_de_fato(nova)
+    if tipo_v != tipo_n or disc_v != disc_n:
+        return False
+    if pred_v != pred_n:
+        valor = _valor_da_observacao(velha)
+        if tipo_v != "observacao" or not valor or valor != _valor_da_observacao(nova):
+            return False
+    if versao_v == versao_n and trecho_v and trecho_n:
+        return trecho_v[0] < trecho_n[1] and trecho_n[0] < trecho_v[1]
+    # Texto de outra versão: posição não se compara; o literal, sim.
+    return bool(literal_v) and _sem_espacos(literal_v) == _sem_espacos(literal_n or "")
+
+
+def _valor_lido(row):
+    normalizado = (row.content.get("attributes") or {}).get("normalized") or {}
+    return {k: v for k, v in normalizado.items() if k not in _CHAVES_DE_REFERENCIA}
+
+
+def separar_por_reencontro(anteriores, novas):
+    """Dívida #281: separa as observações anteriores em reencontradas e não reencontradas.
+
+    Reencontrada é o mesmo fato — tipo, predicado, discriminante (identificador da
+    parte, rótulo do ato, papel, número do processo) — com trecho sobreposto na
+    mesma versão do texto, ou o mesmo literal quando a versão mudou. Devolve
+    ``([(velha, nova, valor_diferente)], [não reencontradas])``.
+    """
+    reencontradas, nao_reencontradas = [], []
+    for velha in anteriores:
+        nova = next((n for n in novas if _mesmo_fato(velha, n)), None)
+        if nova is None:
+            nao_reencontradas.append(velha)
+        else:
+            reencontradas.append((velha, nova, _valor_lido(velha) != _valor_lido(nova)))
+    return reencontradas, nao_reencontradas
 
 
 def _registrar_fatias(db, doc, fatias, metodo, chamadas):

@@ -74,6 +74,8 @@ export default function DocumentObservationsPage() {
         {rotulo(conferencia.data.documento.especie)} · versão do texto {conferencia.data.documento.versao ?? '—'} ·{' '}
         {observacoes.length} observações · {conferencia.data.rejeicoes.length} rejeitadas ·{' '}
         {conferencia.data.campos_sem_suporte.length} campos sem suporte no trecho
+        {observacoes.some(o => o.nao_reencontrada)
+          ? ` · ${observacoes.filter(o => o.nao_reencontrada).length} não reencontradas na última leitura` : ''}
         {conferencia.data.documento.extraction_status ? ` · ${conferencia.data.documento.extraction_status}` : ''}
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -101,6 +103,8 @@ export default function DocumentObservationsPage() {
                 {rotulo(o.tipo)}{o.predicado && o.predicado !== o.tipo ? ` · ${rotulo(o.predicado)}` : ''}
                 {o.superada && <span className="ml-2 text-xs text-gray-500">superada por nova extração</span>}
                 {!o.superada && o.desatualizada && <span className="ml-2 text-xs text-gray-500">desatualizada</span>}
+                {o.nao_reencontrada && <span className="ml-2 rounded bg-amber-100 px-1.5 text-xs text-amber-800">
+                  não reencontrada na última leitura — decidir</span>}
               </p>
               <dl className="mt-1 grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5">
                 {camposLegiveis(o.conteudo).map(([chave, valor]) =>
