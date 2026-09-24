@@ -10,7 +10,7 @@
 | Incremento 4b (motor jurídico) | **mergeado** (#208, ADR-073): seis regras do gate, Rota **validada** com fundamento por ID em #22, #23 e #25 de dev; homologação real com a Ísis (**Q-ISIS-22**) |
 | Backup de produção | **ativo no pré-deploy**: dump do schema `public` no R2 antes de toda migration, retenção de 30 dias com mínimo de 10 (#197, #200, #202) |
 | Imagem | o CI **constrói** e pergunta ao manifesto dentro dela (#206) |
-| Dívidas | abertas até **#284** (#279 e #280 do PR #210); próximo número livre **285** |
+| Dívidas | abertas até **#285** (#279/#280 do PR #210, #281 da releitura); próximo número livre **286** |
 
 **A sexta prova fechou na madrugada, por força bruta:** 2 h 20 e US$ 0,9172 no dia, com três jobs
 acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#272**).
@@ -29,7 +29,7 @@ validado, métodos e preços **do tenant** e versionados, totais em `Decimal`; p
 o motivo; atualidade por leitura, **sem retrocesso**. A proposta nasce do orçamento aprovado e
 atual. Percurso autenticado em dev com #23 e #25 (cadeia e API, recarga, nova sessão, remoção com
 motivo, isolamento). Achados: o diagnóstico real devolve o schema legado em vez do contrato 069
-(**#284**); o relatório lia a execução errada do motor (corrigido). Dívidas **#281–#284**. Registro:
+(**#285**); o relatório lia a execução errada do motor (corrigido). Dívidas **#282–#285**. Registro:
 [COMERCIAL_INCREMENTO5.md](../arquitetura/COMERCIAL_INCREMENTO5.md).
 
 **Pulso 23/09/2026 (tarde) — #274 fechada em dev.** #208 mergeado. Remissão a outra norma ("Art. 29 da

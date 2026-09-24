@@ -361,6 +361,13 @@ def resume_execution(db, tenant_id, user_id, execution_id, expected_revision=Non
                 previous = {k: v for k, v in step.items() if k != "history"}
                 step["history"] = [*step.get("history", []), previous]
                 step.update(status="pending", outputs=[], job_id=None)
+        # A step rerun invalidates what was built on it (ADR-074: new escopo => new orçamento).
+        reset = {s["agent"] for s in steps if s["status"] == "pending"}
+        for step in steps:
+            if step["status"] == "completed" and reset & set(step.get("depends_on", [])):
+                previous = {k: v for k, v in step.items() if k != "history"}
+                step["history"] = [*step.get("history", []), previous]
+                step.update(status="pending", outputs=[], job_id=None)
     for step in steps:
         if step["status"] == "completed":
             continue

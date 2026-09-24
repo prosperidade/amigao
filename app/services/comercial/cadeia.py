@@ -26,14 +26,16 @@ def executar_passo(db: Session, *, agent: str, tenant_id: int, process_id: int, 
         # Rodar a cadeia de novo não supera o que continua atual — nem a aprovação dele.
         rel = base_mod.ultima_redacao(db, tenant_id, process_id, "relatorio_preliminar")
         esc = base_mod.ultima_redacao(db, tenant_id, process_id, "especificacao_escopo")
-        reaproveitado = all(a is not None and base_mod.atualidade(db, a)["estado"] == "vigente" for a in (rel, esc))
+        reaproveitado = all(a is not None and a.estado_revisao != "rejeitada"
+                            and base_mod.atualidade(db, a)["estado"] == "vigente" for a in (rel, esc))
         if not reaproveitado:
             rel, esc = redator_mod.gerar(db, process=process, tenant_id=tenant_id, user_id=user_id)
         return ([{"artefato": "especificacao_escopo", "id": esc.id}],
                 {"status": "awaiting_review", "relatorio_preliminar_id": rel.id, "especificacao_escopo_id": esc.id,
                  "reaproveitado": reaproveitado, "requires_review": True, "llm": False})
     o = base_mod.ultimo_orcamento(db, tenant_id, process_id)
-    reaproveitado = o is not None and base_mod.atualidade(db, o)["estado"] == "vigente"
+    reaproveitado = (o is not None and o.estado_revisao != "rejeitada"
+                     and base_mod.atualidade(db, o)["estado"] == "vigente")
     if not reaproveitado:
         o = orcamento_mod.gerar(db, process=process, tenant_id=tenant_id, user_id=user_id)
     return ([{"artefato": "orcamento", "id": o.id}],

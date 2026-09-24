@@ -213,7 +213,7 @@ def generate_proposal_from_rota(
         raise ProposalGenerationError("Processo não encontrado.")
 
     # ADR-074 §7: havendo orçamento, a proposta só nasce dele. A distribuição da
-    # PRICE_TABLE abaixo é o caminho legado para caso sem orçamento (dívida #283).
+    # PRICE_TABLE abaixo é o caminho legado para caso sem orçamento (dívida #284).
     orcamento = orcamento_para_proposta(db, tenant_id, process_id)
     if orcamento is not None:
         return _draft_do_orcamento(db, process, tenant_id, orcamento)

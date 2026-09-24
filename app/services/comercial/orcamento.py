@@ -113,6 +113,26 @@ def _rule_id_do_passo(db: Session, passo: RotaPasso) -> str | None:
             .filter(AvaliacaoRegra.id == passo.origem_avaliacao_id).scalar())
 
 
+def resolver_metodos(db: Session, tenant_id: int, process_id: int, passo_ids: list[int]) -> dict[str, list]:
+    """Como cada passo seria precificado AGORA: ``{passo: [codigo, versao, origem]}`` ou ``["erro", motivo]``.
+
+    Gravado na base do orçamento e recalculado na leitura: método novo mapeado à regra, padrão
+    trocado ou escolha removida mudam o preço que ``gerar`` daria — e o orçamento sai desatualizado.
+    """
+    metodos = metodos_correntes(db, tenant_id)
+    escolhas = {e.rota_passo_id: e for e in db.query(OrcamentoEscolha).filter(
+        OrcamentoEscolha.tenant_id == tenant_id, OrcamentoEscolha.process_id == process_id)}
+    out: dict[str, list] = {}
+    for pid in sorted(passo_ids):
+        passo = db.query(RotaPasso).filter(RotaPasso.id == pid, RotaPasso.tenant_id == tenant_id).first()
+        try:
+            m, origem = _escolher_metodo(metodos, escolhas.get(pid), _rule_id_do_passo(db, passo) if passo else None)
+            out[str(pid)] = [m.codigo, m.versao, origem]
+        except ComercialError as exc:
+            out[str(pid)] = ["erro", str(exc)]
+    return out
+
+
 def _escolher_metodo(metodos: dict[str, OrcamentoMetodo], escolha: OrcamentoEscolha | None,
                      rule_id: str | None) -> tuple[OrcamentoMetodo, str]:
     if escolha is not None and escolha.metodo_codigo:
@@ -203,7 +223,8 @@ def gerar(db: Session, *, process: Process, tenant_id: int, user_id: int | None)
     if anterior is not None and anterior.superada_em is None:
         anterior.superada_em = agora
     codigos = sorted({db.get(OrcamentoMetodo, i.metodo_id).codigo for i in itens})
-    base = base_mod.base_orcamento(db, tenant_id, process.id, escopo, codigos)
+    base = base_mod.base_orcamento(db, tenant_id, process.id, escopo, codigos,
+                                   resolver_metodos(db, tenant_id, process.id, [i.rota_passo_id for i in itens]))
     diag = base["diagnostico"]
     o = Orcamento(tenant_id=tenant_id, process_id=process.id, versao=(anterior.versao + 1) if anterior else 1,
                   rota_id=rotas[0].id if len(rotas) == 1 else None, escopo_id=escopo.id,
@@ -229,8 +250,11 @@ def escolher(db: Session, *, process: Process, tenant_id: int, user_id: int, rot
         raise LookupError("Passo não encontrado neste caso")
     if metodo_codigo is not None and metodo_codigo not in metodos_correntes(db, tenant_id):
         raise ComercialError(f"Método \"{metodo_codigo}\" não existe ou está inativo.")
-    if quantidade is not None and Decimal(quantidade) <= 0:
-        raise ComercialError("Quantidade precisa ser maior que zero.")
+    if quantidade is not None:
+        # Mesma escala da coluna Numeric(10,2): "10" e "10.00" são a mesma escolha (a base compara texto).
+        quantidade = Decimal(quantidade).quantize(CENTAVO, rounding=ROUND_HALF_UP)
+        if quantidade <= 0:
+            raise ComercialError("Quantidade precisa ser maior que zero.")
     e = (db.query(OrcamentoEscolha).filter(OrcamentoEscolha.tenant_id == tenant_id,
                                            OrcamentoEscolha.rota_passo_id == rota_passo_id).first())
     if e is None:

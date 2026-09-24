@@ -305,6 +305,12 @@ def test_escolha_do_consultor_gera_versao_e_sobrevive(client: TestClient, db_ses
     assert v2["versao"] == v1["versao"] + 1 and v2["estado_revisao"] == "proposta"
     mapear = next(i for i in v2["itens"] if i["rota_passo_id"] == passos[MAPEAR]["id"])
     assert mapear["total"] == "2500.00" and "quantidade do consultor" in mapear["calculo"]
+    # "10" enviado e "10.00" relido do banco são a mesma escolha: a v2 nasce atual e aprovável.
+    lida = client.get(f"/api/v1/processes/{p.id}/comercial/orcamento", headers=hd).json()["orcamento"]
+    assert lida["id"] == v2["id"] and lida["atualidade"] == {"estado": "vigente", "motivos": []}
+    r = client.post(f"/api/v1/processes/{p.id}/comercial/orcamento/{v2['id']}/revisar", headers=hd,
+                    json={"acao": "aprovar", "justificativa": "quantidade conferida"})
+    assert r.status_code == 200, r.text
     r = client.post(f"/api/v1/processes/{p.id}/comercial/orcamento", headers=hd)
     v3 = r.json()
     assert next(i for i in v3["itens"] if i["rota_passo_id"] == passos[MAPEAR]["id"])["total"] == "2500.00"
@@ -429,3 +435,74 @@ def test_alerta_com_ciencia_na_execucao_mais_recente_aparece_como_ciente(client:
     alertas = next(s for s in rel["conteudo"]["secoes"] if s["chave"] == "alertas")["afirmacoes"]
     assert alertas and all("Ciência registrada" in a["texto"] for a in alertas)
     assert all(any(e["tipo"] == "ciencia_alerta" for e in a["evidencias"]) for a in alertas)
+
+
+
+# ---------------------------------------------------------------------------
+# Achados da revisão independente
+# ---------------------------------------------------------------------------
+
+def test_escopo_rejeitado_depois_arrasta_o_orcamento(client: TestClient, db_session):
+    h, p, hd, rota, passos = _rota_validada(client, db_session)
+    _metodos(client, hd)
+    escopo = _escopo_aprovado(client, p.id, hd)
+    _orcamento_aprovado(client, p.id, hd)
+    r = client.post(f"/api/v1/processes/{p.id}/comercial/redacao/{escopo['id']}/revisar", headers=hd,
+                    json={"acao": "rejeitar", "justificativa": "escopo não confere"})
+    assert r.status_code == 200
+    lido = client.get(f"/api/v1/processes/{p.id}/comercial/orcamento", headers=hd).json()["orcamento"]
+    assert lido["atualidade"]["estado"] == "desatualizado"
+    assert any("não está aprovada" in m for m in lido["atualidade"]["motivos"])
+    r = client.get("/api/v1/proposals/generate-draft", headers=hd, params={"process_id": p.id})
+    assert r.status_code == 422
+
+
+def test_metodo_novo_mapeado_a_regra_desatualiza_o_orcamento(client: TestClient, db_session):
+    h, p, hd, rota, passos = _rota_validada(client, db_session)
+    _metodos(client, hd)
+    _escopo_aprovado(client, p.id, hd)
+    _orcamento_aprovado(client, p.id, hd)
+    r = client.post("/api/v1/comercial/metodos", headers=hd, json={
+        "codigo": "mapeamento", "nome": "Mapeamento", "unidade": "fixo", "valor_unitario": "1200",
+        "rule_ids": ["REG-BR-CAR-007"]})
+    assert r.status_code == 201
+    lido = client.get(f"/api/v1/processes/{p.id}/comercial/orcamento", headers=hd).json()["orcamento"]
+    assert lido["atualidade"]["estado"] == "desatualizado"
+    assert any(f"passo {passos[MAPEAR]['id']} mudaria" in m for m in lido["atualidade"]["motivos"])
+
+
+def test_nova_versao_da_proposta_renegocia_sobre_o_orcamento(client: TestClient, db_session):
+    h, p, hd, rota, passos = _rota_validada(client, db_session)
+    _metodos(client, hd)
+    _escopo_aprovado(client, p.id, hd)
+    o = _orcamento_aprovado(client, p.id, hd)
+    prop = client.post("/api/v1/proposals/", headers=hd, json={
+        "client_id": p.client_id, "process_id": p.id, "title": "Proposta"}).json()
+    assert prop["orcamento_id"] == o["id"]
+    client.post(f"/api/v1/proposals/{prop['id']}/send", headers=hd)
+    client.post(f"/api/v1/proposals/{prop['id']}/reject", headers=hd)
+    r = client.post(f"/api/v1/proposals/{prop['id']}/nova-versao", headers=hd)
+    assert r.status_code == 201, r.text
+    nova = r.json()
+    assert nova["orcamento_id"] == o["id"] and nova["total_value"] == 2900.0
+    assert {i["orcamento_item_id"] for i in nova["scope_items"]} == {i["id"] for i in o["itens"]}
+    assert client.patch(f"/api/v1/proposals/{nova['id']}", headers=hd, json={"total_value": 1}).status_code == 422
+
+
+def test_retomada_com_recalculo_reinicia_o_orcamento_junto_do_escopo(client: TestClient, db_session):
+    h, p, hd, rota, passos = _rota_validada(client, db_session)
+    _metodos(client, hd)
+    ex = client.post("/api/v1/agents/chain", headers=hd, json={"chain_name": "gerar_proposta", "process_id": p.id}).json()
+    escopo = client.get(f"/api/v1/processes/{p.id}/comercial/redacao", headers=hd).json()["especificacao_escopo"]
+    client.post(f"/api/v1/processes/{p.id}/comercial/redacao/{escopo['id']}/revisar", headers=hd,
+                json={"acao": "aprovar", "justificativa": "ok"})
+    ex = client.post(f"/api/v1/evidence/executions/{ex['id']}/resume", headers=hd,
+                     json={"expected_revision": ex["revision"]}).json()
+    assert [s["status"] for s in ex["steps"]] == ["completed", "completed"]
+    url = f"/api/v1/rotas/{rota['id']}/passos/{passos[MAPEAR]['id']}"
+    assert client.delete(url, headers=hd, params={"motivo": "fora"}).status_code == 204
+    ex = client.post(f"/api/v1/evidence/executions/{ex['id']}/resume", headers=hd,
+                     json={"expected_revision": ex["revision"], "recompute_stale": True}).json()
+    # O redator reroda (escopo novo, em revisão); o orçamento volta a esperar por ele.
+    assert [s["status"] for s in ex["steps"]] == ["completed", "awaiting_review"]
+    assert ex["steps"][1]["history"]

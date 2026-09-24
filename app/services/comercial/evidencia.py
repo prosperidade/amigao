@@ -2,7 +2,7 @@
 
 Uma afirmação é ``{id, texto, evidencias: [{tipo, id, rotulo}]}``. Este módulo confere que
 cada evidência EXISTE no banco e pertence ao tenant (e ao caso, quando é dado do caso). É a
-trava que a redação por LLM terá de satisfazer quando entrar (dívida #282): ela poderá
+trava que a redação por LLM terá de satisfazer quando entrar (dívida #283): ela poderá
 reescrever ``texto``, nunca ``evidencias``.
 
 Nada aqui procura por semelhança: um ID que não resolve é erro nomeado, não "parecido".
@@ -72,7 +72,11 @@ def _existentes(db: Session, tipo: str, ids: set[int], *, tenant_id: int, proces
              .filter(AvaliacaoRegra.id.in_(ids), AvaliacaoRegra.tenant_id == tenant_id,
                      ExecucaoMotor.process_id == process_id))
     elif tipo == "ciencia_alerta":
-        q = db.query(CienciaAlerta.id).filter(CienciaAlerta.id.in_(ids), CienciaAlerta.tenant_id == tenant_id)
+        q = (db.query(CienciaAlerta.id)
+             .join(AvaliacaoRegra, AvaliacaoRegra.id == CienciaAlerta.avaliacao_id)
+             .join(ExecucaoMotor, ExecucaoMotor.id == AvaliacaoRegra.execucao_id)
+             .filter(CienciaAlerta.id.in_(ids), CienciaAlerta.tenant_id == tenant_id,
+                     ExecucaoMotor.process_id == process_id))
     elif tipo == "execucao_motor":
         q = db.query(ExecucaoMotor.id).filter(ExecucaoMotor.id.in_(ids), ExecucaoMotor.tenant_id == tenant_id,
                                               ExecucaoMotor.process_id == process_id)

@@ -17,8 +17,9 @@ produção intocada (nenhuma leitura nem escrita nesta frente).
 | API | `POST/GET /processes/{id}/comercial/redacao`, `POST .../redacao/{id}/revisar`, `POST/GET .../comercial/orcamento`, `PATCH .../orcamento/passos/{passo}` (gera versão), `POST .../orcamento/{id}/revisar`; `GET/POST /comercial/metodos` |
 | Proposta | `generate-draft` e `POST /proposals` nascem do orçamento aprovado e atual quando ele existe; itens/total do corpo ignorados; editar itens/total → 422; aceite bloqueado se o orçamento de origem ficar desatualizado ou superado |
 
-Testes: `tests/comercial/` (17). Recortes de regressão: cadeia, motor, skills, Rota, proposta,
-contrato, staleness, tenant_guard, agentes (309). Suíte e lint completos no CI.
+Testes: `tests/comercial/` (21). Recortes de regressão depois de integrar a `main` com o #210: cadeia,
+motor, skills, Rota, proposta, contrato, execução, staleness, tenant_guard, teto por job (244).
+Suíte e lint completos no CI.
 
 ## 2. Percurso autenticado em dev
 
@@ -50,7 +51,7 @@ REG-FUN-002; inscrição no CAR R$ 1.800 fixo para REG-BR-CAR-001).
    schema **legado** do diagnóstico (`situacao_geral`, …) em vez de `{"objects": [...]}`, e o passo
    falhou com o erro cru `'objects'`. O prompt-base legado vence a instrução do contrato. É a
    "reconciliação semântica" do diagnóstico que o Plano põe no Incremento 5 e que esta frente não
-   fez. Dívida **#284**.
+   fez. Dívida **#285**.
 2. **Qual execução do motor o relatório lê.** A primeira versão lia a execução que gerou os passos
    (#4 no #25) e escreveu "alerta crítico **sem ciência**" — falso: a ciência está na execução #5,
    a que o `fechar` exige. Corrigido (ADR-074 §2), com teste de regressão. O relatório v2 errado
@@ -59,13 +60,30 @@ REG-FUN-002; inscrição no CAR R$ 1.800 fixo para REG-BR-CAR-001).
    declarou o passo já removido em vez de repetir o gesto; o JSON registra as três execuções.
 4. **Relatório esquemático.** Frases de modelo ("Não consta CCIR nos autos."), não prosa de
    consultor. É o esperado de um Redator determinístico; a prosa por LLM sobre afirmações fixas é
-   a dívida **#282**.
+   a dívida **#283**.
 
-## 4. O que esta frente não fez (do Incremento 5 do Plano)
+## 4. Revisão independente (antes do CI)
+
+Quatro achados sérios, todos corrigidos com teste:
+
+1. Orçamento gerado por escolha de quantidade ("10") nascia **desatualizado para sempre**: a base
+   gravava "10" e relia "10.00" do banco. Quantidade normalizada na escala da coluna.
+2. Orçamento seguia `vigente` com o escopo de origem **rejeitado ou desatualizado**, e a proposta
+   saía. A atualidade do orçamento passa a exigir o escopo de origem aprovado e atual; a retomada
+   com recálculo reinicia também o passo que depende do reiniciado.
+3. A renegociação (`nova-versao`) **perdia o `orcamento_id`** e copiava itens de orçamento talvez
+   superado. Passou a nascer do orçamento aprovado e atual.
+4. Método novo mapeado à regra de um passo não desatualizava o orçamento. A base guarda como cada
+   passo foi precificado e recalcula na leitura.
+
+Menores, também corrigidos: evidência `ciencia_alerta` conferida no caso (não só no tenant); estouro
+numérico vira 422; a cadeia não reaproveita artefato rejeitado.
+
+## 5. O que esta frente não fez (do Incremento 5 do Plano)
 
 - Diagnóstico por afirmação com premissas e a reconciliação da skill do diagnóstico (DIAG-001 a
   009) — ver achado 1.
 - Redator com checklist de TR e peça técnica definitiva (pós-contratação).
 - Relatório da Fazenda Paraíso (INS-008) como referência de qualidade.
-- Tela: relatório, escopo, orçamento e métodos só por API (**#281**).
+- Tela: relatório, escopo, orçamento e métodos só por API (**#282**).
 - Validação da Ísis do método de orçamento e do texto das afirmações.

@@ -7,6 +7,7 @@ Não muda estado, não retrocede etapa, não regenera, não apaga a aprovação 
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -122,7 +123,11 @@ def base_escolhas(db: Session, tenant_id: int, process_id: int) -> dict[str, lis
     rows = (db.query(OrcamentoEscolha)
             .filter(OrcamentoEscolha.tenant_id == tenant_id, OrcamentoEscolha.process_id == process_id)
             .order_by(OrcamentoEscolha.rota_passo_id).all())
-    return {str(r.rota_passo_id): [r.metodo_codigo, str(r.quantidade) if r.quantidade is not None else None]
+    # Normalizado na escala da coluna: o valor recém-escrito ("10") e o relido do banco ("10.00")
+    # são a mesma escolha.
+    return {str(r.rota_passo_id): [r.metodo_codigo,
+                                   str(Decimal(r.quantidade).quantize(Decimal("0.01"))) if r.quantidade is not None
+                                   else None]
             for r in rows}
 
 
@@ -133,11 +138,12 @@ def base_redacao(db: Session, tenant_id: int, process_id: int, execucao_id: int 
 
 
 def base_orcamento(db: Session, tenant_id: int, process_id: int, escopo: RedacaoComercial | None,
-                   codigos: list[str]) -> dict:
+                   codigos: list[str], resolucao: dict[str, list]) -> dict:
     return {"rotas": base_rotas(db, tenant_id, process_id),
             "diagnostico": base_diagnostico(db, tenant_id, process_id),
             "escopo": {"id": escopo.id, "versao": escopo.versao} if escopo else {"id": None, "versao": None},
             "metodos": base_metodos(db, tenant_id, codigos),
+            "resolucao": resolucao,
             "escolhas": base_escolhas(db, tenant_id, process_id)}
 
 
@@ -191,6 +197,12 @@ def motivos_de_desatualizacao(antes: dict, agora: dict) -> list[str]:
         atual = (agora.get("metodos") or {}).get(codigo)
         if atual != versao:
             motivos.append(f"Método \"{codigo}\" mudou (v{versao} → " + (f"v{atual})" if atual else "inativo)"))
+    for passo, antes_m in (antes.get("resolucao") or {}).items():
+        agora_m = (agora.get("resolucao") or {}).get(passo)
+        so_versao = bool(agora_m) and agora_m[0] == antes_m[0] and agora_m[2:] == antes_m[2:]
+        if agora_m != antes_m and not so_versao and not any(f"Passo {passo} " in m for m in motivos):
+            motivos.append(f"O método do passo {passo} mudaria ({' '.join(map(str, antes_m))} → "
+                           f"{' '.join(map(str, agora_m or []))})")
     if "escolhas" in antes and antes["escolhas"] != agora.get("escolhas"):
         motivos.append("Escolha de método ou quantidade do consultor mudou")
     return motivos
@@ -213,10 +225,13 @@ def ultimo_orcamento(db: Session, tenant_id: int, process_id: int) -> Orcamento 
 
 def base_atual_de(db: Session, artefato) -> dict:
     if isinstance(artefato, Orcamento):
+        from app.services.comercial.orcamento import resolver_metodos  # noqa: PLC0415
+
         escopo = ultima_redacao(db, artefato.tenant_id, artefato.process_id, "especificacao_escopo")
-        base = base_orcamento(db, artefato.tenant_id, artefato.process_id, escopo,
-                              list((artefato.base.get("metodos") or {}).keys()))
-        return base
+        passos = [int(p) for p in (artefato.base.get("resolucao") or {})]
+        return base_orcamento(db, artefato.tenant_id, artefato.process_id, escopo,
+                              list((artefato.base.get("metodos") or {}).keys()),
+                              resolver_metodos(db, artefato.tenant_id, artefato.process_id, passos))
     from app.services.motor_juridico.avaliador import ultima_execucao  # noqa: PLC0415
     ex = ultima_execucao(db, process_id=artefato.process_id, tenant_id=artefato.tenant_id)
     return base_redacao(db, artefato.tenant_id, artefato.process_id, ex.id if ex else None)
@@ -227,6 +242,18 @@ def atualidade(db: Session, artefato) -> dict[str, Any]:
     if artefato.superada_em is not None:
         return {"estado": "superada", "motivos": ["Há versão mais nova deste documento"]}
     motivos = motivos_de_desatualizacao(artefato.base, base_atual_de(db, artefato))
+    if isinstance(artefato, Orcamento):
+        # O orçamento só vale sobre o escopo de que nasceu, aprovado e atual: escopo rejeitado ou
+        # desatualizado depois (execução nova do motor, documento novo) arrasta o orçamento junto.
+        escopo = db.query(RedacaoComercial).filter(RedacaoComercial.id == artefato.escopo_id,
+                                                   RedacaoComercial.tenant_id == artefato.tenant_id).first()
+        if escopo is None or escopo.estado_revisao != "aprovada":
+            motivos.append("A especificação de escopo de origem não está aprovada "
+                           f"({escopo.estado_revisao if escopo else 'ausente'})")
+        elif escopo.superada_em is None:
+            estado_escopo = atualidade(db, escopo)
+            if estado_escopo["estado"] != "vigente":
+                motivos += [f"Escopo de origem: {m}" for m in estado_escopo["motivos"]]
     # Documento novo ou decisão da Conferência depois da geração (ADR-068): mesmo aviso
     # que a Rota e a proposta já recebem.
     from app.services.artifact_staleness import checar_desatualizacao  # noqa: PLC0415

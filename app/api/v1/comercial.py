@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user, get_db
@@ -58,6 +58,10 @@ def _gravar(db: Session, fn):
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Versão gerada por outra sessão; recarregue.") from exc
+    except DataError as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Valor fora do limite (quantidade × preço excede o total suportado).") from exc
 
 
 def _dinheiro(v) -> str | None:

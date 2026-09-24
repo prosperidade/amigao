@@ -3,22 +3,22 @@
 ## Pulso 23/09/2026 — Incremento 5, fechamento comercial (ADR-074, só dev)
 
 Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5.md). A **#279** e a
-**#280** são do PR #210 (fatiamento por ato, já na `main`); esta frente começa na #281.
+**#280** são do PR #210 (fatiamento por ato, já na `main`); a **#281** é da frente de releitura (André); esta frente começa na #282.
 
-- **#281 — a tela não conhece relatório, escopo, orçamento nem métodos (aberta):** o percurso do
+- **#282 — a tela não conhece relatório, escopo, orçamento nem métodos (aberta):** o percurso do
   Incremento 5 foi por API. Sem tela, a proposta da E6 continua podendo nascer pelo caminho legado
   da `PRICE_TABLE` em caso sem orçamento. Irmã da #278; mesma condição de entrada do Incremento 7.
 
-- **#282 — Redator sem prosa e sem checklist de TR (aberta):** o relatório preliminar e o escopo
+- **#283 — Redator sem prosa e sem checklist de TR (aberta):** o relatório preliminar e o escopo
   são esquemáticos ("Não consta CCIR nos autos."). A prosa por LLM entra sobre afirmações fixas —
   pode reescrever `texto`, nunca `evidencias` (o validador de `comercial/evidencia.py` já existe).
   O checklist de TR é da peça definitiva, pós-contratação.
 
-- **#283 — dois orçamentos legados no código (aberta):** `OrcamentoAgent._estimate_by_rules`
+- **#284 — dois orçamentos legados no código (aberta):** `OrcamentoAgent._estimate_by_rules`
   (constantes por demanda) e a distribuição da `PRICE_TABLE` em `proposal_generator` continuam
-  servindo o caso sem orçamento. Saem quando a #281 fechar (Plano §9.4, "unificar").
+  servindo o caso sem orçamento. Saem quando a #282 fechar (Plano §9.4, "unificar").
 
-- **#284 — o diagnóstico não produz conclusão pelo contrato 069 (aberta):** rodado em dev no #25
+- **#285 — o diagnóstico não produz conclusão pelo contrato 069 (aberta):** rodado em dev no #25
   (`gpt-5.6-luna`, job 201, 61.222 tokens de entrada, US$ 0,015), devolveu o schema legado
   (`situacao_geral`, …) em vez de `{"objects": [...]}`; o passo falhou com o erro cru `'objects'`
   (KeyError sem nome de causa). O prompt-base legado vence a instrução do contrato. É a
@@ -26,8 +26,8 @@ Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5
   **Consequência:** hoje nenhum diagnóstico real entra em revisão pelo contrato; a prova de
   "diagnóstico em revisão não impede o orçamento" em dev usou conclusão sintética declarada.
 
-> **PRÓXIMO NÚMERO LIVRE: 285.** (#279 e #280 do PR #210; #281 a #284 abertas pelo
-> Incremento 5, 23/09.)
+> **PRÓXIMO NÚMERO LIVRE: 286.** (#279 e #280 do PR #210; #281 da frente de releitura; #282 a
+> #285 abertas pelo Incremento 5, 23/09.)
 
 ## Pulso 23/09/2026 (tarde) — frente #271/#272: fatiamento por ato e teto acumulado
 

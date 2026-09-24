@@ -545,17 +545,29 @@ def new_version(
             detail="Nova versão só a partir de proposta recusada ou expirada "
             f"(estado atual: {eff.value}).",
         )
+    # ADR-074 §7: caso com orçamento renegocia sobre o orçamento aprovado e atual, nunca sobre a
+    # cópia dos itens da versão recusada (que pode vir de um orçamento já superado).
+    scope_items, total_value, rota_id, orcamento_id = prev.scope_items, prev.total_value, prev.rota_id, None
+    if prev.process_id is not None:
+        try:
+            orcamento = orcamento_para_proposta(db, current_user.tenant_id, prev.process_id)
+        except ProposalGenerationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if orcamento is not None:
+            scope_items, total_value = itens_do_orcamento(orcamento), float(orcamento.total)
+            rota_id, orcamento_id = orcamento.rota_id, orcamento.id
     nova = Proposal(
         tenant_id=prev.tenant_id,
         client_id=prev.client_id,
         process_id=prev.process_id,
-        rota_id=prev.rota_id,
+        rota_id=rota_id,
+        orcamento_id=orcamento_id,
         previous_version_id=prev.id,
         version_number=(prev.version_number or 1) + 1,
         status=ProposalStatus.draft,
         title=prev.title,
-        scope_items=prev.scope_items,
-        total_value=prev.total_value,
+        scope_items=scope_items,
+        total_value=total_value,
         validity_days=prev.validity_days,
         payment_terms=prev.payment_terms,
         notes=prev.notes,
