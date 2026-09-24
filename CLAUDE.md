@@ -199,7 +199,7 @@ Os 10 princípios do produto vivem em `docs/manifesto/03-PRINCIPIOS.md`. Os mais
 4. **Multi-tenant desde o dia 1.** Toda query filtra por `tenant_id`.
 5. **Multi-provider IA.** LiteLLM com fallback. Nenhum serviço chama provider direto.
 6. **Schema antes de escala.** Saídas de agente passam por `StageOutputContent` validado.
-7. **Cost cap é hard limit.** `AI_MAX_COST_PER_JOB_USD` enforced no `ai_gateway.complete()`.
+7. **Cost cap é hard limit, acumulado por job.** O `ai_gateway.complete()` soma o custo de **cada chamada paga** do job (inclusive a truncada que é refeita) e recusa a próxima quando o gasto alcança o teto do agente — `settings.teto_de_custo_por_job(agente)`: extrator `AI_MAX_COST_PER_JOB_USD_EXTRATOR`, diagnóstico e legislação com os seus, demais `AI_MAX_COST_PER_JOB_USD`. A folga máxima é uma chamada (a que cruza o teto já foi paga). Até 23/09/2026 a conferência era por chamada e três jobs passaram do teto sem reprovar (dívida #272).
 
 ## Regras de código
 

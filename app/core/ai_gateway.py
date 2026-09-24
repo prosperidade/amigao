@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from app.core.ai_trace import tracked_completion
+from app.core.ai_trace import job_budget, tracked_completion
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -267,6 +267,45 @@ def _recusa_de_temperatura(exc: BaseException) -> bool:
     return "temperature" in message and ("support" in message or "unsupported" in message)
 
 
+def _conferir_orcamento_do_job(model: str) -> None:
+    """Dívida #272: recusa a chamada quando o job já gastou o teto ACUMULADO.
+
+    A checagem é antes de cada chamada paga ao provedor. A folga máxima é uma
+    chamada: a que cruza o teto já foi paga quando se sabe o custo dela.
+    """
+    orc = job_budget.get()
+    if orc is None or orc["limite_usd"] <= 0 or orc["gasto_usd"] < orc["limite_usd"]:
+        return
+    logger.error(
+        "ai_gateway.complete teto acumulado do job atingido: job=%s agente=%s gasto=%.4f "
+        "limite=%.4f chamadas_pagas=%d proxima=%s",
+        orc["job_id"], orc["agente"], orc["gasto_usd"], orc["limite_usd"], orc["chamadas_pagas"], model,
+    )
+    raise AIGatewayError(
+        message=(f"Teto de custo do job atingido: US$ {orc['gasto_usd']:.4f} gastos em "
+                 f"{orc['chamadas_pagas']} chamadas, limite US$ {orc['limite_usd']:.4f}; nenhuma chamada nova"),
+        last_error=f"job_budget_exceeded agente={orc['agente']} job={orc['job_id']}",
+        cost_usd=orc["gasto_usd"],
+    )
+
+
+def _somar_ao_orcamento_do_job(litellm, resp) -> None:
+    """Soma o custo de UMA chamada paga — inclusive a truncada que vai ser refeita."""
+    orc = job_budget.get()
+    if orc is None:
+        return
+    try:
+        custo = litellm.completion_cost(completion_response=resp)
+    except Exception:
+        custo = None
+    orc["chamadas_pagas"] += 1
+    if custo is None:
+        # Desconhecido não é zero: a chamada fica contada e a falta de preço, dita.
+        orc["sem_custo"] += 1
+        return
+    orc["gasto_usd"] += custo
+
+
 def complete(
     prompt: str,
     *,
@@ -278,6 +317,7 @@ def complete(
     user_preferences: Optional[dict] = None,
     agent_name: Optional[str] = None,
     allow_fallback: bool = True,
+    stream: bool = False,
 ) -> AIResponse:
     """
     Envia um prompt para o LLM e retorna AIResponse.
@@ -379,7 +419,11 @@ def complete(
                     try:
                         call = dict(model=_model, messages=messages, max_tokens=mt,
                                     timeout=_timeout, api_key=_api_key or None)
+                        if stream:
+                            # ADR-077: o timeout mede provedor travado, não geração longa.
+                            call["stream"] = True
                         temperature = 1 if _model in _SO_TEMPERATURA_PADRAO else _temperature
+                        _conferir_orcamento_do_job(_model)
                         try:
                             resp = tracked_completion(litellm.completion, temperature=temperature, **call)
                         except _refused as refused:
@@ -390,6 +434,7 @@ def complete(
                                 raise
                             _SO_TEMPERATURA_PADRAO.add(_model)
                             resp = tracked_completion(litellm.completion, temperature=1, **call)
+                        _somar_ao_orcamento_do_job(litellm, resp)
                         break
                     except _transient as transient_exc:
                         if _attempt >= _max_retries:

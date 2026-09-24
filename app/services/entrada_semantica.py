@@ -688,12 +688,24 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     system += json.dumps(EntradaExtraida.model_json_schema(), ensure_ascii=False)
     from app.core.config import settings
     from app.services.extraction_window import fatiar
-    fatias = fatiar(doc.extracted_text, chunk_chars=settings.EXTRACTOR_CHUNK_CHARS,
-        overlap_chars=settings.EXTRACTOR_CHUNK_OVERLAP_CHARS, max_chunks=settings.EXTRACTOR_MAX_CHUNKS)
+    from app.services.fatiamento_registral import fatiar_por_ato
+    # ADR-077 (#271): matrícula vai ao extrator ato a ato. O tamanho da resposta
+    # segue o número de atos na fatia, e resposta grande estourava o timeout do
+    # Luna e truncava o fallback. Sem ato reconhecível, o corte por tamanho segue.
+    fatias, metodo_fatiamento = None, "tamanho"
+    if family == "registral":
+        fatias = fatiar_por_ato(doc.extracted_text, max_chars=settings.EXTRACTOR_ATO_MAX_CHARS,
+            max_chars_abertura=settings.EXTRACTOR_ABERTURA_MAX_CHARS)
+        if fatias:
+            metodo_fatiamento = "ato_registral"
+    if not fatias:
+        fatias = fatiar(doc.extracted_text, chunk_chars=settings.EXTRACTOR_CHUNK_CHARS,
+            overlap_chars=settings.EXTRACTOR_CHUNK_OVERLAP_CHARS, max_chunks=settings.EXTRACTOR_MAX_CHUNKS)
     if not fatias or fatias[-1].fim != len(doc.extracted_text):
         raise HTTPException(422, "Cobertura documental insuficiente; nenhuma extração parcial será publicada como completa")
     colecoes = {key: [] for key in EntradaExtraida.model_fields}
     modelos = []
+    chamadas = []
     rejeicoes, campos, reparos = [], [], []
     for fatia in fatias:
         texto = doc.extracted_text[fatia.inicio:fatia.fim]
@@ -704,13 +716,25 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
             "Trecho repetido exige offsets corretos; sem eles somente a observação será rejeitada. "
             "Não estime offsets. Amplie o trecho para torná-lo único quando necessário. "
             "Não preencha campos de famílias ausentes. Não devolva Markdown.")
+        if getattr(fatia, "atos", None):
+            system_fatia += (f"\nEsta fatia cobre o(s) ato(s) {', '.join(fatia.atos)} da matrícula"
+                + (f", parte {fatia.parte} de {fatia.partes} do mesmo ato" if fatia.partes > 1 else "")
+                + ". Extraia somente o que está no texto desta fatia; não complete com o que estaria fora dela.")
 
-        def chamar(sistema, rotulo, texto=texto):
+        def chamar(sistema, rotulo, texto=texto, fatia=fatia):
+            # ADR-077: ato inteiro gera ~1 token de saída por caractere; em streaming, o
+            # timeout mede provedor travado, e o ato não precisa ser partido para caber.
             response = complete(texto, system=sistema, agent_name="extrator", model=settings.AI_EXTRATOR_MODEL,
-                allow_fallback=settings.AI_EXTRATOR_ALLOW_FALLBACK, max_tokens=12000, temperature=0)
+                allow_fallback=settings.AI_EXTRATOR_ALLOW_FALLBACK, max_tokens=12000, temperature=0,
+                stream=settings.AI_EXTRATOR_STREAM)
             if on_response:
                 on_response(response, rotulo)
             modelos.append(response.model_used)
+            # Medida por fatia (ADR-077): o que cada ato custou e demorou, e se fechou no primário.
+            chamadas.append({"fatia": fatia.indice, "rotulo": rotulo, "modelo": response.model_used,
+                "tokens_in": response.tokens_in, "tokens_out": response.tokens_out,
+                "custo_usd": response.cost_usd, "ms": response.duration_ms,
+                "finish_reason": response.finish_reason})
             raw = response.content.strip()
             if raw.startswith("```"):
                 raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
@@ -765,10 +789,12 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     rows = persistir_entrada(db, doc, entrada, modelo=",".join(sorted(set(modelos))))
     anteriores = extracao_anterior(db, doc, {r.id for r in rows})
     source = fonte_documental(db, doc)
+    fatiamento = _registrar_fatias(db, doc, fatias, metodo_fatiamento, chamadas)
     # One version per extraction of the document: its observations and what it supersedes.
     relatorio = _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
             "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.3",
                 "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "reparos": reparos,
+                    "fatiamento": fatiamento,
                     "observacoes_preservadas": len(rows),
                     "observacoes": [{"id": r.object_id, "version": r.version} for r in rows],
                     "superadas": [{"id": r.object_id, "version": r.version} for r in anteriores]}},
@@ -785,6 +811,23 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
         doc.extraction_status = (f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por "
                                  f"ancora/dependencia; {len(campos)} campos sem suporte no trecho; revisar")
     return rows
+
+
+def _registrar_fatias(db, doc, fatias, metodo, chamadas):
+    """Cada fatia vira ``Fragmento`` da versão lida: a âncora de toda observação cai
+    dentro de exatamente uma delas, então a pertença ato↔observação é posição."""
+    from app.core.config import settings
+    version = db.query(DocumentoVersao).filter_by(tenant_id=doc.tenant_id,
+        documento_id=doc.id).order_by(DocumentoVersao.numero.desc()).first()
+    registro = []
+    for fatia in fatias:
+        fragmento = registrar_fragmento(db, version, fatia.inicio, fatia.fim) if version else None
+        registro.append({"indice": fatia.indice, "rotulo": fatia.rotulo, "inicio": fatia.inicio, "fim": fatia.fim,
+            "atos": list(getattr(fatia, "atos", ())), "fragmento_id": fragmento.id if fragmento else None})
+    maximos = ({"ato": settings.EXTRACTOR_ATO_MAX_CHARS, "abertura": settings.EXTRACTOR_ABERTURA_MAX_CHARS}
+               if metodo == "ato_registral" else {"tamanho": settings.EXTRACTOR_CHUNK_CHARS})
+    return {"metodo": metodo, "max_chars": maximos, "stream": settings.AI_EXTRATOR_STREAM,
+            "fatias": registro, "chamadas": chamadas}
 
 
 def extracao_anterior(db, doc, atuais):
@@ -829,6 +872,36 @@ def superar(db, doc, anteriores, relatorio):
     invalidate_dependents(db, doc.tenant_id, doc.process_id)
 
 
+def observacoes_correntes_do_caso(db, tenant_id, process_id):
+    """A leitura corrente do caso: a última extração de cada documento (dívida #279).
+
+    Cada extração grava ``extracao:rejeicoes:<doc>`` listando as observações que ela
+    preservou. A união dessas listas, na versão mais nova de cada relatório, é o que
+    uma leitura do caso inteiro teria produzido — sem reler documento nenhum.
+    """
+    from sqlalchemy import func
+
+    from app.models.evidence import EvidenceVersion
+    ultimas = (db.query(EvidenceVersion.object_id, func.max(EvidenceVersion.version).label("v"))
+               .filter(EvidenceVersion.tenant_id == tenant_id, EvidenceVersion.process_id == process_id,
+                       EvidenceVersion.object_id.like("extracao:rejeicoes:%"))
+               .group_by(EvidenceVersion.object_id).subquery())
+    relatorios = (db.query(EvidenceVersion)
+                  .join(ultimas, (EvidenceVersion.object_id == ultimas.c.object_id)
+                        & (EvidenceVersion.version == ultimas.c.v))
+                  .filter(EvidenceVersion.tenant_id == tenant_id, EvidenceVersion.process_id == process_id)
+                  .order_by(EvidenceVersion.object_id).all())
+    pares = [(o["id"], o["version"]) for r in relatorios
+             for o in ((r.content.get("attributes") or {}).get("normalized") or {}).get("observacoes", [])]
+    if not pares:
+        return []
+    from sqlalchemy import tuple_
+    return (db.query(EvidenceVersion)
+            .filter(EvidenceVersion.tenant_id == tenant_id, EvidenceVersion.process_id == process_id,
+                    tuple_(EvidenceVersion.object_id, EvidenceVersion.version).in_(pares))
+            .order_by(EvidenceVersion.id).all())
+
+
 def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
     from app.services.agent_capabilities import capability_manifest
     if ctx.process_id is None:
@@ -839,8 +912,12 @@ def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
         return {"status": "capacidade_insuficiente", "manifest": manifest}
     query = ctx.session.query(Document).filter_by(tenant_id=ctx.tenant_id, process_id=ctx.process_id,
         deleted_at=None).filter((Document.source.is_(None)) | (Document.source != DocumentSource.generated_ai))
-    if ctx.metadata.get("document_id"):
-        query = query.filter(Document.id == ctx.metadata["document_id"])
+    escopo = ctx.metadata.get("document_id")
+    if escopo:
+        query = query.filter(Document.id == escopo)
+        if query.count() == 0:
+            # Documento de outro caso, apagado ou saída de IA: dito, não uma rodada vazia.
+            raise ValueError(f"Documento {escopo} não pertence ao caso ou não é fonte extraível")
     rows, documentos_sem_texto, superacoes = [], [], []
     for doc in query.order_by(Document.id).all():
         if not (doc.extracted_text or "").strip() and ctx.metadata.get("document_id") == doc.id and ctx.metadata.get("text"):
@@ -865,13 +942,17 @@ def executar_extracao(ctx, *, on_response=None, ai_job_id=None):
         ctx.session.flush()
     from app.services.ficha01_extraction import data_referencia_do_processo
     reference = data_referencia_do_processo(ctx.session, ctx.tenant_id, ctx.process_id)
-    preview = projetar_preview(rows, data_referencia=reference)
+    # Dívida #279: numa leitura de um documento só, a qualificação cartorária continua
+    # sendo do CASO — as observações correntes de todos os documentos, cada um pela sua
+    # última extração —, nunca a do documento que acabou de ser lido.
+    base = observacoes_correntes_do_caso(ctx.session, ctx.tenant_id, ctx.process_id) if escopo else rows
+    preview = projetar_preview(base, data_referencia=reference)
     if rows:
         derivacao = _capture(ctx.session, ctx.tenant_id, ctx.process_id, "cartorario:material", "derivacao", {
             "origin": "motor_cartorario", "attributes": {"method": "cartorario", "method_version": "071.1",
                 "reference_date": reference.isoformat() if reference else None,
                 "normalized": preview["qualificacao_cartoraria"]},
-            "premises": [{"id": r.object_id, "version": r.version} for r in rows],
+            "premises": [{"id": r.object_id, "version": r.version} for r in base],
             "limits": ["Qualificação do material; não certifica titularidade atual ou poderes externos."],
         })
         preview["derivacao_cartoraria"] = {"id": derivacao.object_id, "version": derivacao.version}

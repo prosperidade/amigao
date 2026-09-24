@@ -40,7 +40,8 @@ _DETERMINISTIC_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
-def _connected_task(task, tenant_id, user_id, *, execution_id=None, process_id=None, name=None):
+def _connected_task(task, tenant_id, user_id, *, execution_id=None, process_id=None, name=None,
+                    documento_id=None):
     from fastapi import HTTPException
 
     from app.db.session import SessionLocal
@@ -49,7 +50,7 @@ def _connected_task(task, tenant_id, user_id, *, execution_id=None, process_id=N
         with SessionLocal() as db:
             if execution_id is None:
                 execution = start_execution(db, tenant_id, user_id, process_id, name,
-                                            key=getattr(task.request, "id", None))
+                                            key=getattr(task.request, "id", None), documento_id=documento_id)
                 execution_id = execution.id
                 db.commit()  # persist the cursor before invoking an external provider
             result = resume_execution(db, tenant_id, user_id, execution_id)
@@ -147,7 +148,10 @@ def run_agent(
     from app.services.agent_capabilities import ACTIVE_AGENTS
     if agent_name not in ACTIVE_AGENTS:
         return {"status": "agente_desativado", "agent": agent_name}
-    return _connected_task(self, tenant_id, user_id, process_id=process_id, name=agent_name)
+    # Dívida #279: o document_id do metadata chega à execução. Antes era descartado aqui,
+    # e cada tarefa "por documento" relia o caso inteiro.
+    return _connected_task(self, tenant_id, user_id, process_id=process_id, name=agent_name,
+                           documento_id=(metadata or {}).get("document_id"))
 
 
 @celery_app.task(

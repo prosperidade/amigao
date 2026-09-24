@@ -789,3 +789,88 @@ def test_citation_gate_recognizes_short_forms_and_every_norm_of_the_source(commi
         stored = {row.object_id for row in db.query(EvidenceVersion).filter(
             EvidenceVersion.process_id == case["case"], EvidenceVersion.kind == "conclusao")}
         assert stored == {"short-forms", "not-the-first-norm"}
+
+
+# ---------------------------------------------------------------------------
+# Dívida #279 — a fila lê UM documento, e a qualificação segue sendo do caso
+# ---------------------------------------------------------------------------
+
+
+def _dois_documentos(factory, case):
+    with factory() as db:
+        doc1 = db.get(Document, case["doc"])
+        doc1.document_type = "certidao_matricula"
+        doc1.extracted_text = "Certidao 1. Proprietaria: ALFA AGRO LTDA, CNPJ 11.222.333/0001-81."
+        doc2 = Document(tenant_id=case["tenant"], process_id=case["case"], original_file_name="doc2.txt",
+                        filename="doc2.txt", storage_key="doc2", content_type="text/plain",
+                        document_type="certidao_matricula",
+                        extracted_text="Certidao 2. Proprietaria: BETA AGRO LTDA, CNPJ 44.555.666/0001-99.",
+                        checksum_sha256="c" * 64)
+        db.add(doc2)
+        db.commit()
+        return doc2.id
+
+
+def _parte(chave, nome, cnpj):
+    return {"partes": [{"chave": chave, "nome": nome, "natureza": "pj", "identificador": cnpj,
+                        "tipo_identificador": "cnpj", "trecho": f"{nome}, CNPJ {cnpj}"}]}
+
+
+def test_execucao_com_documento_le_so_ele_e_qualifica_o_caso_inteiro(committed_case, monkeypatch):
+    from app.services.connected_agents import resume_execution, start_execution
+    factory, case = committed_case
+    doc2 = _dois_documentos(factory, case)
+    alfa = _parte("alfa", "ALFA AGRO LTDA", "11.222.333/0001-81")
+    beta = _parte("beta", "BETA AGRO LTDA", "44.555.666/0001-99")
+    # Leitura do caso inteiro (duas chamadas), depois só do documento 2 (uma chamada).
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    respostas, textos = iter([alfa, beta, beta]), []
+
+    def gateway(texto, *args, **kwargs):
+        textos.append(texto)
+        return AIResponse(content=json.dumps(next(respostas)), model_used="controlled", provider="test",
+                          tokens_in=1, tokens_out=1, cost_usd=0.001, duration_ms=1)
+    monkeypatch.setattr("app.core.ai_gateway.complete", gateway)
+    with factory() as db:
+        inteiro = start_execution(db, case["tenant"], case["user"], case["case"], "extrator")
+        db.commit()
+        assert resume_execution(db, case["tenant"], case["user"], inteiro.id).status == "completed"
+        db.commit()
+        parcial = start_execution(db, case["tenant"], case["user"], case["case"], "extrator", documento_id=doc2)
+        assert parcial.steps[0]["document_id"] == doc2  # gravado no passo: sobrevive a retomada
+        db.commit()
+        assert resume_execution(db, case["tenant"], case["user"], parcial.id).status == "completed"
+        db.commit()
+    # A leitura parcial fez UMA chamada, e com o texto do documento 2 — não o caso inteiro.
+    assert len(textos) == 3
+    assert "Certidao 2" in textos[2] and "Certidao 1" not in textos[2]
+    with factory() as db:
+        derivacao = (db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], object_id="cartorario:material")
+                     .order_by(EvidenceVersion.version.desc()).first())
+        premissas = {p["id"] for p in derivacao.content["premises"]}
+        fontes = {r.source_document_id for r in db.query(EvidenceVersion).filter(
+            EvidenceVersion.tenant_id == case["tenant"], EvidenceVersion.object_id.in_(premissas))}
+        assert fontes == {case["doc"], doc2}  # a qualificação continua sendo do caso inteiro
+
+
+def test_documento_fora_do_caso_falha_dito(committed_case, monkeypatch):
+    from app.services.connected_agents import resume_execution, start_execution
+    factory, case = committed_case
+    _controlled_extractions(monkeypatch)
+    with factory() as db:
+        execucao = start_execution(db, case["tenant"], case["user"], case["case"], "extrator", documento_id=999_999)
+        db.commit()
+        resultado = resume_execution(db, case["tenant"], case["user"], execucao.id)
+        assert resultado.steps[0]["status"] == "failed"
+        assert "não pertence ao caso" in resultado.steps[0]["error"]
+
+
+def test_run_agent_entrega_o_document_id_a_execucao(monkeypatch):
+    from app.workers import agent_tasks
+    recebido = {}
+    monkeypatch.setattr(agent_tasks, "_connected_task", lambda task, *a, **k: recebido.update(k) or {"status": "ok"})
+    agent_tasks.run_agent.run(agent_name="extrator", tenant_id=1, user_id=1, process_id=23,
+                              metadata={"document_id": 548, "document_type": "matricula"})
+    assert recebido["documento_id"] == 548
+    assert recebido["process_id"] == 23
