@@ -1,7 +1,8 @@
 # ADR-074 — Métodos e fechamento comercial: a cadeia comercial nasce da Rota validada
 
 - **Data:** 23/09/2026
-- **Estado:** proposta (Incremento 5). Decisões marcadas **[André]** pedem aceite no PR.
+- **Estado:** aceito (André, 24/09/2026, PR #211). As decisões marcadas **[André]** foram aprovadas;
+  a tabela antiga (#284) sai no Incremento 7, como condição de entrada.
 - **Plano:** [Plano Diretor v1.1 — Incremento 5](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md),
   §4.1 (Redator e Orçamento), §5.2 (transições), §9.4 ("orçamento com tabela própria") e as
   decisões travadas **5** (o Redator não gera contrato) e **6** (o Orçamento não é segunda fonte de
@@ -152,7 +153,8 @@ vigente, aprovado e atual — itens, preços e total dele, com `orcamento_id` na
 `orcamento_item_id` + `rota_passo_id` em cada item; itens e total vindos no corpo são ignorados e
 editar itens ou total dessa proposta é 422 (muda-se o orçamento). Orçamento existente mas não
 aprovado ou desatualizado → 422 com o motivo. Sem orçamento, o caminho do ADR-028 (faixa da `PRICE_TABLE`)
-permanece **como legado declarado**, até a tela do orçamento existir (dívida #282).
+permanece **como legado declarado**, até a tela do orçamento existir (dívida #282). **Prazo (André,
+24/09):** a tabela antiga (#284) sai no Incremento 7 — condição de entrada, registrada no Plano.
 
 ## Alternativas descartadas
 

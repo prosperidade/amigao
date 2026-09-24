@@ -17,6 +17,7 @@ Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5
 - **#284 — dois orçamentos legados no código (aberta):** `OrcamentoAgent._estimate_by_rules`
   (constantes por demanda) e a distribuição da `PRICE_TABLE` em `proposal_generator` continuam
   servindo o caso sem orçamento. Saem quando a #282 fechar (Plano §9.4, "unificar").
+  **Condição de entrada do Incremento 7 (André, 24/09)** — registrada no Plano Diretor.
 
 - **#285 — o diagnóstico não produz conclusão pelo contrato 069 (aberta):** rodado em dev no #25
   (`gpt-5.6-luna`, job 201, 61.222 tokens de entrada, US$ 0,015), devolveu o schema legado

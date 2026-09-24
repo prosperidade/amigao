@@ -98,6 +98,23 @@ remoto ou garantia de custo externo exactly-once.
 Evidência: [G4](../../frontend/scripts/increment1-unified-gate.mjs#L131) e
 [efeitos persistidos](../../tests/e2e/test_evidence_browser.py#L140).
 
+**Reescrita do G4 (24/09/2026, PR #211, ADR-074).** A cadeia `gerar_proposta` deixou de rodar
+o diagnóstico (ruptura 4) e passou a ser `[redator, orcamento]`, a partir da Rota validada. O G4
+continua provando a retomada de uma cadeia de produção **real e parcial**, agora a nova:
+
+- o diagnóstico roda como execução própria (`chain_name: diagnostico`), fonte do G1/G2;
+- `gerar_proposta` sem Rota validada: redator `failed` com "Rota validada ausente", orçamento
+  `awaiting_review` sem job, cursor 0;
+- duas retomadas autenticadas: cada uma registra **nova tentativa** do redator (3 jobs, todos com
+  o motivo, zero objetos de evidência); o orçamento nunca roda; cursor inalterado;
+- a execução do diagnóstico, retomada depois da aprovação da versão 2, fica `completed` com o
+  mesmo passo e o mesmo job — **um só job do diagnóstico**, nenhuma chamada nova ao provider (4
+  no total, como antes).
+
+Mudou a contagem de jobs do percurso (9 → 10) e o limite explícito: o redator agora tem método
+(pré-contratação), e a tentativa falha pela Rota ausente, não por capacidade insuficiente. As nove
+provas continuam verdes no CI (run 35948833019) e localmente com navegador.
+
 ### G5 — portas síncrona e assíncrona recebem o mesmo contexto e skill
 
 No mesmo caso revisado, chama `/agents/run` e `/agents/run-async` com diagnóstico.
