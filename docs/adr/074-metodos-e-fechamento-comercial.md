@@ -84,7 +84,7 @@ pós-contratação (decisão 10) e ficam fora deste ADR.
 - **Indeterminado vira lacuna**, com a avaliação que o declarou e os fatos faltantes.
 - Afirmação que não passa na verificação **não é emitida**; a geração falha com a lista dos IDs
   não resolvidos. O validador é o mesmo que a redação por LLM terá de satisfazer quando entrar
-  (dívida #281): ela poderá reescrever `texto`, nunca `evidencias`.
+  (dívida #282): ela poderá reescrever `texto`, nunca `evidencias`.
 
 **Qual execução do motor.** Situação, achados, alertas e lacunas vêm da **execução mais recente**
 do caso — a mesma que o `fechar` da Rota exige com ciência. A execução que gerou os passos pode ser
@@ -152,7 +152,7 @@ vigente, aprovado e atual — itens, preços e total dele, com `orcamento_id` na
 `orcamento_item_id` + `rota_passo_id` em cada item; itens e total vindos no corpo são ignorados e
 editar itens ou total dessa proposta é 422 (muda-se o orçamento). Orçamento existente mas não
 aprovado ou desatualizado → 422 com o motivo. Sem orçamento, o caminho do ADR-028 (faixa da `PRICE_TABLE`)
-permanece **como legado declarado**, até a tela do orçamento existir (dívida #280).
+permanece **como legado declarado**, até a tela do orçamento existir (dívida #281).
 
 ## Alternativas descartadas
 
@@ -161,7 +161,7 @@ permanece **como legado declarado**, até a tela do orçamento existir (dívida 
   diagnóstico de novo para orçar gera conclusões novas a cada clique.
 - **Redator por LLM já neste incremento.** A exigência é evidência por ID em cada afirmação; a
   estrutura e os IDs são determinísticos de qualquer forma. LLM entra só para a prosa, sobre
-  afirmações fixas (dívida #281), depois de o validador existir — que é o que este ADR entrega.
+  afirmações fixas (dívida #282), depois de o validador existir — que é o que este ADR entrega.
 - **Congelar o orçamento na etapa (retroceder a E5 quando a Rota muda).** Destrói trabalho humano
   por evento que o consultor talvez nem tenha visto (ADR-039, ADR-068, decisão 7).
 - **Preço por hectare com a área do cadastro.** Ver §4.
@@ -173,12 +173,12 @@ dele; tirar um passo muda o orçamento de forma visível e explicada; preço é 
 versionado; a proposta deixa de dividir faixa por igual quando há orçamento.
 
 **Custos e riscos.**
-- A tela não conhece relatório, escopo nem orçamento; o percurso é por API (dívida **#280**,
+- A tela não conhece relatório, escopo nem orçamento; o percurso é por API (dívida **#281**,
   irmã da #278).
-- A redação é esquemática, não prosa de consultor (dívida **#281**, com o checklist de TR da
+- A redação é esquemática, não prosa de consultor (dívida **#282**, com o checklist de TR da
   peça definitiva).
 - O legado `OrcamentoAgent._estimate_by_rules` e a `PRICE_TABLE` continuam no código para o
-  caminho sem orçamento; saem quando a #280 fechar (dívida **#282**).
+  caminho sem orçamento; saem quando a #281 fechar (dívida **#283**).
 - Afirmações do relatório cobrem o que o motor e a Rota sabem; o que não está no retrato de fatos
   (ADR-073 §3) não aparece — é limite declarado na própria peça, não omissão.
 

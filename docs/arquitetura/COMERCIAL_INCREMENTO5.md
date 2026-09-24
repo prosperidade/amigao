@@ -50,7 +50,7 @@ REG-FUN-002; inscrição no CAR R$ 1.800 fixo para REG-BR-CAR-001).
    schema **legado** do diagnóstico (`situacao_geral`, …) em vez de `{"objects": [...]}`, e o passo
    falhou com o erro cru `'objects'`. O prompt-base legado vence a instrução do contrato. É a
    "reconciliação semântica" do diagnóstico que o Plano põe no Incremento 5 e que esta frente não
-   fez. Dívida **#283**.
+   fez. Dívida **#284**.
 2. **Qual execução do motor o relatório lê.** A primeira versão lia a execução que gerou os passos
    (#4 no #25) e escreveu "alerta crítico **sem ciência**" — falso: a ciência está na execução #5,
    a que o `fechar` exige. Corrigido (ADR-074 §2), com teste de regressão. O relatório v2 errado
@@ -59,7 +59,7 @@ REG-FUN-002; inscrição no CAR R$ 1.800 fixo para REG-BR-CAR-001).
    declarou o passo já removido em vez de repetir o gesto; o JSON registra as três execuções.
 4. **Relatório esquemático.** Frases de modelo ("Não consta CCIR nos autos."), não prosa de
    consultor. É o esperado de um Redator determinístico; a prosa por LLM sobre afirmações fixas é
-   a dívida **#281**.
+   a dívida **#282**.
 
 ## 4. O que esta frente não fez (do Incremento 5 do Plano)
 
@@ -67,5 +67,5 @@ REG-FUN-002; inscrição no CAR R$ 1.800 fixo para REG-BR-CAR-001).
   009) — ver achado 1.
 - Redator com checklist de TR e peça técnica definitiva (pós-contratação).
 - Relatório da Fazenda Paraíso (INS-008) como referência de qualidade.
-- Tela: relatório, escopo, orçamento e métodos só por API (**#280**).
+- Tela: relatório, escopo, orçamento e métodos só por API (**#281**).
 - Validação da Ísis do método de orçamento e do texto das afirmações.

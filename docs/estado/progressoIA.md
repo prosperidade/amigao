@@ -7,7 +7,7 @@ Redator pré-contratação e Orçamento entram como contratos determinísticos (
 `deterministic_contract`); nenhum LLM na cadeia `gerar_proposta`. Fora dela, o Redator segue
 `capacidade_insuficiente` (peça definitiva sem método). Um diagnóstico real em dev pelo gateway
 (`gpt-5.6-luna`, job 201, 61.222 + 2.279 tokens, US$ 0,015) voltou no schema legado e falhou
-(`'objects'`) — dívida #283. ADR-074.
+(`'objects'`) — dívida #284. ADR-074.
 
 ## 2026-09-19 — gpt-5.6-luna autorizado e configurado nesta frente
 

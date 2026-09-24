@@ -132,6 +132,15 @@ class Settings(BaseSettings):
     # Tem precedência sobre POSTGRES_* quando setado.
     DATABASE_URL: str = ""
 
+    def teto_de_custo_por_job(self, agente: str | None) -> float:
+        """Teto ACUMULADO por job de cada agente (dívida #272). Os tetos próprios já
+        existiam e eram usados por chamada; o valor agora vale para o job inteiro."""
+        return {
+            "extrator": self.AI_MAX_COST_PER_JOB_USD_EXTRATOR,
+            "diagnostico": self.AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO,
+            "legislacao": self.AI_MAX_COST_PER_JOB_USD_LEGISLACAO,
+        }.get(agente or "", self.AI_MAX_COST_PER_JOB_USD)
+
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         if self.DATABASE_URL.strip():
@@ -295,6 +304,18 @@ class Settings(BaseSettings):
     # limite. 8 fatias ≈ 344k chars; acima disso a cobertura parcial é REGISTRADA
     # (`JanelaResultado.truncado`), nunca silenciosa.
     EXTRACTOR_MAX_CHUNKS: int = 8
+    # ADR-077 (#271): matrícula vai ao extrator ATO A ATO. Máximos por chamada,
+    # medidos em dev com o Luna (23/09): num ato, cada caractere de entrada vira de
+    # 0,9 a 1,6 token de SAÍDA (cada observação repete o trecho literal); no
+    # memorial da abertura, ~0,2. Por isso dois máximos. Com streaming
+    # (AI_EXTRATOR_STREAM), 4.000 caracteres de ato cabem inteiros numa chamada.
+    EXTRACTOR_ATO_MAX_CHARS: int = 4_000
+    EXTRACTOR_ABERTURA_MAX_CHARS: int = 6_000
+    # ADR-077: o extrator recebe a resposta em streaming, e o AI_TIMEOUT_SECONDS
+    # passa a medir provedor TRAVADO (sem nenhum byte), não geração longa. O VALOR
+    # do timeout não muda (decisão do André, 22/09). A chamada fica limitada pelo
+    # max_tokens de saída, não pelo relógio.
+    AI_EXTRATOR_STREAM: bool = True
     # Diagnóstico — trecho de cada documento levado ao contexto (validação 30/07).
     # A consultora subiu 2 relatórios analíticos na E4, re-rodou o diagnóstico e
     # nada foi incorporado: o contexto listava os documentos só por
@@ -305,7 +326,19 @@ class Settings(BaseSettings):
     DIAGNOSTICO_DOC_TRECHO_CHARS: int = 4_000
     DIAGNOSTICO_DOCS_TRECHO_TOTAL_CHARS: int = 60_000
     # Custo máximo por job (USD) — proteção contra prompt injection gigante
+    # Teto de custo ACUMULADO por job (dívida #272, ADR-077): soma todas as chamadas
+    # pagas do job — inclusive a truncada que é refeita — e recusa a próxima quando o
+    # gasto alcança o limite. Até 23/09/2026 era conferido POR CHAMADA, e três jobs do
+    # extrator passaram de US$ 0,10 sem nenhuma checagem reprovar. Vale para os agentes
+    # sem teto próprio; os que têm estão em `teto_de_custo_por_job`.
     AI_MAX_COST_PER_JOB_USD: float = 0.10
+    # Extrator: um job lê o CASO inteiro (a execução conectada ignora o document_id,
+    # dívida #279). Calibrado pela prova do ADR-077 em dev (23/09): o caso ELODI —
+    # 6 documentos, 4 matrículas, o maior caso em produção — custou US$ 0,3672 em 91
+    # chamadas pagas. Margem declarada: 2× o medido (variação das rodadas de reparo
+    # e caso até ~2× o volume de atos da ELODI). Acima disso o job falha com o gasto
+    # nomeado, em vez de continuar gastando.
+    AI_MAX_COST_PER_JOB_USD_EXTRATOR: float = 0.75
     # ADR-072 — confronto de áreas pelo auditor determinístico. Tolerância em
     # PERCENTUAL sobre o denominador declarado. 1,0 é PROVISÓRIO: o limite
     # "informativo" da régua Onda C; a Ísis fixa o valor na Q-ISIS-04. Cada

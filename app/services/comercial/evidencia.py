@@ -2,7 +2,7 @@
 
 Uma afirmação é ``{id, texto, evidencias: [{tipo, id, rotulo}]}``. Este módulo confere que
 cada evidência EXISTE no banco e pertence ao tenant (e ao caso, quando é dado do caso). É a
-trava que a redação por LLM terá de satisfazer quando entrar (dívida #281): ela poderá
+trava que a redação por LLM terá de satisfazer quando entrar (dívida #282): ela poderá
 reescrever ``texto``, nunca ``evidencias``.
 
 Nada aqui procura por semelhança: um ID que não resolve é erro nomeado, não "parecido".

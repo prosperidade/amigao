@@ -40,7 +40,7 @@ Situação dos autos · achados do motor · alertas críticos e ciência · lacu
 O que será feito (item de proposta) · orientações não cobradas (direção) · fora do escopo ·
 premissas (Rota, execução do motor, estado do diagnóstico).
 
-## Redação por LLM (futuro, dívida #281)
+## Redação por LLM (futuro, dívida #282)
 
 Poderá reescrever o `texto` de uma afirmação; nunca criar, remover ou trocar `evidencias`. O
 validador de evidência é o mesmo.
