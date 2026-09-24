@@ -36,6 +36,8 @@ class Proposal(Base):
     # scope_item via `rota_passo_id`). SET NULL: a proposta sobrevive se a Rota
     # for removida (o snapshot do escopo já está materializado em scope_items).
     rota_id = Column(Integer, ForeignKey("rotas.id", ondelete="SET NULL"), nullable=True, index=True)
+    # ADR-074 §7 — quando há orçamento, a proposta nasce dele (itens e total).
+    orcamento_id = Column(Integer, ForeignKey("orcamento.id", ondelete="SET NULL"), nullable=True, index=True)
     # Renegociação: uma recusa/expiração pode gerar a versão N+1, linkada à
     # anterior (histórico preservado — nunca se sobrescreve a versão recusada).
     previous_version_id = Column(
