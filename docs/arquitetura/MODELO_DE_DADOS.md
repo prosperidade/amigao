@@ -233,6 +233,15 @@ Nova entidade introduzida pelo PROMPT_7. Anatomia:
 | `Proposal` | `proposals` | Proposta comercial gerada por `proposal_generator.py`. |
 | `Contract` | `contracts` | Contrato gerado por `contract_generator.py`. |
 | `ContractTemplate` | `contract_templates` | Templates de contrato (white-label por tenant). |
+| `OrcamentoMetodo` | `orcamento_metodo` | Método e preço do tenant (`hora`/`fixo`/`unidade`), versionado por `(tenant, codigo, versao)`; `rule_ids` que precifica; um `padrao` corrente. Mudar preço é versão nova. ADR-074 |
+| `RedacaoComercial` | `redacao_comercial` | Relatório preliminar e especificação de escopo (Redator pré-contratação), versionados; `conteudo` = seções de afirmações com evidência por ID; `base` + `base_hash` (dependências); revisão (`estado_revisao`, autor, justificativa) e `superada_em`. ADR-074 |
+| `Orcamento` / `OrcamentoItem` | `orcamento` / `orcamento_item` | Orçamento derivado da Rota: um item por passo validado `item_proposta` (`rota_passo_id`), método, quantidade, preço e cálculo como foto; `fora` (passos removidos com motivo, direção); `ressalvas` (diagnóstico em revisão); versão, revisão, `superada_em`. ADR-074 |
+| `OrcamentoEscolha` | `orcamento_escolha` | Escolha do consultor (método e/ou quantidade) por passo; vale para as versões seguintes. ADR-074 |
+
+**Atualidade é leitura** (ADR-074 §3, ADR-068): redação e orçamento não têm coluna de
+"desatualizado"; a `base` gravada é comparada à atual (`app/services/comercial/base.py`). A
+proposta ganhou `orcamento_id` e, quando o caso tem orçamento, nasce dele. `rota_passos` ganhou
+`remocao_motivo` (motivo da remoção lembrada, antes só na auditoria). Migration `076mc001`.
 
 ### Comunicação e tarefa
 

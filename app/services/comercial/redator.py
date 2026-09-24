@@ -65,10 +65,13 @@ def _contexto(db: Session, *, process: Process, tenant_id: int) -> Contexto:
     av_ids = {p.origem_avaliacao_id for p in passos if p.origem_avaliacao_id}
     avs = {a.id: a for a in db.query(AvaliacaoRegra).filter(AvaliacaoRegra.id.in_(av_ids),
                                                              AvaliacaoRegra.tenant_id == tenant_id)} if av_ids else {}
-    execucao = None
-    if avs:
-        # A execução que gerou a Rota: a mais recente entre as avaliações dos passos.
-        execucao = db.get(ExecucaoMotor, max(a.execucao_id for a in avs.values()))
+    # Situação, achados, alertas e lacunas vêm da execução MAIS RECENTE do caso — a mesma que o
+    # `fechar` da Rota exige com ciência. A que gerou os passos pode ser anterior (medido no #25 de
+    # dev: passos da execução 4, ciência do alerta na 5); cada passo segue citando a própria avaliação.
+    from app.services.motor_juridico.avaliador import ultima_execucao  # noqa: PLC0415
+
+    execucao = ultima_execucao(db, process_id=process.id, tenant_id=tenant_id)
+    if execucao is not None:
         for a in db.query(AvaliacaoRegra).filter(AvaliacaoRegra.execucao_id == execucao.id,
                                                  AvaliacaoRegra.tenant_id == tenant_id):
             avs[a.id] = a

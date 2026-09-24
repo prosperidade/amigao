@@ -56,6 +56,8 @@ entrada da Rota, não do orçamento. Dependências:
 - **Diagnóstico em revisão não impede o orçamento.** Vira **ressalva registrada** no artefato
   (quantas conclusões do diagnóstico estão em revisão, e a versão legada do diagnóstico e se está
   validada) — o consultor vê, o sistema não finge que não viu, e não bloqueia.
+- Rodar a cadeia de novo **reaproveita** relatório, escopo e orçamento que continuam atuais — não
+  cria versão nova nem supera uma aprovação à toa.
 - Nenhum passo da cadeia comercial chama LLM nesta versão; os dois são serviços determinísticos
   executados pelo mesmo agendador persistido do ADR-069 (execução, snapshot, cursor, retomada).
 
@@ -69,12 +71,14 @@ pós-contratação (decisão 10) e ficam fora deste ADR.
 **Afirmação** é a unidade: `{id, secao, texto, evidencias: [{tipo, id, rotulo}]}`.
 
 - **Toda afirmação tem ao menos uma evidência por ID, resolvida no banco e no tenant.** Tipos:
-  `dispositivo` (com `fonte_normativa_versao`), `observacao` e `fonte_primaria`
-  (`evidence_versions`), `documento`, `avaliacao_regra`, `ciencia_alerta`, `rota_passo`.
+  `dispositivo` e `fonte_versao` (catálogo global ou do tenant), `observacao`, `fonte_primaria` e
+  `conclusao` (`evidence_versions` do caso), `documento`, `avaliacao_regra`, `execucao_motor`,
+  `ciencia_alerta`, `rota` e `rota_passo` (lápide inclusive).
 - **Fundamento é por ID, nunca por semelhança.** Passo validado com `fundamento_dispositivo_id`
-  cita o dispositivo e a versão da fonte. Passo sem fundamento por ID (manual, ou da IA com
-  `SourceRef` textual) **não vira afirmação de obrigação**: vira item da seção *Lacunas* com o
-  motivo "fundamento não resolvido por ID".
+  cita o dispositivo e a versão da fonte. Passo validado sem fundamento por ID (manual, ou da IA
+  com `SourceRef` textual) **não vira afirmação de obrigação legal**: entra no escopo como decisão
+  do consultor ("sem fundamento normativo por ID; passo validado pelo consultor", evidência = o
+  passo) e aparece também em *Lacunas*.
 - **Fato "não consta nos autos" é fato sobre os autos** (ADR-073 §3): a evidência é a avaliação
   que o leu, com o retrato de fatos da execução — nunca "não existe".
 - **Indeterminado vira lacuna**, com a avaliação que o declarou e os fatos faltantes.
@@ -82,12 +86,18 @@ pós-contratação (decisão 10) e ficam fora deste ADR.
   não resolvidos. O validador é o mesmo que a redação por LLM terá de satisfazer quando entrar
   (dívida #281): ela poderá reescrever `texto`, nunca `evidencias`.
 
+**Qual execução do motor.** Situação, achados, alertas e lacunas vêm da **execução mais recente**
+do caso — a mesma que o `fechar` da Rota exige com ciência. A execução que gerou os passos pode ser
+anterior; cada passo continua citando a própria avaliação. (Medido no #25 de dev: passos da execução
+4, ciência do alerta na 5. Lendo a 4, o relatório dizia "sem ciência" — falso.)
+
 Seções do **relatório preliminar**: situação dos autos (fatos do motor com origem), achados
 (regras disparadas com fundamento), alertas críticos e ciência, lacunas, caminho validado.
 Seções da **especificação de escopo**: o que será feito (passos `item_proposta` validados),
 orientações não cobradas (passos `direcao`), **fora do escopo** (passos removidos, com o motivo
-registrado; coletas não assumidas; a peça técnica definitiva), premissas (data de referência,
-conjunto de regras, estado do diagnóstico).
+registrado), premissas (Rota validada, execução do motor, conclusões do diagnóstico em revisão).
+Os limites da peça (não é a peça técnica definitiva, não é contrato) vão em `limites`, texto fixo
+que não se apresenta como afirmação sobre o caso.
 
 ### 3. Versão, revisão e atualidade (redação e orçamento)
 
@@ -117,7 +127,7 @@ conjunto de regras, estado do diagnóstico).
 - **Cálculo determinístico** em `Decimal`: `quantidade × valor_unitario`, arredondado a centavos;
   total = soma dos itens. O texto do cálculo acompanha cada item ("8 h × R$ 250,00"). O consultor
   muda método e quantidade; **nunca digita total**.
-- Unidades nesta versão: `hora`, `fixo`, `unidade`. **Hectare fica fora** até a medição canônica
+- **[André]** Unidades nesta versão: `hora`, `fixo`, `unidade`. **Hectare fica fora** até a medição canônica
   do Incremento 3 escolher a área por finalidade (Plano §6.1) — preço por área sobre número
   cadastral seria preço sobre fato não decidido.
 
@@ -136,10 +146,12 @@ registrada, não inferência); sem registro, o texto é "motivo não registrado"
 
 ### 7. Proposta nasce do orçamento aprovado (emenda ao ADR-028)
 
-`generate_proposal_from_rota`: se o processo tem orçamento, a proposta **só** nasce do orçamento
+**[André]** `generate_proposal_from_rota` e `POST /proposals`: se o processo tem orçamento, a
+proposta **só** nasce do orçamento
 vigente, aprovado e atual — itens, preços e total dele, com `orcamento_id` na proposta e
-`orcamento_item_id` + `rota_passo_id` em cada item. Orçamento existente mas não aprovado ou
-desatualizado → 422 com o motivo. Sem orçamento, o caminho do ADR-028 (faixa da `PRICE_TABLE`)
+`orcamento_item_id` + `rota_passo_id` em cada item; itens e total vindos no corpo são ignorados e
+editar itens ou total dessa proposta é 422 (muda-se o orçamento). Orçamento existente mas não
+aprovado ou desatualizado → 422 com o motivo. Sem orçamento, o caminho do ADR-028 (faixa da `PRICE_TABLE`)
 permanece **como legado declarado**, até a tela do orçamento existir (dívida #280).
 
 ## Alternativas descartadas
@@ -175,6 +187,8 @@ versionado; a proposta deixa de dividir faixa por igual quando há orçamento.
 - `tests/comercial/test_comercial_contrato.py` — cadeia sem diagnóstico, diagnóstico em revisão
   como ressalva, afirmação sem evidência recusada, orçamento por passo, remoção com motivo,
   preço por tenant e versão, atualidade sem retrocesso, proposta do orçamento, isolamento.
+- `test_alerta_com_ciencia_na_execucao_mais_recente_aparece_como_ciente` — regressão do achado
+  do percurso em dev.
 - `tests/agents/test_orchestrator_chain.py` — reescrito para a cadeia nova; o gate de revisão
   continua provado na `diagnostico_completo`.
 - Percurso autenticado em dev com #23 e #25:

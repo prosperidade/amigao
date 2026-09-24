@@ -402,3 +402,30 @@ def test_cadeia_de_novo_reaproveita_o_que_esta_atual_e_aprovado(client: TestClie
     lido = client.get(f"/api/v1/processes/{p.id}/comercial/redacao", headers=hd).json()
     assert lido["especificacao_escopo"]["id"] == escopo["id"] and lido["especificacao_escopo"]["estado_revisao"] == "aprovada"
     assert client.get(f"/api/v1/processes/{p.id}/comercial/orcamento", headers=hd).json()["orcamento"]["id"] == o["id"]
+
+
+def test_alerta_com_ciencia_na_execucao_mais_recente_aparece_como_ciente(client: TestClient, db_session):
+    """Regressão do #25 de dev: passos da execução N, ciência do alerta na N+1 (a que o `fechar` exige)."""
+    h = _homologador(db_session)
+    _catalogo(db_session)
+    _motor_ativo(db_session, h)
+    p = _caso(db_session, h.tenant_id, especies=("escritura_publica",), falecimento=True)
+    db_session.commit()
+    hd = _login(client, h.email)
+    rota = client.post(f"/api/v1/processes/{p.id}/rota/gerar-motor", headers=hd).json()["rota"]["rota"]
+    for passo in rota["passos"]:
+        url = f"/api/v1/rotas/{rota['id']}/passos/{passo['id']}"
+        if passo["fundamento_fonte_versao_id"] is None:
+            client.delete(url, headers=hd, params={"motivo": "norma ausente"})
+        else:
+            client.patch(url, headers=hd, json={"classificacao": "item_proposta"})
+            client.post(url + "/validar", headers=hd)
+    nova = client.post(f"/api/v1/processes/{p.id}/motor/avaliar", headers=hd).json()
+    for av_id in nova["alertas_sem_ciencia"]:
+        assert client.post(f"/api/v1/processes/{p.id}/motor/alertas/{av_id}/ciencia", headers=hd,
+                           json={"justificativa": "inventário em andamento"}).status_code == 201
+    assert client.post(f"/api/v1/rotas/{rota['id']}/fechar", headers=hd).status_code == 200
+    rel = client.post(f"/api/v1/processes/{p.id}/comercial/redacao", headers=hd).json()["relatorio_preliminar"]
+    alertas = next(s for s in rel["conteudo"]["secoes"] if s["chave"] == "alertas")["afirmacoes"]
+    assert alertas and all("Ciência registrada" in a["texto"] for a in alertas)
+    assert all(any(e["tipo"] == "ciencia_alerta" for e in a["evidencias"]) for a in alertas)

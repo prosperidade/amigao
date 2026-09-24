@@ -1,5 +1,34 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 23/09/2026 — Incremento 5, fechamento comercial (ADR-074, só dev)
+
+Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5.md). A **#279**
+está reservada pelo PR #210 (fatiamento por ato); esta frente começa na #280.
+
+- **#280 — a tela não conhece relatório, escopo, orçamento nem métodos (aberta):** o percurso do
+  Incremento 5 foi por API. Sem tela, a proposta da E6 continua podendo nascer pelo caminho legado
+  da `PRICE_TABLE` em caso sem orçamento. Irmã da #278; mesma condição de entrada do Incremento 7.
+
+- **#281 — Redator sem prosa e sem checklist de TR (aberta):** o relatório preliminar e o escopo
+  são esquemáticos ("Não consta CCIR nos autos."). A prosa por LLM entra sobre afirmações fixas —
+  pode reescrever `texto`, nunca `evidencias` (o validador de `comercial/evidencia.py` já existe).
+  O checklist de TR é da peça definitiva, pós-contratação.
+
+- **#282 — dois orçamentos legados no código (aberta):** `OrcamentoAgent._estimate_by_rules`
+  (constantes por demanda) e a distribuição da `PRICE_TABLE` em `proposal_generator` continuam
+  servindo o caso sem orçamento. Saem quando a #280 fechar (Plano §9.4, "unificar").
+
+- **#283 — o diagnóstico não produz conclusão pelo contrato 069 (aberta):** rodado em dev no #25
+  (`gpt-5.6-luna`, job 201, 61.222 tokens de entrada, US$ 0,015), devolveu o schema legado
+  (`situacao_geral`, …) em vez de `{"objects": [...]}`; o passo falhou com o erro cru `'objects'`
+  (KeyError sem nome de causa). O prompt-base legado vence a instrução do contrato. É a
+  reconciliação semântica do diagnóstico prevista no Incremento 5 do Plano (DIAG-001 a 009).
+  **Consequência:** hoje nenhum diagnóstico real entra em revisão pelo contrato; a prova de
+  "diagnóstico em revisão não impede o orçamento" em dev usou conclusão sintética declarada.
+
+> **PRÓXIMO NÚMERO LIVRE: 284.** (#279 reservada pelo PR #210; #280 a #283 abertas pelo
+> Incremento 5, 23/09.)
+
 ## Pulso 23/09/2026 — Incremento 4b, motor jurídico (ADR-073, só dev)
 
 Registro da frente: [MOTOR_JURIDICO_INCREMENTO4B.md](arquitetura/MOTOR_JURIDICO_INCREMENTO4B.md).
