@@ -23,13 +23,21 @@ def executar_passo(db: Session, *, agent: str, tenant_id: int, process_id: int, 
     """``(outputs, resultado)`` do passo; falha levanta ``ComercialError`` (ValueError)."""
     process = db.query(Process).filter(Process.id == process_id, Process.tenant_id == tenant_id).one()
     if agent == "redator":
-        rel, esc = redator_mod.gerar(db, process=process, tenant_id=tenant_id, user_id=user_id)
+        # Rodar a cadeia de novo não supera o que continua atual — nem a aprovação dele.
+        rel = base_mod.ultima_redacao(db, tenant_id, process_id, "relatorio_preliminar")
+        esc = base_mod.ultima_redacao(db, tenant_id, process_id, "especificacao_escopo")
+        reaproveitado = all(a is not None and base_mod.atualidade(db, a)["estado"] == "vigente" for a in (rel, esc))
+        if not reaproveitado:
+            rel, esc = redator_mod.gerar(db, process=process, tenant_id=tenant_id, user_id=user_id)
         return ([{"artefato": "especificacao_escopo", "id": esc.id}],
                 {"status": "awaiting_review", "relatorio_preliminar_id": rel.id, "especificacao_escopo_id": esc.id,
-                 "requires_review": True, "llm": False})
-    o = orcamento_mod.gerar(db, process=process, tenant_id=tenant_id, user_id=user_id)
+                 "reaproveitado": reaproveitado, "requires_review": True, "llm": False})
+    o = base_mod.ultimo_orcamento(db, tenant_id, process_id)
+    reaproveitado = o is not None and base_mod.atualidade(db, o)["estado"] == "vigente"
+    if not reaproveitado:
+        o = orcamento_mod.gerar(db, process=process, tenant_id=tenant_id, user_id=user_id)
     return ([{"artefato": "orcamento", "id": o.id}],
-            {"status": "awaiting_review", "orcamento_id": o.id, "total": str(o.total),
+            {"status": "awaiting_review", "orcamento_id": o.id, "total": str(o.total), "reaproveitado": reaproveitado,
              "ressalvas": o.ressalvas, "requires_review": True, "llm": False})
 
 

@@ -390,3 +390,15 @@ def test_outro_tenant_nao_le_orcamento_nem_metodos(client: TestClient, db_sessio
     assert client.post(f"/api/v1/processes/{p.id}/comercial/orcamento", headers=hi).status_code == 404
     assert client.get("/api/v1/comercial/metodos", headers=hi).json() == {"correntes": [], "versoes": []}
     assert db_session.query(Orcamento).filter(Orcamento.tenant_id == intruso.tenant_id).count() == 0
+
+
+def test_cadeia_de_novo_reaproveita_o_que_esta_atual_e_aprovado(client: TestClient, db_session):
+    h, p, hd, rota, passos = _rota_validada(client, db_session)
+    _metodos(client, hd)
+    escopo = _escopo_aprovado(client, p.id, hd)
+    o = _orcamento_aprovado(client, p.id, hd)
+    ex = client.post("/api/v1/agents/chain", headers=hd, json={"chain_name": "gerar_proposta", "process_id": p.id}).json()
+    assert ex["completed"] is True
+    lido = client.get(f"/api/v1/processes/{p.id}/comercial/redacao", headers=hd).json()
+    assert lido["especificacao_escopo"]["id"] == escopo["id"] and lido["especificacao_escopo"]["estado_revisao"] == "aprovada"
+    assert client.get(f"/api/v1/processes/{p.id}/comercial/orcamento", headers=hd).json()["orcamento"]["id"] == o["id"]
