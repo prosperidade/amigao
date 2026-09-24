@@ -191,5 +191,10 @@ versionado; a proposta deixa de dividir faixa por igual quando há orçamento.
   do percurso em dev.
 - `tests/agents/test_orchestrator_chain.py` — reescrito para a cadeia nova; o gate de revisão
   continua provado na `diagnostico_completo`.
+- Gate de navegador do Incremento 1 (`tests/e2e/test_evidence_browser.py` +
+  `frontend/scripts/increment1-unified-gate.mjs`): o G4 usava `gerar_proposta` como cadeia parcial
+  com o diagnóstico na frente. Passou a provar a cadeia nova — redator falha nomeando a Rota
+  ausente, orçamento espera, retomadas só registram tentativas — e o diagnóstico roda como
+  execução própria, cuja retomada nunca o repete. As nove provas seguem verdes.
 - Percurso autenticado em dev com #23 e #25:
   [provas/inc5_percurso_dev_2026-09-23.json](../arquitetura/provas/inc5_percurso_dev_2026-09-23.json).
