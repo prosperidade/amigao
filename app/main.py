@@ -18,6 +18,7 @@ from app.api.v1 import (
     auth,
     checklists,
     clients,
+    comercial,
     contracts,
     credentials,
     dashboard,
@@ -188,6 +189,8 @@ app.include_router(knowledge.router, prefix=f"{settings.API_V1_STR}/knowledge", 
 app.include_router(acervo_normativo.router, prefix=f"{settings.API_V1_STR}/acervo-normativo", tags=["Acervo normativo (ADR-075)"])
 app.include_router(motor_juridico.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Motor jurídico (ADR-073)"])
 app.include_router(motor_juridico.regras_router, prefix=f"{settings.API_V1_STR}/motor-juridico", tags=["Motor jurídico (ADR-073)"])
+app.include_router(comercial.process_router, prefix=f"{settings.API_V1_STR}/processes", tags=["Comercial (ADR-074)"])
+app.include_router(comercial.tenant_router, prefix=f"{settings.API_V1_STR}/comercial", tags=["Comercial (ADR-074)"])
 app.include_router(waitlist.router, prefix=f"{settings.API_V1_STR}/waitlist", tags=["Waitlist (Regente)"])
 app.include_router(websocket_router, tags=["Tempo Real"])
 # Também sob o prefixo /api/v1 (2026-06-01): em produção o front deriva a URL do

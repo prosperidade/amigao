@@ -222,6 +222,23 @@ def desatualizacao_rota(db: Session, rota) -> Optional[AvisoDesatualizado]:
 def desatualizacao_proposta(db: Session, proposal) -> Optional[AvisoDesatualizado]:
     if proposal.process_id is None:
         return None
+    if getattr(proposal, "orcamento_id", None) is not None:
+        # ADR-074 §3: proposta nascida de orçamento não fecha sobre orçamento superado
+        # ou desatualizado (Plano §5.2 — "bloqueado se qualquer fundamento estiver desatualizado").
+        from app.models.comercial import Orcamento  # noqa: PLC0415
+        from app.services.comercial.base import atualidade  # noqa: PLC0415
+
+        orc = db.query(Orcamento).filter(Orcamento.id == proposal.orcamento_id,
+                                         Orcamento.tenant_id == proposal.tenant_id).first()
+        if orc is not None:
+            atual = atualidade(db, orc)
+            if atual["estado"] != "vigente":
+                return AvisoDesatualizado(
+                    tipo="orcamento_desatualizado",
+                    motivo=f"o orçamento v{orc.versao} de origem está {atual['estado']} ("
+                           + "; ".join(atual["motivos"]) + ")",
+                    desde=orc.created_at,
+                )
     cutoff = proposal.accepted_at or proposal.created_at
     return checar_desatualizacao(
         db, tenant_id=proposal.tenant_id, process_id=proposal.process_id, cutoff=cutoff

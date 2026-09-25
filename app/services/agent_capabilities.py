@@ -12,6 +12,37 @@ REQUIRED_SKILLS = {
     "diagnostico": "diagnostico/situacao_ambiental_imovel_rural",
 }
 
+# ADR-074: pre-contract Redator and Orçamento are deterministic contracts over the validated Rota.
+COMMERCIAL_SKILLS = {
+    "redator": ("redator/relatorio_preliminar_escopo", "redator.py"),
+    "orcamento": ("orcamento/orcamento_da_rota", "orcamento.py"),
+}
+
+
+def _commercial_manifest(manifest, agent_name, metadata):
+    name, implementation = COMMERCIAL_SKILLS[agent_name]
+    meta = discover_skills().get(name)
+    if meta is None:
+        manifest["missing"].append({"skill": name, "reason": "ausente_ou_invalida"})
+    elif not matches_context(meta, agent=agent_name, ctx_metadata=metadata):
+        # The definitive technical piece (post-contract, TR checklist) has no method yet.
+        manifest["not_applicable"].append({"skill": name, "reason": "fora da cadeia comercial pré-contratação"})
+        manifest["missing"].append({"agent": agent_name,
+                                    "reason": "Peça técnica definitiva (pós-contratação) sem método disponível"})
+    else:
+        skill = load_skill(name)
+        if skill is None or "Contrato de evidência — ADR-074" not in skill.body or meta.version != "1.0.0":
+            manifest["missing"].append({"skill": name, "reason": "incompativel_com_contrato_074"})
+        else:
+            manifest["applied"].append({"name": name, "version": meta.version, "hash": canonical_hash(skill.body),
+                "source_hash": canonical_hash(Path(meta.path).read_text(encoding="utf-8")),
+                "content": skill.body, "attachments": [], "mode": "deterministic_contract"})
+            code = (Path(__file__).parent / "comercial" / implementation).read_text(encoding="utf-8")
+            manifest["implementation"].append({"method": f"comercial.{implementation[:-3]}",
+                "hash": canonical_hash(code), "llm": False})
+    manifest["status"] = "capacidade_insuficiente" if manifest["missing"] else "available"
+    return manifest
+
 
 def capability_manifest(agent_name, metadata):
     manifest = {"policy_version": "069.1", "applied": [], "missing": [], "not_applicable": [],
@@ -43,6 +74,8 @@ def capability_manifest(agent_name, metadata):
                 "mode": "deterministic_contract" if family == "cartorario" else "system_prompt"})
         manifest["status"] = "capacidade_insuficiente" if manifest["missing"] else "available"
         return manifest
+    if agent_name in COMMERCIAL_SKILLS:
+        return _commercial_manifest(manifest, agent_name, metadata)
     required = REQUIRED_SKILLS.get(agent_name)
     if not required:
         manifest["missing"].append({"agent": agent_name, "reason": "Método-base ainda não disponível; placeholder não é capacidade"})

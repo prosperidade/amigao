@@ -1,5 +1,14 @@
 # Progresso IA — Amigao do Meio Ambiente
 
+## 2026-09-23 — Incremento 5: cadeia comercial sem LLM; diagnóstico real fora do contrato
+
+Redator pré-contratação e Orçamento entram como contratos determinísticos (skills
+`redator/relatorio_preliminar_escopo` e `orcamento/orcamento_da_rota`, modo
+`deterministic_contract`); nenhum LLM na cadeia `gerar_proposta`. Fora dela, o Redator segue
+`capacidade_insuficiente` (peça definitiva sem método). Um diagnóstico real em dev pelo gateway
+(`gpt-5.6-luna`, job 201, 61.222 + 2.279 tokens, US$ 0,015) voltou no schema legado e falhou
+(`'objects'`) — dívida #285. ADR-074.
+
 ## 2026-09-19 — gpt-5.6-luna autorizado e configurado nesta frente
 
 Decisão do André implementada sem depender de outro PR: AI_EXTRATOR_MODEL=gpt-5.6-luna,
