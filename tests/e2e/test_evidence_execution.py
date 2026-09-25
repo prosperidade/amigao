@@ -926,3 +926,53 @@ def test_reencontrada_com_chave_nova_e_superada_e_o_valor_corrigido_fica_dito(co
         superseding = {i.id for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])
                        if "superada_por" in i.reason}
         assert superseding and not returned & superseding
+
+
+def test_rodada_de_duas_leituras_publica_a_uniao_e_so_marca_entre_rodadas(committed_case, monkeypatch):
+    """ADR-079: dentro da rodada as leituras se unem — o que uma viu e a outra não, entra,
+    com quantas leituras o viram. "Não reencontrada" só existe entre rodadas."""
+    from app.core.config import settings
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry. Area one. Area two. Area three."
+        db.commit()
+
+    def area(value, anchor, predicado="area_documental_ha"):
+        return {"predicado": predicado, "valor": value, "trecho": anchor}
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 2)
+    _controlled_extractions(monkeypatch,
+        # Rodada 1: a leitura B troca o rótulo de "one" (mesmo valor) e vê "three", que A não viu.
+        {"observacoes": [area(1, "Area one."), area(2, "Area two.")]},
+        {"observacoes": [area(1, "Area one.", "area_total_ha"), area(3, "Area three.")]},
+        # Rodada 2: nenhuma das duas vê "three".
+        {"observacoes": [area(1, "Area one.")]},
+        {"observacoes": [area(2, "Area two.")]})
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+
+        def extract():
+            return client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"]
+
+        def relatorio(db):
+            return db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+                object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first(
+                ).content["attributes"]["normalized"]
+        assert extract() == "completed"
+        with factory() as db:
+            apoio = {r.content["attributes"]["literal"]: r.content["attributes"]["normalized"]["leituras_na_rodada"]
+                     for r in db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao")}
+            assert apoio == {"Area one.": {"viram": 2, "de": 2}, "Area two.": {"viram": 1, "de": 2},
+                             "Area three.": {"viram": 1, "de": 2}}
+            rodada = relatorio(db)["rodada"]
+            assert (rodada["pedidas"], rodada["concluidas"], rodada["falhas"]) == (2, [1, 2], [])
+            assert (rodada["itens_por_leitura"], rodada["uniao"], rodada["em_todas"]) == ([2, 2], 3, 1)
+        assert extract() == "completed"
+        with factory() as db:
+            normalized = relatorio(db)
+            assert [r["trecho"] for r in normalized["nao_reencontradas"]] == ["Area three."]
+            # "one" e "two" têm a mesma identidade (tipo, predicado, posição): são nova versão do
+            # mesmo objeto, não superação.
+            assert normalized["superadas"] == []

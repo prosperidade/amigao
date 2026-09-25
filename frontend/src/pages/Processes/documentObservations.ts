@@ -41,7 +41,14 @@ export function segmentar(texto: string, observacoes: ObservacaoConferencia[]): 
   return segmentos;
 }
 
-const OCULTOS = new Set(['trecho', 'posicao_inicio', 'posicao_fim', 'campos_sem_suporte']);
+const OCULTOS = new Set(['trecho', 'posicao_inicio', 'posicao_fim', 'campos_sem_suporte', 'leituras_na_rodada']);
+
+// ADR-079: quantas leituras da rodada viram a observação; nada com uma leitura só.
+export function apoioNaRodada(conteudo: Record<string, unknown> | null): string | null {
+  const apoio = conteudo?.leituras_na_rodada as { viram?: number; de?: number } | undefined;
+  if (!apoio?.viram || !apoio.de || apoio.de < 2) return null;
+  return `vista em ${apoio.viram} de ${apoio.de} leituras da rodada`;
+}
 
 // Campos simples do conteúdo normalizado, na ordem proposta, para leitura da consultora.
 export function camposLegiveis(conteudo: Record<string, unknown> | null): [string, string][] {

@@ -50,6 +50,8 @@ class ItemAncorado(Contract):
     ao modelo e do model_dump; a persistência o grava explicitamente.
     """
     _campos_sem_suporte: list[dict] = PrivateAttr(default_factory=list)
+    # ADR-079: quantas leituras da rodada viram o item ({"viram": k, "de": N}); None com uma leitura.
+    _leituras_na_rodada: dict | None = PrivateAttr(default=None)
 
 
 class ParteExtraida(ItemAncorado):
