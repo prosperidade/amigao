@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import RodapeVersao from '@/components/RodapeVersao';
-import { camposLegiveis, segmentar, type ObservacaoConferencia } from './documentObservations';
+import { apoioNaRodada, camposLegiveis, segmentar, type ObservacaoConferencia } from './documentObservations';
 
 interface DocumentoDoCaso { id: number; filename: string; tipo: string }
 interface CampoSemSuporte { colecao: string; indice: number; campo: string; motivo: string }
@@ -118,6 +118,7 @@ export default function DocumentObservationsPage() {
               <p className="mt-1 text-xs text-gray-500">
                 {o.inicio !== null ? `Trecho de origem: caracteres ${o.inicio}–${o.fim}` : 'Trecho fora da versão atual do texto'}
                 {' · '}conhecimento: {rotulo(o.conhecimento)}
+                {apoioNaRodada(o.conteudo) && ` · ${apoioNaRodada(o.conteudo)}`}
               </p>
             </article>;
           })}

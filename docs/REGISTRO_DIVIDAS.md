@@ -1,5 +1,28 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 24/09/2026 — leitura múltipla por rodada (ADR-079)
+
+- **#286 — decisão em lote das observações "não reencontradas" na tela (ABERTA):**
+  - Pelo ADR-078, a observação que a releitura não reencontra fica corrente e marcada para o
+    consultor decidir, uma a uma. Medido: ~30% da leitura anterior a cada releitura de uma leitura só
+    (≈222 observações no caso ELODI com o gpt-5.6-luna). Decidir uma a uma não escala.
+  - **Desenho confirmado pelo André (24/09), por apoio (ADR-079):** a não reencontrada que 2+ leituras
+    da rodada viram fica **mantida**; a que uma leitura só viu vai para a **decisão em lote** na
+    conferência do documento — uma justificativa, gravada como decisão de cada observação (a trilha
+    continua por observação; o lote é só o gesto).
+  - O ADR-079 reduz o volume (a marca só existe entre rodadas); não substitui o lote.
+
+- **#287 — resposta não-JSON de uma fatia derruba a leitura do documento inteiro (ABERTA):**
+  - `ler_documento` levanta `ValueError("Resposta do extrator não é JSON")` quando uma fatia volta com
+    JSON inválido, e o documento inteiro falha — as fatias já lidas se perdem, e o custo delas some do
+    relatório. A rodada de reparo (skill) só trata item recusado na validação, não JSON quebrado.
+  - **Medido (ADR-079, 24/09):** gpt-6-luna, 2 de 30 leituras de documento, ambas na matrícula 3.673
+    (`Invalid \escape`, `Invalid control character`); gpt-5.6-luna, 0 de 30.
+  - Caminho provável: uma nova tentativa da fatia com JSON inválido (como o gateway já refaz a truncada)
+    e, persistindo, fatia registrada como não lida — cobertura parcial dita, não documento perdido.
+
+> **PRÓXIMO NÚMERO LIVRE: 288.** (#286 e #287 abertas pela frente do ADR-079, 24/09.)
+
 ## Pulso 23/09/2026 (noite) — releitura e comparação de modelos (#281, ADR-078)
 
 - **#281 — variância entre leituras × superação automática = perda de evidência (FECHADA, ADR-078):**
@@ -18,7 +41,7 @@
     de leitura 6/6 nos dois; o gpt-6-luna lê ~35% menos itens, custa ~1/3 e não teve timeout. O
     padrão segue gpt-5.6-luna até decisão do André.
 
-> **PRÓXIMO NÚMERO LIVRE: 286.** (#281 aberta e fechada por esta frente; **#282 a #285 são do PR #211**,
+> **Anterior: 286.** (#281 aberta e fechada por esta frente; **#282 a #285 são do PR #211**,
 > Incremento 5 — renumeradas lá em 23/09 depois de colidirem com #280 e #281.)
 
 ## Pulso 23/09/2026 — Incremento 5, fechamento comercial (ADR-074, só dev)

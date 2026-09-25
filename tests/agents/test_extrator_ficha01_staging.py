@@ -74,7 +74,9 @@ def seeded(db_session):
     return tenant, user, process, doc
 
 
-def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session):
+def test_extrator_grava_staging_sem_mexer_extracted_fields(seeded, db_session, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)  # uma leitura (ADR-079 tem teste próprio)
     # Inc2: staging referencia observação; preview achatado deixou de ser contrato.
     import json
     from hashlib import sha256

@@ -7,6 +7,7 @@ from datetime import date
 from fastapi import HTTPException
 from pydantic import TypeAdapter, ValidationError
 
+from app.core.logging import get_logger
 from app.models.document import Document, DocumentSource
 from app.models.entrada_semantica import ClassificacaoDocumento, DocumentoVersao
 from app.models.evidence import EvidenceInvalidation
@@ -39,6 +40,8 @@ from app.services.identidade_observacao import (
     resolver_ancora_literal,
 )
 from app.services.taxonomia_documental import SUPORTE, destino_consolidavel, propor_especie
+
+logger = get_logger(__name__)
 
 
 def classificacao_atual(db, doc):
@@ -91,6 +94,8 @@ def conteudo_do_item(item):
     content = item.model_dump(mode="json")
     if item._campos_sem_suporte:
         content["campos_sem_suporte"] = item._campos_sem_suporte
+    if item._leituras_na_rodada:
+        content["leituras_na_rodada"] = item._leituras_na_rodada
     return content
 
 
@@ -792,20 +797,57 @@ def ler_documento(db, doc, *, manifest, on_response=None):
             "rejeicoes": rejeicoes, "campos": campos, "reparos": reparos}
 
 
+def ler_rodada(db, doc, *, manifest, on_response=None, leituras=None):
+    """ADR-079: uma rodada de extração — N leituras do documento, publicada a união.
+
+    Com uma leitura é ``ler_documento``. Com mais, cada leitura é completa (fatiar,
+    chamar, ancorar, validar, reparar) e a união funde o mesmo fato pela regra do
+    ADR-078; o que só uma leitura viu entra, com ``leituras_na_rodada``. Leitura que
+    falha não derruba a rodada — fica no relatório; sem nenhuma leitura, o erro da
+    última sobe.
+    """
+    from app.core.config import settings
+    from app.services.leitura_multipla import unir_leituras
+    total = leituras or settings.AI_EXTRATOR_LEITURAS_POR_RODADA
+    if total == 1:
+        return {**ler_documento(db, doc, manifest=manifest, on_response=on_response), "rodada": None}
+    lidas, falhas = [], []
+    for n in range(1, total + 1):
+        try:
+            lidas.append((n, ler_documento(db, doc, manifest=manifest, on_response=on_response)))
+        except Exception as exc:  # noqa: BLE001 — a falha de uma leitura é registrada, não some
+            if not lidas and n == total:
+                raise
+            falhas.append({"leitura": n, "erro": f"{type(exc).__name__}: {getattr(exc, 'detail', None) or exc}"})
+            logger.warning("extrator: leitura %s de %s do documento %s falhou: %s", n, total, doc.id, exc)
+    if not lidas:  # pragma: no cover — a última falha já subiu
+        raise ValueError("Nenhuma leitura da rodada concluída")
+    entrada, rodada = unir_leituras([leitura["entrada"] for _, leitura in lidas])
+    rodada = {**(rodada or {"leituras": 1}), "pedidas": total,
+              "concluidas": [n for n, _ in lidas], "falhas": falhas}
+    primeira = lidas[0][1]
+    return {**primeira, "entrada": entrada,
+            "modelos": [m for _, leitura in lidas for m in leitura["modelos"]],
+            "chamadas": [{**c, "leitura": n} for n, leitura in lidas for c in leitura["chamadas"]],
+            "rejeicoes": [{**r, "leitura": n} for n, leitura in lidas for r in leitura["rejeicoes"]],
+            "reparos": [{**r, "leitura": n} for n, leitura in lidas for r in leitura["reparos"]],
+            "campos": campos_sem_suporte(entrada), "rodada": rodada}
+
+
 def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     """Único parser/persistidor, compartilhado pelo agente e adaptador de staging.
 
     With ``superacoes`` the caller supersedes the previous version after writing
     the case derivations; otherwise supersession happens here.
     """
-    leitura = ler_documento(db, doc, manifest=manifest, on_response=on_response)
+    leitura = ler_rodada(db, doc, manifest=manifest, on_response=on_response)
     entrada, modelos = leitura["entrada"], leitura["modelos"]
     fatias, metodo_fatiamento, chamadas = leitura["fatias"], leitura["metodo_fatiamento"], leitura["chamadas"]
     rejeicoes, campos, reparos = leitura["rejeicoes"], leitura["campos"], leitura["reparos"]
     rows = persistir_entrada(db, doc, entrada, modelo=",".join(sorted(set(modelos))))
     anteriores = extracao_anterior(db, doc, {r.id for r in rows})
-    # Dívida #281: a leitura varia (o Luna só aceita temperatura 1). Observação anterior
-    # que a releitura NÃO reencontrou não é superada — seria perda de evidência por
+    # Dívida #281: a leitura varia (o Luna só aceita temperatura 1). Observação da RODADA
+    # anterior (ADR-079: dentro da rodada as leituras se unem) que esta NÃO reencontrou não é superada — seria perda de evidência por
     # variância —, fica corrente e marcada para o consultor decidir. Só a reencontrada
     # (mesmo fato, mesmo trecho) é superada pela nova, com o valor igual ou corrigido.
     reencontradas, nao_reencontradas = separar_por_reencontro(anteriores, rows)
@@ -814,9 +856,9 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     fatiamento = _registrar_fatias(db, doc, fatias, metodo_fatiamento, chamadas)
     # One version per extraction of the document: its observations and what it supersedes.
     relatorio = _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
-            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.4",
+            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.5",
                 "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "reparos": reparos,
-                    "fatiamento": fatiamento,
+                    "fatiamento": fatiamento, "rodada": leitura["rodada"],
                     "observacoes_preservadas": len(rows),
                     "observacoes": [{"id": r.object_id, "version": r.version} for r in rows],
                     "superadas": [{"id": v.object_id, "version": v.version,
@@ -848,8 +890,10 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
 
 
 # Chaves que o modelo inventa para ligar itens entre si: não são o valor lido (#281).
+# ``leituras_na_rodada`` (ADR-079) é o apoio do item na rodada, não o que o texto diz.
 _CHAVES_DE_REFERENCIA = {"chave", "parte_chave", "representado_chave", "falecido_chave", "sujeito",
-                         "contratante", "contratado", "posicao_inicio", "posicao_fim", "trecho", "confianca"}
+                         "contratante", "contratado", "posicao_inicio", "posicao_fim", "trecho", "confianca",
+                         "leituras_na_rodada"}
 
 
 def _identidade_de_fato(row):
