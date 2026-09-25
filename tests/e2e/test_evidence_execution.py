@@ -504,6 +504,8 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
 def _controlled_extractions(monkeypatch, *responses):
     from app.core.config import settings
     pending = iter(responses)
+    # Cada resposta controlada é UMA leitura; a rodada de N leituras (ADR-079) tem teste próprio.
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)
     monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
     monkeypatch.setattr(settings, "AI_EXTRATOR_MODEL", "gpt-5.6-luna")
     monkeypatch.setattr("app.core.ai_gateway.complete", lambda *args, **kwargs: AIResponse(
@@ -543,6 +545,14 @@ def test_identical_content_from_two_documents_persists_two_independent_sources(c
         assert len({p.object_id for p in parties}) == 2  # two independent sources, never deduplicated
         assert [p.content["attributes"]["normalized"]["identificador"] for p in parties] == ["11.222.333/0001-81"] * 2
         assert [p.content["premises"][0]["id"] for p in parties] == [f"document:{case['doc']}", f"document:{doc2_id}"]
+        # ADR-079: o caso inteiro não é lido num job só — um passo, um job e um teto por documento.
+        from app.models.ai_job import AIJob
+        from app.models.evidence import AgentExecution
+        execucao = db.query(AgentExecution).filter_by(tenant_id=case["tenant"], process_id=case["case"]).one()
+        assert [(s["agent"], s.get("document_id")) for s in execucao.steps] == [
+            ("extrator", case["doc"]), ("extrator", doc2_id)]
+        jobs = db.query(AIJob).filter(AIJob.id.in_([s["job_id"] for s in execucao.steps])).all()
+        assert len(jobs) == 2 and all(j.input_payload["orcamento"]["limite_usd"] == 0.75 for j in jobs)
 
 
 def test_baixa_preserves_the_act_and_the_link_to_what_it_alters(committed_case, monkeypatch):
@@ -941,7 +951,6 @@ def test_rodada_de_duas_leituras_publica_a_uniao_e_so_marca_entre_rodadas(commit
 
     def area(value, anchor, predicado="area_documental_ha"):
         return {"predicado": predicado, "valor": value, "trecho": anchor}
-    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 2)
     _controlled_extractions(monkeypatch,
         # Rodada 1: a leitura B troca o rótulo de "one" (mesmo valor) e vê "three", que A não viu.
         {"observacoes": [area(1, "Area one."), area(2, "Area two.")]},
@@ -949,6 +958,7 @@ def test_rodada_de_duas_leituras_publica_a_uniao_e_so_marca_entre_rodadas(commit
         # Rodada 2: nenhuma das duas vê "three".
         {"observacoes": [area(1, "Area one.")]},
         {"observacoes": [area(2, "Area two.")]})
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 2)
     with TestClient(app) as client:
         headers = login(client, case["email"])
 

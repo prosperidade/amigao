@@ -6,10 +6,10 @@
   - Pelo ADR-078, a observação que a releitura não reencontra fica corrente e marcada para o
     consultor decidir, uma a uma. Medido: ~30% da leitura anterior a cada releitura de uma leitura só
     (≈222 observações no caso ELODI com o gpt-5.6-luna). Decidir uma a uma não escala.
-  - **Pedido do André (24/09):** decisão em lote das não reencontradas, na tela. Desenho proposto, a
-    confirmar com ele: na conferência de um documento, manter ou descartar as não reencontradas
-    selecionadas com uma justificativa só, gravada como decisão de cada observação (a trilha continua
-    por observação; o lote é só o gesto).
+  - **Desenho confirmado pelo André (24/09), por apoio (ADR-079):** a não reencontrada que 2+ leituras
+    da rodada viram fica **mantida**; a que uma leitura só viu vai para a **decisão em lote** na
+    conferência do documento — uma justificativa, gravada como decisão de cada observação (a trilha
+    continua por observação; o lote é só o gesto).
   - O ADR-079 reduz o volume (a marca só existe entre rodadas); não substitui o lote.
 
 - **#287 — resposta não-JSON de uma fatia derruba a leitura do documento inteiro (ABERTA):**

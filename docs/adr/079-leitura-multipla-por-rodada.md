@@ -1,6 +1,6 @@
 # ADR-079 — Leitura múltipla por rodada
 
-**Status:** proposto · **Data:** 24/09/2026 · **Estende:** ADR-078 (releitura não supera o que não reencontra) · **Dívida relacionada:** #286
+**Status:** aceito (André, 24/09/2026: N = 2) · **Data:** 24/09/2026 · **Estende:** ADR-078 (releitura não supera o que não reencontra) · **Dívida relacionada:** #286
 
 ## Contexto
 
@@ -23,9 +23,9 @@ ADR-078, 'não reencontrada' só entre rodadas").
 
 1. **Rodada.** Uma extração do documento passa a ser uma rodada de **N leituras**
    completas (fatiar, chamar, ancorar, validar, reparar — ADR-077 inteiro em cada
-   uma). N vem de `AI_EXTRATOR_LEITURAS_POR_RODADA` (1 a 3). **O padrão fica 1**
-   (comportamento de hoje) até o André escolher N sobre a medição abaixo: custo e
-   tempo multiplicam por N.
+   uma). N vem de `AI_EXTRATOR_LEITURAS_POR_RODADA` (1 a 3). **N = 2 por decisão
+   do André (24/09)**, sobre a medição abaixo: custo e tempo dobram. O modelo segue
+   `gpt-5.6-luna`.
 2. **União com o dedupe do ADR-078.** Dois itens de leituras diferentes são o
    mesmo fato pela mesma regra do reencontro: mesmo tipo e discriminante, trechos
    sobrepostos e, para observação, mesmo predicado **ou** mesmo valor lido
@@ -48,6 +48,11 @@ ADR-078, 'não reencontrada' só entre rodadas").
 7. **Leitura que falha não derruba a rodada.** Vai ao relatório
    (`rodada.falhas`) e a rodada publica a união das que concluíram; sem nenhuma,
    o erro sobe. O teto acumulado por job (#272) vale para a rodada inteira.
+8. **O caso inteiro não é lido num job só.** Execução do extrator sem
+   `document_id` (`/agents/run`, cadeias `diagnostico_completo` e
+   `enquadramento_regulatorio`) abre um passo do extrator por documento com texto —
+   job e teto próprios, como a fila da #279. O teto por job **não muda** (André,
+   24/09).
 
 O relatório da extração (`extracao:rejeicoes:<doc>`, `method_version` 071.5)
 ganha `rodada`: leituras pedidas e concluídas, itens por leitura, união, em
@@ -112,7 +117,9 @@ apoio:
 Um fato que duas leituras viram quase sempre volta (93%); o que uma só viu some
 em metade das rodadas seguintes. O apoio `k de N` separa, na tela, a marca que
 merece atenção (o fato firme que sumiu) da que é a variância de sempre — é o
-critério natural para a decisão em lote da #286.
+critério natural para a decisão em lote da #286 — confirmado pelo André (24/09):
+a não reencontrada vista por 2+ leituras fica mantida; a vista por uma só vai
+para a decisão em lote.
 
 ### Falhas
 
@@ -129,8 +136,9 @@ critério natural para a decisão em lote da #286.
 O teto por job do extrator é US$ 0,75 (#272). Por documento (a fila lê um por
 tarefa, #279), a matrícula mais cara custa ~US$ 0,12 por leitura no 5.6: N = 3 ≈
 US$ 0,39, dentro. **A extração do caso inteiro num job só** (sem `document_id`)
-custa US$ 0,99 com N = 3 no 5.6 e seria recusada no meio pelo teto — com N ≥ 2, o
-caminho é por documento, ou o teto muda por decisão do André.
+custa US$ 0,99 com N = 3 no 5.6 e seria recusada no meio pelo teto. Decisão do
+André: teto inalterado, o caso inteiro passa a ser um passo por documento
+(regra 8).
 
 ## Consequências
 
