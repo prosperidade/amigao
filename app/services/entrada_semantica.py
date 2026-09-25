@@ -879,6 +879,9 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     # (mesmo fato, mesmo trecho) é superada pela nova, com o valor igual ou corrigido.
     reencontradas, nao_reencontradas = separar_por_reencontro(anteriores, rows)
     superadas = [velha for velha, _nova, _diferente in reencontradas]
+    # Dívida #286 (André, 24/09): a que 2+ leituras da rodada viram fica corrente com marca
+    # informativa, fora do lote e da contagem de pendências; só a vista por uma leitura pede decisão.
+    para_decidir = [r for r in nao_reencontradas if apoio_na_rodada(r) < 2]
     source = fonte_documental(db, doc)
     fatiamento = _registrar_fatias(db, doc, fatias, metodo_fatiamento, chamadas)
     # One version per extraction of the document: its observations and what it supersedes.
@@ -894,21 +897,22 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
                                    "valor_diferente": diferente} for v, n, diferente in reencontradas],
                     "nao_reencontradas": [{"id": r.object_id, "version": r.version,
                                            "predicado": (r.content.get("attributes") or {}).get("predicate"),
-                                           "trecho": (r.content.get("attributes") or {}).get("literal")}
+                                           "trecho": (r.content.get("attributes") or {}).get("literal"),
+                                           "apoio": apoio_na_rodada(r), "decidir": apoio_na_rodada(r) < 2}
                                           for r in nao_reencontradas]}},
             "premises": [{"id": source.object_id, "version": source.version}],
             "limits": (["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [])
                       + (["Extracao parcial: fatia(s) do documento nao lida(s) (resposta invalida do extrator)."]
                          if nao_lidas else [])
-                      + (["Observacoes da leitura anterior nao reencontradas: decisao do consultor."]
-                         if nao_reencontradas else []),
+                      + (["Observacoes da rodada anterior nao reencontradas: decisao do consultor."]
+                         if para_decidir else []),
         })
     if superacoes is None:
         superar(db, doc, superadas, relatorio)
     else:
         superacoes.append((doc, superadas, relatorio))
     doc.review_required = (doc.review_required or bool(rows) or bool(rejeicoes) or bool(campos)
-                           or bool(nao_reencontradas) or bool(nao_lidas))
+                           or bool(para_decidir) or bool(nao_lidas))
     doc.extraction_status = "observações extraídas; revisão necessária" if rows else "extração sem observações"
     if rejeicoes or campos:
         doc.extraction_status = (f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por "
@@ -916,10 +920,16 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     if nao_lidas:
         doc.extraction_status += (f"; {len(nao_lidas)} fatia(s) não lida(s) (resposta inválida do extrator) — "
                                   "reextrair")
-    if nao_reencontradas:
-        doc.extraction_status += (f"; {len(nao_reencontradas)} observação(ões) da leitura anterior não "
+    if para_decidir:
+        doc.extraction_status += (f"; {len(para_decidir)} observação(ões) da rodada anterior não "
                                   "reencontrada(s) — decidir")
     return rows
+
+
+def apoio_na_rodada(row):
+    """Quantas leituras da rodada viram a observação (ADR-079); sem registro, uma."""
+    normalizado = (row.content.get("attributes") or {}).get("normalized") or {}
+    return (normalizado.get("leituras_na_rodada") or {}).get("viram") or 1
 
 
 # Chaves que o modelo inventa para ligar itens entre si: não são o valor lido (#281).
