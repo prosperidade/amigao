@@ -280,9 +280,12 @@ def run_step(db, execution, step, user_id):
             "Use apenas conclusões autorizadas do envelope. O sistema atribui identidade às novas conclusões.\n"
         ) + json.dumps(EvidenceObject.model_json_schema(), ensure_ascii=False)
         prompt = envelope.model_dump_json()
-        parameters = {"agent_name": step["agent"]}
+        from app.core.config import settings as _settings
+        # Each agent's own cap per call (the legacy agents passed it; this path had dropped it and
+        # the #23 diagnosis was stopped at the global 0.10 cap). The job-wide cap stays below.
+        parameters = {"agent_name": step["agent"],
+                      "max_cost_override_usd": _settings.teto_de_custo_por_job(step["agent"])}
         if step["agent"] == "diagnostico":
-            from app.core.config import settings as _settings
             parameters["max_tokens"] = _settings.AI_DIAGNOSTICO_MAX_TOKENS
         record = {"base_prompt": base_record,
                   "system": system, "user": prompt, "system_hash": canonical_hash(system),
@@ -301,12 +304,26 @@ def run_step(db, execution, step, user_id):
                                   agente=step["agent"]) as orcamento:
                 response = complete(prompt, system=system, user_preferences=agent._resolve_user_ai_preferences(),
                                     **parameters)
+                sintaxe = diagnostico_contrato.erro_de_sintaxe(response.content) \
+                    if step["agent"] == "diagnostico" else None
+                if sintaxe:
+                    # ADR-079: a reply that is not JSON gets ONE new call (transport, not content;
+                    # admission rules never retry). Both replies stay on the job; the job-wide
+                    # cap covers both calls. Measured: #23 in dev, a missing "]" in limits.
+                    invalida = {"raw": response.content, "erro": sintaxe, "model": response.model_used,
+                                "tokens_in": response.tokens_in, "tokens_out": response.tokens_out,
+                                "cost_usd": response.cost_usd}
+                    job.input_payload = {**job.input_payload, "resposta_sem_sintaxe": invalida}
+                    response = complete(prompt, system=system,
+                                        user_preferences=agent._resolve_user_ai_preferences(), **parameters)
         finally:
             attempt_sink.reset(token)
             job.input_payload = {**job.input_payload, "attempts": attempts,
                 "orcamento": {k: orcamento[k] for k in ("limite_usd", "gasto_usd", "chamadas_pagas", "sem_custo")}}
         job.model_used, job.provider = response.model_used, response.provider
-        job.tokens_in, job.tokens_out, job.cost_usd = response.tokens_in, response.tokens_out, response.cost_usd
+        job.tokens_in, job.tokens_out = response.tokens_in, response.tokens_out
+        # #272: the job cost is what was PAID, including a discarded reply.
+        job.cost_usd = orcamento["gasto_usd"] if orcamento["chamadas_pagas"] else response.cost_usd
         job.raw_output = response.content
         # Tests may control the gateway response; retain an explicit record of that boundary.
         if not attempts:

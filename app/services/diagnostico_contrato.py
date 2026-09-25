@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from app.schemas.evidence import EvidenceObject, ExecutionEnvelope, canonical_hash
 
-CONTRATO_VERSAO = "079.1"
+CONTRATO_VERSAO = "079.2"
 
 CERTEZAS = ("alta", "media", "baixa")
 IMPACTOS = ("informativo", "atencao", "alto", "critico_impeditivo_potencial")
@@ -46,6 +46,15 @@ CADA AFIRMAÇÃO TEM:
   aplica a ESTE caso.
 - limits: o que a afirmação não cobre.
 
+ATENÇÃO À FORMA: "kind" é SEMPRE a string "conclusao", em TODOS os itens, do primeiro ao último.
+A classe (risco, lacuna, orientacao, escopo_proposto…) vai em "conclusion_class", nunca em "kind".
+Exemplo de UM item (os ids são ilustrativos; use os do envelope):
+{"id": "a1", "version": 1, "kind": "conclusao", "origin": "diagnostico",
+ "statement": "…", "conclusion_class": "risco",
+ "attributes": {"certainty": "media", "impact": "alto", "urgency": "media"},
+ "applicability": "aplicavel", "applicability_reason": "…",
+ "premises": [{"id": "<id do envelope>", "version": 1}], "limits": ["…"]}
+
 REGRAS DE SUPORTE (o servidor recusa o que as viola):
 - Ausência de informação é LACUNA (ou hipótese), nunca risco nem fato. "Não consta nos autos" não
   prova que não existe.
@@ -62,6 +71,17 @@ REGRAS DE SUPORTE (o servidor recusa o que as viola):
 def prompt_base_registro() -> dict:
     return {"slug": "diagnostico_contrato", "hash": canonical_hash(PROMPT_BASE), "content": PROMPT_BASE,
             "version": CONTRATO_VERSAO, "origin": "contrato_079"}
+
+
+def erro_de_sintaxe(conteudo: str) -> str | None:
+    """Mensagem do parser quando a resposta não é JSON; None quando é."""
+    import json
+
+    try:
+        json.loads(conteudo)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return str(exc)
+    return None
 
 
 def faltou_objects(parsed) -> str | None:

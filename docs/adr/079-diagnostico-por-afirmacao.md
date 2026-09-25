@@ -35,9 +35,20 @@
 ### 1. Prompt-base do contrato, não o legado
 
 No contrato 069, o diagnóstico recebe um prompt-base próprio, versionado em código
-(`app/services/diagnostico_contrato.py`, `CONTRATO_VERSAO = "079.1"`), gravado no job com hash e
+(`app/services/diagnostico_contrato.py`, `CONTRATO_VERSAO = "079.2"`), gravado no job com hash e
 origem `contrato_079`. O `diagnostico_system` legado **não é enviado**. O pedido termina no schema
-de `EvidenceObject`, como antes. Resposta sem a chave `objects` falha com motivo nomeado ("resposta
+de `EvidenceObject`, como antes. O teto por chamada é o do agente
+(`AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO`), como no agente legado — o caminho do contrato tinha
+perdido o repasse e o #23 foi barrado no teto global (US$ 0,1192 > 0,10).
+
+**Sintaxe (transporte), não conteúdo:** resposta que não é JSON ganha **uma** nova chamada; as
+duas ficam no job (`resposta_sem_sintaxe`) e o custo do job é o pago nas duas. Regras de admissão
+(§3) nunca ganham nova chamada. Medido no #23 de dev: um `]` faltando em `limits`.
+
+A 079.2 acrescenta um exemplo de item e a regra de forma "`kind` é sempre `conclusao`": na 079.1
+o modelo pôs a classe em `kind` do 4º item em diante (#25, job 210).
+
+Resposta sem a chave `objects` falha com motivo nomeado ("resposta
 fora do contrato: faltou `objects`; veio `situacao_geral`, …"), não com `KeyError`.
 
 ### 2. Afirmação = conclusão com três dimensões independentes

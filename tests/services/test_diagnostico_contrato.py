@@ -135,6 +135,8 @@ def test_formato_legado_falha_com_motivo_e_nao_grava(committed_case, monkeypatch
     assert "Retorne APENAS JSON valido com: situacao_geral" not in enviados[0]["system"]
     assert dc.PROMPT_BASE in enviados[0]["system"]
     assert enviados[0]["max_tokens"] > 4096
+    from app.core.config import settings
+    assert enviados[0]["max_cost_override_usd"] == settings.AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO
     with factory() as db:
         job = db.query(AIJob).filter(AIJob.tenant_id == case["tenant"]).one()
         assert job.input_payload["base_prompt"]["origin"] == "contrato_079"
@@ -158,3 +160,41 @@ def test_afirmacao_sem_suporte_recusa_a_execucao_inteira(committed_case, monkeyp
     with factory() as db:
         assert db.query(EvidenceVersion).filter(EvidenceVersion.process_id == case["case"],
                                                 EvidenceVersion.kind == "conclusao").count() == 0
+
+
+
+def test_resposta_sem_sintaxe_ganha_uma_nova_chamada_e_fica_no_job(committed_case, monkeypatch):
+    factory, case = committed_case
+    respostas = iter(['{"objects": [{"id": "a", "limits": ["x"}]}', '{"objects": []}'])
+    chamadas = []
+
+    def responder(prompt, **kwargs):
+        chamadas.append(1)
+        return AIResponse(content=next(respostas), model_used="controlled", provider="test",
+                          tokens_in=1, tokens_out=1, cost_usd=0, duration_ms=1)
+    monkeypatch.setattr("app.core.ai_gateway.complete", responder)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        r = client.post("/api/v1/agents/run", headers=headers,
+                        json={"agent_name": "diagnostico", "process_id": case["case"]}).json()
+    assert len(chamadas) == 2 and r["steps"][0]["status"] == "completed"
+    with factory() as db:
+        job = db.query(AIJob).filter(AIJob.tenant_id == case["tenant"]).one()
+        assert "Expecting" in job.input_payload["resposta_sem_sintaxe"]["erro"]
+        assert job.input_payload["resposta_sem_sintaxe"]["raw"].startswith('{"objects"')
+
+
+def test_sintaxe_invalida_duas_vezes_falha_sem_terceira_chamada(committed_case, monkeypatch):
+    factory, case = committed_case
+    chamadas = []
+
+    def responder(prompt, **kwargs):
+        chamadas.append(1)
+        return AIResponse(content='{"objects": [', model_used="controlled", provider="test",
+                          tokens_in=1, tokens_out=1, cost_usd=0, duration_ms=1)
+    monkeypatch.setattr("app.core.ai_gateway.complete", responder)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        r = client.post("/api/v1/agents/run", headers=headers,
+                        json={"agent_name": "diagnostico", "process_id": case["case"]}).json()
+    assert len(chamadas) == 2 and r["status"] == "failed"
