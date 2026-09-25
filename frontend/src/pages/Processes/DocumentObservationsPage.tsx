@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import RodapeVersao from '@/components/RodapeVersao';
-import { camposLegiveis, segmentar, type ObservacaoConferencia } from './documentObservations';
+import { apoioNaRodada, camposLegiveis, segmentar, type ObservacaoConferencia } from './documentObservations';
 
 interface DocumentoDoCaso { id: number; filename: string; tipo: string }
 interface CampoSemSuporte { colecao: string; indice: number; campo: string; motivo: string }
@@ -24,6 +24,8 @@ export default function DocumentObservationsPage() {
   const [params, setParams] = useSearchParams();
   const [selecionada, setSelecionada] = useState<string | null>(null);
   const [mostrarSuperadas, setMostrarSuperadas] = useState(false);
+  const [justificativaLote, setJustificativaLote] = useState('');
+  const queryClient = useQueryClient();
 
   const documentos = useQuery({
     queryKey: ['semantic-documents', processId],
@@ -41,6 +43,18 @@ export default function DocumentObservationsPage() {
     .filter(o => mostrarSuperadas || !o.superada), [conferencia.data, mostrarSuperadas]);
   const segmentos = useMemo(() => segmentar(conferencia.data?.texto || '', observacoes),
     [conferencia.data, observacoes]);
+  const lote = useMemo(() => (conferencia.data?.observacoes || []).filter(o => o.no_lote),
+    [conferencia.data]);
+  // Dívida #286: uma decisão para as não reencontradas que uma leitura só viu; cada uma recebe a sua revisão.
+  const decidirLote = useMutation({
+    mutationFn: async (acao: 'aprovar' | 'rejeitar') => (await api.post<{ decididas: number }>(
+      `/evidence/cases/${processId}/documents/${documentoId}/nao-reencontradas/lote`,
+      { acao, justificativa: justificativaLote, observacoes: lote.map(o => ({ id: o.id, version: o.version })) })).data,
+    onSuccess: () => {
+      setJustificativaLote('');
+      queryClient.invalidateQueries({ queryKey: ['document-conference', processId, documentoId] });
+    },
+  });
   const semSuporte = (o: ObservacaoConferencia) =>
     (o.conteudo?.campos_sem_suporte as CampoSemSuporte[] | undefined) || [];
 
@@ -74,8 +88,30 @@ export default function DocumentObservationsPage() {
         {rotulo(conferencia.data.documento.especie)} · versão do texto {conferencia.data.documento.versao ?? '—'} ·{' '}
         {observacoes.length} observações · {conferencia.data.rejeicoes.length} rejeitadas ·{' '}
         {conferencia.data.campos_sem_suporte.length} campos sem suporte no trecho
+        {lote.length ? ` · ${lote.length} não reencontradas para decidir` : ''}
         {conferencia.data.documento.extraction_status ? ` · ${conferencia.data.documento.extraction_status}` : ''}
       </p>
+      {lote.length > 0 && <section aria-label="Decisão em lote" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">
+        <p className="font-medium">
+          {lote.length} não reencontrada(s) na última leitura, vista(s) por uma leitura só — decisão em lote
+        </p>
+        <p className="mt-1 text-xs text-gray-600">
+          As vistas por duas ou mais leituras permanecem correntes, só com a marca informativa.
+          A justificativa vai para a revisão de cada observação.
+        </p>
+        <textarea aria-label="Justificativa do lote" className="mt-2 w-full rounded border p-2" rows={2}
+          value={justificativaLote} onChange={e => setJustificativaLote(e.target.value)} />
+        <div className="mt-2 flex gap-2">
+          <button type="button" disabled={!justificativaLote.trim() || decidirLote.isPending}
+            onClick={() => decidirLote.mutate('aprovar')}
+            className="rounded bg-emerald-600 px-3 py-1 text-white disabled:opacity-50">Manter todas (aprovar)</button>
+          <button type="button" disabled={!justificativaLote.trim() || decidirLote.isPending}
+            onClick={() => decidirLote.mutate('rejeitar')}
+            className="rounded bg-gray-600 px-3 py-1 text-white disabled:opacity-50">Descartar todas (rejeitar)</button>
+        </div>
+        {decidirLote.isError && <p role="alert" className="mt-1 text-red-700">
+          Não foi possível decidir o lote; recarregue a conferência.</p>}
+      </section>}
       <div className="grid gap-4 lg:grid-cols-2">
         <section aria-label="Texto do documento" className="rounded-xl border bg-white p-4 dark:bg-white/5">
           <pre className="max-h-[75vh] overflow-auto whitespace-pre-wrap break-words font-mono text-sm leading-6">
@@ -101,6 +137,10 @@ export default function DocumentObservationsPage() {
                 {rotulo(o.tipo)}{o.predicado && o.predicado !== o.tipo ? ` · ${rotulo(o.predicado)}` : ''}
                 {o.superada && <span className="ml-2 text-xs text-gray-500">superada por nova extração</span>}
                 {!o.superada && o.desatualizada && <span className="ml-2 text-xs text-gray-500">desatualizada</span>}
+                {o.no_lote && <span className="ml-2 rounded bg-amber-100 px-1.5 text-xs text-amber-800">
+                  não reencontrada, vista por uma leitura — no lote</span>}
+                {o.nao_reencontrada && !o.no_lote && <span className="ml-2 text-xs text-gray-500">
+                  não reencontrada na última rodada</span>}
               </p>
               <dl className="mt-1 grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5">
                 {camposLegiveis(o.conteudo).map(([chave, valor]) =>
@@ -114,6 +154,7 @@ export default function DocumentObservationsPage() {
               <p className="mt-1 text-xs text-gray-500">
                 {o.inicio !== null ? `Trecho de origem: caracteres ${o.inicio}–${o.fim}` : 'Trecho fora da versão atual do texto'}
                 {' · '}conhecimento: {rotulo(o.conhecimento)}
+                {apoioNaRodada(o.conteudo) && ` · ${apoioNaRodada(o.conteudo)}`}
               </p>
             </article>;
           })}

@@ -471,6 +471,7 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
         db.commit()
     raw = json.dumps({"observacoes": [{"predicado": "area_documental_ha", "valor": 12,
                                       "trecho": "ANCHOR_NOT_IN_SOURCE"}, {"predicado": "area_documental_ha", "valor": 13, "trecho": "Valid area."}]})
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)  # uma leitura: tokens de UMA resposta
     monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
     monkeypatch.setattr(settings, "AI_EXTRATOR_MODEL", "gpt-5.6-luna")
     def gateway(*args, **kwargs):
@@ -505,6 +506,8 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
 def _controlled_extractions(monkeypatch, *responses):
     from app.core.config import settings
     pending = iter(responses)
+    # Cada resposta controlada é UMA leitura; a rodada de N leituras (ADR-079) tem teste próprio.
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)
     monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
     monkeypatch.setattr(settings, "AI_EXTRATOR_MODEL", "gpt-5.6-luna")
     monkeypatch.setattr("app.core.ai_gateway.complete", lambda *args, **kwargs: AIResponse(
@@ -544,6 +547,14 @@ def test_identical_content_from_two_documents_persists_two_independent_sources(c
         assert len({p.object_id for p in parties}) == 2  # two independent sources, never deduplicated
         assert [p.content["attributes"]["normalized"]["identificador"] for p in parties] == ["11.222.333/0001-81"] * 2
         assert [p.content["premises"][0]["id"] for p in parties] == [f"document:{case['doc']}", f"document:{doc2_id}"]
+        # ADR-079: o caso inteiro não é lido num job só — um passo, um job e um teto por documento.
+        from app.models.ai_job import AIJob
+        from app.models.evidence import AgentExecution
+        execucao = db.query(AgentExecution).filter_by(tenant_id=case["tenant"], process_id=case["case"]).one()
+        assert [(s["agent"], s.get("document_id")) for s in execucao.steps] == [
+            ("extrator", case["doc"]), ("extrator", doc2_id)]
+        jobs = db.query(AIJob).filter(AIJob.id.in_([s["job_id"] for s in execucao.steps])).all()
+        assert len(jobs) == 2 and all(j.input_payload["orcamento"]["limite_usd"] == 0.75 for j in jobs)
 
 
 def test_baixa_preserves_the_act_and_the_link_to_what_it_alters(committed_case, monkeypatch):
@@ -577,10 +588,12 @@ def test_baixa_preserves_the_act_and_the_link_to_what_it_alters(committed_case, 
 
 
 def test_reextraction_supersedes_the_previous_version_except_decided_observations(committed_case, monkeypatch):
-    """#258, ADR-070: a new extraction is a new version and the previous one is superseded.
+    """#258, ADR-070, dívida #281: re-extraction supersedes only what it finds again.
 
     Decisions of the consultant (panel review, accepted projection) are not the
-    machine's to supersede. Supersession is not a collection pendency.
+    machine's to supersede. An observation the new reading did NOT find again is
+    not superseded either — reading varies, and superseding it would lose evidence:
+    it stays current, marked "não reencontrada", for the consultant to decide.
     """
     from app.models.evidence import EvidenceInvalidation
     from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
@@ -616,29 +629,31 @@ def test_reextraction_supersedes_the_previous_version_except_decided_observation
         with factory() as db:
             reasons = {i.evidence_id: i.reason for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])}
             superseded = {literal for literal, (row_id, _) in first.items() if "superada_por" in reasons.get(row_id, {})}
-            assert superseded == {"Area four."}
+            assert superseded == set()  # nada foi superado: "Area four." não foi reencontrada
             assert first["Area one."][0] not in reasons  # produced again by the new version
             report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
                 object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first()
-            assert reasons[first["Area four."][0]]["superada_por"] == {"id": report.object_id, "version": report.version}
-            assert [r["id"] for r in report.content["attributes"]["normalized"]["superadas"]] == [first["Area four."][1]]
-            assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area four."][0]).count() == 0
+            normalized = report.content["attributes"]["normalized"]
+            assert normalized["superadas"] == []
+            assert [(r["id"], r["trecho"]) for r in normalized["nao_reencontradas"]] == [
+                (first["Area four."][1], "Area four.")]
+            assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area four."][0]).count() == 1
             assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area three."][0]).one().status == \
                 ExtractedFieldStatus.aceito
         state = client.get(f"/api/v1/evidence/cases/{case['case']}", headers=headers).json()
         rows = {r["object"]["attributes"]["literal"]: r for r in state["objects"] if r["object"]["kind"] == "observacao"}
-        assert rows["Area four."]["superseded"] is True and rows["Area four."]["stale"] is True
+        assert rows["Area four."]["superseded"] is False and rows["Area four."]["stale"] is False
         assert rows["Area two."]["superseded"] is False and rows["Area two."]["stale"] is False
-        assert "Area four." not in {o["attributes"]["literal"] for o in state["envelope"]["observations"]}
-        # The first extraction also versions the source (documento_versao), which is a
-        # pendency of its own; supersession must not be one.
-        client.post(f"/api/v1/evidence/cases/{case['case']}/return-to-collection", headers=headers)
+        assert "Area four." in {o["attributes"]["literal"] for o in state["envelope"]["observations"]}
+        tela = client.get(f"/api/v1/evidence/cases/{case['case']}/documents/{case['doc']}/conferencia",
+                          headers=headers).json()
+        marcas = {o["trecho"]: o["nao_reencontrada"] for o in tela["observacoes"]}
+        assert marcas["Area four."] is True    # visível na tela, para decidir
+        assert marcas["Area one."] is False
     with factory() as db:
-        from app.models.evidence import RetornoColeta
-        returned = {r.invalidacao_id for r in db.query(RetornoColeta).filter_by(tenant_id=case["tenant"])}
         superseding = {i.id for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])
                        if "superada_por" in i.reason}
-        assert superseding and not returned & superseding
+        assert superseding == set()  # "supersession is not a pendency" moved to the reencounter test
 
 
 def test_field_without_support_in_its_anchor_is_persisted_empty_with_reason(committed_case, monkeypatch):
@@ -826,6 +841,7 @@ def test_execucao_com_documento_le_so_ele_e_qualifica_o_caso_inteiro(committed_c
     # Leitura do caso inteiro (duas chamadas), depois só do documento 2 (uma chamada).
     from app.core.config import settings
     monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)  # conta chamadas de UMA leitura
     respostas, textos = iter([alfa, beta, beta]), []
 
     def gateway(texto, *args, **kwargs):
@@ -875,3 +891,199 @@ def test_run_agent_entrega_o_document_id_a_execucao(monkeypatch):
                               metadata={"document_id": 548, "document_type": "matricula"})
     assert recebido["documento_id"] == 548
     assert recebido["process_id"] == 23
+
+
+
+def test_reencontrada_com_chave_nova_e_superada_e_o_valor_corrigido_fica_dito(committed_case, monkeypatch):
+    """Dívida #281: a chave que o modelo inventa muda entre leituras; o fato é o mesmo.
+
+    Mesmo identificador, mesmo trecho, chave diferente ("alfa" → "p1"): é o mesmo
+    fato reencontrado, então a anterior é superada pela nova — e quando o valor lido
+    mudou (o nome corrigido), o relatório diz.
+    """
+    from app.models.evidence import EvidenceInvalidation
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Certidao. Proprietaria: ALFA AGRO LTDA, CNPJ 11.222.333/0001-81."
+        db.commit()
+    trecho = "ALFA AGRO LTDA, CNPJ 11.222.333/0001-81"
+    primeira = {"partes": [{"chave": "alfa", "nome": "ALFA AGRO", "natureza": "pj",
+                            "identificador": "11.222.333/0001-81", "tipo_identificador": "cnpj", "trecho": trecho}]}
+    segunda = {"partes": [{"chave": "p1", "nome": "ALFA AGRO LTDA", "natureza": "pj",
+                           "identificador": "11.222.333/0001-81", "tipo_identificador": "cnpj", "trecho": trecho}]}
+    _controlled_extractions(monkeypatch, primeira, segunda)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        for _ in range(2):
+            assert client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+    with factory() as db:
+        report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+            object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first()
+        normalized = report.content["attributes"]["normalized"]
+        assert normalized["nao_reencontradas"] == []
+        [superada] = normalized["superadas"]
+        assert superada["valor_diferente"] is True  # o nome lido mudou: dito no relatório
+        assert superada["reencontrada_em"]["id"] != superada["id"]  # chave nova, identidade nova
+        invalidada = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], object_id=superada["id"]).one()
+        assert db.query(EvidenceInvalidation).filter_by(evidence_id=invalidada.id).count() == 1
+    # The extraction also versions the source (documento_versao), which is a pendency
+    # of its own; supersession must not be one.
+    with TestClient(app) as client:
+        client.post(f"/api/v1/evidence/cases/{case['case']}/return-to-collection", headers=login(client, case["email"]))
+    with factory() as db:
+        from app.models.evidence import RetornoColeta
+        returned = {r.invalidacao_id for r in db.query(RetornoColeta).filter_by(tenant_id=case["tenant"])}
+        superseding = {i.id for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])
+                       if "superada_por" in i.reason}
+        assert superseding and not returned & superseding
+
+
+def test_rodada_de_duas_leituras_publica_a_uniao_e_so_marca_entre_rodadas(committed_case, monkeypatch):
+    """ADR-079: dentro da rodada as leituras se unem — o que uma viu e a outra não, entra,
+    com quantas leituras o viram. "Não reencontrada" só existe entre rodadas."""
+    from app.core.config import settings
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry. Area one. Area two. Area three."
+        db.commit()
+
+    def area(value, anchor, predicado="area_documental_ha"):
+        return {"predicado": predicado, "valor": value, "trecho": anchor}
+    _controlled_extractions(monkeypatch,
+        # Rodada 1: a leitura B troca o rótulo de "one" (mesmo valor) e vê "three", que A não viu.
+        {"observacoes": [area(1, "Area one."), area(2, "Area two.")]},
+        {"observacoes": [area(1, "Area one.", "area_total_ha"), area(3, "Area three.")]},
+        # Rodada 2: nenhuma das duas vê "three".
+        {"observacoes": [area(1, "Area one.")]},
+        {"observacoes": [area(2, "Area two.")]})
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 2)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+
+        def extract():
+            return client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"]
+
+        def relatorio(db):
+            return db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+                object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first(
+                ).content["attributes"]["normalized"]
+        assert extract() == "completed"
+        with factory() as db:
+            apoio = {r.content["attributes"]["literal"]: r.content["attributes"]["normalized"]["leituras_na_rodada"]
+                     for r in db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], kind="observacao")}
+            assert apoio == {"Area one.": {"viram": 2, "de": 2}, "Area two.": {"viram": 1, "de": 2},
+                             "Area three.": {"viram": 1, "de": 2}}
+            rodada = relatorio(db)["rodada"]
+            assert (rodada["pedidas"], rodada["concluidas"], rodada["falhas"]) == (2, [1, 2], [])
+            assert (rodada["itens_por_leitura"], rodada["uniao"], rodada["em_todas"]) == ([2, 2], 3, 1)
+        assert extract() == "completed"
+        with factory() as db:
+            normalized = relatorio(db)
+            assert [r["trecho"] for r in normalized["nao_reencontradas"]] == ["Area three."]
+            # "one" e "two" têm a mesma identidade (tipo, predicado, posição): são nova versão do
+            # mesmo objeto, não superação.
+            assert normalized["superadas"] == []
+
+
+def test_json_invalido_falha_a_fatia_nao_o_documento(committed_case, monkeypatch):
+    """Dívida #287: uma fatia com JSON inválido ganha uma nova tentativa; persistindo, fica
+    registrada como não lida e as outras fatias são publicadas. O que a leitura anterior
+    ancorou nela não foi examinado: nem superado, nem marcado "não reencontrado"."""
+    from app.core.config import settings
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry one. Area one.   Registry two. Area two.  "
+        db.commit()
+
+    def area(value, anchor):
+        return json.dumps({"observacoes": [{"predicado": "area_documental_ha", "valor": value, "trecho": anchor}]})
+    respostas = iter([area(1, "Area one."), area(2, "Area two."),        # rodada 1: as duas fatias lidas
+                      area(1, "Area one."), "{observacoes: [}", "nao e json"])  # rodada 2: fatia 2 falha 2×
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    monkeypatch.setattr(settings, "EXTRACTOR_CHUNK_CHARS", 26)
+    monkeypatch.setattr(settings, "EXTRACTOR_CHUNK_OVERLAP_CHARS", 0)
+    monkeypatch.setattr("app.core.ai_gateway.complete", lambda *args, **kwargs: AIResponse(
+        content=next(respostas), model_used="controlled", provider="test",
+        tokens_in=1, tokens_out=1, cost_usd=0.001, duration_ms=1))
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        for _ in range(2):
+            assert client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+    with factory() as db:
+        report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+            object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first()
+        normalized = report.content["attributes"]["normalized"]
+        [nao_lida] = normalized["fatias_nao_lidas"]
+        assert (nao_lida["inicio"], nao_lida["fim"], nao_lida["tentativas"]) == (26, 51, 2)
+        assert normalized["nao_reencontradas"] == []
+        [nao_examinada] = normalized["nao_examinadas"]
+        area_dois = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], object_id=nao_examinada["id"]).one()
+        assert area_dois.content["attributes"]["literal"] == "Area two."
+        from app.models.evidence import EvidenceInvalidation
+        assert db.query(EvidenceInvalidation).filter_by(evidence_id=area_dois.id).count() == 0
+        # O custo das duas tentativas fica no fatiamento do relatório.
+        rotulos = [c["rotulo"] for c in normalized["fatiamento"]["chamadas"]]
+        assert sum(r.endswith(":nova_tentativa") for r in rotulos) == 1 and len(rotulos) == 3
+        doc = db.get(Document, case["doc"])
+        assert "fatia(s) não lida(s)" in doc.extraction_status and doc.review_required
+
+
+def test_nao_reencontradas_vistas_por_uma_leitura_vao_para_decisao_em_lote(committed_case, monkeypatch):
+    """Dívida #286 (André, 24/09): a não reencontrada que 2+ leituras viram permanece corrente,
+    com marca só informativa, fora do lote e da contagem de pendências; a que uma leitura só viu
+    vai para o lote. O lote grava uma revisão por observação e recusa o que está fora dele."""
+    from app.core.config import settings
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry. Area one. Area two. Area three."
+        db.commit()
+
+    def area(value, anchor):
+        return {"predicado": "area_documental_ha", "valor": value, "trecho": anchor}
+    _controlled_extractions(monkeypatch,
+        {"observacoes": [area(1, "Area one."), area(2, "Area two.")]},   # rodada 1, leitura A
+        {"observacoes": [area(1, "Area one."), area(3, "Area three.")]},  # rodada 1, leitura B
+        {"observacoes": []}, {"observacoes": []})                        # rodada 2: nada reencontrado
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 2)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        for _ in range(2):
+            assert client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+        url = f"/api/v1/evidence/cases/{case['case']}/documents/{case['doc']}"
+        tela = client.get(f"{url}/conferencia", headers=headers).json()["observacoes"]
+        por_trecho = {o["trecho"]: o for o in tela}
+        assert {t: (o["nao_reencontrada"], o["no_lote"]) for t, o in por_trecho.items()} == {
+            "Area one.": (True, False), "Area two.": (True, True), "Area three.": (True, True)}
+        with factory() as db:
+            # A pendência do documento conta só as duas do lote; "one" (2 de 2) é informativa.
+            status = db.get(Document, case["doc"]).extraction_status
+            assert "2 observação(ões) da rodada anterior não reencontrada(s) — decidir" in status
+        lote = [{"id": por_trecho[t]["id"], "version": por_trecho[t]["version"]} for t in ("Area two.", "Area three.")]
+        fora = [{"id": por_trecho["Area one."]["id"], "version": por_trecho["Area one."]["version"]}]
+        recusado = client.post(f"{url}/nao-reencontradas/lote", headers=headers,
+                               json={"acao": "rejeitar", "justificativa": "Leitura espúria", "observacoes": lote + fora})
+        assert recusado.status_code == 409
+        feito = client.post(f"{url}/nao-reencontradas/lote", headers=headers,
+                            json={"acao": "rejeitar", "justificativa": "Leitura espúria", "observacoes": lote})
+        assert feito.status_code == 200, feito.text
+        assert feito.json() == {"decididas": 2, "acao": "rejeitar"}
+        depois = {o["trecho"]: (o["nao_reencontrada"], o["no_lote"]) for o in
+                  client.get(f"{url}/conferencia", headers=headers).json()["observacoes"]}
+        assert depois == {"Area one.": (True, False), "Area two.": (False, False), "Area three.": (False, False)}
+    with factory() as db:
+        revisoes = db.query(EvidenceReview).filter_by(tenant_id=case["tenant"]).all()
+        assert len(revisoes) == 2 and {r.action for r in revisoes} == {"rejeitar"}
+        assert all(r.justification.startswith("Decisão em lote") for r in revisoes)

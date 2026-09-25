@@ -267,6 +267,17 @@ def _recusa_de_temperatura(exc: BaseException) -> bool:
     return "temperature" in message and ("support" in message or "unsupported" in message)
 
 
+# gpt-6-luna (23/09/2026): recusa `max_tokens` e exige `max_completion_tokens`. O
+# LiteLLM instalado faz essa troca só para a família gpt-5; aqui ela é aprendida
+# como a temperatura: a recusa vem antes de gerar (sem custo) e o processo lembra.
+_SO_MAX_COMPLETION_TOKENS: set[str] = set()
+
+
+def _recusa_de_max_tokens(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "max_tokens" in message and "max_completion_tokens" in message
+
+
 def _conferir_orcamento_do_job(model: str) -> None:
     """Dívida #272: recusa a chamada quando o job já gastou o teto ACUMULADO.
 
@@ -423,17 +434,30 @@ def complete(
                             # ADR-077: o timeout mede provedor travado, não geração longa.
                             call["stream"] = True
                         temperature = 1 if _model in _SO_TEMPERATURA_PADRAO else _temperature
+                        token_param = ("max_completion_tokens" if _model in _SO_MAX_COMPLETION_TOKENS
+                                       else "max_tokens")
                         _conferir_orcamento_do_job(_model)
-                        try:
-                            resp = tracked_completion(litellm.completion, temperature=temperature, **call)
-                        except _refused as refused:
-                            # The gpt-5 family (Luna, Terra) accepts only temperature 1. The refusal
-                            # happens before generation (no tokens); both attempts stay in the trace
-                            # and the process remembers the model.
-                            if temperature == 1 or not _recusa_de_temperatura(refused):
-                                raise
-                            _SO_TEMPERATURA_PADRAO.add(_model)
-                            resp = tracked_completion(litellm.completion, temperature=1, **call)
+                        # Parameter refusals happen before generation (no tokens): the gpt-5
+                        # family accepts only temperature 1, and gpt-6-luna only
+                        # max_completion_tokens. Each refusal is corrected once, stays in the
+                        # trace, and the process remembers the model.
+                        for _ajuste in range(3):
+                            try:
+                                resp = tracked_completion(litellm.completion, temperature=temperature,
+                                                          token_param=token_param, **call)
+                                break
+                            except _refused as refused:
+                                if temperature != 1 and _recusa_de_temperatura(refused):
+                                    _SO_TEMPERATURA_PADRAO.add(_model)
+                                    temperature = 1
+                                elif token_param == "max_tokens" and _recusa_de_max_tokens(refused):
+                                    _SO_MAX_COMPLETION_TOKENS.add(_model)
+                                    token_param = "max_completion_tokens"
+                                else:
+                                    raise
+                        else:
+                            raise AIGatewayError(message=f"Parâmetros recusados por {_model} após ajustes",
+                                                 last_error=f"parametros_recusados model={_model}")
                         _somar_ao_orcamento_do_job(litellm, resp)
                         break
                     except _transient as transient_exc:

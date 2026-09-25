@@ -7,6 +7,7 @@ from datetime import date
 from fastapi import HTTPException
 from pydantic import TypeAdapter, ValidationError
 
+from app.core.logging import get_logger
 from app.models.document import Document, DocumentSource
 from app.models.entrada_semantica import ClassificacaoDocumento, DocumentoVersao
 from app.models.evidence import EvidenceInvalidation
@@ -39,6 +40,8 @@ from app.services.identidade_observacao import (
     resolver_ancora_literal,
 )
 from app.services.taxonomia_documental import SUPORTE, destino_consolidavel, propor_especie
+
+logger = get_logger(__name__)
 
 
 def classificacao_atual(db, doc):
@@ -91,6 +94,8 @@ def conteudo_do_item(item):
     content = item.model_dump(mode="json")
     if item._campos_sem_suporte:
         content["campos_sem_suporte"] = item._campos_sem_suporte
+    if item._leituras_na_rodada:
+        content["leituras_na_rodada"] = item._leituras_na_rodada
     return content
 
 
@@ -663,11 +668,16 @@ def registro_do_reparo(pedidos, recusadas_finais):
     return registro
 
 
-def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
-    """Único parser/persistidor, compartilhado pelo agente e adaptador de staging.
+class RespostaNaoJSON(ValueError):
+    """A resposta do extrator para uma fatia não é JSON (dívida #287)."""
 
-    With ``superacoes`` the caller supersedes the previous version after writing
-    the case derivations; otherwise supersession happens here.
+
+def ler_documento(db, doc, *, manifest, on_response=None):
+    """A leitura, sem persistir: fatiar, chamar o extrator, ancorar e validar.
+
+    Devolve o que a persistência usa. Separada de ``extrair_documento`` para que a
+    leitura possa ser medida (dívida #281: variância entre leituras) sem disparar a
+    superação da leitura anterior.
     """
     from app.core.ai_gateway import AIGatewayError, complete
     from app.services.taxonomia_documental import FAMILIAS
@@ -706,7 +716,7 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     colecoes = {key: [] for key in EntradaExtraida.model_fields}
     modelos = []
     chamadas = []
-    rejeicoes, campos, reparos = [], [], []
+    rejeicoes, campos, reparos, nao_lidas = [], [], [], []
     for fatia in fatias:
         texto = doc.extracted_text[fatia.inicio:fatia.fim]
         system_fatia = system + (f"\nEspécie: {especie}. Fatia {fatia.indice}; "
@@ -741,9 +751,21 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
             try:
                 return json.loads(raw)
             except json.JSONDecodeError as exc:
-                raise ValueError(f"Resposta do extrator não é JSON: {exc.msg}") from exc
+                raise RespostaNaoJSON(f"Resposta do extrator não é JSON: {exc.msg}") from exc
 
-        proposta = chamar(system_fatia, f"doc{doc.id}:{fatia.rotulo}")
+        # Dívida #287: JSON inválido falha a FATIA, não o documento. Uma nova tentativa;
+        # persistindo, a fatia fica registrada como não lida (cobertura parcial dita) e as
+        # outras seguem. O custo das duas chamadas já está em ``chamadas``.
+        try:
+            proposta = chamar(system_fatia, f"doc{doc.id}:{fatia.rotulo}")
+        except RespostaNaoJSON:
+            try:
+                proposta = chamar(system_fatia, f"doc{doc.id}:{fatia.rotulo}:nova_tentativa")
+            except RespostaNaoJSON as exc:
+                nao_lidas.append({"fatia": fatia.indice, "rotulo": fatia.rotulo, "inicio": fatia.inicio,
+                                  "fim": fatia.fim, "motivo": str(exc), "tentativas": 2})
+                logger.warning("extrator: documento %s, fatia %s não lida: %s", doc.id, fatia.rotulo, exc)
+                continue
         parcial, recusadas = validar_proposta(proposta, doc.extracted_text, fatia.inicio, fatia.fim, especie=especie)
         # Skill compensation (André, 21/09/2026): one repair round, result recorded per item.
         try:
@@ -781,36 +803,229 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
                 referencia.sujeito = prefix + referencia.sujeito
         for key in colecoes:
             colecoes[key].extend(getattr(parcial, key))
+    if len(nao_lidas) == len(fatias):
+        raise ValueError(f"Nenhuma fatia do documento foi lida: {nao_lidas[-1]['motivo']}")
     entrada = EntradaExtraida(**colecoes)
-    if family == "contratual" and not entrada.contratos and not rejeicoes:
+    if family == "contratual" and not entrada.contratos and not rejeicoes and not nao_lidas:
         raise HTTPException(422, "Extração contratual incompleta: contratos ausentes; não publicar sucesso vazio")
-    if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados and not rejeicoes:
+    if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados and not rejeicoes and not nao_lidas:
         raise HTTPException(422, "Extração cadastral incompleta: declaração de falecimento não preservada")
+    return {"entrada": entrada, "especie": especie, "family": family, "modelos": modelos,
+            "fatias": fatias, "metodo_fatiamento": metodo_fatiamento, "chamadas": chamadas,
+            "rejeicoes": rejeicoes, "campos": campos, "reparos": reparos, "fatias_nao_lidas": nao_lidas}
+
+
+def ler_rodada(db, doc, *, manifest, on_response=None, leituras=None):
+    """ADR-079: uma rodada de extração — N leituras do documento, publicada a união.
+
+    Com uma leitura é ``ler_documento``. Com mais, cada leitura é completa (fatiar,
+    chamar, ancorar, validar, reparar) e a união funde o mesmo fato pela regra do
+    ADR-078; o que só uma leitura viu entra, com ``leituras_na_rodada``. Leitura que
+    falha não derruba a rodada — fica no relatório; sem nenhuma leitura, o erro da
+    última sobe.
+    """
+    from app.core.config import settings
+    from app.services.leitura_multipla import unir_leituras
+    total = leituras or settings.AI_EXTRATOR_LEITURAS_POR_RODADA
+    if total == 1:
+        return {**ler_documento(db, doc, manifest=manifest, on_response=on_response), "rodada": None}
+    lidas, falhas = [], []
+    for n in range(1, total + 1):
+        try:
+            lidas.append((n, ler_documento(db, doc, manifest=manifest, on_response=on_response)))
+        except Exception as exc:  # noqa: BLE001 — a falha de uma leitura é registrada, não some
+            if not lidas and n == total:
+                raise
+            falhas.append({"leitura": n, "erro": f"{type(exc).__name__}: {getattr(exc, 'detail', None) or exc}"})
+            logger.warning("extrator: leitura %s de %s do documento %s falhou: %s", n, total, doc.id, exc)
+    if not lidas:  # pragma: no cover — a última falha já subiu
+        raise ValueError("Nenhuma leitura da rodada concluída")
+    entrada, rodada = unir_leituras([leitura["entrada"] for _, leitura in lidas])
+    rodada = {**(rodada or {"leituras": 1}), "pedidas": total,
+              "concluidas": [n for n, _ in lidas], "falhas": falhas}
+    primeira = lidas[0][1]
+    # Uma fatia só fica sem leitura se NENHUMA leitura da rodada a leu (#287).
+    nao_lidas = [f for f in primeira["fatias_nao_lidas"]
+                 if all(any(g["fatia"] == f["fatia"] for g in leitura["fatias_nao_lidas"]) for _, leitura in lidas)]
+    rodada["fatias_nao_lidas_por_leitura"] = [{**f, "leitura": n} for n, leitura in lidas
+                                              for f in leitura["fatias_nao_lidas"]]
+    return {**primeira, "entrada": entrada, "fatias_nao_lidas": nao_lidas,
+            "modelos": [m for _, leitura in lidas for m in leitura["modelos"]],
+            "chamadas": [{**c, "leitura": n} for n, leitura in lidas for c in leitura["chamadas"]],
+            "rejeicoes": [{**r, "leitura": n} for n, leitura in lidas for r in leitura["rejeicoes"]],
+            "reparos": [{**r, "leitura": n} for n, leitura in lidas for r in leitura["reparos"]],
+            "campos": campos_sem_suporte(entrada), "rodada": rodada}
+
+
+def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
+    """Único parser/persistidor, compartilhado pelo agente e adaptador de staging.
+
+    With ``superacoes`` the caller supersedes the previous version after writing
+    the case derivations; otherwise supersession happens here.
+    """
+    leitura = ler_rodada(db, doc, manifest=manifest, on_response=on_response)
+    entrada, modelos = leitura["entrada"], leitura["modelos"]
+    fatias, metodo_fatiamento, chamadas = leitura["fatias"], leitura["metodo_fatiamento"], leitura["chamadas"]
+    rejeicoes, campos, reparos = leitura["rejeicoes"], leitura["campos"], leitura["reparos"]
     rows = persistir_entrada(db, doc, entrada, modelo=",".join(sorted(set(modelos))))
     anteriores = extracao_anterior(db, doc, {r.id for r in rows})
+    # #287: o que a leitura anterior ancorou numa fatia que esta rodada não leu não foi
+    # examinado — nem superado, nem marcado "não reencontrado". Fica como estava.
+    nao_lidas = leitura["fatias_nao_lidas"]
+    anteriores, nao_examinadas = _fora_das_fatias_nao_lidas(db, doc, anteriores, nao_lidas)
+    # Dívida #281: a leitura varia (o Luna só aceita temperatura 1). Observação da RODADA
+    # anterior (ADR-079: dentro da rodada as leituras se unem) que esta NÃO reencontrou não é superada — seria perda de evidência por
+    # variância —, fica corrente e marcada para o consultor decidir. Só a reencontrada
+    # (mesmo fato, mesmo trecho) é superada pela nova, com o valor igual ou corrigido.
+    reencontradas, nao_reencontradas = separar_por_reencontro(anteriores, rows)
+    superadas = [velha for velha, _nova, _diferente in reencontradas]
+    # Dívida #286 (André, 24/09): a que 2+ leituras da rodada viram fica corrente com marca
+    # informativa, fora do lote e da contagem de pendências; só a vista por uma leitura pede decisão.
+    para_decidir = [r for r in nao_reencontradas if apoio_na_rodada(r) < 2]
     source = fonte_documental(db, doc)
     fatiamento = _registrar_fatias(db, doc, fatias, metodo_fatiamento, chamadas)
     # One version per extraction of the document: its observations and what it supersedes.
     relatorio = _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
-            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.3",
+            "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.5",
                 "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "reparos": reparos,
-                    "fatiamento": fatiamento,
+                    "fatiamento": fatiamento, "rodada": leitura["rodada"], "fatias_nao_lidas": nao_lidas,
+                    "nao_examinadas": [{"id": r.object_id, "version": r.version} for r in nao_examinadas],
                     "observacoes_preservadas": len(rows),
                     "observacoes": [{"id": r.object_id, "version": r.version} for r in rows],
-                    "superadas": [{"id": r.object_id, "version": r.version} for r in anteriores]}},
+                    "superadas": [{"id": v.object_id, "version": v.version,
+                                   "reencontrada_em": {"id": n.object_id, "version": n.version},
+                                   "valor_diferente": diferente} for v, n, diferente in reencontradas],
+                    "nao_reencontradas": [{"id": r.object_id, "version": r.version,
+                                           "predicado": (r.content.get("attributes") or {}).get("predicate"),
+                                           "trecho": (r.content.get("attributes") or {}).get("literal"),
+                                           "apoio": apoio_na_rodada(r), "decidir": apoio_na_rodada(r) < 2}
+                                          for r in nao_reencontradas]}},
             "premises": [{"id": source.object_id, "version": source.version}],
-            "limits": ["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [],
+            "limits": (["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [])
+                      + (["Extracao parcial: fatia(s) do documento nao lida(s) (resposta invalida do extrator)."]
+                         if nao_lidas else [])
+                      + (["Observacoes da rodada anterior nao reencontradas: decisao do consultor."]
+                         if para_decidir else []),
         })
     if superacoes is None:
-        superar(db, doc, anteriores, relatorio)
+        superar(db, doc, superadas, relatorio)
     else:
-        superacoes.append((doc, anteriores, relatorio))
-    doc.review_required = doc.review_required or bool(rows) or bool(rejeicoes) or bool(campos)
+        superacoes.append((doc, superadas, relatorio))
+    doc.review_required = (doc.review_required or bool(rows) or bool(rejeicoes) or bool(campos)
+                           or bool(para_decidir) or bool(nao_lidas))
     doc.extraction_status = "observações extraídas; revisão necessária" if rows else "extração sem observações"
     if rejeicoes or campos:
         doc.extraction_status = (f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por "
                                  f"ancora/dependencia; {len(campos)} campos sem suporte no trecho; revisar")
+    if nao_lidas:
+        doc.extraction_status += (f"; {len(nao_lidas)} fatia(s) não lida(s) (resposta inválida do extrator) — "
+                                  "reextrair")
+    if para_decidir:
+        doc.extraction_status += (f"; {len(para_decidir)} observação(ões) da rodada anterior não "
+                                  "reencontrada(s) — decidir")
     return rows
+
+
+def apoio_na_rodada(row):
+    """Quantas leituras da rodada viram a observação (ADR-079); sem registro, uma."""
+    normalizado = (row.content.get("attributes") or {}).get("normalized") or {}
+    return (normalizado.get("leituras_na_rodada") or {}).get("viram") or 1
+
+
+# Chaves que o modelo inventa para ligar itens entre si: não são o valor lido (#281).
+# ``leituras_na_rodada`` (ADR-079) é o apoio do item na rodada, não o que o texto diz.
+_CHAVES_DE_REFERENCIA = {"chave", "parte_chave", "representado_chave", "falecido_chave", "sujeito",
+                         "contratante", "contratado", "posicao_inicio", "posicao_fim", "trecho", "confianca",
+                         "leituras_na_rodada"}
+
+
+def _identidade_de_fato(row):
+    """(tipo, predicado, discriminante), versão do texto, trecho [início, fim) e literal."""
+    atributos = row.content.get("attributes") or {}
+    normalizado = atributos.get("normalized") or {}
+    tipo = (row.source_record or {}).get("tipo_entrada")
+    if tipo == "parte":
+        disc = re.sub(r"\D", "", str(normalizado.get("identificador") or "")) or _sem_espacos(
+            str(normalizado.get("nome") or "")).upper()
+    elif tipo == "ato_registral":
+        disc = re.sub(r"[\s.\-]", "", str(normalizado.get("rotulo") or "")).upper()
+    elif tipo == "participacao":
+        disc = atributos.get("role")
+    elif tipo == "referencia_processo":
+        disc = re.sub(r"\D", "", str(normalizado.get("numero") or ""))
+    else:
+        disc = None
+    posicao = re.match(r"\[(\d+),(\d+)\)", atributos.get("position") or "")
+    trecho = (int(posicao[1]), int(posicao[2])) if posicao else None
+    return ((tipo, atributos.get("predicate"), disc), atributos.get("documento_versao_id"), trecho,
+            atributos.get("literal"))
+
+
+def _valor_da_observacao(row):
+    normalizado = (row.content.get("attributes") or {}).get("normalized") or {}
+    return _sem_espacos(str(normalizado.get("valor") or "")).upper()
+
+
+def _mesmo_fato(velha, nova):
+    """Mesmo fato: mesmo tipo e discriminante, trecho sobreposto, e — para observação —
+    mesmo predicado OU mesmo valor lido.
+
+    Medido na #281 (3 leituras × 5 documentos da ELODI): metade da variância aparente
+    é só rótulo — o mesmo trecho, o mesmo valor, predicado com outro nome — e deve
+    casar. Mas casar só pelo trecho funde fatos distintos da mesma frase (área e
+    município): 292 de 485 pares no gpt-5.6-luna tinham predicado E valor diferentes.
+    """
+    (tipo_v, pred_v, disc_v), versao_v, trecho_v, literal_v = _identidade_de_fato(velha)
+    (tipo_n, pred_n, disc_n), versao_n, trecho_n, literal_n = _identidade_de_fato(nova)
+    if tipo_v != tipo_n or disc_v != disc_n:
+        return False
+    if pred_v != pred_n:
+        valor = _valor_da_observacao(velha)
+        if tipo_v != "observacao" or not valor or valor != _valor_da_observacao(nova):
+            return False
+    if versao_v == versao_n and trecho_v and trecho_n:
+        return trecho_v[0] < trecho_n[1] and trecho_n[0] < trecho_v[1]
+    # Texto de outra versão: posição não se compara; o literal, sim.
+    return bool(literal_v) and _sem_espacos(literal_v) == _sem_espacos(literal_n or "")
+
+
+def _valor_lido(row):
+    normalizado = (row.content.get("attributes") or {}).get("normalized") or {}
+    return {k: v for k, v in normalizado.items() if k not in _CHAVES_DE_REFERENCIA}
+
+
+def separar_por_reencontro(anteriores, novas):
+    """Dívida #281: separa as observações anteriores em reencontradas e não reencontradas.
+
+    Reencontrada é o mesmo fato — tipo, predicado, discriminante (identificador da
+    parte, rótulo do ato, papel, número do processo) — com trecho sobreposto na
+    mesma versão do texto, ou o mesmo literal quando a versão mudou. Devolve
+    ``([(velha, nova, valor_diferente)], [não reencontradas])``.
+    """
+    reencontradas, nao_reencontradas = [], []
+    for velha in anteriores:
+        nova = next((n for n in novas if _mesmo_fato(velha, n)), None)
+        if nova is None:
+            nao_reencontradas.append(velha)
+        else:
+            reencontradas.append((velha, nova, _valor_lido(velha) != _valor_lido(nova)))
+    return reencontradas, nao_reencontradas
+
+
+def _fora_das_fatias_nao_lidas(db, doc, anteriores, nao_lidas):
+    """Separa as observações anteriores ancoradas numa fatia não lida (#287) — na versão do
+    texto que a rodada leu; de outra versão não se sabe, e seguem o reencontro normal."""
+    if not nao_lidas:
+        return anteriores, []
+    versao = db.query(DocumentoVersao).filter_by(tenant_id=doc.tenant_id,
+        documento_id=doc.id).order_by(DocumentoVersao.numero.desc()).first()
+    fora, dentro = [], []
+    for row in anteriores:
+        _, versao_id, trecho, _ = _identidade_de_fato(row)
+        na_fatia = versao is not None and versao_id == versao.id and trecho is not None and any(
+            f["inicio"] <= trecho[0] and trecho[1] <= f["fim"] for f in nao_lidas)
+        (dentro if na_fatia else fora).append(row)
+    return fora, dentro
 
 
 def _registrar_fatias(db, doc, fatias, metodo, chamadas):

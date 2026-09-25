@@ -58,15 +58,39 @@ def start_execution(db, tenant_id, user_id, process_id, name, key=None, document
                 raise HTTPException(409, "Chave idempotente já usada para outra execução")
             return existing
     snapshot = capture_snapshot(db, tenant_id, user_id, process_id)
+    # ADR-079: o caso inteiro não é lido num job só. Com N leituras por rodada, o caso
+    # ELODI custaria US$ 0,99 contra o teto de US$ 0,75 por job. Cada documento com
+    # texto vira um passo do extrator — job e teto próprios, como na fila da #279.
+    documentos = [documento_id] if documento_id else documentos_extraiveis(db, tenant_id, process_id)
+    steps = []
+    for n in names:
+        base = {"agent": n, "status": "pending", "depends_on": DEPENDENCIES.get(n, [])}
+        if n == "extrator" and documentos:
+            steps += [{**base, "document_id": d} for d in documentos]
+        else:
+            steps.append(base)
     execution = AgentExecution(id=uuid4().hex, tenant_id=tenant_id, process_id=process_id,
         created_by_user_id=user_id, snapshot_id=snapshot.id, idempotency_key=key or uuid4().hex,
-        chain_name=name, steps=[{"agent": n, "status": "pending", "depends_on": DEPENDENCIES.get(n, []),
-                                 **({"document_id": documento_id} if documento_id and n == "extrator" else {})}
-                                for n in names])
+        chain_name=name, steps=steps)
     db.add(execution)
     db.flush()
     registrar_snapshot(db, execution, snapshot.id)
     return execution
+
+
+def documentos_extraiveis(db, tenant_id, process_id):
+    """Documentos do caso que o extrator lê: fonte primária, não apagados, com texto.
+
+    Sem texto o documento não vira passo próprio; se nenhum tiver texto, o passo único
+    do caso segue dizendo "OCR: texto extraído ausente".
+    """
+    from sqlalchemy import func
+
+    from app.models.document import Document, DocumentSource
+    query = db.query(Document.id).filter(Document.tenant_id == tenant_id, Document.process_id == process_id,
+        Document.deleted_at.is_(None), (Document.source.is_(None)) | (Document.source != DocumentSource.generated_ai),
+        Document.extracted_text.isnot(None), func.length(func.trim(Document.extracted_text)) > 0)
+    return [d for (d,) in query.order_by(Document.id)]
 
 
 def registrar_snapshot(db, execution, snapshot_id):

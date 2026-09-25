@@ -59,7 +59,12 @@ def _start(db, user, body, name, asynchronous):
     db.commit()
     data = execution_data(execution)
     if name not in CHAINS:
-        return {**legacy_step_result(db, execution, execution.steps[0]), **data}
+        resultado = {**legacy_step_result(db, execution, execution.steps[0]), **data}
+        if len(execution.steps) > 1:
+            # ADR-079: o extrator do caso inteiro roda um passo por documento; todos são ditos.
+            resultado["success"] = all(s["status"] == "completed" for s in execution.steps)
+            resultado["results"] = [legacy_step_result(db, execution, s) for s in execution.steps]
+        return resultado
     return {**data, "chain_name": name, "stopped_for_review": execution.status == "awaiting_review",
             "total_duration_ms": 0, "results": [legacy_step_result(db, execution, s) for s in execution.steps]}
 

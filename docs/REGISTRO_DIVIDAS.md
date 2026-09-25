@@ -20,6 +20,64 @@ são do PR #214 (leitura múltipla); esta frente começa na #288.
 
 > **PRÓXIMO NÚMERO LIVRE: 289.** (#286 e #287 do PR #214; #288 aberta pelo #285, 24/09.)
 
+## Pulso 24/09/2026 — leitura múltipla por rodada (ADR-079)
+
+- **#286 — decisão em lote das observações "não reencontradas" na tela (FECHADA, PR próprio):**
+  - Pelo ADR-078, a observação que a releitura não reencontra fica corrente e marcada para o
+    consultor decidir, uma a uma. Medido: ~30% da leitura anterior a cada releitura de uma leitura só
+    (≈222 observações no caso ELODI com o gpt-5.6-luna). Decidir uma a uma não escala.
+  - **Desenho confirmado pelo André (24/09), por apoio (ADR-079):** a não reencontrada que 2+ leituras
+    da rodada viram **permanece corrente, com marca informativa "não reencontrada na última rodada"**,
+    sem "decidir", fora do lote e fora da contagem de pendências (status e revisão do documento); a que
+    uma leitura só viu vai para a **decisão em lote** na
+    conferência do documento — uma justificativa, gravada como decisão de cada observação (a trilha
+    continua por observação; o lote é só o gesto).
+  - **Implementado:** a conferência devolve `apoio` e `no_lote` por observação; o lote tem seção
+    própria (justificativa + "Manter todas (aprovar)" / "Descartar todas (rejeitar)") e o endpoint
+    `POST /evidence/cases/{caso}/documents/{doc}/nao-reencontradas/lote` grava uma revisão e um
+    registro de auditoria por observação. Observação fora do lote (decidida, reencontrada, vista por
+    2+ leituras) recusa o lote inteiro (409). Sem apoio registrado (leitura de antes do ADR-079)
+    conta como uma leitura.
+  - O ADR-079 reduz o volume (a marca só existe entre rodadas); não substitui o lote.
+
+- **#287 — resposta não-JSON de uma fatia derruba a leitura do documento inteiro (FECHADA, PR próprio):**
+  - `ler_documento` levanta `ValueError("Resposta do extrator não é JSON")` quando uma fatia volta com
+    JSON inválido, e o documento inteiro falha — as fatias já lidas se perdem, e o custo delas some do
+    relatório. A rodada de reparo (skill) só trata item recusado na validação, não JSON quebrado.
+  - **Medido (ADR-079, 24/09):** gpt-6-luna, 2 de 30 leituras de documento, ambas na matrícula 3.673
+    (`Invalid \escape`, `Invalid control character`); gpt-5.6-luna, 0 de 30.
+  - **Correção (André, 24/09: "falha por fatia, não por documento"; antes de qualquer troca para o
+    gpt-6-luna):** JSON inválido ganha **uma nova tentativa** da fatia; persistindo, a fatia vai para
+    `fatias_nao_lidas` no relatório (com as duas chamadas pagas em `fatiamento.chamadas`), o documento
+    sai "extração parcial … reextrair" e as outras fatias são publicadas. O que a leitura anterior
+    ancorou na fatia não lida **não foi examinado** (`nao_examinadas`): nem superado, nem marcado não
+    reencontrado. Numa rodada (ADR-079), a fatia só fica não lida se nenhuma leitura a leu. Todas as
+    fatias sem leitura: a leitura falha, como antes.
+
+> **PRÓXIMO NÚMERO LIVRE: 289.** (#286 e #287 abertas pela frente do ADR-079, 24/09; **#288 é do PR #216**,
+> ADR-080, da pilha #211 → #216. Próximo ADR livre: 081.)
+
+## Pulso 23/09/2026 (noite) — releitura e comparação de modelos (#281, ADR-078)
+
+- **#281 — variância entre leituras × superação automática = perda de evidência (FECHADA, ADR-078):**
+  - O Luna só aceita temperatura 1, e a superação automática do ADR-070 invalidava toda observação
+    que a releitura não produzisse de novo. **Medido** (3 leituras do CAR e das 4 matrículas da
+    ELODI, sem gravar): **~41% dos fatos aparecem em só uma de três leituras**, nos dois modelos
+    testados; por releitura, ~30% da leitura anterior não é reencontrada — era isso que se perdia em
+    silêncio.
+  - **Correção (desenho do André):** observação não reencontrada **não é superada** — fica corrente,
+    marcada "não reencontrada" no relatório e na tela de conferência, e o consultor decide. Só a
+    reencontrada é superada automaticamente, com `reencontrada_em` e `valor_diferente` no relatório.
+  - **Regra de reencontro calibrada pela medição:** mesmo tipo e discriminante, trecho sobreposto e,
+    para observação, mesmo predicado **ou** mesmo valor lido. Exigir o predicado marcava rótulo trocado
+    como sumido; dispensá-lo fundia fatos distintos da mesma frase (292 de 485 pares).
+  - **Comparação gpt-5.6-luna × gpt-6-luna** registrada no ADR-078 (dado, não decisão): seis provas
+    de leitura 6/6 nos dois; o gpt-6-luna lê ~35% menos itens, custa ~1/3 e não teve timeout. O
+    padrão segue gpt-5.6-luna até decisão do André.
+
+> **Anterior: 286.** (#281 aberta e fechada por esta frente; **#282 a #285 são do PR #211**,
+> Incremento 5 — renumeradas lá em 23/09 depois de colidirem com #280 e #281.)
+
 ## Pulso 23/09/2026 — Incremento 5, fechamento comercial (ADR-074, só dev)
 
 Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5.md). A **#279** e a
@@ -47,7 +105,7 @@ Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5
   **Consequência:** hoje nenhum diagnóstico real entra em revisão pelo contrato; a prova de
   "diagnóstico em revisão não impede o orçamento" em dev usou conclusão sintética declarada.
 
-> **PRÓXIMO NÚMERO LIVRE: 286.** (#279 e #280 do PR #210; #281 da frente de releitura; #282 a
+> **Anterior: 286.** (#279 e #280 do PR #210; #281 da frente de releitura; #282 a
 > #285 abertas pelo Incremento 5, 23/09.)
 
 ## Pulso 23/09/2026 (tarde) — frente #271/#272: fatiamento por ato e teto acumulado
@@ -102,7 +160,7 @@ Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5
   - **Quando:** **depois da homologação** (decisão do André, 23/09) — não muda resultado, só tempo.
   - **Origem:** prova do ADR-077 em dev.
 
-> **PRÓXIMO NÚMERO LIVRE: 281.** (#279 e #280 abertas pela frente #271/#272, 23/09; #273 a #278 são
+> **Anterior: 281.** (#279 e #280 abertas pela frente #271/#272, 23/09; #273 a #278 são
 > do Incremento 4b, logo abaixo.)
 
 ## Pulso 23/09/2026 — Incremento 4b, motor jurídico (ADR-073, só dev)

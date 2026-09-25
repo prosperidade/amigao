@@ -316,6 +316,10 @@ class Settings(BaseSettings):
     # do timeout não muda (decisão do André, 22/09). A chamada fica limitada pelo
     # max_tokens de saída, não pelo relógio.
     AI_EXTRATOR_STREAM: bool = True
+    # ADR-079: leituras do mesmo documento por rodada de extração; publica-se a união
+    # (dedupe do ADR-078). N = 2 por decisão do André (24/09) sobre a medição do ADR:
+    # cobertura do que 2+ leituras veem 0,72 -> 0,88; custo e tempo dobram.
+    AI_EXTRATOR_LEITURAS_POR_RODADA: int = Field(default=2, ge=1, le=3)
     # Diagnóstico — trecho de cada documento levado ao contexto (validação 30/07).
     # A consultora subiu 2 relatórios analíticos na E4, re-rodou o diagnóstico e
     # nada foi incorporado: o contexto listava os documentos só por
