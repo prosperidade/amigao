@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 from app.models.acao import Acao
 from app.models.base import Base
 from app.models.client import Client
+from app.models.comercial import Orcamento
 from app.models.communication import CommunicationThread
 from app.models.contract import Contract
 from app.models.document import Document
@@ -74,6 +75,7 @@ _RELACOES: dict[str, tuple[type[Base], str]] = {
     "document_id": (Document, "Documento"),
     "matricula_id": (Matricula, "Matrícula"),
     "rota_id": (Rota, "Rota"),
+    "orcamento_id": (Orcamento, "Orçamento"),
     "acao_id": (Acao, "Ação"),
     "thread_id": (CommunicationThread, "Conversa"),
     "task_id": (Task, "Tarefa"),

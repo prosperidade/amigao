@@ -702,6 +702,11 @@ relatório da execução (avaliadas, não aplicáveis, indeterminadas com os fat
 faltantes, fundamento por ID ou a razão de não ter), registrar ciência de alerta
 crítico com justificativa e pedir motivo ao remover passo do motor — hoje o botão
 de remover recebe 400 num passo de origem `motor`.
+
+**Condição de entrada (André, 24/09/2026) — orçamento só do tenant (dívida #284).** Antes do
+Incremento 7 saem os dois orçamentos legados de código — `OrcamentoAgent._estimate_by_rules` e a
+distribuição da `PRICE_TABLE` em `proposal_generator` —, e toda proposta nasce do orçamento derivado
+da Rota com métodos e preços do tenant (ADR-074). Depende da tela do orçamento (#282).
 **Esforço:** médio. **Não é opcional.**
 
 ### INCREMENTO 8 — Aceite da Ísis e publicação controlada
@@ -737,7 +742,7 @@ do próprio método.
 | 4 | Motor jurídico e método da Legislação | Regras e fundamentos homologados para a cobertura escolhida |
 | 5 | Diagnóstico, redação e fechamento comercial | Percurso chega a proposta sem inventar escopo |
 | 6 | Migração de dados: corpus, extrações antigas, checksums (schema migra no deploy) | Dados antigos tratados sem fabricar evidência |
-| 7 | Homologação técnica integral e auditoria independente | Percurso completo aprovado, com falha e concorrência · **entra só com a tela do motor jurídico (#278)** |
+| 7 | Homologação técnica integral e auditoria independente | Percurso completo aprovado, com falha e concorrência · **entra só com a tela do motor jurídico (#278) e sem a tabela de preços de código (#284)** |
 | 8 | Aceite da Ísis e publicação controlada | Versão aceita e funcionamento publicado verificado |
 
 **Sobre prazo:** isto é uma sequência com esforço relativo, não um cronograma.

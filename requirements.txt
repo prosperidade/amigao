@@ -6,7 +6,9 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 email-validator
-sqlalchemy
+# SQLAlchemy 2.1 (24/09/2026) troca o driver padrão de postgresql:// para psycopg (v3), que não
+# está instalado: o CI caiu com "No module named 'psycopg'". Fica em 2.0 até a migração ser decidida.
+sqlalchemy>=2.0,<2.1
 sqlalchemy-utils
 alembic
 psycopg2-binary

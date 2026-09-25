@@ -26,15 +26,17 @@ from app.services.evidence import (
 
 CHAINS = {
     "diagnostico_completo": ["extrator", "auditor_imovel", "legislacao", "diagnostico"],
-    "gerar_proposta": ["diagnostico", "redator", "orcamento"],
+    # ADR-074 §1 (ruptura 4): a cadeia comercial parte da Rota validada. O diagnóstico
+    # é entrada da Rota, não do orçamento; rodá-lo de novo aqui prendia o orçamento
+    # atrás de uma revisão que nada tem a ver com o preço.
+    "gerar_proposta": ["redator", "orcamento"],
     "gerar_documento": ["redator"],
     "analise_regulatoria": ["legislacao"],
     "enquadramento_regulatorio": ["extrator", "legislacao"],
 }
 # Reading, comparison and legal retrieval do not depend on an unreviewed conclusion.
 # Synthesis/commercial steps wait only for the conclusions they require.
-DEPENDENCIES = {"diagnostico": ["auditor_imovel", "legislacao"],
-                "redator": ["diagnostico"], "orcamento": ["diagnostico", "redator"]}
+DEPENDENCIES = {"diagnostico": ["auditor_imovel", "legislacao"], "orcamento": ["redator"]}
 
 
 def start_execution(db, tenant_id, user_id, process_id, name, key=None, documento_id=None):
@@ -105,6 +107,13 @@ def _outputs_resolved(db, execution, step):
     latest = latest_objects(db, execution.tenant_id, execution.process_id)
     invalid = invalidate_dependents(db, execution.tenant_id, execution.process_id)
     for ref in step.get("outputs", []):
+        if "artefato" in ref:
+            # ADR-074: redação e orçamento são artefatos versionados, não conclusões.
+            from app.services.comercial.cadeia import artefato_resolvido
+            if not artefato_resolvido(db, tenant_id=execution.tenant_id,
+                                      process_id=execution.process_id, ref=ref):
+                return False
+            continue
         row = latest.get(ref["id"])
         if row is None or row.id in invalid:
             return False
@@ -165,7 +174,7 @@ def run_step(db, execution, step, user_id):
     from app.core.ai_gateway import check_tenant_cost_limit, check_tenant_monthly_budget
 
     envelope = build_envelope(db, execution.tenant_id, user_id, execution.process_id, execution.snapshot_id)
-    metadata = {"uf": envelope.case.get("uf"), "demand_type": envelope.objective}
+    metadata = {"uf": envelope.case.get("uf"), "demand_type": envelope.objective, "chain": execution.chain_name}
     if step.get("document_id"):
         metadata["document_id"] = step["document_id"]  # dívida #279: leitura de um documento só
     manifest = capability_manifest(step["agent"], metadata)
@@ -191,6 +200,17 @@ def run_step(db, execution, step, user_id):
         job.result = {"status": manifest["status"], "manifest": manifest}
         job.finished_at = datetime.now(UTC)
         step["status"] = manifest["status"]
+        return
+    from app.services.comercial.cadeia import AGENTES_COMERCIAIS
+    if step["agent"] in AGENTES_COMERCIAIS:
+        from app.services.comercial.cadeia import executar_passo
+        outputs, result = executar_passo(db, agent=step["agent"], tenant_id=execution.tenant_id,
+                                         process_id=execution.process_id, user_id=user_id)
+        job.result = result
+        job.status = AIJobStatus.completed
+        job.finished_at = datetime.now(UTC)
+        step.update(status="completed", outputs=outputs)
+        db.flush()
         return
     if step["agent"] == "extrator":
         from app.core.ai_trace import attempt_sink
@@ -333,8 +353,18 @@ def resume_execution(db, tenant_id, user_id, execution_id, expected_revision=Non
     if recompute_stale:
         latest = latest_objects(db, tenant_id, execution.process_id)
         invalid = invalidate_dependents(db, tenant_id, execution.process_id)
+        from app.services.comercial.cadeia import artefato_desatualizado
         for step in steps:
-            if any(latest.get(ref["id"]) and latest[ref["id"]].id in invalid for ref in step.get("outputs", [])):
+            if any(artefato_desatualizado(db, tenant_id=tenant_id, process_id=execution.process_id, ref=ref)
+                   if "artefato" in ref else (latest.get(ref["id"]) and latest[ref["id"]].id in invalid)
+                   for ref in step.get("outputs", [])):
+                previous = {k: v for k, v in step.items() if k != "history"}
+                step["history"] = [*step.get("history", []), previous]
+                step.update(status="pending", outputs=[], job_id=None)
+        # A step rerun invalidates what was built on it (ADR-074: new escopo => new orçamento).
+        reset = {s["agent"] for s in steps if s["status"] == "pending"}
+        for step in steps:
+            if step["status"] == "completed" and reset & set(step.get("depends_on", [])):
                 previous = {k: v for k, v in step.items() if k != "history"}
                 step["history"] = [*step.get("history", []), previous]
                 step.update(status="pending", outputs=[], job_id=None)
