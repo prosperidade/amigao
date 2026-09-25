@@ -988,3 +988,50 @@ def test_rodada_de_duas_leituras_publica_a_uniao_e_so_marca_entre_rodadas(commit
             # "one" e "two" têm a mesma identidade (tipo, predicado, posição): são nova versão do
             # mesmo objeto, não superação.
             assert normalized["superadas"] == []
+
+
+def test_json_invalido_falha_a_fatia_nao_o_documento(committed_case, monkeypatch):
+    """Dívida #287: uma fatia com JSON inválido ganha uma nova tentativa; persistindo, fica
+    registrada como não lida e as outras fatias são publicadas. O que a leitura anterior
+    ancorou nela não foi examinado: nem superado, nem marcado "não reencontrado"."""
+    from app.core.config import settings
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Registry one. Area one.   Registry two. Area two.  "
+        db.commit()
+
+    def area(value, anchor):
+        return json.dumps({"observacoes": [{"predicado": "area_documental_ha", "valor": value, "trecho": anchor}]})
+    respostas = iter([area(1, "Area one."), area(2, "Area two."),        # rodada 1: as duas fatias lidas
+                      area(1, "Area one."), "{observacoes: [}", "nao e json"])  # rodada 2: fatia 2 falha 2×
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    monkeypatch.setattr(settings, "EXTRACTOR_CHUNK_CHARS", 26)
+    monkeypatch.setattr(settings, "EXTRACTOR_CHUNK_OVERLAP_CHARS", 0)
+    monkeypatch.setattr("app.core.ai_gateway.complete", lambda *args, **kwargs: AIResponse(
+        content=next(respostas), model_used="controlled", provider="test",
+        tokens_in=1, tokens_out=1, cost_usd=0.001, duration_ms=1))
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        for _ in range(2):
+            assert client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+    with factory() as db:
+        report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+            object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first()
+        normalized = report.content["attributes"]["normalized"]
+        [nao_lida] = normalized["fatias_nao_lidas"]
+        assert (nao_lida["inicio"], nao_lida["fim"], nao_lida["tentativas"]) == (26, 51, 2)
+        assert normalized["nao_reencontradas"] == []
+        [nao_examinada] = normalized["nao_examinadas"]
+        area_dois = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], object_id=nao_examinada["id"]).one()
+        assert area_dois.content["attributes"]["literal"] == "Area two."
+        from app.models.evidence import EvidenceInvalidation
+        assert db.query(EvidenceInvalidation).filter_by(evidence_id=area_dois.id).count() == 0
+        # O custo das duas tentativas fica no fatiamento do relatório.
+        rotulos = [c["rotulo"] for c in normalized["fatiamento"]["chamadas"]]
+        assert sum(r.endswith(":nova_tentativa") for r in rotulos) == 1 and len(rotulos) == 3
+        doc = db.get(Document, case["doc"])
+        assert "fatia(s) não lida(s)" in doc.extraction_status and doc.review_required

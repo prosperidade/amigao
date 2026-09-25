@@ -77,3 +77,19 @@ def test_uma_leitura_e_a_propria_leitura():
     l1 = EntradaExtraida(observacoes=[_obs("area", "1", 0, 10)])
     entrada, rodada = unir_leituras([l1])
     assert entrada is l1 and rodada is None
+
+
+def test_fatia_so_fica_nao_lida_se_nenhuma_leitura_da_rodada_a_leu(monkeypatch):
+    """#287 na rodada (ADR-079): a fatia que uma leitura perdeu e a outra leu está lida."""
+    from app.services import entrada_semantica
+
+    def leitura(nao_lidas):
+        return {"entrada": EntradaExtraida(observacoes=[_obs("area", "1", 0, 10)]), "modelos": ["m"],
+                "chamadas": [], "rejeicoes": [], "reparos": [], "campos": [], "fatias": [],
+                "fatias_nao_lidas": [{"fatia": i, "inicio": 0, "fim": 10} for i in nao_lidas]}
+    lidas = iter([leitura([0, 1]), leitura([1])])
+    monkeypatch.setattr(entrada_semantica, "ler_documento", lambda *a, **k: next(lidas))
+    resultado = entrada_semantica.ler_rodada(None, None, manifest={}, leituras=2)
+    assert [f["fatia"] for f in resultado["fatias_nao_lidas"]] == [1]
+    assert [(f["leitura"], f["fatia"]) for f in resultado["rodada"]["fatias_nao_lidas_por_leitura"]] == [
+        (1, 0), (1, 1), (2, 1)]
