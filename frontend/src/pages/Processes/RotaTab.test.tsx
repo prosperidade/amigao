@@ -81,6 +81,18 @@ function rota(passos: ReturnType<typeof passo>[]) {
   };
 }
 
+/** A tela da Rota lê três coisas: a Rota, a última execução do motor (404 = o
+ *  motor ainda não avaliou) e a versão do rodapé. Cada GET responde pela URL. */
+function servir(dadosRota: unknown) {
+  vi.mocked(api.get).mockImplementation(async (url: string) => {
+    if (url.includes('/motor/execucoes/ultima')) {
+      throw Object.assign(new Error('404'), { response: { status: 404 } });
+    }
+    if (url === '/versao') return { data: { commit: 'abc1234', ambiente: 'test' } };
+    return { data: dadosRota };
+  });
+}
+
 const CAR = passo(40, 1, 'Inscrição e atualização do CAR');
 const PRA = passo(41, 2, 'Elaboração e protocolo do PRA');
 
@@ -91,7 +103,7 @@ describe('RotaTab — reordenação persistida', () => {
 
   it('mover um passo manda a ordem nova ao servidor e a tela confirma', async () => {
     const user = userEvent.setup();
-    vi.mocked(api.get).mockResolvedValue({ data: rota([CAR, PRA]) });
+    servir(rota([CAR, PRA]));
     vi.mocked(api.patch).mockResolvedValue({ data: rota([PRA, CAR]) });
 
     render(withQuery(<RotaTab processId={16} />));
@@ -113,7 +125,7 @@ describe('RotaTab — reordenação persistida', () => {
 
   it('ao recarregar, a ordem permaneceu', async () => {
     const user = userEvent.setup();
-    vi.mocked(api.get).mockResolvedValue({ data: rota([CAR, PRA]) });
+    servir(rota([CAR, PRA]));
     vi.mocked(api.patch).mockResolvedValue({ data: rota([PRA, CAR]) });
 
     const { unmount } = render(withQuery(<RotaTab processId={16} />));
@@ -124,7 +136,7 @@ describe('RotaTab — reordenação persistida', () => {
     // Recarregar de verdade: desmonta, zera o cache e sobe de novo lendo o que o
     // servidor passou a devolver. Ordem que só vive no estado local morreria aqui.
     unmount();
-    vi.mocked(api.get).mockResolvedValue({ data: rota([PRA, CAR]) });
+    servir(rota([PRA, CAR]));
     render(withQuery(<RotaTab processId={16} />));
 
     await screen.findByText('Elaboração e protocolo do PRA');
@@ -137,7 +149,7 @@ describe('RotaTab — reordenação persistida', () => {
 
   it('falha ao salvar devolve a ordem anterior à tela', async () => {
     const user = userEvent.setup();
-    vi.mocked(api.get).mockResolvedValue({ data: rota([CAR, PRA]) });
+    servir(rota([CAR, PRA]));
     vi.mocked(api.patch).mockRejectedValue(new Error('500'));
 
     render(withQuery(<RotaTab processId={16} />));
@@ -158,7 +170,7 @@ describe('RotaTab — reordenação persistida', () => {
     const user = userEvent.setup();
     // Estado 1: rota cheia. Depois da remoção, o servidor passa a devolver só o
     // CAR — e continua devolvendo só o CAR depois da regeneração.
-    vi.mocked(api.get).mockResolvedValue({ data: rota([CAR, PRA]) });
+    servir(rota([CAR, PRA]));
     vi.mocked(api.delete).mockResolvedValue({ data: null });
     vi.mocked(api.post).mockResolvedValue({
       data: {
@@ -174,10 +186,12 @@ describe('RotaTab — reordenação persistida', () => {
     await screen.findByText('Elaboração e protocolo do PRA');
 
     // Gesto 1 — remover o PRA (o gesto que a consultora fez 4× em 11 segundos).
-    vi.mocked(api.get).mockResolvedValue({ data: rota([CAR]) });
+    servir(rota([CAR]));
     await user.click(
       screen.getByRole('button', { name: /remover passo 2: elaboração e protocolo do PRA/i }),
     );
+    // O motivo é pedido sempre; no passo da IA pode ficar vazio.
+    await user.click(screen.getByRole('button', { name: /remover da rota/i }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/rotas/2/passos/41'));
     await waitFor(() =>
       expect(screen.queryByText('Elaboração e protocolo do PRA')).not.toBeInTheDocument(),
@@ -205,9 +219,7 @@ describe('RotaTab — reordenação persistida', () => {
   });
 
   it('rota fechada não se reordena', async () => {
-    vi.mocked(api.get).mockResolvedValue({
-      data: { ...rota([CAR, PRA]), status: 'validada' },
-    });
+    servir({ ...rota([CAR, PRA]), status: 'validada' });
 
     render(withQuery(<RotaTab processId={16} />));
     await screen.findByText('Inscrição e atualização do CAR');

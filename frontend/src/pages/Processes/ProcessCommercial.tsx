@@ -8,6 +8,8 @@ import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import { Plus, FileText, ExternalLink, Send, CheckCircle2, XCircle, AlertCircle, RotateCcw } from 'lucide-react';
+import RodapeVersao from '@/components/RodapeVersao';
+import ComercialRotaPanel from './ComercialRotaPanel';
 
 interface Proposal {
   id: number;
@@ -126,6 +128,9 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
 
   return (
     <div className="space-y-6">
+
+      {/* ── Relatório, escopo e orçamento (ADR-074, #282) — a proposta nasce daqui ── */}
+      <ComercialRotaPanel processId={processId} />
 
       {/* ── Propostas ──────────────────────────────────────────────────────── */}
       <div>
@@ -281,6 +286,7 @@ export default function ProcessCommercial({ processId }: ProcessCommercialProps)
           </div>
         )}
       </div>
+      <RodapeVersao />
     </div>
   );
 }

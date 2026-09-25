@@ -2,7 +2,7 @@
 
 - **Caso** (`/processes/{id}/comercial/...`): gerar e ler o relatório preliminar e a
   especificação de escopo, revisar; gerar e ler o orçamento, escolher método/quantidade de um
-  passo (gera versão nova), revisar.
+  passo (gera versão nova), revisar; abrir uma evidência citada por ID.
 - **Tenant** (`/comercial/metodos`): métodos e preços, versionados.
 
 Todo usuário interno do tenant. Nada aqui chama LLM, muda etapa ou regenera sozinho: a
@@ -25,6 +25,7 @@ from app.models.process import Process
 from app.models.user import User
 from app.services.comercial import ComercialError
 from app.services.comercial import base as base_mod
+from app.services.comercial import detalhe as detalhe_mod
 from app.services.comercial import orcamento as orcamento_mod
 from app.services.comercial import redator as redator_mod
 
@@ -157,6 +158,19 @@ def revisar_redacao(process_id: int, redacao_id: int, body: RevisaoIn, db: Db, u
     _gravar(db, lambda: orcamento_mod.revisar(db, r, user_id=user.id, acao=body.acao,
                                               justificativa=body.justificativa))
     return _redacao_out(db, r)
+
+
+@process_router.get("/{process_id}/evidencias/{tipo}/{ref_id}")
+def ler_evidencia(process_id: int, tipo: str, ref_id: int, db: Db, user: UserDep) -> dict:
+    """O que está por trás de uma evidência ``{tipo, id}`` deste caso (o clique da tela).
+
+    Mesmas travas da verificação das afirmações: fora do tenant ou do caso é 404.
+    """
+    _processo(db, process_id, user.tenant_id)
+    out = detalhe_mod.detalhar(db, tipo, ref_id, tenant_id=user.tenant_id, process_id=process_id)
+    if out is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evidência não encontrada neste caso")
+    return out
 
 
 # ---------------------------------------------------------------------------
