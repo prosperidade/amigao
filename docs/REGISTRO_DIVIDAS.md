@@ -34,7 +34,8 @@
     reencontrado. Numa rodada (ADR-079), a fatia só fica não lida se nenhuma leitura a leu. Todas as
     fatias sem leitura: a leitura falha, como antes.
 
-> **PRÓXIMO NÚMERO LIVRE: 288.** (#286 e #287 abertas pela frente do ADR-079, 24/09.)
+> **PRÓXIMO NÚMERO LIVRE: 289.** (#286 e #287 abertas pela frente do ADR-079, 24/09; **#288 é do PR #216**,
+> ADR-080, da pilha #211 → #216. Próximo ADR livre: 081.)
 
 ## Pulso 23/09/2026 (noite) — releitura e comparação de modelos (#281, ADR-078)
 
