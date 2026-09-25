@@ -1038,9 +1038,9 @@ def test_json_invalido_falha_a_fatia_nao_o_documento(committed_case, monkeypatch
 
 
 def test_nao_reencontradas_vistas_por_uma_leitura_vao_para_decisao_em_lote(committed_case, monkeypatch):
-    """Dívida #286 (desenho do André, 24/09): a não reencontrada que 2+ leituras viram fica
-    mantida e marcada uma a uma; a que uma leitura só viu vai para o lote. O lote grava uma
-    revisão por observação e recusa o que está fora dele."""
+    """Dívida #286 (André, 24/09): a não reencontrada que 2+ leituras viram permanece corrente,
+    com marca só informativa, fora do lote e da contagem de pendências; a que uma leitura só viu
+    vai para o lote. O lote grava uma revisão por observação e recusa o que está fora dele."""
     from app.core.config import settings
     factory, case = committed_case
     with factory() as db:
@@ -1066,6 +1066,10 @@ def test_nao_reencontradas_vistas_por_uma_leitura_vao_para_decisao_em_lote(commi
         por_trecho = {o["trecho"]: o for o in tela}
         assert {t: (o["nao_reencontrada"], o["no_lote"]) for t, o in por_trecho.items()} == {
             "Area one.": (True, False), "Area two.": (True, True), "Area three.": (True, True)}
+        with factory() as db:
+            # A pendência do documento conta só as duas do lote; "one" (2 de 2) é informativa.
+            status = db.get(Document, case["doc"]).extraction_status
+            assert "2 observação(ões) da rodada anterior não reencontrada(s) — decidir" in status
         lote = [{"id": por_trecho[t]["id"], "version": por_trecho[t]["version"]} for t in ("Area two.", "Area three.")]
         fora = [{"id": por_trecho["Area one."]["id"], "version": por_trecho["Area one."]["version"]}]
         recusado = client.post(f"{url}/nao-reencontradas/lote", headers=headers,

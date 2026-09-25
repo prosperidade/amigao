@@ -135,9 +135,9 @@ def conferencia_documento(process_id: int, document_id: int, db: Db, user: UserD
             "superada": "superada_por" in invalidacoes.get(row.id, {}), "desatualizada": row.id in invalidacoes,
             "nao_reencontrada": (row.object_id, row.version) in nao_reencontradas and row.id not in decididas,
             "apoio": (attrs.get("normalized") or {}).get("leituras_na_rodada")})
-    # Dívida #286 (desenho do André, 24/09): a não reencontrada que 2+ leituras da rodada viram
-    # fica mantida e marcada uma a uma; a que uma leitura só viu (ou de antes do ADR-079, sem
-    # apoio registrado) vai para a decisão em lote.
+    # Dívida #286 (André, 24/09): a não reencontrada que 2+ leituras da rodada viram permanece
+    # corrente com marca só informativa — sem "decidir", fora do lote e da contagem de pendências;
+    # a que uma leitura só viu (ou de antes do ADR-079, sem apoio registrado) vai para o lote.
     for o in observacoes:
         o["no_lote"] = o["nao_reencontrada"] and ((o["apoio"] or {}).get("viram") or 1) < 2
     observacoes.sort(key=lambda o: (o["inicio"] is None, o["inicio"] or 0, o["fim"] or 0))

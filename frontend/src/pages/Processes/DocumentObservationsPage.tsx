@@ -88,8 +88,7 @@ export default function DocumentObservationsPage() {
         {rotulo(conferencia.data.documento.especie)} · versão do texto {conferencia.data.documento.versao ?? '—'} ·{' '}
         {observacoes.length} observações · {conferencia.data.rejeicoes.length} rejeitadas ·{' '}
         {conferencia.data.campos_sem_suporte.length} campos sem suporte no trecho
-        {observacoes.some(o => o.nao_reencontrada)
-          ? ` · ${observacoes.filter(o => o.nao_reencontrada).length} não reencontradas na última leitura` : ''}
+        {lote.length ? ` · ${lote.length} não reencontradas para decidir` : ''}
         {conferencia.data.documento.extraction_status ? ` · ${conferencia.data.documento.extraction_status}` : ''}
       </p>
       {lote.length > 0 && <section aria-label="Decisão em lote" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">
@@ -97,7 +96,7 @@ export default function DocumentObservationsPage() {
           {lote.length} não reencontrada(s) na última leitura, vista(s) por uma leitura só — decisão em lote
         </p>
         <p className="mt-1 text-xs text-gray-600">
-          As vistas por duas ou mais leituras continuam marcadas uma a uma na lista.
+          As vistas por duas ou mais leituras permanecem correntes, só com a marca informativa.
           A justificativa vai para a revisão de cada observação.
         </p>
         <textarea aria-label="Justificativa do lote" className="mt-2 w-full rounded border p-2" rows={2}
@@ -138,9 +137,10 @@ export default function DocumentObservationsPage() {
                 {rotulo(o.tipo)}{o.predicado && o.predicado !== o.tipo ? ` · ${rotulo(o.predicado)}` : ''}
                 {o.superada && <span className="ml-2 text-xs text-gray-500">superada por nova extração</span>}
                 {!o.superada && o.desatualizada && <span className="ml-2 text-xs text-gray-500">desatualizada</span>}
-                {o.nao_reencontrada && <span className="ml-2 rounded bg-amber-100 px-1.5 text-xs text-amber-800">
-                  {o.no_lote ? 'não reencontrada, vista por uma leitura — no lote'
-                    : 'não reencontrada na última leitura — decidir'}</span>}
+                {o.no_lote && <span className="ml-2 rounded bg-amber-100 px-1.5 text-xs text-amber-800">
+                  não reencontrada, vista por uma leitura — no lote</span>}
+                {o.nao_reencontrada && !o.no_lote && <span className="ml-2 text-xs text-gray-500">
+                  não reencontrada na última rodada</span>}
               </p>
               <dl className="mt-1 grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5">
                 {camposLegiveis(o.conteudo).map(([chave, valor]) =>

@@ -118,8 +118,9 @@ Um fato que duas leituras viram quase sempre volta (93%); o que uma só viu some
 em metade das rodadas seguintes. O apoio `k de N` separa, na tela, a marca que
 merece atenção (o fato firme que sumiu) da que é a variância de sempre — é o
 critério natural para a decisão em lote da #286 — confirmado pelo André (24/09):
-a não reencontrada vista por 2+ leituras fica mantida; a vista por uma só vai
-para a decisão em lote.
+a não reencontrada vista por 2+ leituras permanece corrente, com marca só
+informativa ("não reencontrada na última rodada"), sem "decidir", fora do lote e
+fora da contagem de pendências; a vista por uma só vai para a decisão em lote.
 
 ### Falhas
 

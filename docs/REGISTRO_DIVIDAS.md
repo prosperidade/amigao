@@ -7,7 +7,9 @@
     consultor decidir, uma a uma. Medido: ~30% da leitura anterior a cada releitura de uma leitura só
     (≈222 observações no caso ELODI com o gpt-5.6-luna). Decidir uma a uma não escala.
   - **Desenho confirmado pelo André (24/09), por apoio (ADR-079):** a não reencontrada que 2+ leituras
-    da rodada viram fica **mantida**; a que uma leitura só viu vai para a **decisão em lote** na
+    da rodada viram **permanece corrente, com marca informativa "não reencontrada na última rodada"**,
+    sem "decidir", fora do lote e fora da contagem de pendências (status e revisão do documento); a que
+    uma leitura só viu vai para a **decisão em lote** na
     conferência do documento — uma justificativa, gravada como decisão de cada observação (a trilha
     continua por observação; o lote é só o gesto).
   - **Implementado:** a conferência devolve `apoio` e `no_lote` por observação; o lote tem seção
