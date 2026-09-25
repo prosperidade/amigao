@@ -434,6 +434,7 @@ def remover_passo(
     # passo removido voltava na regeneração seguinte (medido no caso 16, 02/08).
     passo.deleted_at = datetime.now(UTC)
     passo.deleted_by_user_id = current_user.id
+    passo.remocao_motivo = motivo
     db.commit()
 
 
@@ -466,6 +467,7 @@ def restaurar_passo(
     passo.ordem = max((p.ordem for p in rota.passos), default=0) + 1
     passo.deleted_at = None
     passo.deleted_by_user_id = None
+    passo.remocao_motivo = None
     _audit(
         db,
         tenant_id=current_user.tenant_id,
