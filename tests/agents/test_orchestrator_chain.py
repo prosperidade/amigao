@@ -44,6 +44,7 @@ def test_review_gate_cannot_be_bypassed_and_commercial_chain_does_not_rerun_diag
         source = envelope["sources"][0]
         obj = {"id": "proposal", "version": 1, "kind": "conclusao", "origin": "diagnostico",
                "statement": "Controlled hypothesis", "conclusion_class": "hipotese",
+               "attributes": {"certainty": "baixa"},
                "premises": [{"id": source["id"], "version": source["version"]}]}
         return AIResponse(content=json.dumps({"objects": [obj]}), model_used="controlled", provider="test",
                           tokens_in=1, tokens_out=1, cost_usd=0, duration_ms=1)

@@ -255,10 +255,21 @@ def run_step(db, execution, step, user_id):
         objects = _audit_objects(agent, envelope)
     else:
         # Preserve the existing responsibility's base prompt; the envelope is the sole case input.
+        # ADR-079: the diagnosis has a contract base prompt — the legacy one asked for another
+        # format and won over the contract (job 201, #25 in dev).
+        from app.services import diagnostico_contrato
         base_slug = agent.prompt_slugs[0] if agent.prompt_slugs else None
-        from app.services.prompt_service import get_active_prompt
-        template = get_active_prompt(base_slug, db, tenant_id=execution.tenant_id) if base_slug else None
-        base_prompt = template.content if template else agent._fallback_prompts().get(base_slug, "")
+        template = None
+        if step["agent"] == "diagnostico":
+            base_record = diagnostico_contrato.prompt_base_registro()
+            base_prompt = base_record["content"]
+        else:
+            from app.services.prompt_service import get_active_prompt
+            template = get_active_prompt(base_slug, db, tenant_id=execution.tenant_id) if base_slug else None
+            base_prompt = template.content if template else agent._fallback_prompts().get(base_slug, "")
+            base_record = {"slug": base_slug, "hash": canonical_hash(base_prompt), "content": base_prompt,
+                           "version": template.version if template else canonical_hash(base_prompt),
+                           "origin": "database" if template else "code_fallback"}
         skills = "\n\n".join(s["content"] + "\n" + "\n".join(a["content"] for a in s["attachments"])
                               for s in manifest["applied"])
         system = base_prompt + "\n\n" + skills + (
@@ -270,9 +281,10 @@ def run_step(db, execution, step, user_id):
         ) + json.dumps(EvidenceObject.model_json_schema(), ensure_ascii=False)
         prompt = envelope.model_dump_json()
         parameters = {"agent_name": step["agent"]}
-        record = {"base_prompt": {"slug": base_slug, "hash": canonical_hash(base_prompt), "content": base_prompt,
-                                  "version": template.version if template else canonical_hash(base_prompt),
-                                  "origin": "database" if template else "code_fallback"},
+        if step["agent"] == "diagnostico":
+            from app.core.config import settings as _settings
+            parameters["max_tokens"] = _settings.AI_DIAGNOSTICO_MAX_TOKENS
+        record = {"base_prompt": base_record,
                   "system": system, "user": prompt, "system_hash": canonical_hash(system),
                   "user_hash": canonical_hash(prompt), "parameters": parameters}
         job.input_payload = {**job.input_payload, **record}
@@ -301,9 +313,16 @@ def run_step(db, execution, step, user_id):
             job.input_payload = {**job.input_payload, "attempts": [{"model": response.model_used,
                 "provider": response.provider, "cost": response.cost_usd, "scope": "gateway_response_only"}]}
         parsed = json.loads(response.content)
+        fora_do_contrato = diagnostico_contrato.faltou_objects(parsed)
+        if fora_do_contrato:
+            raise ValueError(fora_do_contrato)
         objects = TypeAdapter(list[EvidenceObject]).validate_python(parsed["objects"])
         if any(obj.kind != "conclusao" for obj in objects):
             raise ValueError("Síntese de agente só pode propor conclusões; não criar fontes primárias")
+        if step["agent"] == "diagnostico":
+            recusadas = diagnostico_contrato.recusas(objects, envelope)
+            if recusadas:
+                raise ValueError("Afirmação do diagnóstico recusada (ADR-079): " + "; ".join(recusadas))
         objects = [obj.model_copy(update={"id": f"conclusion:{uuid4().hex}", "version": 1,
                                            "origin": step["agent"]}) for obj in objects]
     refs = []

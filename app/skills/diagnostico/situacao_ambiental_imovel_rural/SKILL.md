@@ -1,7 +1,7 @@
 ---
 name: diagnostico/situacao_ambiental_imovel_rural
 agent: diagnostico
-version: "1.3.0"
+version: "1.4.0"
 description: "Skill base do agente Diagnóstico — situação ambiental de imóvel rural (movimentos 2 e 4 do método)"
 applies_to:
   uf: [GO, MS, MT]
@@ -31,7 +31,7 @@ fundamentação suficiente para uma conclusão atual. Sem essa avaliação, regi
 Somente conclusões aprovadas e vigentes do envelope podem ser premissas. Não recuperar
 resumos antigos nem jobs concluídos para contornar rejeição. Lacunas não alimentam
 automaticamente escopo comercial. A saída segue o contrato versionado exigido pelo
-servidor; os exemplos de schemas e dual-emit abaixo são históricos de apresentação.
+servidor: afirmações (ADR-079), descritas em "Formato da afirmação" abaixo.
 
 Skill principal do agente Diagnóstico. Cobre os movimentos 2 (preliminar) e 4 (consolidado)
 do método. Alimenta o `LegislacaoAgent` (movimento 5) e, por fim, o `RedatorAgent`.
@@ -520,76 +520,36 @@ parcelamento registrado, descaracterização no SNCR/Incra, e o **risco tributá
 uso rural ativo dentro do perímetro = amarelo (híbrido); sem uso rural mas sem parcelamento
 registrado = laranja (transição incompleta); RL/APP ignorada em projeto urbano = vermelho.
 
-## O que você produz — schema `DiagnosticoPreliminarContent`
+## Formato da afirmação — ADR-079
 
-Seu output é JSON validado pelo schema em `app/schemas/stage_output.py`:
+Você produz **afirmações**, uma por conclusão, para o consultor revisar uma a uma. Cada
+afirmação é uma `conclusao` do contrato de evidência, com premissas pelo **id e versão** do
+envelope. Não existe mais `hipoteses`, `lacunas`, `riscos` e `checklist_inicial` como listas
+separadas: a classe da afirmação diz o que ela é.
 
-```python
-class DiagnosticoPreliminarContent(StageOutputContent):
-    content_type: Literal["diagnostico_preliminar"]
-    hipoteses: list[Hipotese]
-    lacunas: list[Lacuna]
-    riscos: list[Risco]              # Risco agora tem 8 campos (Mapa de Riscos Regulatórios)
-    checklist_inicial: list[ItemChecklist]
-    # campos candidatos a extensão do schema — ver dívidas no rodapé
-    # nivel_risco_geral: Literal["informativo", "atencao", "alto", "critico_impeditivo_potencial"]
-    # nivel_confianca_diagnostico: Literal["alta", "media", "baixa", "informacao_insuficiente"]
-    # recomendacoes_externas: list[RecomendacaoExterna]
-    # etapa_funil_sugerida: Optional[str]
-    # divergencias: list[Divergencia]   # {tema, divergencia, impacto} da matriz de cruzamento
-```
+| O que o método chamava de | Vira afirmação com |
+|---|---|
+| hipótese (o que está claro, com fundamentação) | `conclusion_class = hipotese` ou `fato_documental` (se o documento diz) |
+| lacuna (o que falta) | `conclusion_class = lacuna` — nunca risco |
+| risco (o que pode comprometer) | `conclusion_class = risco` + `impact` (os 4 níveis abaixo) + aplicabilidade |
+| divergência da matriz de cruzamento | `conclusion_class = divergencia`, premissas = as fontes que discordam |
+| item do checklist (o que verificar) | `conclusion_class = orientacao` |
+| serviço sugerido | `conclusion_class = escopo_proposto` + aplicabilidade |
 
-O schema acima é referência histórica de apresentação. Na execução ADR-069, produza
-somente `objects` conforme o schema do servidor. A projeção legada é feita pelo
-adaptador, sem segunda escrita canônica e sem leitura de jobs antigos.
+Três dimensões **independentes** em `attributes`:
 
-### `hipoteses` — o que está claro
-- `descricao`: afirmação plausível com fundamentação.
-- `confianca`: alta | media | baixa.
-- `fontes`: lista de doc_ids ou citação legal.
-- `consequencia`: o que implica, incluindo exceção normativa aplicável (H5).
+- `certainty` (sempre): `alta` exige documento entre as premissas; transcrição ou declaração
+  isolada produz no máximo `media`.
+- `impact` (em risco): o **grau** dos 4 níveis — `informativo`, `atencao`, `alto`,
+  `critico_impeditivo_potencial`.
+- `urgency` (opcional): `alta`, `media`, `baixa`; `alta` só em risco aplicável.
 
-**REGRA:** confiança `alta` exige documento; transcrição da reunião isolada produz no
-máximo `media`.
+A categoria de risco (as 7 abaixo) vai no texto da afirmação; o próximo passo, numa afirmação
+`orientacao` própria. O consultor registra decisão e observação na revisão — você não preenche.
 
-### `lacunas` — o que falta
-- `descricao`, `severidade` (alta/media/baixa), `acao_sugerida`,
-  `responsavel` (consultor/cliente/cartorio/orgao), `prazo_estimado_dias`.
-
-**REGRA:** lacuna de alta severidade NÃO impede o consultor de avançar (radar, não cancela).
-Ela sinaliza que a conclusão não pode afirmar regularidade plena sem ressalva. H1 (GEO
-INCRA) permanece lacuna até haver evidência e teste de aplicabilidade; não vira risco por si só.
-
-### `riscos` — o que pode comprometer
-Cada risco segue a estrutura oficial do Mapa de Riscos Regulatórios, com 8 campos:
-- `categoria`: fundiário | geoespacial | ambiental | territorial | cadastral_sistemico |
-  atividade_produtiva | credito_mercado
-- `risco_identificado`: descrição objetiva do problema
-- `grau`: informativo | atencao | alto | critico_impeditivo_potencial
-- `impacto_possivel`: o que afeta (CAR, licença, outorga, crédito, venda, uso, segurança jurídica)
-- `evidencia`: referências recuperáveis de documentos, consultas ou camadas; ausência
-  de informação isolada é lacuna e não satisfaz a fundamentação do risco
-- `proximo_passo`: ação prática de saneamento/validação
-- `status_saneamento`: pendente | em_validacao | saneado | descartado | nao_aplicavel
-- `observacao_consultor`: campo livre (preenchido pelo consultor, não por você)
-- `decisao_consultor` (riscos `critico`): corrigir_antes_de_seguir | seguir_com_ressalva |
-  solicitar_documento | fora_do_escopo | ignorar_com_justificativa. Você **não** preenche este
-  campo — ele é a decisão registrada do consultor diante do alerta crítico (Princípio 1). Você
-  só garante que todo risco crítico chegue com `proximo_passo` claro para que essa decisão seja
-  possível. `ignorar_com_justificativa` exige justificativa obrigatória.
-
-> **Nota de modelagem (dívida):** circulam hoje três conjuntos de estado para um alerta — o
-> `status_saneamento` acima, o `status` do auditor (suspeita/confirmada/descartada/resolvida/
-> ignorada) e a `decisao_consultor` da P4. Eles descrevem coisas diferentes (estado do
-> saneamento × estado do achado × ação escolhida), mas precisam ser conciliados numa modelagem
-> única antes de o campo de decisão entrar em produção. Resolver com o A4/auditor, não na skill.
-
-### `checklist_inicial` — o que verificar a seguir
-- `ordem`, `descricao`, `tipo` (documento_a_obter / consulta_externa / confirmacao_cliente
-  / analise_interna).
-
-**REGRA:** consultas externas são sempre `tipo=consulta_externa`. Aponte O QUE verificar,
-não a fonte específica. O consultor escolhe a fonte (H3).
+**REGRA:** ausência de informação isolada é lacuna e não satisfaz a fundamentação de risco, fato
+ou serviço. Risco, fato documental e serviço precisam de premissa documental. H1 (GEO INCRA)
+permanece lacuna até haver evidência e teste de aplicabilidade; não vira risco por si só.
 
 ## Os 4 níveis de risco (taxonomia oficial)
 
@@ -836,10 +796,8 @@ deixar essa resposta explícita.
 1. **Pipeline de transcrição estruturada.** Áudio MP3/WAV/M4A/AAC → texto → estruturação
    em 12 blocos × 5 camadas por fala. Whisper API ou Gemini 2.0 Flash. Worker
    `transcription_tasks.py` ou extensão do `ExtratorAgent`.
-2. **Schema do `DiagnosticoPreliminarContent` precisa estender** para incluir
-   `nivel_risco_geral`, `nivel_confianca_diagnostico`, `recomendacoes_externas`,
-   `etapa_funil_sugerida`, `divergencias`, e o `Risco` com os 8 campos da taxonomia oficial.
-   Migration necessária. Mantém dual-emit durante transição.
+2. **(Superada pelo ADR-079.)** O schema `DiagnosticoPreliminarContent` deixou de ser a saída:
+   o diagnóstico produz afirmações do contrato de evidência, com certeza, impacto e urgência.
 3. **Tool determinística de cálculo de uso do solo.** Não é skill, é função Python. A fórmula
    combina **período × localização jurídica da área** (ver seção "Regime de compensação por
    supressão em GO"): separar a área suprimida por período (pré-2008 / 2008–2019 / pós-2019) e
