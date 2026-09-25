@@ -668,6 +668,10 @@ def registro_do_reparo(pedidos, recusadas_finais):
     return registro
 
 
+class RespostaNaoJSON(ValueError):
+    """A resposta do extrator para uma fatia não é JSON (dívida #287)."""
+
+
 def ler_documento(db, doc, *, manifest, on_response=None):
     """A leitura, sem persistir: fatiar, chamar o extrator, ancorar e validar.
 
@@ -712,7 +716,7 @@ def ler_documento(db, doc, *, manifest, on_response=None):
     colecoes = {key: [] for key in EntradaExtraida.model_fields}
     modelos = []
     chamadas = []
-    rejeicoes, campos, reparos = [], [], []
+    rejeicoes, campos, reparos, nao_lidas = [], [], [], []
     for fatia in fatias:
         texto = doc.extracted_text[fatia.inicio:fatia.fim]
         system_fatia = system + (f"\nEspécie: {especie}. Fatia {fatia.indice}; "
@@ -747,9 +751,21 @@ def ler_documento(db, doc, *, manifest, on_response=None):
             try:
                 return json.loads(raw)
             except json.JSONDecodeError as exc:
-                raise ValueError(f"Resposta do extrator não é JSON: {exc.msg}") from exc
+                raise RespostaNaoJSON(f"Resposta do extrator não é JSON: {exc.msg}") from exc
 
-        proposta = chamar(system_fatia, f"doc{doc.id}:{fatia.rotulo}")
+        # Dívida #287: JSON inválido falha a FATIA, não o documento. Uma nova tentativa;
+        # persistindo, a fatia fica registrada como não lida (cobertura parcial dita) e as
+        # outras seguem. O custo das duas chamadas já está em ``chamadas``.
+        try:
+            proposta = chamar(system_fatia, f"doc{doc.id}:{fatia.rotulo}")
+        except RespostaNaoJSON:
+            try:
+                proposta = chamar(system_fatia, f"doc{doc.id}:{fatia.rotulo}:nova_tentativa")
+            except RespostaNaoJSON as exc:
+                nao_lidas.append({"fatia": fatia.indice, "rotulo": fatia.rotulo, "inicio": fatia.inicio,
+                                  "fim": fatia.fim, "motivo": str(exc), "tentativas": 2})
+                logger.warning("extrator: documento %s, fatia %s não lida: %s", doc.id, fatia.rotulo, exc)
+                continue
         parcial, recusadas = validar_proposta(proposta, doc.extracted_text, fatia.inicio, fatia.fim, especie=especie)
         # Skill compensation (André, 21/09/2026): one repair round, result recorded per item.
         try:
@@ -787,14 +803,16 @@ def ler_documento(db, doc, *, manifest, on_response=None):
                 referencia.sujeito = prefix + referencia.sujeito
         for key in colecoes:
             colecoes[key].extend(getattr(parcial, key))
+    if len(nao_lidas) == len(fatias):
+        raise ValueError(f"Nenhuma fatia do documento foi lida: {nao_lidas[-1]['motivo']}")
     entrada = EntradaExtraida(**colecoes)
-    if family == "contratual" and not entrada.contratos and not rejeicoes:
+    if family == "contratual" and not entrada.contratos and not rejeicoes and not nao_lidas:
         raise HTTPException(422, "Extração contratual incompleta: contratos ausentes; não publicar sucesso vazio")
-    if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados and not rejeicoes:
+    if especie == "comprovante_situacao_cadastral_cpf" and "titular falecido" in doc.extracted_text.lower() and not entrada.falecimentos_declarados and not rejeicoes and not nao_lidas:
         raise HTTPException(422, "Extração cadastral incompleta: declaração de falecimento não preservada")
     return {"entrada": entrada, "especie": especie, "family": family, "modelos": modelos,
             "fatias": fatias, "metodo_fatiamento": metodo_fatiamento, "chamadas": chamadas,
-            "rejeicoes": rejeicoes, "campos": campos, "reparos": reparos}
+            "rejeicoes": rejeicoes, "campos": campos, "reparos": reparos, "fatias_nao_lidas": nao_lidas}
 
 
 def ler_rodada(db, doc, *, manifest, on_response=None, leituras=None):
@@ -826,7 +844,12 @@ def ler_rodada(db, doc, *, manifest, on_response=None, leituras=None):
     rodada = {**(rodada or {"leituras": 1}), "pedidas": total,
               "concluidas": [n for n, _ in lidas], "falhas": falhas}
     primeira = lidas[0][1]
-    return {**primeira, "entrada": entrada,
+    # Uma fatia só fica sem leitura se NENHUMA leitura da rodada a leu (#287).
+    nao_lidas = [f for f in primeira["fatias_nao_lidas"]
+                 if all(any(g["fatia"] == f["fatia"] for g in leitura["fatias_nao_lidas"]) for _, leitura in lidas)]
+    rodada["fatias_nao_lidas_por_leitura"] = [{**f, "leitura": n} for n, leitura in lidas
+                                              for f in leitura["fatias_nao_lidas"]]
+    return {**primeira, "entrada": entrada, "fatias_nao_lidas": nao_lidas,
             "modelos": [m for _, leitura in lidas for m in leitura["modelos"]],
             "chamadas": [{**c, "leitura": n} for n, leitura in lidas for c in leitura["chamadas"]],
             "rejeicoes": [{**r, "leitura": n} for n, leitura in lidas for r in leitura["rejeicoes"]],
@@ -846,6 +869,10 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     rejeicoes, campos, reparos = leitura["rejeicoes"], leitura["campos"], leitura["reparos"]
     rows = persistir_entrada(db, doc, entrada, modelo=",".join(sorted(set(modelos))))
     anteriores = extracao_anterior(db, doc, {r.id for r in rows})
+    # #287: o que a leitura anterior ancorou numa fatia que esta rodada não leu não foi
+    # examinado — nem superado, nem marcado "não reencontrado". Fica como estava.
+    nao_lidas = leitura["fatias_nao_lidas"]
+    anteriores, nao_examinadas = _fora_das_fatias_nao_lidas(db, doc, anteriores, nao_lidas)
     # Dívida #281: a leitura varia (o Luna só aceita temperatura 1). Observação da RODADA
     # anterior (ADR-079: dentro da rodada as leituras se unem) que esta NÃO reencontrou não é superada — seria perda de evidência por
     # variância —, fica corrente e marcada para o consultor decidir. Só a reencontrada
@@ -858,7 +885,8 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     relatorio = _capture(db, doc.tenant_id, doc.process_id, f"extracao:rejeicoes:{doc.id}", "derivacao", {
             "origin": "extrator", "attributes": {"document_id": doc.id, "method": "validacao_ancoras", "method_version": "071.5",
                 "normalized": {"rejeicoes": rejeicoes, "campos_sem_suporte": campos, "reparos": reparos,
-                    "fatiamento": fatiamento, "rodada": leitura["rodada"],
+                    "fatiamento": fatiamento, "rodada": leitura["rodada"], "fatias_nao_lidas": nao_lidas,
+                    "nao_examinadas": [{"id": r.object_id, "version": r.version} for r in nao_examinadas],
                     "observacoes_preservadas": len(rows),
                     "observacoes": [{"id": r.object_id, "version": r.version} for r in rows],
                     "superadas": [{"id": v.object_id, "version": v.version,
@@ -870,6 +898,8 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
                                           for r in nao_reencontradas]}},
             "premises": [{"id": source.object_id, "version": source.version}],
             "limits": (["Extracao parcial: observacoes rejeitadas exigem revisao."] if rejeicoes else [])
+                      + (["Extracao parcial: fatia(s) do documento nao lida(s) (resposta invalida do extrator)."]
+                         if nao_lidas else [])
                       + (["Observacoes da leitura anterior nao reencontradas: decisao do consultor."]
                          if nao_reencontradas else []),
         })
@@ -878,11 +908,14 @@ def extrair_documento(db, doc, *, manifest, on_response=None, superacoes=None):
     else:
         superacoes.append((doc, superadas, relatorio))
     doc.review_required = (doc.review_required or bool(rows) or bool(rejeicoes) or bool(campos)
-                           or bool(nao_reencontradas))
+                           or bool(nao_reencontradas) or bool(nao_lidas))
     doc.extraction_status = "observações extraídas; revisão necessária" if rows else "extração sem observações"
     if rejeicoes or campos:
         doc.extraction_status = (f"extracao parcial: {len(rows)} preservadas; {len(rejeicoes)} rejeitadas por "
                                  f"ancora/dependencia; {len(campos)} campos sem suporte no trecho; revisar")
+    if nao_lidas:
+        doc.extraction_status += (f"; {len(nao_lidas)} fatia(s) não lida(s) (resposta inválida do extrator) — "
+                                  "reextrair")
     if nao_reencontradas:
         doc.extraction_status += (f"; {len(nao_reencontradas)} observação(ões) da leitura anterior não "
                                   "reencontrada(s) — decidir")
@@ -967,6 +1000,22 @@ def separar_por_reencontro(anteriores, novas):
         else:
             reencontradas.append((velha, nova, _valor_lido(velha) != _valor_lido(nova)))
     return reencontradas, nao_reencontradas
+
+
+def _fora_das_fatias_nao_lidas(db, doc, anteriores, nao_lidas):
+    """Separa as observações anteriores ancoradas numa fatia não lida (#287) — na versão do
+    texto que a rodada leu; de outra versão não se sabe, e seguem o reencontro normal."""
+    if not nao_lidas:
+        return anteriores, []
+    versao = db.query(DocumentoVersao).filter_by(tenant_id=doc.tenant_id,
+        documento_id=doc.id).order_by(DocumentoVersao.numero.desc()).first()
+    fora, dentro = [], []
+    for row in anteriores:
+        _, versao_id, trecho, _ = _identidade_de_fato(row)
+        na_fatia = versao is not None and versao_id == versao.id and trecho is not None and any(
+            f["inicio"] <= trecho[0] and trecho[1] <= f["fim"] for f in nao_lidas)
+        (dentro if na_fatia else fora).append(row)
+    return fora, dentro
 
 
 def _registrar_fatias(db, doc, fatias, metodo, chamadas):

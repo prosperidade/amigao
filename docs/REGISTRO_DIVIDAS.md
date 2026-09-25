@@ -12,14 +12,19 @@
     continua por observação; o lote é só o gesto).
   - O ADR-079 reduz o volume (a marca só existe entre rodadas); não substitui o lote.
 
-- **#287 — resposta não-JSON de uma fatia derruba a leitura do documento inteiro (ABERTA):**
+- **#287 — resposta não-JSON de uma fatia derruba a leitura do documento inteiro (FECHADA, PR próprio):**
   - `ler_documento` levanta `ValueError("Resposta do extrator não é JSON")` quando uma fatia volta com
     JSON inválido, e o documento inteiro falha — as fatias já lidas se perdem, e o custo delas some do
     relatório. A rodada de reparo (skill) só trata item recusado na validação, não JSON quebrado.
   - **Medido (ADR-079, 24/09):** gpt-6-luna, 2 de 30 leituras de documento, ambas na matrícula 3.673
     (`Invalid \escape`, `Invalid control character`); gpt-5.6-luna, 0 de 30.
-  - Caminho provável: uma nova tentativa da fatia com JSON inválido (como o gateway já refaz a truncada)
-    e, persistindo, fatia registrada como não lida — cobertura parcial dita, não documento perdido.
+  - **Correção (André, 24/09: "falha por fatia, não por documento"; antes de qualquer troca para o
+    gpt-6-luna):** JSON inválido ganha **uma nova tentativa** da fatia; persistindo, a fatia vai para
+    `fatias_nao_lidas` no relatório (com as duas chamadas pagas em `fatiamento.chamadas`), o documento
+    sai "extração parcial … reextrair" e as outras fatias são publicadas. O que a leitura anterior
+    ancorou na fatia não lida **não foi examinado** (`nao_examinadas`): nem superado, nem marcado não
+    reencontrado. Numa rodada (ADR-079), a fatia só fica não lida se nenhuma leitura a leu. Todas as
+    fatias sem leitura: a leitura falha, como antes.
 
 > **PRÓXIMO NÚMERO LIVRE: 288.** (#286 e #287 abertas pela frente do ADR-079, 24/09.)
 
