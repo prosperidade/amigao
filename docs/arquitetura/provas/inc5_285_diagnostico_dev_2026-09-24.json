@@ -1,0 +1,2183 @@
+[
+ {
+  "passo": "preparacao",
+  "ambiente": {
+   "api": "worktree wt-diag, 127.0.0.1:8040, branch feat/285-diagnostico-por-afirmacao",
+   "banco": "127.0.0.1:15432/amigao_db (dev)",
+   "modelo": "cadeia do projeto pelo ai_gateway (gpt-5.6-luna)"
+  },
+  "escritas_diretas_no_dev_declaradas": [
+   "senha aleatória do usuário 38 redefinida a cada execução (só dev, em memória)"
+  ],
+  "sintetica_do_inc5": {
+   "evidence_id": 4092,
+   "revisao": [
+    "rejeitar",
+    "Conclusão sintética da prova do Inc. 5 (roteamento); substituída pelo diagnóstico real (#285)"
+   ]
+  },
+  "nada_simulado": "todas as conclusões abaixo vieram do modelo; nenhuma foi escrita no banco pelo agente",
+  "renumeracao": {
+   "adr": "escrito como ADR-079, renumerado para ADR-080 (079 é do #214)",
+   "prompt": "jobs gravaram 079.1/079.2/079.3 = 080.1/080.2/080.3; hash da 080.3 = 8f53a2ff197ec4414352553ca00e2febe5a7849ec9a4acc42626d7c4a4ccc82b = jobs 214/215",
+   "origem": "jobs gravaram contrato_079 = contrato_080"
+  },
+  "custo_total_usd": {
+   "registrado_nos_jobs": 0.3222,
+   "pago_nao_registrado": {
+    "job": 208,
+    "usd": 0.1192,
+    "motivo": "barrado pelo teto global depois da resposta"
+   },
+   "total_aproximado": 0.4414
+  }
+ },
+ {
+  "passo": "jobs_do_diagnostico",
+  "jobs": [
+   {
+    "id": 201,
+    "processo": 66,
+    "status": "failed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 61222,
+    "tokens_out": 2279,
+    "custo_usd": "0.0150",
+    "prompt_origem": "code_fallback",
+    "prompt_versao": "38bba5754eddd980e2e538353839feffa3e6128a60fa7418cac9ca99616496a2",
+    "erro": "'objects'",
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 208,
+    "processo": 65,
+    "status": "failed",
+    "model_used": null,
+    "tokens_in": null,
+    "tokens_out": null,
+    "custo_usd": null,
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.1",
+    "erro": "Job cost $0.1192 exceeded max $0.1000",
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 209,
+    "processo": 65,
+    "status": "failed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 286526,
+    "tokens_out": 2225,
+    "custo_usd": "0.0155",
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.1",
+    "erro": "1 validation error for list[function-after[validate_object(), EvidenceObject]]\n3.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='risco', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_er",
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 210,
+    "processo": 66,
+    "status": "failed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 60739,
+    "tokens_out": 3187,
+    "custo_usd": "0.0129",
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.1",
+    "erro": "7 validation errors for list[function-after[validate_object(), EvidenceObject]]\n3.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='risco', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_e",
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 211,
+    "processo": 65,
+    "status": "failed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 286712,
+    "tokens_out": 2572,
+    "custo_usd": "0.1193",
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.2",
+    "erro": "Expecting ',' delimiter: line 1 column 4340 (char 4339)",
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 212,
+    "processo": 66,
+    "status": "completed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 60925,
+    "tokens_out": 2431,
+    "custo_usd": "0.0120",
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.2",
+    "erro": null,
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 213,
+    "processo": 65,
+    "status": "failed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 286712,
+    "tokens_out": 2829,
+    "custo_usd": "0.0166",
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.2",
+    "erro": "6 validation errors for list[function-after[validate_object(), EvidenceObject]]\n3.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='fato_documental', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v",
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 214,
+    "processo": 65,
+    "status": "completed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 286533,
+    "tokens_out": 2286,
+    "custo_usd": "0.1187",
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.3",
+    "erro": null,
+    "nova_chamada_sintaxe": false
+   },
+   {
+    "id": 215,
+    "processo": 66,
+    "status": "completed",
+    "model_used": "gpt-5.6-luna",
+    "tokens_in": 61023,
+    "tokens_out": 2602,
+    "custo_usd": "0.0122",
+    "prompt_origem": "contrato_079",
+    "prompt_versao": "079.3",
+    "erro": null,
+    "nova_chamada_sintaxe": false
+   }
+  ],
+  "leitura": {
+   "201": "legado (antes do #285): schema situacao_geral",
+   "208": "#23 barrado no teto global por chamada (0,10)",
+   "209/210": "079.1: classe em kind a partir do 4º item",
+   "211": "079.2 #23: faltou ']' em limits (antes da nova chamada por sintaxe)",
+   "212": "079.2 #25: 7 afirmações admitidas (depois rejeitadas para refazer na 079.3)",
+   "213": "079.2 #23: classe em kind de novo",
+   "214": "079.3 #23: 9 afirmações admitidas",
+   "215": "079.3 #25: 10 afirmações admitidas"
+  }
+ },
+ {
+  "passo": "execucoes_do_script",
+  "registros": {
+   "2": [
+    {
+     "passo": "login",
+     "sessao": "A"
+    },
+    {
+     "passo": "sintetica_ja_rejeitada",
+     "objeto": "conclusion:8f3d289340274729876a32bdeb085b90"
+    },
+    {
+     "passo": "failed",
+     "caso": "#23",
+     "execucao": "1287908d75d3410eb72190f5ffb72ea8",
+     "status": "failed",
+     "erro": "1 validation error for list[function-after[validate_object(), EvidenceObject]]\n3.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='risco', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error",
+     "job": 209,
+     "conclusoes": 0,
+     "segundos": 36.4
+    },
+    {
+     "passo": "failed",
+     "caso": "#25",
+     "execucao": "40c8701b62e14d88a21457b11cf8ab02",
+     "status": "failed",
+     "erro": "7 validation errors for list[function-after[validate_object(), EvidenceObject]]\n3.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='risco', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n4.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='lacuna', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n5.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='lacuna', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n6.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='orientacao', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n7.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='orientacao', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n8.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='orientacao', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n9.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='escopo_proposto', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error",
+     "job": 210,
+     "conclusoes": 0,
+     "segundos": 27.0
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#23",
+     "orcamento": [
+      2,
+      1,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "sem_diagnostico"
+     ],
+     "conclusoes_em_revisao": []
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#25",
+     "orcamento": [
+      4,
+      3,
+      "aprovada",
+      "desatualizado"
+     ],
+     "ressalvas": [
+      "diagnostico_em_revisao"
+     ],
+     "conclusoes_em_revisao": []
+    }
+   ],
+   "3": [
+    {
+     "passo": "login",
+     "sessao": "A"
+    },
+    {
+     "passo": "sintetica_ja_rejeitada",
+     "objeto": "conclusion:8f3d289340274729876a32bdeb085b90"
+    },
+    {
+     "passo": "diagnostico_real",
+     "caso": "#23",
+     "execucao": "9b7fff430ef1438189c946aee34ba717",
+     "status": "failed",
+     "passo_status": "failed",
+     "erro": "Expecting ',' delimiter: line 1 column 4340 (char 4339)",
+     "job": 211,
+     "conclusoes": 0,
+     "segundos": 51.0
+    },
+    {
+     "passo": "diagnostico_real",
+     "caso": "#25",
+     "execucao": "326bfce52d6c4119a47d745258d75a73",
+     "status": "awaiting_review",
+     "passo_status": "completed",
+     "erro": null,
+     "job": 212,
+     "conclusoes": 7,
+     "segundos": 24.6
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:26662233bbf444448c052cd464c9382f",
+     "classe": "fato_documental",
+     "texto": "A escritura pública de venda e compra registra Jobson Rosa das Merces como comprador, em 21/08/2018, de uma gleba denominada Fazenda Abóbora ou Serradinho, com área de 2,6893 hectares, em Inhumas/GO.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:152",
+       3
+      ],
+      [
+       "obs:152:1:2:230e0fc27de304743ac2799a",
+       1
+      ],
+      [
+       "obs:152:1:2:0f12791dc10248a4da576e86",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:60ed15575ca54c958ec134852dca0bd6",
+     "classe": "divergencia",
+     "texto": "Há divergência documental entre o comprador indicado na escritura, Jobson Rosa das Merces, e o detentor indicado no CCIR reproduzido no mesmo documento, Ivair Machado da Trindade.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "obs:152:1:2:c2af37587f21d940d63e6e0a",
+       1
+      ],
+      [
+       "obs:152:1:2:3c5a1a08fdd2f1c3bc3d42e4",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:34a62dfa531d49f287b3eb08a2157d0a",
+     "classe": "risco",
+     "texto": "O caso apresenta risco fundiário e documental de comprometimento do protocolo do CAR porque o CPF do comprador indicado na escritura consta como titular falecido desde 2022, enquanto o contrato de serviços é firmado pelo espólio representado por inventariante judicial.",
+     "certeza": "alta",
+     "impacto": "critico_impeditivo_potencial",
+     "urgencia": "alta",
+     "aplicabilidade": "aplicavel",
+     "premissas": [
+      [
+       "obs:151:1:1:5549ea434860317d858da8e5",
+       1
+      ],
+      [
+       "obs:153:1:1:f953e894a3836c420447cc84",
+       1
+      ],
+      [
+       "obs:153:1:1:4cb6907ad922bd2e75ff8765",
+       1
+      ],
+      [
+       "obs:153:1:1:9524d9cb4dd3df59caca6608",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:69adada133bc445baa493eaa24a0edd6",
+     "classe": "lacuna",
+     "texto": "Permanece lacuna sobre a titularidade registral atual e sobre a efetiva transferência do imóvel para o espólio, pois o material inventariado contém escritura e contrato, mas não confirma matrícula atualizada nem registro da compra.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "case:material",
+       6
+      ],
+      [
+       "document:152",
+       3
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:a4c286f9da7645468a4dd0dde4f93385",
+     "classe": "lacuna",
+     "texto": "Permanece lacuna sobre a existência, o número, o arquivo, o perímetro e o status de validação do CAR do imóvel.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "case:material",
+       6
+      ],
+      [
+       "document:153",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:14a87700501b416698e0da831974d9a3",
+     "classe": "orientacao",
+     "texto": "Deve ser verificada a matrícula atualizada e o respectivo registro da aquisição, incluindo a presença de georreferenciamento aplicável, antes da definição do perímetro e do titular do CAR.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "case:material",
+       6
+      ],
+      [
+       "obs:152:1:2:235c4074a4cd75a929ea63e5",
+       1
+      ],
+      [
+       "obs:152:1:2:3c5a1a08fdd2f1c3bc3d42e4",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:1b0fc2bab40545578a79acc6dd137efe",
+     "classe": "orientacao",
+     "texto": "Deve ser verificada no processo de inventário a nomeação e a extensão dos poderes do inventariante judicial para representar o espólio na inscrição ou retificação do CAR e na aprovação do perímetro ambiental.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "obs:153:1:1:9524d9cb4dd3df59caca6608",
+       1
+      ],
+      [
+       "obs:153:1:1:4cb6907ad922bd2e75ff8765",
+       1
+      ],
+      [
+       "document:151",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "orcamento_depois_do_diagnostico",
+     "caso": "#25",
+     "id": 4,
+     "versao": 3,
+     "estado_revisao": "aprovada",
+     "atualidade": {
+      "estado": "desatualizado",
+      "motivos": [
+       "O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)",
+       "Escopo de origem: O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)"
+      ]
+     }
+    },
+    {
+     "passo": "escopo_regerado",
+     "caso": "#25",
+     "id": 10,
+     "versao": 4,
+     "premissa_diagnostico": [
+      {
+       "id": "premissa:diagnostico",
+       "texto": "7 conclusão(ões) do diagnóstico em revisão: registradas como ressalva, não usadas como premissa do escopo.",
+       "evidencias": [
+        {
+         "tipo": "conclusao",
+         "id": 5332,
+         "rotulo": "conclusion:14a87700501b416698e0da831974d9a3"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5333,
+         "rotulo": "conclusion:1b0fc2bab40545578a79acc6dd137efe"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5327,
+         "rotulo": "conclusion:26662233bbf444448c052cd464c9382f"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5329,
+         "rotulo": "conclusion:34a62dfa531d49f287b3eb08a2157d0a"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5328,
+         "rotulo": "conclusion:60ed15575ca54c958ec134852dca0bd6"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5330,
+         "rotulo": "conclusion:69adada133bc445baa493eaa24a0edd6"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5331,
+         "rotulo": "conclusion:a4c286f9da7645468a4dd0dde4f93385"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "passo": "orcamento_com_ressalva",
+     "caso": "#25",
+     "id": 5,
+     "versao": 4,
+     "total": "1800.00",
+     "ressalvas": [
+      {
+       "tipo": "diagnostico_em_revisao",
+       "texto": "7 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+       "conclusoes": [
+        5332,
+        5333,
+        5327,
+        5329,
+        5328,
+        5330,
+        5331
+       ]
+      }
+     ],
+     "atualidade": {
+      "estado": "vigente",
+      "motivos": []
+     }
+    },
+    {
+     "passo": "proposta_rascunho",
+     "caso": "#25",
+     "orcamento_id": 5,
+     "valor": 1800.0
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#23",
+     "orcamento": [
+      2,
+      1,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "sem_diagnostico"
+     ],
+     "conclusoes_em_revisao": []
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#25",
+     "orcamento": [
+      5,
+      4,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "diagnostico_em_revisao"
+     ],
+     "conclusoes_em_revisao": [
+      "conclusion:26662233bbf444448c052cd464c9382f",
+      "conclusion:60ed15575ca54c958ec134852dca0bd6",
+      "conclusion:34a62dfa531d49f287b3eb08a2157d0a",
+      "conclusion:69adada133bc445baa493eaa24a0edd6",
+      "conclusion:a4c286f9da7645468a4dd0dde4f93385",
+      "conclusion:14a87700501b416698e0da831974d9a3",
+      "conclusion:1b0fc2bab40545578a79acc6dd137efe"
+     ]
+    }
+   ],
+   "4": [
+    {
+     "passo": "login",
+     "sessao": "A"
+    },
+    {
+     "passo": "diagnostico_real",
+     "caso": "#23",
+     "execucao": "f70891c89d1246b1930bc1d16d822472",
+     "status": "failed",
+     "passo_status": "failed",
+     "erro": "6 validation errors for list[function-after[validate_object(), EvidenceObject]]\n3.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='fato_documental', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n4.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='fato_documental', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n5.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='lacuna', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n6.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='orientacao', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n7.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='lacuna', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\n8.kind\n  Input should be 'fonte_primaria', 'observacao', 'derivacao' or 'conclusao' [type=literal_error, input_value='orientacao', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error",
+     "job": 213,
+     "conclusoes": 0,
+     "segundos": 82.9
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#23",
+     "orcamento": [
+      2,
+      1,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "sem_diagnostico"
+     ],
+     "conclusoes_em_revisao": []
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#25",
+     "orcamento": [
+      5,
+      4,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "diagnostico_em_revisao"
+     ],
+     "conclusoes_em_revisao": [
+      "conclusion:26662233bbf444448c052cd464c9382f",
+      "conclusion:60ed15575ca54c958ec134852dca0bd6",
+      "conclusion:34a62dfa531d49f287b3eb08a2157d0a",
+      "conclusion:69adada133bc445baa493eaa24a0edd6",
+      "conclusion:a4c286f9da7645468a4dd0dde4f93385",
+      "conclusion:14a87700501b416698e0da831974d9a3",
+      "conclusion:1b0fc2bab40545578a79acc6dd137efe"
+     ]
+    }
+   ],
+   "5": [
+    {
+     "passo": "login",
+     "sessao": "A"
+    },
+    {
+     "passo": "diagnostico_real",
+     "caso": "#23",
+     "execucao": "efb4943aefdc43cdab4a166734eba8bb",
+     "status": "awaiting_review",
+     "passo_status": "completed",
+     "erro": null,
+     "job": 214,
+     "conclusoes": 9,
+     "segundos": 78.8
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:a912a10eb2ad4a57a39243c730f161f6",
+     "classe": "fato_documental",
+     "texto": "O recibo documental registra o imóvel rural no CAR sob o código GO-5200605-82E5.AE14.076B.4637.9900.9C9D.EC86.D700, em nome de ELODI AGROPECUÁRIA, com área gráfica de 2.180,8267 hectares, localizado em Alto Paraíso de Goiás/GO.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:145",
+       2
+      ],
+      [
+       "obs:145:1:1:1789d3e8549492b9a60e7c4e",
+       1
+      ],
+      [
+       "obs:145:1:1:2246bb6175e5dd4e57223526",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:f8063a8114ee4ae78754389f9b28f11d",
+     "classe": "divergencia",
+     "texto": "Há divergência documental de área entre o CAR, que informa 2.180,8267 hectares na representação gráfica, e a documentação comprobatória indicada no próprio CAR, que informa 2.180,3923 hectares; a diferença aproximada é de 0,4344 hectare, inferior a 1% da área declarada.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "obs:145:1:1:df49c59005a2f14c47cbfac3",
+       1
+      ],
+      [
+       "obs:145:1:1:4cb9a78c7d819cf9a65f0d5a",
+       1
+      ],
+      [
+       "document:146",
+       2
+      ],
+      [
+       "document:147",
+       2
+      ],
+      [
+       "document:148",
+       2
+      ],
+      [
+       "document:150",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:fefa0e60bd804db1a35aa76741ca713d",
+     "classe": "divergencia",
+     "texto": "Os documentos apresentam valores de Reserva Legal que precisam ser reconciliados antes da conclusão do CAR: o recibo do CAR informa 437,7632 hectares, enquanto a matrícula 3.181 registra relocação de 185,8560 hectares e a matrícula 3.673 registra Reserva Legal conjunta de 492,9252 hectares com outras matrículas.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "obs:145:1:1:4754bb26a2e085c9ae5038cf",
+       1
+      ],
+      [
+       "obs:147:1:1:1e69af3c84cf83c9f1031630",
+       1
+      ],
+      [
+       "document:148",
+       2
+      ],
+      [
+       "document:145",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:33d5faead9704f2d99f5ecba0b77909f",
+     "classe": "risco",
+     "texto": "Para o objetivo de obter ou aperfeiçoar o CAR, a divergência entre a área gráfica e a documentação comprobatória, somada à diferença entre os valores de Reserva Legal declarados e registrados, representa risco cadastral e geoespacial de atenção, pois pode gerar exigência de esclarecimento ou ajuste do cadastro.",
+     "certeza": "alta",
+     "impacto": "atencao",
+     "urgencia": "media",
+     "aplicabilidade": "aplicavel",
+     "premissas": [
+      [
+       "obs:145:1:1:df49c59005a2f14c47cbfac3",
+       1
+      ],
+      [
+       "obs:145:1:1:4754bb26a2e085c9ae5038cf",
+       1
+      ],
+      [
+       "obs:147:1:1:1e69af3c84cf83c9f1031630",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:4781399d685b4e3db36d5c1ddfcee39a",
+     "classe": "lacuna",
+     "texto": "O material disponível não determina se o CAR está validado, pendente, suspenso ou cancelado, embora o recibo informe que a inscrição está sujeita à validação pelo órgão competente.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:145",
+       2
+      ],
+      [
+       "obs:145:1:1:1789d3e8549492b9a60e7c4e",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:519b80680ec1484bb57a536571b518a0",
+     "classe": "lacuna",
+     "texto": "O material disponível não determina se o arquivo geoespacial atual do CAR, incluindo perímetro, áreas de Reserva Legal, APP e remanescente de vegetação nativa, está disponível para conferência técnica.",
+     "certeza": "media",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "case:material",
+       8
+      ],
+      [
+       "document:145",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:337779c204fd4e55a0297ba10f12947b",
+     "classe": "orientacao",
+     "texto": "Deve ser verificado o status atual do CAR no sistema ambiental competente, incluindo validação, pendências, retificações, sobreposições e eventual vinculação das quatro matrículas informadas no recibo.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:145",
+       2
+      ],
+      [
+       "obs:145:1:1:e5b5ab470135862e75433e1b",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:f1e274fa16f145078f83681aa5685c38",
+     "classe": "orientacao",
+     "texto": "Deve ser feita a reconciliação técnica dos perímetros, áreas e Reserva Legal do CAR com as matrículas 3.181, 3.313, 3.673 e 4.387, usando os documentos georreferenciados e os arquivos vetoriais disponíveis, antes de qualquer retificação ou protocolo.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:145",
+       2
+      ],
+      [
+       "document:146",
+       2
+      ],
+      [
+       "document:147",
+       2
+      ],
+      [
+       "document:148",
+       2
+      ],
+      [
+       "document:150",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#23",
+     "objeto": "conclusion:4d20e5fabb82496f9f82a5700d3f4e80",
+     "classe": "fato_documental",
+     "texto": "As certidões apresentadas registram georreferenciamento ou certificação pelo INCRA/SIGEF para as matrículas 3.181, 3.313, 3.673 e 4.387.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:146",
+       2
+      ],
+      [
+       "document:147",
+       2
+      ],
+      [
+       "document:148",
+       2
+      ],
+      [
+       "document:150",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "orcamento_depois_do_diagnostico",
+     "caso": "#23",
+     "id": 2,
+     "versao": 1,
+     "estado_revisao": "aprovada",
+     "atualidade": {
+      "estado": "desatualizado",
+      "motivos": [
+       "O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)",
+       "Escopo de origem: O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)"
+      ]
+     }
+    },
+    {
+     "passo": "escopo_regerado",
+     "caso": "#23",
+     "id": 12,
+     "versao": 2,
+     "premissa_diagnostico": [
+      {
+       "id": "premissa:diagnostico",
+       "texto": "9 conclusão(ões) do diagnóstico em revisão: registradas como ressalva, não usadas como premissa do escopo.",
+       "evidencias": [
+        {
+         "tipo": "conclusao",
+         "id": 5340,
+         "rotulo": "conclusion:337779c204fd4e55a0297ba10f12947b"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5337,
+         "rotulo": "conclusion:33d5faead9704f2d99f5ecba0b77909f"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5338,
+         "rotulo": "conclusion:4781399d685b4e3db36d5c1ddfcee39a"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5342,
+         "rotulo": "conclusion:4d20e5fabb82496f9f82a5700d3f4e80"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5339,
+         "rotulo": "conclusion:519b80680ec1484bb57a536571b518a0"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5334,
+         "rotulo": "conclusion:a912a10eb2ad4a57a39243c730f161f6"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5341,
+         "rotulo": "conclusion:f1e274fa16f145078f83681aa5685c38"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5335,
+         "rotulo": "conclusion:f8063a8114ee4ae78754389f9b28f11d"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5336,
+         "rotulo": "conclusion:fefa0e60bd804db1a35aa76741ca713d"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "passo": "orcamento_com_ressalva",
+     "caso": "#23",
+     "id": 6,
+     "versao": 2,
+     "total": "900.00",
+     "ressalvas": [
+      {
+       "tipo": "diagnostico_em_revisao",
+       "texto": "9 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+       "conclusoes": [
+        5340,
+        5337,
+        5338,
+        5342,
+        5339,
+        5334,
+        5341,
+        5335,
+        5336
+       ]
+      }
+     ],
+     "atualidade": {
+      "estado": "vigente",
+      "motivos": []
+     }
+    },
+    {
+     "passo": "proposta_rascunho",
+     "caso": "#23",
+     "orcamento_id": 6,
+     "valor": 900.0
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#23",
+     "orcamento": [
+      6,
+      2,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "diagnostico_em_revisao"
+     ],
+     "conclusoes_em_revisao": [
+      "conclusion:a912a10eb2ad4a57a39243c730f161f6",
+      "conclusion:f8063a8114ee4ae78754389f9b28f11d",
+      "conclusion:fefa0e60bd804db1a35aa76741ca713d",
+      "conclusion:33d5faead9704f2d99f5ecba0b77909f",
+      "conclusion:4781399d685b4e3db36d5c1ddfcee39a",
+      "conclusion:519b80680ec1484bb57a536571b518a0",
+      "conclusion:337779c204fd4e55a0297ba10f12947b",
+      "conclusion:f1e274fa16f145078f83681aa5685c38",
+      "conclusion:4d20e5fabb82496f9f82a5700d3f4e80"
+     ]
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#25",
+     "orcamento": [
+      5,
+      4,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "diagnostico_em_revisao"
+     ],
+     "conclusoes_em_revisao": [
+      "conclusion:26662233bbf444448c052cd464c9382f",
+      "conclusion:60ed15575ca54c958ec134852dca0bd6",
+      "conclusion:34a62dfa531d49f287b3eb08a2157d0a",
+      "conclusion:69adada133bc445baa493eaa24a0edd6",
+      "conclusion:a4c286f9da7645468a4dd0dde4f93385",
+      "conclusion:14a87700501b416698e0da831974d9a3",
+      "conclusion:1b0fc2bab40545578a79acc6dd137efe"
+     ]
+    }
+   ],
+   "6": [
+    {
+     "passo": "login",
+     "sessao": "A"
+    },
+    {
+     "passo": "conclusao_rejeitada",
+     "caso": "#25",
+     "objeto": "conclusion:26662233bbf444448c052cd464c9382f",
+     "motivo": "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    },
+    {
+     "passo": "conclusao_rejeitada",
+     "caso": "#25",
+     "objeto": "conclusion:60ed15575ca54c958ec134852dca0bd6",
+     "motivo": "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    },
+    {
+     "passo": "conclusao_rejeitada",
+     "caso": "#25",
+     "objeto": "conclusion:34a62dfa531d49f287b3eb08a2157d0a",
+     "motivo": "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    },
+    {
+     "passo": "conclusao_rejeitada",
+     "caso": "#25",
+     "objeto": "conclusion:69adada133bc445baa493eaa24a0edd6",
+     "motivo": "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    },
+    {
+     "passo": "conclusao_rejeitada",
+     "caso": "#25",
+     "objeto": "conclusion:a4c286f9da7645468a4dd0dde4f93385",
+     "motivo": "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    },
+    {
+     "passo": "conclusao_rejeitada",
+     "caso": "#25",
+     "objeto": "conclusion:14a87700501b416698e0da831974d9a3",
+     "motivo": "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    },
+    {
+     "passo": "conclusao_rejeitada",
+     "caso": "#25",
+     "objeto": "conclusion:1b0fc2bab40545578a79acc6dd137efe",
+     "motivo": "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    },
+    {
+     "passo": "diagnostico_real",
+     "caso": "#25",
+     "execucao": "be25d9aad0694f7f9f949a2de6566e79",
+     "status": "awaiting_review",
+     "passo_status": "completed",
+     "erro": null,
+     "job": 215,
+     "conclusoes": 10,
+     "segundos": 38.4
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:df4761e368fd4acfaf0d60b4e660872e",
+     "classe": "fato_documental",
+     "texto": "O documento de identificação fiscal registra JOBSON ROSA DAS MERCES como titular falecido, com ano de óbito informado como 2022, e o contrato de serviços identifica o contratante como Espólio de JOBSON ROSA DAS MERCES.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:151",
+       2
+      ],
+      [
+       "document:153",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:0eadc4e633de46c5b99dca4301d4f3f4",
+     "classe": "fato_documental",
+     "texto": "A escritura pública de venda e compra de 21/08/2018 identifica JOBSON ROSA DAS MERCES como comprador de uma gleba de 2,6893 hectares denominada Fazenda Abóbora ou Serradinho, situada em Inhumas/GO.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:152",
+       3
+      ],
+      [
+       "obs:152:1:2:235c4074a4cd75a929ea63e5",
+       1
+      ],
+      [
+       "obs:152:1:2:00c7029be692e8a2e12d846d",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:3ea2174ab77041f490e84d8ed9fa5185",
+     "classe": "divergencia",
+     "texto": "Há divergência temporal e documental entre a escritura, que identifica JOBSON ROSA DAS MERCES como comprador, e os dados de CCIR reproduzidos na própria escritura, que ainda indicam IVAIR MACHADO DA TRINDADE como detentor do imóvel.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "obs:152:1:2:c2af37587f21d940d63e6e0a",
+       1
+      ],
+      [
+       "obs:152:1:2:3c5a1a08fdd2f1c3bc3d42e4",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:5d6be739b12f4c96b4208739fe09cddc",
+     "classe": "risco",
+     "texto": "Há risco fundiário e documental de inconsistência na representação do espólio para o cadastro ambiental, porque o titular indicado nos documentos fiscais é falecido e o contrato atribui a representação a um inventariante judicial, sem comprovar no material disponível a extensão atual de seus poderes para o ato ambiental.",
+     "certeza": "alta",
+     "impacto": "alto",
+     "urgencia": "alta",
+     "aplicabilidade": "aplicavel",
+     "premissas": [
+      [
+       "document:151",
+       2
+      ],
+      [
+       "document:153",
+       2
+      ],
+      [
+       "obs:153:1:1:fcef81f4d5201c4b4337c865",
+       1
+      ],
+      [
+       "obs:153:1:1:4cb6907ad922bd2e75ff8765",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:f21b3af604644a8a8dc3c829a22587df",
+     "classe": "lacuna",
+     "texto": "Não consta no inventário documental autorizado uma matrícula atualizada que permita confirmar o número do registro, o titular registral vigente, averbações de Reserva Legal ou a situação registral do imóvel.",
+     "certeza": "media",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "case:material",
+       6
+      ],
+      [
+       "document:153",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:5e20096f79f8440babbbb58a5a14d5f7",
+     "classe": "lacuna",
+     "texto": "Não consta no material autorizado número, recibo, arquivo geoespacial ou status de CAR já emitido para o imóvel de 2,6893 hectares.",
+     "certeza": "media",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "case:material",
+       6
+      ],
+      [
+       "document:153",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:eff523953ec94cdcabed3e6cdb653457",
+     "classe": "lacuna",
+     "texto": "Não consta no material autorizado perímetro georreferenciado, coordenadas ou número de GEO certificado pelo INCRA que permita testar a correspondência espacial do imóvel com o futuro CAR.",
+     "certeza": "media",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "case:material",
+       6
+      ],
+      [
+       "document:152",
+       3
+      ],
+      [
+       "document:153",
+       2
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:6afbef6ce8d048d0b2bb7a8a9f0015d6",
+     "classe": "fato_documental",
+     "texto": "A contratação documentada propõe elaboração e acompanhamento de CAR para a Fazenda Abóbora ou Serradinho, incluindo análise temporal de uso e cobertura do solo, delimitação de APP e RL e entrega de arquivos georreferenciados.",
+     "certeza": "alta",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:153",
+       2
+      ],
+      [
+       "obs:153:1:1:47a43d7218fda8e61e398508",
+       1
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:010f592a84ae434f8022f635e53fa458",
+     "classe": "orientacao",
+     "texto": "Deve ser verificada a matrícula atualizada e a decisão ou documento judicial que comprove os poderes atuais do inventariante para representar o espólio no cadastro ambiental, antes da submissão do CAR.",
+     "certeza": "media",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:151",
+       2
+      ],
+      [
+       "document:153",
+       2
+      ],
+      [
+       "case:material",
+       6
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "afirmacao",
+     "caso": "#25",
+     "objeto": "conclusion:84687caf91164b05ac0f303ca4488e82",
+     "classe": "orientacao",
+     "texto": "Deve ser obtido e conferido o perímetro georreferenciado do imóvel, com verificação da existência e aplicabilidade de eventual GEO certificado pelo INCRA, antes de desenhar ou protocolar o CAR.",
+     "certeza": "media",
+     "impacto": null,
+     "urgencia": null,
+     "aplicabilidade": null,
+     "premissas": [
+      [
+       "document:152",
+       3
+      ],
+      [
+       "document:153",
+       2
+      ],
+      [
+       "case:material",
+       6
+      ]
+     ],
+     "premissas_fora_do_envelope": [],
+     "revisao": null
+    },
+    {
+     "passo": "orcamento_depois_do_diagnostico",
+     "caso": "#25",
+     "id": 5,
+     "versao": 4,
+     "estado_revisao": "aprovada",
+     "atualidade": {
+      "estado": "desatualizado",
+      "motivos": [
+       "O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)",
+       "Escopo de origem: O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)"
+      ]
+     }
+    },
+    {
+     "passo": "escopo_regerado",
+     "caso": "#25",
+     "id": 14,
+     "versao": 5,
+     "premissa_diagnostico": [
+      {
+       "id": "premissa:diagnostico",
+       "texto": "10 conclusão(ões) do diagnóstico em revisão: registradas como ressalva, não usadas como premissa do escopo.",
+       "evidencias": [
+        {
+         "tipo": "conclusao",
+         "id": 5351,
+         "rotulo": "conclusion:010f592a84ae434f8022f635e53fa458"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5344,
+         "rotulo": "conclusion:0eadc4e633de46c5b99dca4301d4f3f4"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5345,
+         "rotulo": "conclusion:3ea2174ab77041f490e84d8ed9fa5185"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5346,
+         "rotulo": "conclusion:5d6be739b12f4c96b4208739fe09cddc"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5348,
+         "rotulo": "conclusion:5e20096f79f8440babbbb58a5a14d5f7"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5350,
+         "rotulo": "conclusion:6afbef6ce8d048d0b2bb7a8a9f0015d6"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5352,
+         "rotulo": "conclusion:84687caf91164b05ac0f303ca4488e82"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5343,
+         "rotulo": "conclusion:df4761e368fd4acfaf0d60b4e660872e"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5349,
+         "rotulo": "conclusion:eff523953ec94cdcabed3e6cdb653457"
+        },
+        {
+         "tipo": "conclusao",
+         "id": 5347,
+         "rotulo": "conclusion:f21b3af604644a8a8dc3c829a22587df"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "passo": "orcamento_com_ressalva",
+     "caso": "#25",
+     "id": 7,
+     "versao": 5,
+     "total": "1800.00",
+     "ressalvas": [
+      {
+       "tipo": "diagnostico_em_revisao",
+       "texto": "10 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+       "conclusoes": [
+        5351,
+        5344,
+        5345,
+        5346,
+        5348,
+        5350,
+        5352,
+        5343,
+        5349,
+        5347
+       ]
+      }
+     ],
+     "atualidade": {
+      "estado": "vigente",
+      "motivos": []
+     }
+    },
+    {
+     "passo": "proposta_rascunho",
+     "caso": "#25",
+     "orcamento_id": 7,
+     "valor": 1800.0
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#23",
+     "orcamento": [
+      6,
+      2,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "diagnostico_em_revisao"
+     ],
+     "conclusoes_em_revisao": [
+      "conclusion:a912a10eb2ad4a57a39243c730f161f6",
+      "conclusion:f8063a8114ee4ae78754389f9b28f11d",
+      "conclusion:fefa0e60bd804db1a35aa76741ca713d",
+      "conclusion:33d5faead9704f2d99f5ecba0b77909f",
+      "conclusion:4781399d685b4e3db36d5c1ddfcee39a",
+      "conclusion:519b80680ec1484bb57a536571b518a0",
+      "conclusion:337779c204fd4e55a0297ba10f12947b",
+      "conclusion:f1e274fa16f145078f83681aa5685c38",
+      "conclusion:4d20e5fabb82496f9f82a5700d3f4e80"
+     ]
+    },
+    {
+     "passo": "nova_sessao",
+     "caso": "#25",
+     "orcamento": [
+      7,
+      5,
+      "aprovada",
+      "vigente"
+     ],
+     "ressalvas": [
+      "diagnostico_em_revisao"
+     ],
+     "conclusoes_em_revisao": [
+      "conclusion:df4761e368fd4acfaf0d60b4e660872e",
+      "conclusion:0eadc4e633de46c5b99dca4301d4f3f4",
+      "conclusion:3ea2174ab77041f490e84d8ed9fa5185",
+      "conclusion:5d6be739b12f4c96b4208739fe09cddc",
+      "conclusion:f21b3af604644a8a8dc3c829a22587df",
+      "conclusion:5e20096f79f8440babbbb58a5a14d5f7",
+      "conclusion:eff523953ec94cdcabed3e6cdb653457",
+      "conclusion:6afbef6ce8d048d0b2bb7a8a9f0015d6",
+      "conclusion:010f592a84ae434f8022f635e53fa458",
+      "conclusion:84687caf91164b05ac0f303ca4488e82"
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "passo": "conclusoes_finais",
+  "conclusoes": [
+   {
+    "evidence_id": 5327,
+    "processo": 66,
+    "job": 212,
+    "objeto": "conclusion:26662233bbf444448c052cd464c9382f",
+    "classe": "fato_documental",
+    "texto": "A escritura pública de venda e compra registra Jobson Rosa das Merces como comprador, em 21/08/2018, de uma gleba denominada Fazenda Abóbora ou Serradinho, com área de 2,6893 hectares, em Inhumas/GO.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "O documento não comprova que a transmissão foi registrada nem a titularidade atual do imóvel.",
+     "Não confirma a existência, o perímetro ou o status de CAR."
+    ],
+    "revisao": [
+     "rejeitar",
+     "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    ]
+   },
+   {
+    "evidence_id": 5328,
+    "processo": 66,
+    "job": 212,
+    "objeto": "conclusion:60ed15575ca54c958ec134852dca0bd6",
+    "classe": "divergencia",
+    "texto": "Há divergência documental entre o comprador indicado na escritura, Jobson Rosa das Merces, e o detentor indicado no CCIR reproduzido no mesmo documento, Ivair Machado da Trindade.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "A divergência não permite concluir, isoladamente, se houve registro da compra, atualização cadastral ou alteração de titularidade.",
+     "Não abrange eventual matrícula atualizada, CCIR posterior ou outros cadastros ambientais."
+    ],
+    "revisao": [
+     "rejeitar",
+     "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    ]
+   },
+   {
+    "evidence_id": 5329,
+    "processo": 66,
+    "job": 212,
+    "objeto": "conclusion:34a62dfa531d49f287b3eb08a2157d0a",
+    "classe": "risco",
+    "texto": "O caso apresenta risco fundiário e documental de comprometimento do protocolo do CAR porque o CPF do comprador indicado na escritura consta como titular falecido desde 2022, enquanto o contrato de serviços é firmado pelo espólio representado por inventariante judicial.",
+    "certeza": "alta",
+    "impacto": "critico_impeditivo_potencial",
+    "urgencia": "alta",
+    "aplicabilidade": "aplicavel",
+    "premissas": 4,
+    "premissas_resolvidas": 4,
+    "limites": [
+     "O risco não comprova ausência de poderes do inventariante nem impede, por si só, a continuidade do diagnóstico.",
+     "Não avalia a validade processual da nomeação, a situação registral ou as exigências específicas do sistema ambiental."
+    ],
+    "revisao": [
+     "rejeitar",
+     "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    ]
+   },
+   {
+    "evidence_id": 5330,
+    "processo": 66,
+    "job": 212,
+    "objeto": "conclusion:69adada133bc445baa493eaa24a0edd6",
+    "classe": "lacuna",
+    "texto": "Permanece lacuna sobre a titularidade registral atual e sobre a efetiva transferência do imóvel para o espólio, pois o material inventariado contém escritura e contrato, mas não confirma matrícula atualizada nem registro da compra.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "A lacuna não demonstra que a matrícula ou o registro inexistam; apenas indica que não foram confirmados no material autorizado.",
+     "Não avalia ônus, averbações, cancelamentos, confrontações ou georreferenciamento."
+    ],
+    "revisao": [
+     "rejeitar",
+     "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    ]
+   },
+   {
+    "evidence_id": 5331,
+    "processo": 66,
+    "job": 212,
+    "objeto": "conclusion:a4c286f9da7645468a4dd0dde4f93385",
+    "classe": "lacuna",
+    "texto": "Permanece lacuna sobre a existência, o número, o arquivo, o perímetro e o status de validação do CAR do imóvel.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "O contrato prevê a elaboração e o acompanhamento do CAR, mas isso não comprova que um CAR tenha sido emitido ou validado.",
+     "Não permite concluir que o imóvel esteja sem CAR."
+    ],
+    "revisao": [
+     "rejeitar",
+     "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    ]
+   },
+   {
+    "evidence_id": 5332,
+    "processo": 66,
+    "job": 212,
+    "objeto": "conclusion:14a87700501b416698e0da831974d9a3",
+    "classe": "orientacao",
+    "texto": "Deve ser verificada a matrícula atualizada e o respectivo registro da aquisição, incluindo a presença de georreferenciamento aplicável, antes da definição do perímetro e do titular do CAR.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "A orientação não determina que o georreferenciamento seja obrigatório neste caso.",
+     "Não substitui a análise registral ou topográfica."
+    ],
+    "revisao": [
+     "rejeitar",
+     "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    ]
+   },
+   {
+    "evidence_id": 5333,
+    "processo": 66,
+    "job": 212,
+    "objeto": "conclusion:1b0fc2bab40545578a79acc6dd137efe",
+    "classe": "orientacao",
+    "texto": "Deve ser verificada no processo de inventário a nomeação e a extensão dos poderes do inventariante judicial para representar o espólio na inscrição ou retificação do CAR e na aprovação do perímetro ambiental.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "A orientação não conclui sobre a validade da representação nem sobre a necessidade de autorização judicial específica.",
+     "Não substitui análise jurídica do inventário."
+    ],
+    "revisao": [
+     "rejeitar",
+     "PROVA #285 — rodada do prompt 079.2 substituída pela 079.3 (código final do PR)"
+    ]
+   },
+   {
+    "evidence_id": 5334,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:a912a10eb2ad4a57a39243c730f161f6",
+    "classe": "fato_documental",
+    "texto": "O recibo documental registra o imóvel rural no CAR sob o código GO-5200605-82E5.AE14.076B.4637.9900.9C9D.EC86.D700, em nome de ELODI AGROPECUÁRIA, com área gráfica de 2.180,8267 hectares, localizado em Alto Paraíso de Goiás/GO.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "O recibo confirma inscrição declaratória no CAR, mas não comprova validação pelo órgão, domínio, posse ou regularidade ambiental plena."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5335,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:f8063a8114ee4ae78754389f9b28f11d",
+    "classe": "divergencia",
+    "texto": "Há divergência documental de área entre o CAR, que informa 2.180,8267 hectares na representação gráfica, e a documentação comprobatória indicada no próprio CAR, que informa 2.180,3923 hectares; a diferença aproximada é de 0,4344 hectare, inferior a 1% da área declarada.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 6,
+    "premissas_resolvidas": 6,
+    "limites": [
+     "A divergência percentual é apenas uma régua de triagem; não determina, isoladamente, necessidade de retificação registral ou ambiental."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5336,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:fefa0e60bd804db1a35aa76741ca713d",
+    "classe": "divergencia",
+    "texto": "Os documentos apresentam valores de Reserva Legal que precisam ser reconciliados antes da conclusão do CAR: o recibo do CAR informa 437,7632 hectares, enquanto a matrícula 3.181 registra relocação de 185,8560 hectares e a matrícula 3.673 registra Reserva Legal conjunta de 492,9252 hectares com outras matrículas.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 4,
+    "premissas_resolvidas": 4,
+    "limites": [
+     "A comparação não permite concluir déficit, excesso ou invalidade da Reserva Legal, pois parte dos registros indica composição conjunta e o material não contém todos os atos ambientais e perímetros correspondentes."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5337,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:33d5faead9704f2d99f5ecba0b77909f",
+    "classe": "risco",
+    "texto": "Para o objetivo de obter ou aperfeiçoar o CAR, a divergência entre a área gráfica e a documentação comprobatória, somada à diferença entre os valores de Reserva Legal declarados e registrados, representa risco cadastral e geoespacial de atenção, pois pode gerar exigência de esclarecimento ou ajuste do cadastro.",
+    "certeza": "alta",
+    "impacto": "atencao",
+    "urgencia": "media",
+    "aplicabilidade": "aplicavel",
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "O risco não comprova pendência ativa no sistema ambiental nem prevê o resultado de eventual análise do órgão."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5338,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:4781399d685b4e3db36d5c1ddfcee39a",
+    "classe": "lacuna",
+    "texto": "O material disponível não determina se o CAR está validado, pendente, suspenso ou cancelado, embora o recibo informe que a inscrição está sujeita à validação pelo órgão competente.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "A lacuna não permite concluir que exista pendência ou irregularidade ativa."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5339,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:519b80680ec1484bb57a536571b518a0",
+    "classe": "lacuna",
+    "texto": "O material disponível não determina se o arquivo geoespacial atual do CAR, incluindo perímetro, áreas de Reserva Legal, APP e remanescente de vegetação nativa, está disponível para conferência técnica.",
+    "certeza": "media",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "O recibo do CAR comprova a existência de informações declaradas, mas não comprova a disponibilidade dos arquivos vetoriais atuais."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5340,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:337779c204fd4e55a0297ba10f12947b",
+    "classe": "orientacao",
+    "texto": "Deve ser verificado o status atual do CAR no sistema ambiental competente, incluindo validação, pendências, retificações, sobreposições e eventual vinculação das quatro matrículas informadas no recibo.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "A orientação não constitui consulta externa realizada nem antecipa a resposta do sistema."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5341,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:f1e274fa16f145078f83681aa5685c38",
+    "classe": "orientacao",
+    "texto": "Deve ser feita a reconciliação técnica dos perímetros, áreas e Reserva Legal do CAR com as matrículas 3.181, 3.313, 3.673 e 4.387, usando os documentos georreferenciados e os arquivos vetoriais disponíveis, antes de qualquer retificação ou protocolo.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 5,
+    "premissas_resolvidas": 5,
+    "limites": [
+     "A orientação não define qual documento deverá prevalecer nem substitui análise geoespacial ou decisão do consultor."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5342,
+    "processo": 65,
+    "job": 214,
+    "objeto": "conclusion:4d20e5fabb82496f9f82a5700d3f4e80",
+    "classe": "fato_documental",
+    "texto": "As certidões apresentadas registram georreferenciamento ou certificação pelo INCRA/SIGEF para as matrículas 3.181, 3.313, 3.673 e 4.387.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 4,
+    "premissas_resolvidas": 4,
+    "limites": [
+     "O fato documental não confirma a coincidência atual desses perímetros com o CAR nem a validade operacional dos certificados fora do conteúdo reproduzido nas certidões."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5343,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:df4761e368fd4acfaf0d60b4e660872e",
+    "classe": "fato_documental",
+    "texto": "O documento de identificação fiscal registra JOBSON ROSA DAS MERCES como titular falecido, com ano de óbito informado como 2022, e o contrato de serviços identifica o contratante como Espólio de JOBSON ROSA DAS MERCES.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "Não comprova a data exata do óbito, a conclusão do inventário, a titularidade registral atual ou a suficiência dos poderes do inventariante."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5344,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:0eadc4e633de46c5b99dca4301d4f3f4",
+    "classe": "fato_documental",
+    "texto": "A escritura pública de venda e compra de 21/08/2018 identifica JOBSON ROSA DAS MERCES como comprador de uma gleba de 2,6893 hectares denominada Fazenda Abóbora ou Serradinho, situada em Inhumas/GO.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "A escritura não comprova, isoladamente, o registro do título nem a titularidade imobiliária atual."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5345,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:3ea2174ab77041f490e84d8ed9fa5185",
+    "classe": "divergencia",
+    "texto": "Há divergência temporal e documental entre a escritura, que identifica JOBSON ROSA DAS MERCES como comprador, e os dados de CCIR reproduzidos na própria escritura, que ainda indicam IVAIR MACHADO DA TRINDADE como detentor do imóvel.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "A divergência pode decorrer da defasagem do CCIR ou de atualização posterior não apresentada; não permite concluir, sozinha, inexistência de transferência ou irregularidade registral."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5346,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:5d6be739b12f4c96b4208739fe09cddc",
+    "classe": "risco",
+    "texto": "Há risco fundiário e documental de inconsistência na representação do espólio para o cadastro ambiental, porque o titular indicado nos documentos fiscais é falecido e o contrato atribui a representação a um inventariante judicial, sem comprovar no material disponível a extensão atual de seus poderes para o ato ambiental.",
+    "certeza": "alta",
+    "impacto": "alto",
+    "urgencia": "alta",
+    "aplicabilidade": "aplicavel",
+    "premissas": 4,
+    "premissas_resolvidas": 4,
+    "limites": [
+     "Não conclui que o inventariante não tenha poderes nem que o protocolo seja inviável; não substitui a análise jurídica ou processual do inventário."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5347,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:f21b3af604644a8a8dc3c829a22587df",
+    "classe": "lacuna",
+    "texto": "Não consta no inventário documental autorizado uma matrícula atualizada que permita confirmar o número do registro, o titular registral vigente, averbações de Reserva Legal ou a situação registral do imóvel.",
+    "certeza": "media",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "Não afirma que a matrícula não exista; registra apenas que não foi localizada no material inventariado."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5348,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:5e20096f79f8440babbbb58a5a14d5f7",
+    "classe": "lacuna",
+    "texto": "Não consta no material autorizado número, recibo, arquivo geoespacial ou status de CAR já emitido para o imóvel de 2,6893 hectares.",
+    "certeza": "media",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "Não afirma inexistência de CAR; a situação pode estar documentada em fonte externa ou em material ainda não anexado."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5349,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:eff523953ec94cdcabed3e6cdb653457",
+    "classe": "lacuna",
+    "texto": "Não consta no material autorizado perímetro georreferenciado, coordenadas ou número de GEO certificado pelo INCRA que permita testar a correspondência espacial do imóvel com o futuro CAR.",
+    "certeza": "media",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "Não conclui ausência de GEO nem incompatibilidade espacial; não realiza análise topográfica ou geoespacial."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5350,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:6afbef6ce8d048d0b2bb7a8a9f0015d6",
+    "classe": "fato_documental",
+    "texto": "A contratação documentada propõe elaboração e acompanhamento de CAR para a Fazenda Abóbora ou Serradinho, incluindo análise temporal de uso e cobertura do solo, delimitação de APP e RL e entrega de arquivos georreferenciados.",
+    "certeza": "alta",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 2,
+    "premissas_resolvidas": 2,
+    "limites": [
+     "O contrato não comprova que os serviços tenham sido executados, protocolados ou concluídos, nem que o CAR tenha sido emitido ou homologado."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5351,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:010f592a84ae434f8022f635e53fa458",
+    "classe": "orientacao",
+    "texto": "Deve ser verificada a matrícula atualizada e a decisão ou documento judicial que comprove os poderes atuais do inventariante para representar o espólio no cadastro ambiental, antes da submissão do CAR.",
+    "certeza": "media",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "A orientação não define o conteúdo jurídico necessário do inventário nem substitui a validação pelo consultor ou advogado."
+    ],
+    "revisao": null
+   },
+   {
+    "evidence_id": 5352,
+    "processo": 66,
+    "job": 215,
+    "objeto": "conclusion:84687caf91164b05ac0f303ca4488e82",
+    "classe": "orientacao",
+    "texto": "Deve ser obtido e conferido o perímetro georreferenciado do imóvel, com verificação da existência e aplicabilidade de eventual GEO certificado pelo INCRA, antes de desenhar ou protocolar o CAR.",
+    "certeza": "media",
+    "impacto": null,
+    "urgencia": null,
+    "aplicabilidade": null,
+    "premissas": 3,
+    "premissas_resolvidas": 3,
+    "limites": [
+     "A orientação não afirma que o GEO seja obrigatório neste caso nem substitui o levantamento ou a conferência técnica do perímetro."
+    ],
+    "revisao": null
+   }
+  ]
+ },
+ {
+  "passo": "estado_final",
+  "orcamentos": [
+   {
+    "id": 1,
+    "process_id": 66,
+    "versao": 1,
+    "total": "2700.00",
+    "estado_revisao": "aprovada",
+    "superada": true,
+    "ressalvas": [
+     {
+      "tipo": "sem_diagnostico",
+      "texto": "Caso sem diagnóstico registrado; a Rota foi validada pelo motor jurídico."
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "process_id": 65,
+    "versao": 1,
+    "total": "900.00",
+    "estado_revisao": "aprovada",
+    "superada": true,
+    "ressalvas": [
+     {
+      "tipo": "sem_diagnostico",
+      "texto": "Caso sem diagnóstico registrado; a Rota foi validada pelo motor jurídico."
+     }
+    ]
+   },
+   {
+    "id": 3,
+    "process_id": 66,
+    "versao": 2,
+    "total": "1800.00",
+    "estado_revisao": "aprovada",
+    "superada": true,
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "1 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       4092
+      ]
+     }
+    ]
+   },
+   {
+    "id": 4,
+    "process_id": 66,
+    "versao": 3,
+    "total": "1800.00",
+    "estado_revisao": "aprovada",
+    "superada": true,
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "1 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       4092
+      ]
+     }
+    ]
+   },
+   {
+    "id": 5,
+    "process_id": 66,
+    "versao": 4,
+    "total": "1800.00",
+    "estado_revisao": "aprovada",
+    "superada": true,
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "7 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       5332,
+       5333,
+       5327,
+       5329,
+       5328,
+       5330,
+       5331
+      ]
+     }
+    ]
+   },
+   {
+    "id": 6,
+    "process_id": 65,
+    "versao": 2,
+    "total": "900.00",
+    "estado_revisao": "aprovada",
+    "superada": false,
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "9 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       5340,
+       5337,
+       5338,
+       5342,
+       5339,
+       5334,
+       5341,
+       5335,
+       5336
+      ]
+     }
+    ]
+   },
+   {
+    "id": 7,
+    "process_id": 66,
+    "versao": 5,
+    "total": "1800.00",
+    "estado_revisao": "aprovada",
+    "superada": false,
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "10 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       5351,
+       5344,
+       5345,
+       5346,
+       5348,
+       5350,
+       5352,
+       5343,
+       5349,
+       5347
+      ]
+     }
+    ]
+   }
+  ],
+  "macroetapa": [
+   {
+    "id": 65,
+    "macroetapa": "entrada_demanda"
+   },
+   {
+    "id": 66,
+    "macroetapa": "entrada_demanda"
+   }
+  ]
+ }
+]

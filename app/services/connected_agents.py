@@ -279,10 +279,21 @@ def run_step(db, execution, step, user_id):
         objects = _audit_objects(agent, envelope)
     else:
         # Preserve the existing responsibility's base prompt; the envelope is the sole case input.
+        # ADR-080: the diagnosis has a contract base prompt — the legacy one asked for another
+        # format and won over the contract (job 201, #25 in dev).
+        from app.services import diagnostico_contrato
         base_slug = agent.prompt_slugs[0] if agent.prompt_slugs else None
-        from app.services.prompt_service import get_active_prompt
-        template = get_active_prompt(base_slug, db, tenant_id=execution.tenant_id) if base_slug else None
-        base_prompt = template.content if template else agent._fallback_prompts().get(base_slug, "")
+        template = None
+        if step["agent"] == "diagnostico":
+            base_record = diagnostico_contrato.prompt_base_registro()
+            base_prompt = base_record["content"]
+        else:
+            from app.services.prompt_service import get_active_prompt
+            template = get_active_prompt(base_slug, db, tenant_id=execution.tenant_id) if base_slug else None
+            base_prompt = template.content if template else agent._fallback_prompts().get(base_slug, "")
+            base_record = {"slug": base_slug, "hash": canonical_hash(base_prompt), "content": base_prompt,
+                           "version": template.version if template else canonical_hash(base_prompt),
+                           "origin": "database" if template else "code_fallback"}
         skills = "\n\n".join(s["content"] + "\n" + "\n".join(a["content"] for a in s["attachments"])
                               for s in manifest["applied"])
         system = base_prompt + "\n\n" + skills + (
@@ -291,12 +302,17 @@ def run_step(db, execution, step, user_id):
             "Não infira ausência de uma lacuna. Não crie fontes primárias, ids de documentos, revisores ou datas. "
             "Regras/normas mencionadas na skill são orientação histórica, não prova de aplicabilidade. "
             "Use apenas conclusões autorizadas do envelope. O sistema atribui identidade às novas conclusões.\n"
-        ) + json.dumps(EvidenceObject.model_json_schema(), ensure_ascii=False)
+        ) + json.dumps(diagnostico_contrato.SCHEMA_AFIRMACAO if step["agent"] == "diagnostico"
+                       else EvidenceObject.model_json_schema(), ensure_ascii=False)
         prompt = envelope.model_dump_json()
-        parameters = {"agent_name": step["agent"]}
-        record = {"base_prompt": {"slug": base_slug, "hash": canonical_hash(base_prompt), "content": base_prompt,
-                                  "version": template.version if template else canonical_hash(base_prompt),
-                                  "origin": "database" if template else "code_fallback"},
+        from app.core.config import settings as _settings
+        # Each agent's own cap per call (the legacy agents passed it; this path had dropped it and
+        # the #23 diagnosis was stopped at the global 0.10 cap). The job-wide cap stays below.
+        parameters = {"agent_name": step["agent"],
+                      "max_cost_override_usd": _settings.teto_de_custo_por_job(step["agent"])}
+        if step["agent"] == "diagnostico":
+            parameters["max_tokens"] = _settings.AI_DIAGNOSTICO_MAX_TOKENS
+        record = {"base_prompt": base_record,
                   "system": system, "user": prompt, "system_hash": canonical_hash(system),
                   "user_hash": canonical_hash(prompt), "parameters": parameters}
         job.input_payload = {**job.input_payload, **record}
@@ -307,27 +323,62 @@ def run_step(db, execution, step, user_id):
         from app.core.ai_trace import attempt_sink, orcamento_do_job
         from app.core.config import settings
         attempts = []
+        pagas = []  # replies that came back (paid), in order
+        orcamento = None
         token = attempt_sink.set(attempts)
         try:
             with orcamento_do_job(settings.teto_de_custo_por_job(step["agent"]), job_id=job.id,
                                   agente=step["agent"]) as orcamento:
                 response = complete(prompt, system=system, user_preferences=agent._resolve_user_ai_preferences(),
                                     **parameters)
+                pagas.append(response)
+                sintaxe = diagnostico_contrato.erro_de_sintaxe(response.content) \
+                    if step["agent"] == "diagnostico" else None
+                if sintaxe:
+                    # ADR-080: a reply that is not JSON gets ONE new call (transport, not content;
+                    # admission rules never retry). Both replies stay on the job; the job-wide
+                    # cap covers both calls. Measured: #23 in dev, a missing "]" in limits.
+                    invalida = {"raw": response.content, "erro": sintaxe, "model": response.model_used,
+                                "tokens_in": response.tokens_in, "tokens_out": response.tokens_out,
+                                "cost_usd": response.cost_usd}
+                    job.input_payload = {**job.input_payload, "resposta_sem_sintaxe": invalida}
+                    response = complete(prompt, system=system,
+                                        user_preferences=agent._resolve_user_ai_preferences(), **parameters)
+                    pagas.append(response)
         finally:
             attempt_sink.reset(token)
-            job.input_payload = {**job.input_payload, "attempts": attempts,
-                "orcamento": {k: orcamento[k] for k in ("limite_usd", "gasto_usd", "chamadas_pagas", "sem_custo")}}
-        job.model_used, job.provider = response.model_used, response.provider
-        job.tokens_in, job.tokens_out, job.cost_usd = response.tokens_in, response.tokens_out, response.cost_usd
+            if orcamento is not None:
+                job.input_payload = {**job.input_payload, "attempts": attempts,
+                    "orcamento": {k: orcamento[k] for k in ("limite_usd", "gasto_usd", "chamadas_pagas", "sem_custo")}}
+            # #272: what was PAID stays on the job even when a later call raises (budget, cap,
+            # truncation) — a discarded or barred reply is still tenant spend.
+            if pagas:
+                job.model_used, job.provider = pagas[-1].model_used, pagas[-1].provider
+                job.tokens_in = sum(r.tokens_in or 0 for r in pagas)
+                job.tokens_out = sum(r.tokens_out or 0 for r in pagas)
+            if orcamento is not None and orcamento["chamadas_pagas"]:
+                job.cost_usd = orcamento["gasto_usd"]
+            elif pagas:
+                job.cost_usd = sum(r.cost_usd or 0 for r in pagas)
         job.raw_output = response.content
         # Tests may control the gateway response; retain an explicit record of that boundary.
         if not attempts:
             job.input_payload = {**job.input_payload, "attempts": [{"model": response.model_used,
                 "provider": response.provider, "cost": response.cost_usd, "scope": "gateway_response_only"}]}
-        parsed = json.loads(response.content)
-        objects = TypeAdapter(list[EvidenceObject]).validate_python(parsed["objects"])
+        conteudo = diagnostico_contrato.sem_cerca(response.content) if step["agent"] == "diagnostico" \
+            else response.content
+        parsed = json.loads(conteudo)
+        fora_do_contrato = diagnostico_contrato.faltou_objects(parsed)
+        if fora_do_contrato:
+            raise ValueError(fora_do_contrato)
+        objects = (diagnostico_contrato.para_objetos(parsed["objects"]) if step["agent"] == "diagnostico"
+                   else TypeAdapter(list[EvidenceObject]).validate_python(parsed["objects"]))
         if any(obj.kind != "conclusao" for obj in objects):
             raise ValueError("Síntese de agente só pode propor conclusões; não criar fontes primárias")
+        if step["agent"] == "diagnostico":
+            recusadas = diagnostico_contrato.recusas(objects, envelope)
+            if recusadas:
+                raise ValueError("Afirmação do diagnóstico recusada (ADR-080): " + "; ".join(recusadas))
         objects = [obj.model_copy(update={"id": f"conclusion:{uuid4().hex}", "version": 1,
                                            "origin": step["agent"]}) for obj in objects]
     refs = []

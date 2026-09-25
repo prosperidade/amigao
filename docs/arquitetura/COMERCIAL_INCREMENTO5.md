@@ -51,7 +51,8 @@ REG-FUN-002; inscrição no CAR R$ 1.800 fixo para REG-BR-CAR-001).
    schema **legado** do diagnóstico (`situacao_geral`, …) em vez de `{"objects": [...]}`, e o passo
    falhou com o erro cru `'objects'`. O prompt-base legado vence a instrução do contrato. É a
    "reconciliação semântica" do diagnóstico que o Plano põe no Incremento 5 e que esta frente não
-   fez. Dívida **#285**.
+   fez. Dívida **#285** — fechada em dev no #285 (ADR-080): ver
+   [DIAGNOSTICO_AFIRMACAO_285.md](DIAGNOSTICO_AFIRMACAO_285.md).
 2. **Qual execução do motor o relatório lê.** A primeira versão lia a execução que gerou os passos
    (#4 no #25) e escreveu "alerta crítico **sem ciência**" — falso: a ciência está na execução #5,
    a que o `fechar` exige. Corrigido (ADR-074 §2), com teste de regressão. O relatório v2 errado

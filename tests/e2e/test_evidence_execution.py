@@ -93,6 +93,7 @@ def test_authenticated_review_correction_reload_resume_and_context(committed_cas
         source = envelope["sources"][0]
         output = {"objects": [{"id": "proposed", "version": 1, "kind": "conclusao", "origin": "diagnostico",
             "statement": "Conclusão controlada para revisão", "conclusion_class": "hipotese",
+            "attributes": {"certainty": "baixa"},
             "premises": [{"id": source["id"], "version": source["version"]}]}]}
         if empty_mode:
             output = {"objects": []}
@@ -163,7 +164,7 @@ def test_authenticated_review_correction_reload_resume_and_context(committed_cas
         assert client.post("/api/v1/agents/run", headers=headers, json=body).status_code == 200
         assert client.post("/api/v1/agents/run-async", headers=headers, json=body).status_code == 202
     assert len(received) == 4 and received[-1] == received[-2]
-    assert received[-1]["manifest"]["applied"][0]["version"] == "1.3.0"
+    assert received[-1]["manifest"]["applied"][0]["version"] == "1.4.0"
     with factory() as db:
         jobs = db.query(AIJob).filter(AIJob.tenant_id == case["tenant"]).order_by(AIJob.id.desc()).limit(2).all()
         assert jobs[0].input_payload["context_hash"] == jobs[1].input_payload["context_hash"]
@@ -192,7 +193,7 @@ def test_sync_and_worker_share_context_and_skill_manifest(committed_case, monkey
         asynchronous = client.post("/api/v1/agents/run-async", headers=headers, json=body)
         assert sync.status_code == 200 and asynchronous.status_code == 202
     assert len(inputs) == 2 and inputs[0] == inputs[1]
-    assert inputs[0][0]["manifest"]["applied"][0]["version"] == "1.3.0"
+    assert inputs[0][0]["manifest"]["applied"][0]["version"] == "1.4.0"
     with factory() as db:
         jobs = db.query(AIJob).filter(AIJob.entity_id == case["case"], AIJob.tenant_id == case["tenant"]).all()
         assert len(jobs) == 2

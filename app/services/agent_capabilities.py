@@ -11,6 +11,8 @@ REQUIRED_SKILLS = {
     "auditor_imovel": "auditor_imovel/analise_divergencias_documentais",
     "diagnostico": "diagnostico/situacao_ambiental_imovel_rural",
 }
+# Versão exigida por agente: o diagnóstico passou a 1.4.0 com o formato de afirmação (ADR-080).
+REQUIRED_VERSIONS = {"auditor_imovel": "1.3.0", "diagnostico": "1.4.0"}
 
 # ADR-074: pre-contract Redator and Orçamento are deterministic contracts over the validated Rota.
 COMMERCIAL_SKILLS = {
@@ -89,7 +91,7 @@ def capability_manifest(agent_name, metadata):
             manifest["missing"].append({"agent": agent_name, "reason": "Método geral de coleta não disponível para esta jurisdição"})
         else:
             skill = load_skill(required)
-            if skill is None or "Contrato de evidência — ADR-069" not in skill.body or meta.version != "1.3.0":
+            if skill is None or "Contrato de evidência — ADR-069" not in skill.body or meta.version != REQUIRED_VERSIONS[agent_name]:
                 manifest["missing"].append({"skill": required, "reason": "incompativel_com_contrato_069"})
             else:
                 attachments = []

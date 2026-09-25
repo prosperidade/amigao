@@ -73,6 +73,7 @@ def test_incremento1_gate_nove_provas_no_mesmo_percurso(committed_case, monkeypa
             approved = envelope["conclusions"][0]
             output = {"objects": [{"id": "proposed", "version": 1, "kind": "conclusao", "origin": "diagnostico",
                 "statement": "GATE_DIAGNOSTICO_PROPOSTO", "conclusion_class": "hipotese",
+                "attributes": {"certainty": "baixa"},
                 "premises": [{"id": o["id"], "version": o["version"]} for o in (observation, approved)]}]}
         elif len(received) in (2, 3):
             output = {"objects": []}  # keep evidence unchanged for transport equivalence
@@ -156,7 +157,7 @@ def test_incremento1_gate_nove_provas_no_mesmo_percurso(committed_case, monkeypa
             asynchronous = by_execution[receipt["transports"]["async"]]
             assert sync.input_payload == asynchronous.input_payload
             applied = sync.input_payload["manifest"]["applied"]
-            assert len(applied) == 1 and applied[0]["name"] == skill_name and applied[0]["version"] == "1.3.0"
+            assert len(applied) == 1 and applied[0]["name"] == skill_name and applied[0]["version"] == "1.4.0"
             assert applied[0]["content"] in sync.input_payload["system"]
             assert applied[0]["hash"] == canonical_hash(applied[0]["content"])
             # G6: missing mandatory DIAGNOSTIC skill, visible in UI, no provider invocation.
