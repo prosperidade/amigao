@@ -299,12 +299,15 @@ def run_step(db, execution, step, user_id):
         from app.core.ai_trace import attempt_sink, orcamento_do_job
         from app.core.config import settings
         attempts = []
+        pagas = []  # replies that came back (paid), in order
+        orcamento = None
         token = attempt_sink.set(attempts)
         try:
             with orcamento_do_job(settings.teto_de_custo_por_job(step["agent"]), job_id=job.id,
                                   agente=step["agent"]) as orcamento:
                 response = complete(prompt, system=system, user_preferences=agent._resolve_user_ai_preferences(),
                                     **parameters)
+                pagas.append(response)
                 sintaxe = diagnostico_contrato.erro_de_sintaxe(response.content) \
                     if step["agent"] == "diagnostico" else None
                 if sintaxe:
@@ -317,20 +320,30 @@ def run_step(db, execution, step, user_id):
                     job.input_payload = {**job.input_payload, "resposta_sem_sintaxe": invalida}
                     response = complete(prompt, system=system,
                                         user_preferences=agent._resolve_user_ai_preferences(), **parameters)
+                    pagas.append(response)
         finally:
             attempt_sink.reset(token)
-            job.input_payload = {**job.input_payload, "attempts": attempts,
-                "orcamento": {k: orcamento[k] for k in ("limite_usd", "gasto_usd", "chamadas_pagas", "sem_custo")}}
-        job.model_used, job.provider = response.model_used, response.provider
-        job.tokens_in, job.tokens_out = response.tokens_in, response.tokens_out
-        # #272: the job cost is what was PAID, including a discarded reply.
-        job.cost_usd = orcamento["gasto_usd"] if orcamento["chamadas_pagas"] else response.cost_usd
+            if orcamento is not None:
+                job.input_payload = {**job.input_payload, "attempts": attempts,
+                    "orcamento": {k: orcamento[k] for k in ("limite_usd", "gasto_usd", "chamadas_pagas", "sem_custo")}}
+            # #272: what was PAID stays on the job even when a later call raises (budget, cap,
+            # truncation) — a discarded or barred reply is still tenant spend.
+            if pagas:
+                job.model_used, job.provider = pagas[-1].model_used, pagas[-1].provider
+                job.tokens_in = sum(r.tokens_in or 0 for r in pagas)
+                job.tokens_out = sum(r.tokens_out or 0 for r in pagas)
+            if orcamento is not None and orcamento["chamadas_pagas"]:
+                job.cost_usd = orcamento["gasto_usd"]
+            elif pagas:
+                job.cost_usd = sum(r.cost_usd or 0 for r in pagas)
         job.raw_output = response.content
         # Tests may control the gateway response; retain an explicit record of that boundary.
         if not attempts:
             job.input_payload = {**job.input_payload, "attempts": [{"model": response.model_used,
                 "provider": response.provider, "cost": response.cost_usd, "scope": "gateway_response_only"}]}
-        parsed = json.loads(response.content)
+        conteudo = diagnostico_contrato.sem_cerca(response.content) if step["agent"] == "diagnostico" \
+            else response.content
+        parsed = json.loads(conteudo)
         fora_do_contrato = diagnostico_contrato.faltou_objects(parsed)
         if fora_do_contrato:
             raise ValueError(fora_do_contrato)

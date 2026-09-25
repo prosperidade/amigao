@@ -20,6 +20,15 @@ registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de ch
 prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
 pendente; a última tarefa do #23 foi deixada terminar sozinha.
 
+**Pulso 24/09/2026 — #285, diagnóstico por afirmação (ADR-080), PR rascunho empilhado no #211, só
+dev.** O diagnóstico real passou a entrar em revisão pelo contrato: prompt-base próprio (o legado
+pedia `situacao_geral`), schema estreito da afirmação, regras D1–D6, teto do agente por chamada.
+Com o modelo real, #23 deu 9 afirmações e #25 deu 10, com 57 premissas resolvidas por ID; os dois
+orçamentos ficaram desatualizados sem retroceder e foram regerados com a ressalva citando as
+conclusões. A conclusão sintética da prova anterior foi rejeitada. Dívida **#288** (DIAG-002 a 009
+fora do repositório). Também: SQLAlchemy 2.1 quebrou o CI (driver psycopg v3) — pin em 2.0 no
+**#213**. Registro: [DIAGNOSTICO_AFIRMACAO_285.md](../arquitetura/DIAGNOSTICO_AFIRMACAO_285.md).
+
 **Pulso 23/09/2026 (noite) — Incremento 5, fechamento comercial (ADR-074), PR rascunho, só dev.**
 A cadeia `gerar_proposta` passou a ser `[redator, orcamento]` e nasce da Rota validada: o
 diagnóstico saiu da cadeia comercial e, em revisão, vira ressalva — não impede o orçamento (ruptura

@@ -1,5 +1,14 @@
 # Progresso IA — Amigao do Meio Ambiente
 
+## 2026-09-24 — diagnóstico no contrato: prompt próprio, schema estreito (ADR-080)
+
+O diagnóstico pelo contrato 069 deixa de receber o `diagnostico_system` legado (pedia outro formato)
+e recebe o prompt 080.3 com o schema `AfirmacaoDiagnostico`. Medido no percurso real em dev
+(`gpt-5.6-luna`): na 080.1 o modelo pôs a classe no campo `kind` a partir do 4º item (#23 e #25);
+na 080.2, com regra explícita, o #25 passou mas o #23 (286 mil tokens) repetiu — o schema estreito
+tirou `kind` do modelo. Um JSON inválido (`]` faltando) motivou a nova chamada única por sintaxe.
+Teto do agente por chamada (US$ 0,50) repassado ao gateway. Custo em dev: cerca de US$ 0,44.
+
 ## 2026-09-23 — Incremento 5: cadeia comercial sem LLM; diagnóstico real fora do contrato
 
 Redator pré-contratação e Orçamento entram como contratos determinísticos (skills

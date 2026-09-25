@@ -81,7 +81,7 @@ motivo`); nada é gravado. Mesmo comportamento do G7 do Incremento 1 (ausência 
 | Regra | Conteúdo | Origem |
 |---|---|---|
 | D1 | Toda afirmação tem ao menos uma premissa, e toda premissa está no envelope autorizado | DIAG-001 |
-| D2 | `certainty` obrigatória; `alta` exige premissa **documental** (fonte primária ou observação) | DIAG-001; skill ("confiança alta exige documento") |
+| D2 | `certainty` obrigatória; `alta` exige premissa **documental** (fonte primária de documento ou observação não legada) | DIAG-001; skill ("confiança alta exige documento") |
 | D3 | `risco`, `fato_documental` e `escopo_proposto` exigem premissa documental: derivação de inventário, declaração ou outra conclusão sozinhas não sustentam | "lacuna não vira passivo"; skill ("ausência de informação isolada é lacuna") |
 | D4 | `risco` exige `impact`, aplicabilidade `aplicavel` e razão (a última já no schema) | Plano: "risco tem premissas e aplicabilidade" |
 | D5 | `escopo_proposto` (serviço) exige aplicabilidade `aplicavel` e razão | Plano: "serviço tem premissas e aplicabilidade" |
@@ -122,5 +122,11 @@ O diagnóstico continua fora da cadeia comercial; em revisão, vira ressalva do 
 
 ## Validação
 
-- `tests/services/test_diagnostico_contrato.py` — D1 a D7, resposta sem `objects`, prompt-base.
+- `tests/services/test_diagnostico_contrato.py` — D1 a D7, resposta sem `objects`, prompt-base,
+  schema estreito, nova chamada por sintaxe, custo pago que fica no job.
+- Revisão independente antes do CI: `attributes` da afirmação restrito a `certainty`/`impact`/
+  `urgency` (referências de cobertura não passariam pela conferência do envelope); observação legada
+  não conferida não conta como documental; cerca markdown não é erro de sintaxe; custo e tokens
+  pagos ficam no job mesmo quando a chamada seguinte falha.
+- Registro: [DIAGNOSTICO_AFIRMACAO_285.md](../arquitetura/DIAGNOSTICO_AFIRMACAO_285.md).
 - Percurso em dev, #23 e #25, com o modelo real: [provas/inc5_285_diagnostico_dev_2026-09-24.json](../arquitetura/provas/inc5_285_diagnostico_dev_2026-09-24.json).

@@ -1,5 +1,24 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 24/09/2026 — #285, diagnóstico por afirmação (ADR-080, só dev)
+
+Registro: [DIAGNOSTICO_AFIRMACAO_285.md](arquitetura/DIAGNOSTICO_AFIRMACAO_285.md). #286 e #287
+são do PR #214 (leitura múltipla); esta frente começa na #288.
+
+- **#285 — o diagnóstico não produzia conclusão pelo contrato 069 (FECHADA em dev, 24/09):** causa:
+  o prompt-base legado `diagnostico_system` ia antes do contrato e pedia `situacao_geral`. Prompt do
+  contrato (080.3), schema estreito da afirmação (o modelo não escolhe espécie nem identidade),
+  regras de admissão D1–D6, teto do próprio agente por chamada, uma nova chamada só para resposta
+  sem JSON. Prova com o modelo real: #23 (9 afirmações) e #25 (10), 57 premissas resolvidas, todas
+  em revisão e na ressalva do orçamento. Sem sintético: a 4092 foi rejeitada pela API.
+
+- **#288 — DIAG-002 a DIAG-009 fora do repositório (aberta, depende da Ísis):** o texto está no
+  segundo DOCX da Ísis; o ADR-080 declara a correspondência só para DIAG-001 e DIAG-005. Junto: o
+  vocabulário de `urgency` (alta/media/baixa) é provisório. **Correção:** versionar o DOCX em
+  `docs/auditoria/` e completar a tabela do ADR-080 §3.
+
+> **PRÓXIMO NÚMERO LIVRE: 289.** (#286 e #287 do PR #214; #288 aberta pelo #285, 24/09.)
+
 ## Pulso 23/09/2026 — Incremento 5, fechamento comercial (ADR-074, só dev)
 
 Registro da frente: [COMERCIAL_INCREMENTO5.md](arquitetura/COMERCIAL_INCREMENTO5.md). A **#279** e a

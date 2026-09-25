@@ -212,3 +212,47 @@ def test_modelo_nao_escolhe_especie_nem_identidade():
 def test_classe_em_kind_e_erro_nomeado():
     with pytest.raises(ValueError, match="kind='risco'; a classe vai em conclusion_class"):
         dc.para_objetos([{"kind": "risco", "statement": "s"}])
+
+
+
+def test_modelo_nao_manda_referencia_em_attributes():
+    with pytest.raises(ValueError):
+        dc.para_objetos([{"statement": "s", "conclusion_class": "lacuna",
+                          "attributes": {"certainty": "baixa",
+                                         "coverage": {"material": [{"id": "inventado", "version": 9}],
+                                                      "scope": "x", "coverage": "x"}}}])
+
+
+def test_observacao_legada_nao_e_documental():
+    legada = OBS.model_copy(update={"id": "obs:legado", "legacy_unverified": True})
+    env = _envelope().model_copy(update={"observations": [legada]})
+    fato = _afirmacao(conclusion_class="fato_documental", premises=[{"id": "obs:legado", "version": 1}],
+                      attributes={"certainty": "alta"})
+    assert [f.split(":")[0] for f in dc.recusas([fato], env)] == ["D2", "D3"]
+
+
+def test_cerca_markdown_nao_conta_como_erro_de_sintaxe():
+    assert dc.erro_de_sintaxe('```json\n{"objects": []}\n```') is None
+    assert dc.erro_de_sintaxe('{"objects": [') is not None
+
+
+def test_custo_pago_fica_no_job_quando_a_nova_chamada_falha(committed_case, monkeypatch):
+    from app.core.ai_gateway import AIGatewayError
+    factory, case = committed_case
+    chamadas = []
+
+    def responder(prompt, **kwargs):
+        chamadas.append(1)
+        if len(chamadas) == 2:
+            raise AIGatewayError("teto do job")
+        return AIResponse(content='{"objects": [', model_used="controlled", provider="test",
+                          tokens_in=100, tokens_out=10, cost_usd=0.07, duration_ms=1)
+    monkeypatch.setattr("app.core.ai_gateway.complete", responder)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        r = client.post("/api/v1/agents/run", headers=headers,
+                        json={"agent_name": "diagnostico", "process_id": case["case"]}).json()
+    assert r["status"] == "failed"
+    with factory() as db:
+        job = db.query(AIJob).filter(AIJob.tenant_id == case["tenant"]).one()
+        assert job.cost_usd == pytest.approx(0.07) and job.tokens_in == 100

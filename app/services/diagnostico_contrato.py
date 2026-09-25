@@ -17,7 +17,6 @@ from pydantic import Field
 
 from app.schemas.evidence import (
     Contract,
-    EvidenceAttributes,
     EvidenceObject,
     EvidenceRef,
     ExecutionEnvelope,
@@ -79,6 +78,15 @@ REGRAS DE SUPORTE (o servidor recusa o que as viola):
 """
 
 
+class AtributosAfirmacao(Contract):
+    """As três dimensões que o modelo decide. Referências a documento, fragmento ou cobertura
+    não são dele: não passariam pela conferência do envelope."""
+
+    certainty: str | None = None
+    impact: str | None = None
+    urgency: str | None = None
+
+
 class AfirmacaoDiagnostico(Contract):
     """O que o modelo decide numa afirmação. Identidade, espécie e origem são do servidor."""
 
@@ -87,7 +95,7 @@ class AfirmacaoDiagnostico(Contract):
         "fato_documental", "divergencia", "lacuna", "hipotese", "risco", "orientacao", "escopo_proposto",
     ]
     premises: list[EvidenceRef] = Field(default_factory=list)
-    attributes: EvidenceAttributes = Field(default_factory=EvidenceAttributes)
+    attributes: AtributosAfirmacao = Field(default_factory=AtributosAfirmacao)
     knowledge: Knowledge = Field(default_factory=Knowledge)
     applicability: str | None = None
     applicability_reason: str | None = None
@@ -127,12 +135,22 @@ def prompt_base_registro() -> dict:
             "version": CONTRATO_VERSAO, "origin": "contrato_080"}
 
 
+def sem_cerca(conteudo: str) -> str:
+    """Tira uma cerca markdown (```json … ```) em volta da resposta inteira — e só isso."""
+    texto = (conteudo or "").strip()
+    if texto.startswith("```") and texto.endswith("```"):
+        texto = texto[3:-3].strip()
+        if texto.lower().startswith("json"):
+            texto = texto[4:].strip()
+    return texto
+
+
 def erro_de_sintaxe(conteudo: str) -> str | None:
-    """Mensagem do parser quando a resposta não é JSON; None quando é."""
+    """Mensagem do parser quando a resposta não é JSON (sem cerca); None quando é."""
     import json
 
     try:
-        json.loads(conteudo)
+        json.loads(sem_cerca(conteudo))
     except (json.JSONDecodeError, TypeError) as exc:
         return str(exc)
     return None
@@ -147,7 +165,8 @@ def faltou_objects(parsed) -> str | None:
 
 
 def _documentais(envelope: ExecutionEnvelope) -> set[tuple[str, int]]:
-    out = {(o.id, o.version) for o in envelope.observations}
+    # Observação legada não conferida (staging antigo) não sustenta certeza alta nem passivo.
+    out = {(o.id, o.version) for o in envelope.observations if not o.legacy_unverified}
     out |= {(o.id, o.version) for o in envelope.sources if o.origin in ORIGENS_DOCUMENTAIS}
     return out
 

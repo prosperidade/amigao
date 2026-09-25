@@ -115,6 +115,10 @@ Mudou a contagem de jobs do percurso (9 → 10) e o limite explícito: o redator
 (pré-contratação), e a tentativa falha pela Rota ausente, não por capacidade insuficiente. As nove
 provas continuam verdes no CI (run 35948833019) e localmente com navegador.
 
+**ADR-080 (24/09/2026, #285).** A resposta controlada do G1 declara `certainty` (regra D2 do
+diagnóstico por afirmação) e o diagnóstico passa a exigir a skill 1.4.0 no G5; o G7 continua
+recusando a ausência verificada sem consulta pelo schema. As nove provas seguem verdes.
+
 ### G5 — portas síncrona e assíncrona recebem o mesmo contexto e skill
 
 No mesmo caso revisado, chama `/agents/run` e `/agents/run-async` com diagnóstico.
