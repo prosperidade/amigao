@@ -16,6 +16,7 @@ são do PR #214 (leitura múltipla); esta frente começa na #288.
   segundo DOCX da Ísis; o ADR-080 declara a correspondência só para DIAG-001 e DIAG-005. Junto: o
   vocabulário de `urgency` (alta/media/baixa) é provisório. **Correção:** versionar o DOCX em
   `docs/auditoria/` e completar a tabela do ADR-080 §3.
+  **André, 25/09:** decisões do ADR-080 aprovadas como provisórias até o DOCX chegar (ele envia).
 
 > **PRÓXIMO NÚMERO LIVRE: 289.** (#286 e #287 do PR #214; #288 aberta pelo #285, 24/09.)
 

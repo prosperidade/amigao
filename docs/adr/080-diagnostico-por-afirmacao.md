@@ -4,7 +4,9 @@
 - **Numeração:** escrito como ADR-079 e renumerado para 080 — o 079 é da leitura múltipla (#214).
   Os jobs de dev gravaram o prompt como `079.x`; o texto não contém o número e o hash é o mesmo
   (`8f53a2ff…` na 080.3 = 079.3, jobs 214 e 215).
-- **Estado:** proposta (Incremento 5, dívida #285). Decisões marcadas **[André]** pedem aceite no PR.
+- **Estado:** aceito (André, 25/09/2026, PR #216). As decisões **[André]** — correspondência parcial
+  com DIAG-002 a 009 e vocabulário de `urgency` — estão aprovadas **como provisórias**: vencem quando
+  o DOCX dos critérios DIAG entrar em `docs/auditoria/` (enviado pelo André). A #288 fica aberta até lá.
 - **Plano:** [Plano Diretor v1.1 — Incremento 5](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md)
   ("diagnóstico por afirmação com premissas · risco, urgência e serviço têm premissas e
   aplicabilidade · lacuna não vira passivo"), §4.2 (skill do diagnóstico: "reconciliar
