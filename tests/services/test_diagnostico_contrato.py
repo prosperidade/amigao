@@ -103,7 +103,7 @@ def test_resposta_sem_objects_tem_motivo_nomeado():
 def test_prompt_base_nao_pede_formato_legado():
     registro = dc.prompt_base_registro()
     assert registro["origin"] == "contrato_079" and registro["version"] == dc.CONTRATO_VERSAO
-    assert "objects" in dc.PROMPT_BASE and "nada de\nsituacao_geral" in dc.PROMPT_BASE
+    assert "objects" in dc.PROMPT_BASE and "nada de situacao_geral" in dc.PROMPT_BASE
 
 
 # ---------------------------------------------------------------------------
@@ -198,3 +198,17 @@ def test_sintaxe_invalida_duas_vezes_falha_sem_terceira_chamada(committed_case, 
         r = client.post("/api/v1/agents/run", headers=headers,
                         json={"agent_name": "diagnostico", "process_id": case["case"]}).json()
     assert len(chamadas) == 2 and r["status"] == "failed"
+
+
+
+def test_modelo_nao_escolhe_especie_nem_identidade():
+    objs = dc.para_objetos([{"id": "x9", "version": 7, "origin": "modelo", "kind": "conclusao",
+                             "statement": "s", "conclusion_class": "lacuna"},
+                            {"statement": "t", "conclusion_class": "hipotese"}])
+    assert [(o.kind, o.origin, o.version) for o in objs] == [("conclusao", "diagnostico", 1)] * 2
+    assert "kind" not in json.dumps(dc.SCHEMA_AFIRMACAO["properties"])
+
+
+def test_classe_em_kind_e_erro_nomeado():
+    with pytest.raises(ValueError, match="kind='risco'; a classe vai em conclusion_class"):
+        dc.para_objetos([{"kind": "risco", "statement": "s"}])

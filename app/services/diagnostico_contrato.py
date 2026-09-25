@@ -11,9 +11,21 @@ Duas peças:
 
 from __future__ import annotations
 
-from app.schemas.evidence import EvidenceObject, ExecutionEnvelope, canonical_hash
+from typing import Literal
 
-CONTRATO_VERSAO = "079.2"
+from pydantic import Field
+
+from app.schemas.evidence import (
+    Contract,
+    EvidenceAttributes,
+    EvidenceObject,
+    EvidenceRef,
+    ExecutionEnvelope,
+    Knowledge,
+    canonical_hash,
+)
+
+CONTRATO_VERSAO = "079.3"
 
 CERTEZAS = ("alta", "media", "baixa")
 IMPACTOS = ("informativo", "atencao", "alto", "critico_impeditivo_potencial")
@@ -27,8 +39,9 @@ Você é o agente Diagnóstico do Regente Ambiental. Sua tarefa é ler o envelop
 AFIRMAÇÕES de diagnóstico para o consultor revisar uma a uma. Você não decide: propõe.
 
 FORMATO (obrigatório, único): um objeto JSON com a chave "objects", uma lista. Cada item é UMA
-afirmação, um objeto do schema ao final com kind="conclusao". Não use outro formato: nada de
-situacao_geral, passivos_identificados, riscos ou hipoteses soltos. Nenhum texto fora do JSON.
+afirmação, no schema ao final. Não use outro formato: nada de situacao_geral,
+passivos_identificados, riscos ou hipoteses soltos. Nenhum texto fora do JSON. Não inclua id,
+version, kind nem origin: o servidor atribui.
 
 CADA AFIRMAÇÃO TEM:
 - statement: uma frase afirmativa, verificável, sobre este caso.
@@ -46,11 +59,9 @@ CADA AFIRMAÇÃO TEM:
   aplica a ESTE caso.
 - limits: o que a afirmação não cobre.
 
-ATENÇÃO À FORMA: "kind" é SEMPRE a string "conclusao", em TODOS os itens, do primeiro ao último.
-A classe (risco, lacuna, orientacao, escopo_proposto…) vai em "conclusion_class", nunca em "kind".
-Exemplo de UM item (os ids são ilustrativos; use os do envelope):
-{"id": "a1", "version": 1, "kind": "conclusao", "origin": "diagnostico",
- "statement": "…", "conclusion_class": "risco",
+A classe (risco, lacuna, orientacao, escopo_proposto…) vai em "conclusion_class", em todos os itens.
+Exemplo de UM item (os ids de premissa são ilustrativos; use os do envelope):
+{"statement": "…", "conclusion_class": "risco",
  "attributes": {"certainty": "media", "impact": "alto", "urgency": "media"},
  "applicability": "aplicavel", "applicability_reason": "…",
  "premises": [{"id": "<id do envelope>", "version": 1}], "limits": ["…"]}
@@ -66,6 +77,49 @@ REGRAS DE SUPORTE (o servidor recusa o que as viola):
 - Poucas afirmações bem sustentadas valem mais que muitas fracas. Se nada se sustenta, devolva
   {"objects": []}.
 """
+
+
+class AfirmacaoDiagnostico(Contract):
+    """O que o modelo decide numa afirmação. Identidade, espécie e origem são do servidor."""
+
+    statement: str = Field(min_length=1)
+    conclusion_class: Literal[
+        "fato_documental", "divergencia", "lacuna", "hipotese", "risco", "orientacao", "escopo_proposto",
+    ]
+    premises: list[EvidenceRef] = Field(default_factory=list)
+    attributes: EvidenceAttributes = Field(default_factory=EvidenceAttributes)
+    knowledge: Knowledge = Field(default_factory=Knowledge)
+    applicability: str | None = None
+    applicability_reason: str | None = None
+    norms: list[EvidenceRef] = Field(default_factory=list)
+    rules: list[EvidenceRef] = Field(default_factory=list)
+    limits: list[str] = Field(default_factory=list)
+
+
+SCHEMA_AFIRMACAO = AfirmacaoDiagnostico.model_json_schema()
+_DO_SERVIDOR = ("id", "version", "origin")
+
+
+def para_objetos(itens: list) -> list[EvidenceObject]:
+    """Afirmações do modelo → conclusões do contrato. Campos de identidade são descartados
+    (o servidor atribui); ``kind`` diferente de ``conclusao`` é erro nomeado, nunca corrigido."""
+    from pydantic import TypeAdapter
+
+    limpos, erros = [], []
+    for n, item in enumerate(itens, start=1):
+        if not isinstance(item, dict):
+            erros.append(f"item {n} não é objeto")
+            continue
+        kind = item.get("kind", "conclusao")
+        if kind != "conclusao":
+            erros.append(f"item {n}: kind={kind!r}; a classe vai em conclusion_class")
+            continue
+        limpos.append({k: v for k, v in item.items() if k not in _DO_SERVIDOR and k != "kind"})
+    if erros:
+        raise ValueError(f"Afirmação fora do contrato {CONTRATO_VERSAO}: " + "; ".join(erros))
+    afirmacoes = TypeAdapter(list[AfirmacaoDiagnostico]).validate_python(limpos)
+    return [EvidenceObject(id=f"afirmacao:{n}", version=1, kind="conclusao", origin="diagnostico",
+                           **a.model_dump()) for n, a in enumerate(afirmacoes, start=1)]
 
 
 def prompt_base_registro() -> dict:

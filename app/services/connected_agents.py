@@ -278,7 +278,8 @@ def run_step(db, execution, step, user_id):
             "Não infira ausência de uma lacuna. Não crie fontes primárias, ids de documentos, revisores ou datas. "
             "Regras/normas mencionadas na skill são orientação histórica, não prova de aplicabilidade. "
             "Use apenas conclusões autorizadas do envelope. O sistema atribui identidade às novas conclusões.\n"
-        ) + json.dumps(EvidenceObject.model_json_schema(), ensure_ascii=False)
+        ) + json.dumps(diagnostico_contrato.SCHEMA_AFIRMACAO if step["agent"] == "diagnostico"
+                       else EvidenceObject.model_json_schema(), ensure_ascii=False)
         prompt = envelope.model_dump_json()
         from app.core.config import settings as _settings
         # Each agent's own cap per call (the legacy agents passed it; this path had dropped it and
@@ -333,7 +334,8 @@ def run_step(db, execution, step, user_id):
         fora_do_contrato = diagnostico_contrato.faltou_objects(parsed)
         if fora_do_contrato:
             raise ValueError(fora_do_contrato)
-        objects = TypeAdapter(list[EvidenceObject]).validate_python(parsed["objects"])
+        objects = (diagnostico_contrato.para_objetos(parsed["objects"]) if step["agent"] == "diagnostico"
+                   else TypeAdapter(list[EvidenceObject]).validate_python(parsed["objects"]))
         if any(obj.kind != "conclusao" for obj in objects):
             raise ValueError("Síntese de agente só pode propor conclusões; não criar fontes primárias")
         if step["agent"] == "diagnostico":
