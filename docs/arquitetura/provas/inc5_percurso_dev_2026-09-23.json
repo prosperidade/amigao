@@ -1,0 +1,3041 @@
+[
+ {
+  "passo": "preparacao",
+  "ambiente": {
+   "api": "worktree wt-inc5 em 127.0.0.1:8040 (branch feat/inc5-metodos-comercial)",
+   "banco": "127.0.0.1:15432/amigao_db (dev)",
+   "alembic": "076mc001"
+  },
+  "casos": {
+   "#23": 65,
+   "#25": 66
+  },
+  "tenant": 33,
+  "usuario_de_prova": {
+   "id": 38,
+   "email": "gate4b-consultor@example.com"
+  },
+  "usuario_outro_tenant": {
+   "id": 37,
+   "tenant": 34
+  },
+  "escritas_diretas_no_dev_declaradas": [
+   "senha aleatória redefinida nos usuários 38 e 37 (só dev; valor só em memória do processo)",
+   "conclusão sintética do diagnóstico 4092 no #25, por persist_object (schema do contrato 069), texto 'PROVA INC5', gravada ENTRE a execução 1 e a 2 — mede roteamento, não semântica",
+   "senha do usuário 38 redefinida de novo antes da execução 3 (API reiniciada)"
+  ],
+  "precos": "valores de prova, não a tabela de uma consultoria"
+ },
+ {
+  "passo": "execucao_1",
+  "nota": "o script caiu por erro próprio (argumento 'passo' duplicado em registrar) logo depois do DELETE 204 do passo 6 do #25; o JSON não foi gravado. Fatos abaixo transcritos da saída do console.",
+  "fatos": [
+   {
+    "metodos_criados": [
+     [
+      "hora_tecnica",
+      1,
+      "hora",
+      "250.00",
+      "padrao"
+     ],
+     [
+      "ccir",
+      1,
+      "fixo",
+      "900.00",
+      [
+       "REG-FUN-002"
+      ]
+     ],
+     [
+      "inscricao_car",
+      1,
+      "fixo",
+      "1800.00",
+      [
+       "REG-BR-CAR-001"
+      ]
+     ]
+    ]
+   },
+   {
+    "diagnostico_real_25": {
+     "execucao": "012a3193eaf340b0b78528bf37b00fda",
+     "status": "failed",
+     "erro": "'objects'",
+     "ai_job": 201,
+     "modelo": "gpt-5.6-luna",
+     "tokens_in": 61222,
+     "tokens_out": 2279,
+     "custo_usd": 0.0149792,
+     "achado": "a resposta veio no schema legado do diagnóstico (situacao_geral...), sem a chave objects do contrato 069 — dívida #283"
+    }
+   },
+   {
+    "cadeia_25_inicio": {
+     "execucao": "f9b1ddfa8af6490aadd30defa10eeabb",
+     "passos": [
+      [
+       "redator",
+       "completed"
+      ],
+      [
+       "orcamento",
+       "awaiting_review"
+      ]
+     ]
+    }
+   },
+   {
+    "redacao_25_v1": {
+     "relatorio": {
+      "id": 1,
+      "afirmacoes": 13,
+      "sem_evidencia": 0
+     },
+     "escopo": {
+      "id": 2,
+      "afirmacoes": 6,
+      "sem_evidencia": 0
+     }
+    }
+   },
+   {
+    "cadeia_25_apos_aprovar_escopo": [
+     [
+      "redator",
+      "completed"
+     ],
+     [
+      "orcamento",
+      "completed"
+     ]
+    ],
+    "completa": false
+   },
+   {
+    "orcamento_25_v1": {
+     "id": 1,
+     "total": "2700.00",
+     "ressalvas": [
+      "sem_diagnostico"
+     ]
+    }
+   },
+   {
+    "cadeia_25_apos_aprovar_orcamento": {
+     "status": "completed",
+     "completa": true
+    }
+   },
+   {
+    "redacao_23_v1": {
+     "relatorio": {
+      "id": 3,
+      "afirmacoes": 12,
+      "sem_evidencia": 0
+     },
+     "escopo": {
+      "id": 4,
+      "afirmacoes": 6,
+      "sem_evidencia": 0
+     }
+    }
+   },
+   {
+    "orcamento_23_v1": {
+     "id": 2,
+     "total": "900.00"
+    }
+   },
+   {
+    "proposta_rascunho_23": {
+     "orcamento_id": 2,
+     "valor": 900.0,
+     "itens": [
+      [
+       "Emitir ou regularizar o CCIR do imóvel",
+       2,
+       3,
+       900.0
+      ]
+     ]
+    }
+   },
+   {
+    "recarga_e_nova_sessao": {
+     "#23": {
+      "escopo": [
+       4,
+       "aprovada",
+       "vigente"
+      ],
+      "orcamento": [
+       2,
+       1,
+       "900.00",
+       "aprovada",
+       "vigente"
+      ]
+     },
+     "#25": {
+      "escopo": [
+       2,
+       "aprovada",
+       "vigente"
+      ],
+      "orcamento": [
+       1,
+       1,
+       "2700.00",
+       "aprovada",
+       "vigente"
+      ]
+     }
+    }
+   },
+   {
+    "delete_passo_6_25": {
+     "http": 204,
+     "motivo": "PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço"
+    }
+   }
+  ]
+ },
+ {
+  "passo": "execucao_2",
+  "comando": "INC5_FASES=remocao,isolamento INC5_PASSO_REMOVIDO=6 INC5_CONCLUSAO=4092",
+  "registro": [
+   {
+    "passo": "login",
+    "sessao": "A",
+    "usuario": "gate4b-consultor@example.com",
+    "fases": [
+     "isolamento",
+     "remocao"
+    ]
+   },
+   {
+    "passo": "passo_removido_em_execucao_anterior",
+    "caso": "#25",
+    "rota": 2,
+    "passo_id": 6,
+    "motivo": "PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço",
+    "vivos": [
+     5
+    ]
+   },
+   {
+    "passo": "orcamento_apos_remocao",
+    "caso": "#25",
+    "id": 1,
+    "versao": 1,
+    "estado_revisao": "aprovada",
+    "atualidade": {
+     "estado": "desatualizado",
+     "motivos": [
+      "Passo 6 \"Emitir ou regularizar o CCIR do imóvel\" removido: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço",
+      "O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)"
+     ]
+    },
+    "rota_status": "validada"
+   },
+   {
+    "passo": "orcamento_sobre_escopo_desatualizado",
+    "caso": "#25",
+    "http": 422,
+    "detalhe": "A especificação de escopo v1 está desatualizada: Passo 6 \"Emitir ou regularizar o CCIR do imóvel\" removido: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço; O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão). Gere o escopo de novo."
+   },
+   {
+    "passo": "redacao_regerada",
+    "caso": "#25",
+    "id": 6,
+    "tipo": "especificacao_escopo",
+    "versao": 2,
+    "estado_revisao": "proposta",
+    "atualidade": {
+     "estado": "vigente",
+     "motivos": []
+    },
+    "afirmacoes": 7,
+    "afirmacoes_sem_evidencia": 0,
+    "evidencias_por_tipo": {
+     "rota_passo": 4,
+     "dispositivo": 1,
+     "fonte_versao": 1,
+     "avaliacao_regra": 1,
+     "rota": 1,
+     "execucao_motor": 1,
+     "conclusao": 1
+    },
+    "secoes": {
+     "incluido": [
+      "Será executado: Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29."
+     ],
+     "orientacoes": [],
+     "fora": [
+      "Fora do escopo: Emitir ou regularizar o CCIR do imóvel. Motivo: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço.",
+      "Fora do escopo: Reunir a prova da sucessão (óbito, inventário ou partilha). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+      "Fora do escopo: Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte."
+     ],
+     "premissas": [
+      "Rota 2 validada pelo consultor em 23/09/2026.",
+      "Avaliação do motor jurídico na data de referência 23/09/2026, conjunto de regras #1.",
+      "1 conclusão(ões) do diagnóstico em revisão: registradas como ressalva, não usadas como premissa do escopo."
+     ]
+    }
+   },
+   {
+    "passo": "orcamento_regerado",
+    "caso": "#25",
+    "id": 3,
+    "versao": 2,
+    "total": "1800.00",
+    "estado_revisao": "proposta",
+    "atualidade": {
+     "estado": "vigente",
+     "motivos": []
+    },
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "1 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       4092
+      ]
+     }
+    ],
+    "fora": [
+     {
+      "rota_passo_id": 6,
+      "titulo": "Emitir ou regularizar o CCIR do imóvel",
+      "motivo": "removido da Rota: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço"
+     },
+     {
+      "rota_passo_id": 7,
+      "titulo": "Reunir a prova da sucessão (óbito, inventário ou partilha)",
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte"
+     },
+     {
+      "rota_passo_id": 8,
+      "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte"
+     }
+    ],
+    "itens": [
+     {
+      "rota_passo_id": 5,
+      "descricao": "Verificar inscrição no CAR e inscrever o imóvel",
+      "escolha": "regra",
+      "calculo": "valor fixo R$ 1.800,00",
+      "total": "1800.00",
+      "metodo": "inscricao_car v1",
+      "dispositivo_id": 41702
+     }
+    ]
+   },
+   {
+    "passo": "nova_sessao_apos_remocao",
+    "caso": "#25",
+    "versoes": [
+     [
+      1,
+      "2700.00",
+      "aprovada",
+      true
+     ],
+     [
+      2,
+      "1800.00",
+      "proposta",
+      false
+     ]
+    ],
+    "atual": {
+     "estado": "vigente",
+     "motivos": []
+    }
+   },
+   {
+    "passo": "proposta_rascunho",
+    "caso": "#25",
+    "orcamento_id": 3,
+    "valor": 1800.0,
+    "conclusao_em_revisao": "4092",
+    "itens": [
+     [
+      "Verificar inscrição no CAR e inscrever o imóvel",
+      5,
+      4,
+      1800.0
+     ]
+    ]
+   },
+   {
+    "passo": "isolamento",
+    "orcamento_23": 404,
+    "redacao_25": 404,
+    "metodos": {
+     "correntes": [],
+     "versoes": []
+    }
+   }
+  ]
+ },
+ {
+  "passo": "execucao_3",
+  "comando": "INC5_FASES=regerar",
+  "motivo": "correção de código entre a 2 e a 3: o relatório lia a execução do motor que gerou os passos (#4) e dizia 'alerta sem ciência'; a ciência está na execução mais recente (#5), a que o fechar da Rota exige. Relatório v2 do #25 (id 5) ficou superado com o texto errado, preservado.",
+  "registro": [
+   {
+    "passo": "login",
+    "sessao": "A",
+    "usuario": "gate4b-consultor@example.com",
+    "fases": [
+     "regerar"
+    ]
+   },
+   {
+    "passo": "relatorio_regerado",
+    "caso": "#25",
+    "id": 7,
+    "tipo": "relatorio_preliminar",
+    "versao": 3,
+    "estado_revisao": "proposta",
+    "atualidade": {
+     "estado": "vigente",
+     "motivos": []
+    },
+    "afirmacoes": 12,
+    "afirmacoes_sem_evidencia": 0,
+    "evidencias_por_tipo": {
+     "execucao_motor": 6,
+     "avaliacao_regra": 16,
+     "observacao": 3,
+     "dispositivo": 3,
+     "fonte_versao": 3,
+     "ciencia_alerta": 1,
+     "rota_passo": 1
+    },
+    "secoes": {
+     "situacao": [
+      "Não consta CAR nos autos.",
+      "UF do imóvel no cadastro do caso: GO.",
+      "Não consta CCIR nos autos.",
+      "Não consta certidão de matrícula nos autos.",
+      "Natureza do imóvel: rural (declarada na abertura do caso).",
+      "Falecimento do titular declarado em documento dos autos."
+     ],
+     "achados": [
+      "REG-BR-CAR-001 disparou — Todo imóvel rural deve possuir inscrição no CAR. Fundamento: Lei 12.651/2012, art. 29.",
+      "REG-FUN-002 disparou — CCIR ausente, vencido ou com taxa não quitada gera ação de emissão/regularização. Fundamento: Lei 5.868/1972, art. 2º.",
+      "REG-FUN-012 disparou — Pessoa na posse que não corresponde ao titular indica cessão, sucessão ou ocupação. Fundamento: fundamento não resolvido (fonte_ausente).",
+      "REG-GO-CAR-001 disparou — Em Goiás, o sistema operacional atual é o SIGCAR integrado ao SICAR. Fundamento: fundamento não resolvido (fonte_ausente)."
+     ],
+     "alertas": [
+      "Alerta crítico de REG-FUN-012: Titular com falecimento declarado — classificar possível sucessão. Ciência registrada em 23/09/2026: Ciente: prova do gate 4b em dev; classificação da sucessão é decisão jurídica."
+     ],
+     "lacunas": [],
+     "caminho": [
+      "Passo validado (item de proposta): Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29."
+     ]
+    }
+   },
+   {
+    "passo": "escopo_regerado",
+    "caso": "#25",
+    "id": 8,
+    "tipo": "especificacao_escopo",
+    "versao": 3,
+    "estado_revisao": "proposta",
+    "atualidade": {
+     "estado": "vigente",
+     "motivos": []
+    },
+    "afirmacoes": 7,
+    "afirmacoes_sem_evidencia": 0,
+    "evidencias_por_tipo": {
+     "rota_passo": 4,
+     "dispositivo": 1,
+     "fonte_versao": 1,
+     "avaliacao_regra": 1,
+     "rota": 1,
+     "execucao_motor": 1,
+     "conclusao": 1
+    },
+    "secoes": {
+     "incluido": [
+      "Será executado: Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29."
+     ],
+     "orientacoes": [],
+     "fora": [
+      "Fora do escopo: Emitir ou regularizar o CCIR do imóvel. Motivo: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço.",
+      "Fora do escopo: Reunir a prova da sucessão (óbito, inventário ou partilha). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+      "Fora do escopo: Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte."
+     ],
+     "premissas": [
+      "Rota 2 validada pelo consultor em 23/09/2026.",
+      "Avaliação do motor jurídico na data de referência 23/09/2026, conjunto de regras #1.",
+      "1 conclusão(ões) do diagnóstico em revisão: registradas como ressalva, não usadas como premissa do escopo."
+     ]
+    }
+   },
+   {
+    "passo": "orcamento_apos_escopo_novo",
+    "caso": "#25",
+    "id": 3,
+    "versao": 2,
+    "estado_revisao": "aprovada",
+    "atualidade": {
+     "estado": "desatualizado",
+     "motivos": [
+      "A especificação de escopo mudou (v2 → v3)"
+     ]
+    },
+    "era": {
+     "estado": "vigente",
+     "motivos": []
+    }
+   },
+   {
+    "passo": "orcamento_regerado",
+    "caso": "#25",
+    "id": 4,
+    "versao": 3,
+    "total": "1800.00",
+    "estado_revisao": "proposta",
+    "atualidade": {
+     "estado": "vigente",
+     "motivos": []
+    },
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "1 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       4092
+      ]
+     }
+    ],
+    "fora": [
+     {
+      "rota_passo_id": 6,
+      "titulo": "Emitir ou regularizar o CCIR do imóvel",
+      "motivo": "removido da Rota: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço"
+     },
+     {
+      "rota_passo_id": 7,
+      "titulo": "Reunir a prova da sucessão (óbito, inventário ou partilha)",
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte"
+     },
+     {
+      "rota_passo_id": 8,
+      "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte"
+     }
+    ],
+    "itens": [
+     {
+      "rota_passo_id": 5,
+      "descricao": "Verificar inscrição no CAR e inscrever o imóvel",
+      "escolha": "regra",
+      "calculo": "valor fixo R$ 1.800,00",
+      "total": "1800.00",
+      "metodo": "inscricao_car v1",
+      "dispositivo_id": 41702
+     }
+    ]
+   },
+   {
+    "passo": "nova_sessao_final",
+    "caso": "#23",
+    "relatorio": [
+     3,
+     1,
+     "vigente"
+    ],
+    "escopo": [
+     4,
+     1,
+     "aprovada",
+     "vigente"
+    ],
+    "orcamento": [
+     2,
+     1,
+     "900.00",
+     "aprovada",
+     "vigente"
+    ],
+    "versoes": [
+     [
+      1,
+      "900.00",
+      "aprovada",
+      false
+     ]
+    ]
+   },
+   {
+    "passo": "nova_sessao_final",
+    "caso": "#25",
+    "relatorio": [
+     7,
+     3,
+     "vigente"
+    ],
+    "escopo": [
+     8,
+     3,
+     "aprovada",
+     "vigente"
+    ],
+    "orcamento": [
+     4,
+     3,
+     "1800.00",
+     "aprovada",
+     "vigente"
+    ],
+    "versoes": [
+     [
+      1,
+      "2700.00",
+      "aprovada",
+      true
+     ],
+     [
+      2,
+      "1800.00",
+      "aprovada",
+      true
+     ],
+     [
+      3,
+      "1800.00",
+      "aprovada",
+      false
+     ]
+    ]
+   },
+   {
+    "passo": "proposta_rascunho",
+    "caso": "#25",
+    "orcamento_id": 4,
+    "valor": 1800.0,
+    "itens": [
+     [
+      "Verificar inscrição no CAR e inscrever o imóvel",
+      5,
+      5,
+      1800.0
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "passo": "estado_final_no_banco_de_dev",
+  "lido_por": "SELECT",
+  "processos_e_rotas": [
+   {
+    "processo": 65,
+    "macroetapa": "entrada_demanda",
+    "rota": 1,
+    "rota_status": "validada",
+    "validated_at": "2026-09-23 15:36:21.945306+00:00"
+   },
+   {
+    "processo": 66,
+    "macroetapa": "entrada_demanda",
+    "rota": 2,
+    "rota_status": "validada",
+    "validated_at": "2026-09-23 15:36:22.835535+00:00"
+   }
+  ],
+  "passos": [
+   {
+    "id": 1,
+    "process_id": 65,
+    "titulo": "Mapear os componentes do imóvel (matrículas, posses e cadastros)",
+    "classificacao": "direcao",
+    "status": "validado",
+    "removido": false,
+    "remocao_motivo": null,
+    "fundamento_dispositivo_id": 38936
+   },
+   {
+    "id": 2,
+    "process_id": 65,
+    "titulo": "Emitir ou regularizar o CCIR do imóvel",
+    "classificacao": "item_proposta",
+    "status": "validado",
+    "removido": false,
+    "remocao_motivo": null,
+    "fundamento_dispositivo_id": 65677
+   },
+   {
+    "id": 3,
+    "process_id": 65,
+    "titulo": "Confirmar: situação do titular (falecimento)",
+    "classificacao": "direcao",
+    "status": "proposto",
+    "removido": true,
+    "remocao_motivo": null,
+    "fundamento_dispositivo_id": null
+   },
+   {
+    "id": 4,
+    "process_id": 65,
+    "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+    "classificacao": "item_proposta",
+    "status": "proposto",
+    "removido": true,
+    "remocao_motivo": null,
+    "fundamento_dispositivo_id": null
+   },
+   {
+    "id": 5,
+    "process_id": 66,
+    "titulo": "Verificar inscrição no CAR e inscrever o imóvel",
+    "classificacao": "item_proposta",
+    "status": "validado",
+    "removido": false,
+    "remocao_motivo": null,
+    "fundamento_dispositivo_id": 41702
+   },
+   {
+    "id": 6,
+    "process_id": 66,
+    "titulo": "Emitir ou regularizar o CCIR do imóvel",
+    "classificacao": "item_proposta",
+    "status": "validado",
+    "removido": true,
+    "remocao_motivo": "PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço",
+    "fundamento_dispositivo_id": 65677
+   },
+   {
+    "id": 7,
+    "process_id": 66,
+    "titulo": "Reunir a prova da sucessão (óbito, inventário ou partilha)",
+    "classificacao": "direcao",
+    "status": "proposto",
+    "removido": true,
+    "remocao_motivo": null,
+    "fundamento_dispositivo_id": null
+   },
+   {
+    "id": 8,
+    "process_id": 66,
+    "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+    "classificacao": "item_proposta",
+    "status": "proposto",
+    "removido": true,
+    "remocao_motivo": null,
+    "fundamento_dispositivo_id": null
+   }
+  ],
+  "redacoes": [
+   {
+    "id": 1,
+    "process_id": 66,
+    "tipo": "relatorio_preliminar",
+    "versao": 1,
+    "rota_id": 2,
+    "execucao_motor_id": 4,
+    "estado_revisao": "proposta",
+    "justificativa": null,
+    "superada": true,
+    "base_hash": "7ad23d6d19533e8e0840d7ed1dc079dd3303162eda3f65e42fe6c05a496ead59",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "situacao",
+       "titulo": "Situação dos autos",
+       "afirmacoes": [
+        {
+         "id": "situacao:car.no_dossie",
+         "texto": "Não consta CAR nos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          },
+          {
+           "id": 20,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:caso.uf",
+         "texto": "UF do imóvel no cadastro do caso: GO.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 24,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          }
+         ]
+        },
+        {
+         "id": "situacao:ccir.no_dossie",
+         "texto": "Não consta CCIR nos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:dominio.matriculas_no_dossie",
+         "texto": "Não consta certidão de matrícula nos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 20,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          },
+          {
+           "id": 21,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-007"
+          }
+         ]
+        },
+        {
+         "id": "situacao:imovel.natureza",
+         "texto": "Natureza do imóvel: rural (declarada na abertura do caso).",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          },
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          },
+          {
+           "id": 24,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          }
+         ]
+        },
+        {
+         "id": "situacao:titular.falecimento_declarado",
+         "texto": "Falecimento do titular declarado em documento dos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          },
+          {
+           "id": 23,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "achados",
+       "titulo": "Achados do motor jurídico",
+       "afirmacoes": [
+        {
+         "id": "achado:19",
+         "texto": "REG-BR-CAR-001 disparou — Todo imóvel rural deve possuir inscrição no CAR. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          }
+         ]
+        },
+        {
+         "id": "achado:22",
+         "texto": "REG-FUN-002 disparou — CCIR ausente, vencido ou com taxa não quitada gera ação de emissão/regularização. Fundamento: Lei 5.868/1972, art. 2º.",
+         "evidencias": [
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          }
+         ]
+        },
+        {
+         "id": "achado:23",
+         "texto": "REG-FUN-012 disparou — Pessoa na posse que não corresponde ao titular indica cessão, sucessão ou ocupação. Fundamento: fundamento não resolvido (fonte_ausente).",
+         "evidencias": [
+          {
+           "id": 23,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012: aplicavel_disparou"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          }
+         ]
+        },
+        {
+         "id": "achado:24",
+         "texto": "REG-GO-CAR-001 disparou — Em Goiás, o sistema operacional atual é o SIGCAR integrado ao SICAR. Fundamento: fundamento não resolvido (fonte_ausente).",
+         "evidencias": [
+          {
+           "id": 24,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "alertas",
+       "titulo": "Alertas críticos",
+       "afirmacoes": [
+        {
+         "id": "alerta:23",
+         "texto": "Alerta crítico de REG-FUN-012 sem ciência registrada: Titular com falecimento declarado — classificar possível sucessão.",
+         "evidencias": [
+          {
+           "id": 23,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012: aplicavel_disparou"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "lacunas",
+       "titulo": "Lacunas",
+       "afirmacoes": []
+      },
+      {
+       "chave": "caminho",
+       "titulo": "Caminho validado",
+       "afirmacoes": [
+        {
+         "id": "caminho:5",
+         "texto": "Passo validado (item de proposta): Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "rota_passo",
+           "rotulo": "passo 5 da Rota 2"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          }
+         ]
+        },
+        {
+         "id": "caminho:6",
+         "texto": "Passo validado (item de proposta): Emitir ou regularizar o CCIR do imóvel. Fundamento: Lei 5.868/1972, art. 2º. Órgão: INCRA.",
+         "evidencias": [
+          {
+           "id": 6,
+           "tipo": "rota_passo",
+           "rotulo": "passo 6 da Rota 2"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Relatório preliminar: descreve o que os autos e a Rota validada sustentam; não é a peça técnica contratada nem parecer jurídico.",
+      "A situação dos autos vem do retrato de fatos do motor jurídico (ADR-073 §3); o que não está no vocabulário do motor não aparece aqui.",
+      "\"Não consta nos autos\" é fato sobre os autos, não sobre o imóvel."
+     ]
+    },
+    "afirmacoes": 13,
+    "sem_evidencia": 0
+   },
+   {
+    "id": 2,
+    "process_id": 66,
+    "tipo": "especificacao_escopo",
+    "versao": 1,
+    "rota_id": 2,
+    "execucao_motor_id": 4,
+    "estado_revisao": "aprovada",
+    "justificativa": "PROVA INC5 — escopo confere com a Rota validada",
+    "superada": true,
+    "base_hash": "7ad23d6d19533e8e0840d7ed1dc079dd3303162eda3f65e42fe6c05a496ead59",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "incluido",
+       "titulo": "O que será feito",
+       "afirmacoes": [
+        {
+         "id": "escopo:5",
+         "texto": "Será executado: Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "rota_passo",
+           "rotulo": "passo 5 da Rota 2"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          }
+         ]
+        },
+        {
+         "id": "escopo:6",
+         "texto": "Será executado: Emitir ou regularizar o CCIR do imóvel. Fundamento: Lei 5.868/1972, art. 2º. Órgão: INCRA.",
+         "evidencias": [
+          {
+           "id": 6,
+           "tipo": "rota_passo",
+           "rotulo": "passo 6 da Rota 2"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "orientacoes",
+       "titulo": "Orientações (não cobradas)",
+       "afirmacoes": []
+      },
+      {
+       "chave": "fora",
+       "titulo": "Fora do escopo",
+       "afirmacoes": [
+        {
+         "id": "fora:7",
+         "texto": "Fora do escopo: Reunir a prova da sucessão (óbito, inventário ou partilha). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 7,
+           "tipo": "rota_passo",
+           "rotulo": "passo 7 removido"
+          }
+         ]
+        },
+        {
+         "id": "fora:8",
+         "texto": "Fora do escopo: Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 8,
+           "tipo": "rota_passo",
+           "rotulo": "passo 8 removido"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "premissas",
+       "titulo": "Premissas",
+       "afirmacoes": [
+        {
+         "id": "premissa:rota:2",
+         "texto": "Rota 2 validada pelo consultor em 23/09/2026.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "rota",
+           "rotulo": "Rota 2"
+          }
+         ]
+        },
+        {
+         "id": "premissa:execucao",
+         "texto": "Avaliação do motor jurídico na data de referência 23/09/2026, conjunto de regras #1.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução #4"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Não inclui a peça técnica definitiva (laudo, memorial, requerimento): ela é elaborada depois da contratação, quando fizer parte do serviço contratado.",
+      "Não é contrato: a peça comercial oficial nasce da proposta aceita."
+     ]
+    },
+    "afirmacoes": 6,
+    "sem_evidencia": 0
+   },
+   {
+    "id": 3,
+    "process_id": 65,
+    "tipo": "relatorio_preliminar",
+    "versao": 1,
+    "rota_id": 1,
+    "execucao_motor_id": 2,
+    "estado_revisao": "proposta",
+    "justificativa": null,
+    "superada": false,
+    "base_hash": "e35b6c544f4db61221a0b2a637499c87b79e7bf03e1f77e159b0ae75337c0108",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "situacao",
+       "titulo": "Situação dos autos",
+       "afirmacoes": [
+        {
+         "id": "situacao:car.no_dossie",
+         "texto": "Consta CAR nos autos.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #2 (referência 2026-09-23)"
+          },
+          {
+           "id": 145,
+           "tipo": "documento",
+           "rotulo": "documento #145"
+          },
+          {
+           "id": 1917,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 1929,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 7,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          },
+          {
+           "id": 8,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:caso.uf",
+         "texto": "UF do imóvel no cadastro do caso: GO.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #2 (referência 2026-09-23)"
+          },
+          {
+           "id": 12,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          }
+         ]
+        },
+        {
+         "id": "situacao:ccir.no_dossie",
+         "texto": "Não consta CCIR nos autos.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #2 (referência 2026-09-23)"
+          },
+          {
+           "id": 10,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:dominio.matriculas_no_dossie",
+         "texto": "Constam 4 certidão(ões) de matrícula nos autos.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #2 (referência 2026-09-23)"
+          },
+          {
+           "id": 146,
+           "tipo": "documento",
+           "rotulo": "documento #146"
+          },
+          {
+           "id": 1921,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 1947,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 147,
+           "tipo": "documento",
+           "rotulo": "documento #147"
+          },
+          {
+           "id": 1919,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 2047,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 148,
+           "tipo": "documento",
+           "rotulo": "documento #148"
+          },
+          {
+           "id": 1923,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 2100,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 150,
+           "tipo": "documento",
+           "rotulo": "documento #150"
+          },
+          {
+           "id": 1925,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          },
+          {
+           "id": 2146,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          },
+          {
+           "id": 8,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          },
+          {
+           "id": 9,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-007"
+          }
+         ]
+        },
+        {
+         "id": "situacao:imovel.natureza",
+         "texto": "Natureza do imóvel: rural (declarada na abertura do caso).",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #2 (referência 2026-09-23)"
+          },
+          {
+           "id": 145,
+           "tipo": "documento",
+           "rotulo": "documento #145"
+          },
+          {
+           "id": 1917,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 1929,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 10,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          },
+          {
+           "id": 12,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          },
+          {
+           "id": 7,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "achados",
+       "titulo": "Achados do motor jurídico",
+       "afirmacoes": [
+        {
+         "id": "achado:9",
+         "texto": "REG-BR-CAR-007 disparou — Multipartes, múltiplas matrículas e posses devem ser explicitamente qualificadas. Fundamento: IN MMA 2/2014, art. 2º.",
+         "evidencias": [
+          {
+           "id": 9,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-007: aplicavel_disparou"
+          },
+          {
+           "id": 38936,
+           "tipo": "dispositivo",
+           "rotulo": "IN MMA 2/2014, art. 2º"
+          },
+          {
+           "id": 1216,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 146,
+           "tipo": "documento",
+           "rotulo": "documento #146"
+          },
+          {
+           "id": 1921,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 1947,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 147,
+           "tipo": "documento",
+           "rotulo": "documento #147"
+          },
+          {
+           "id": 1919,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 2047,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 148,
+           "tipo": "documento",
+           "rotulo": "documento #148"
+          },
+          {
+           "id": 1923,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 2100,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 150,
+           "tipo": "documento",
+           "rotulo": "documento #150"
+          },
+          {
+           "id": 1925,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          },
+          {
+           "id": 2146,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          }
+         ]
+        },
+        {
+         "id": "achado:10",
+         "texto": "REG-FUN-002 disparou — CCIR ausente, vencido ou com taxa não quitada gera ação de emissão/regularização. Fundamento: Lei 5.868/1972, art. 2º.",
+         "evidencias": [
+          {
+           "id": 10,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 145,
+           "tipo": "documento",
+           "rotulo": "documento #145"
+          },
+          {
+           "id": 1917,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 1929,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          }
+         ]
+        },
+        {
+         "id": "achado:12",
+         "texto": "REG-GO-CAR-001 disparou — Em Goiás, o sistema operacional atual é o SIGCAR integrado ao SICAR. Fundamento: fundamento não resolvido (fonte_ausente).",
+         "evidencias": [
+          {
+           "id": 12,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001: aplicavel_disparou"
+          },
+          {
+           "id": 145,
+           "tipo": "documento",
+           "rotulo": "documento #145"
+          },
+          {
+           "id": 1917,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 1929,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "alertas",
+       "titulo": "Alertas críticos",
+       "afirmacoes": []
+      },
+      {
+       "chave": "lacunas",
+       "titulo": "Lacunas",
+       "afirmacoes": [
+        {
+         "id": "lacuna:fato:titular.falecimento_declarado",
+         "texto": "Não determinado nos autos: situação do titular (falecimento).",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #2 (referência 2026-09-23)"
+          },
+          {
+           "id": 11,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012"
+          }
+         ]
+        },
+        {
+         "id": "lacuna:regra:11",
+         "texto": "REG-FUN-012 não pôde decidir: falta situação do titular (falecimento).",
+         "evidencias": [
+          {
+           "id": 11,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012: indeterminado"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "caminho",
+       "titulo": "Caminho validado",
+       "afirmacoes": [
+        {
+         "id": "caminho:1",
+         "texto": "Passo validado (orientação): Mapear os componentes do imóvel (matrículas, posses e cadastros). Fundamento: IN MMA 2/2014, art. 2º.",
+         "evidencias": [
+          {
+           "id": 1,
+           "tipo": "rota_passo",
+           "rotulo": "passo 1 da Rota 1"
+          },
+          {
+           "id": 38936,
+           "tipo": "dispositivo",
+           "rotulo": "IN MMA 2/2014, art. 2º"
+          },
+          {
+           "id": 1216,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 3,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-007: aplicavel_disparou"
+          },
+          {
+           "id": 146,
+           "tipo": "documento",
+           "rotulo": "documento #146"
+          },
+          {
+           "id": 1921,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 1947,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 147,
+           "tipo": "documento",
+           "rotulo": "documento #147"
+          },
+          {
+           "id": 1919,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 2047,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 148,
+           "tipo": "documento",
+           "rotulo": "documento #148"
+          },
+          {
+           "id": 1923,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 2100,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 150,
+           "tipo": "documento",
+           "rotulo": "documento #150"
+          },
+          {
+           "id": 1925,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          },
+          {
+           "id": 2146,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          }
+         ]
+        },
+        {
+         "id": "caminho:2",
+         "texto": "Passo validado (item de proposta): Emitir ou regularizar o CCIR do imóvel. Fundamento: Lei 5.868/1972, art. 2º. Órgão: INCRA.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "rota_passo",
+           "rotulo": "passo 2 da Rota 1"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 10,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          },
+          {
+           "id": 145,
+           "tipo": "documento",
+           "rotulo": "documento #145"
+          },
+          {
+           "id": 1917,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 1929,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Relatório preliminar: descreve o que os autos e a Rota validada sustentam; não é a peça técnica contratada nem parecer jurídico.",
+      "A situação dos autos vem do retrato de fatos do motor jurídico (ADR-073 §3); o que não está no vocabulário do motor não aparece aqui.",
+      "\"Não consta nos autos\" é fato sobre os autos, não sobre o imóvel."
+     ]
+    },
+    "afirmacoes": 12,
+    "sem_evidencia": 0
+   },
+   {
+    "id": 4,
+    "process_id": 65,
+    "tipo": "especificacao_escopo",
+    "versao": 1,
+    "rota_id": 1,
+    "execucao_motor_id": 2,
+    "estado_revisao": "aprovada",
+    "justificativa": "PROVA INC5 — escopo confere com a Rota validada",
+    "superada": false,
+    "base_hash": "e35b6c544f4db61221a0b2a637499c87b79e7bf03e1f77e159b0ae75337c0108",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "incluido",
+       "titulo": "O que será feito",
+       "afirmacoes": [
+        {
+         "id": "escopo:2",
+         "texto": "Será executado: Emitir ou regularizar o CCIR do imóvel. Fundamento: Lei 5.868/1972, art. 2º. Órgão: INCRA.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "rota_passo",
+           "rotulo": "passo 2 da Rota 1"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 10,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          },
+          {
+           "id": 145,
+           "tipo": "documento",
+           "rotulo": "documento #145"
+          },
+          {
+           "id": 1917,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          },
+          {
+           "id": 1929,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #145"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "orientacoes",
+       "titulo": "Orientações (não cobradas)",
+       "afirmacoes": [
+        {
+         "id": "orientacao:1",
+         "texto": "Orientação ao cliente: Mapear os componentes do imóvel (matrículas, posses e cadastros). Fundamento: IN MMA 2/2014, art. 2º.",
+         "evidencias": [
+          {
+           "id": 1,
+           "tipo": "rota_passo",
+           "rotulo": "passo 1 da Rota 1"
+          },
+          {
+           "id": 38936,
+           "tipo": "dispositivo",
+           "rotulo": "IN MMA 2/2014, art. 2º"
+          },
+          {
+           "id": 1216,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 3,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-007: aplicavel_disparou"
+          },
+          {
+           "id": 146,
+           "tipo": "documento",
+           "rotulo": "documento #146"
+          },
+          {
+           "id": 1921,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 1947,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #146"
+          },
+          {
+           "id": 147,
+           "tipo": "documento",
+           "rotulo": "documento #147"
+          },
+          {
+           "id": 1919,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 2047,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #147"
+          },
+          {
+           "id": 148,
+           "tipo": "documento",
+           "rotulo": "documento #148"
+          },
+          {
+           "id": 1923,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 2100,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #148"
+          },
+          {
+           "id": 150,
+           "tipo": "documento",
+           "rotulo": "documento #150"
+          },
+          {
+           "id": 1925,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          },
+          {
+           "id": 2146,
+           "tipo": "fonte_primaria",
+           "rotulo": "fonte primária do documento #150"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "fora",
+       "titulo": "Fora do escopo",
+       "afirmacoes": [
+        {
+         "id": "fora:3",
+         "texto": "Fora do escopo: Confirmar: situação do titular (falecimento). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 3,
+           "tipo": "rota_passo",
+           "rotulo": "passo 3 removido"
+          }
+         ]
+        },
+        {
+         "id": "fora:4",
+         "texto": "Fora do escopo: Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "rota_passo",
+           "rotulo": "passo 4 removido"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "premissas",
+       "titulo": "Premissas",
+       "afirmacoes": [
+        {
+         "id": "premissa:rota:1",
+         "texto": "Rota 1 validada pelo consultor em 23/09/2026.",
+         "evidencias": [
+          {
+           "id": 1,
+           "tipo": "rota",
+           "rotulo": "Rota 1"
+          }
+         ]
+        },
+        {
+         "id": "premissa:execucao",
+         "texto": "Avaliação do motor jurídico na data de referência 23/09/2026, conjunto de regras #1.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "execucao_motor",
+           "rotulo": "execução #2"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Não inclui a peça técnica definitiva (laudo, memorial, requerimento): ela é elaborada depois da contratação, quando fizer parte do serviço contratado.",
+      "Não é contrato: a peça comercial oficial nasce da proposta aceita."
+     ]
+    },
+    "afirmacoes": 6,
+    "sem_evidencia": 0
+   },
+   {
+    "id": 5,
+    "process_id": 66,
+    "tipo": "relatorio_preliminar",
+    "versao": 2,
+    "rota_id": 2,
+    "execucao_motor_id": 4,
+    "estado_revisao": "proposta",
+    "justificativa": null,
+    "superada": true,
+    "base_hash": "2b745fce6ce44609420654939692f810ec6455c71c8b0bd7d7c007f1677d33b0",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "situacao",
+       "titulo": "Situação dos autos",
+       "afirmacoes": [
+        {
+         "id": "situacao:car.no_dossie",
+         "texto": "Não consta CAR nos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          },
+          {
+           "id": 20,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:caso.uf",
+         "texto": "UF do imóvel no cadastro do caso: GO.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 24,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          }
+         ]
+        },
+        {
+         "id": "situacao:ccir.no_dossie",
+         "texto": "Não consta CCIR nos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:dominio.matriculas_no_dossie",
+         "texto": "Não consta certidão de matrícula nos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 20,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          },
+          {
+           "id": 21,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-007"
+          }
+         ]
+        },
+        {
+         "id": "situacao:imovel.natureza",
+         "texto": "Natureza do imóvel: rural (declarada na abertura do caso).",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          },
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          },
+          {
+           "id": 24,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          }
+         ]
+        },
+        {
+         "id": "situacao:titular.falecimento_declarado",
+         "texto": "Falecimento do titular declarado em documento dos autos.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #4 (referência 2026-09-23)"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          },
+          {
+           "id": 23,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "achados",
+       "titulo": "Achados do motor jurídico",
+       "afirmacoes": [
+        {
+         "id": "achado:19",
+         "texto": "REG-BR-CAR-001 disparou — Todo imóvel rural deve possuir inscrição no CAR. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          }
+         ]
+        },
+        {
+         "id": "achado:22",
+         "texto": "REG-FUN-002 disparou — CCIR ausente, vencido ou com taxa não quitada gera ação de emissão/regularização. Fundamento: Lei 5.868/1972, art. 2º.",
+         "evidencias": [
+          {
+           "id": 22,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          }
+         ]
+        },
+        {
+         "id": "achado:23",
+         "texto": "REG-FUN-012 disparou — Pessoa na posse que não corresponde ao titular indica cessão, sucessão ou ocupação. Fundamento: fundamento não resolvido (fonte_ausente).",
+         "evidencias": [
+          {
+           "id": 23,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012: aplicavel_disparou"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          }
+         ]
+        },
+        {
+         "id": "achado:24",
+         "texto": "REG-GO-CAR-001 disparou — Em Goiás, o sistema operacional atual é o SIGCAR integrado ao SICAR. Fundamento: fundamento não resolvido (fonte_ausente).",
+         "evidencias": [
+          {
+           "id": 24,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "alertas",
+       "titulo": "Alertas críticos",
+       "afirmacoes": [
+        {
+         "id": "alerta:23",
+         "texto": "Alerta crítico de REG-FUN-012 sem ciência registrada: Titular com falecimento declarado — classificar possível sucessão.",
+         "evidencias": [
+          {
+           "id": 23,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012: aplicavel_disparou"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "lacunas",
+       "titulo": "Lacunas",
+       "afirmacoes": []
+      },
+      {
+       "chave": "caminho",
+       "titulo": "Caminho validado",
+       "afirmacoes": [
+        {
+         "id": "caminho:5",
+         "texto": "Passo validado (item de proposta): Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "rota_passo",
+           "rotulo": "passo 5 da Rota 2"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Relatório preliminar: descreve o que os autos e a Rota validada sustentam; não é a peça técnica contratada nem parecer jurídico.",
+      "A situação dos autos vem do retrato de fatos do motor jurídico (ADR-073 §3); o que não está no vocabulário do motor não aparece aqui.",
+      "\"Não consta nos autos\" é fato sobre os autos, não sobre o imóvel."
+     ]
+    },
+    "afirmacoes": 12,
+    "sem_evidencia": 0
+   },
+   {
+    "id": 6,
+    "process_id": 66,
+    "tipo": "especificacao_escopo",
+    "versao": 2,
+    "rota_id": 2,
+    "execucao_motor_id": 4,
+    "estado_revisao": "aprovada",
+    "justificativa": "PROVA INC5 — escopo sem o CCIR",
+    "superada": true,
+    "base_hash": "2b745fce6ce44609420654939692f810ec6455c71c8b0bd7d7c007f1677d33b0",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "incluido",
+       "titulo": "O que será feito",
+       "afirmacoes": [
+        {
+         "id": "escopo:5",
+         "texto": "Será executado: Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "rota_passo",
+           "rotulo": "passo 5 da Rota 2"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "orientacoes",
+       "titulo": "Orientações (não cobradas)",
+       "afirmacoes": []
+      },
+      {
+       "chave": "fora",
+       "titulo": "Fora do escopo",
+       "afirmacoes": [
+        {
+         "id": "fora:6",
+         "texto": "Fora do escopo: Emitir ou regularizar o CCIR do imóvel. Motivo: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço.",
+         "evidencias": [
+          {
+           "id": 6,
+           "tipo": "rota_passo",
+           "rotulo": "passo 6 removido"
+          }
+         ]
+        },
+        {
+         "id": "fora:7",
+         "texto": "Fora do escopo: Reunir a prova da sucessão (óbito, inventário ou partilha). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 7,
+           "tipo": "rota_passo",
+           "rotulo": "passo 7 removido"
+          }
+         ]
+        },
+        {
+         "id": "fora:8",
+         "texto": "Fora do escopo: Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 8,
+           "tipo": "rota_passo",
+           "rotulo": "passo 8 removido"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "premissas",
+       "titulo": "Premissas",
+       "afirmacoes": [
+        {
+         "id": "premissa:rota:2",
+         "texto": "Rota 2 validada pelo consultor em 23/09/2026.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "rota",
+           "rotulo": "Rota 2"
+          }
+         ]
+        },
+        {
+         "id": "premissa:execucao",
+         "texto": "Avaliação do motor jurídico na data de referência 23/09/2026, conjunto de regras #1.",
+         "evidencias": [
+          {
+           "id": 4,
+           "tipo": "execucao_motor",
+           "rotulo": "execução #4"
+          }
+         ]
+        },
+        {
+         "id": "premissa:diagnostico",
+         "texto": "1 conclusão(ões) do diagnóstico em revisão: registradas como ressalva, não usadas como premissa do escopo.",
+         "evidencias": [
+          {
+           "id": 4092,
+           "tipo": "conclusao",
+           "rotulo": "conclusion:8f3d289340274729876a32bdeb085b90"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Não inclui a peça técnica definitiva (laudo, memorial, requerimento): ela é elaborada depois da contratação, quando fizer parte do serviço contratado.",
+      "Não é contrato: a peça comercial oficial nasce da proposta aceita."
+     ]
+    },
+    "afirmacoes": 7,
+    "sem_evidencia": 0
+   },
+   {
+    "id": 7,
+    "process_id": 66,
+    "tipo": "relatorio_preliminar",
+    "versao": 3,
+    "rota_id": 2,
+    "execucao_motor_id": 5,
+    "estado_revisao": "proposta",
+    "justificativa": null,
+    "superada": false,
+    "base_hash": "2b745fce6ce44609420654939692f810ec6455c71c8b0bd7d7c007f1677d33b0",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "situacao",
+       "titulo": "Situação dos autos",
+       "afirmacoes": [
+        {
+         "id": "situacao:car.no_dossie",
+         "texto": "Não consta CAR nos autos.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #5 (referência 2026-09-23)"
+          },
+          {
+           "id": 25,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          },
+          {
+           "id": 26,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:caso.uf",
+         "texto": "UF do imóvel no cadastro do caso: GO.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #5 (referência 2026-09-23)"
+          },
+          {
+           "id": 30,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          }
+         ]
+        },
+        {
+         "id": "situacao:ccir.no_dossie",
+         "texto": "Não consta CCIR nos autos.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #5 (referência 2026-09-23)"
+          },
+          {
+           "id": 28,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          }
+         ]
+        },
+        {
+         "id": "situacao:dominio.matriculas_no_dossie",
+         "texto": "Não consta certidão de matrícula nos autos.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #5 (referência 2026-09-23)"
+          },
+          {
+           "id": 26,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-002"
+          },
+          {
+           "id": 27,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-007"
+          }
+         ]
+        },
+        {
+         "id": "situacao:imovel.natureza",
+         "texto": "Natureza do imóvel: rural (declarada na abertura do caso).",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #5 (referência 2026-09-23)"
+          },
+          {
+           "id": 25,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001"
+          },
+          {
+           "id": 28,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002"
+          },
+          {
+           "id": 30,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001"
+          }
+         ]
+        },
+        {
+         "id": "situacao:titular.falecimento_declarado",
+         "texto": "Falecimento do titular declarado em documento dos autos.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "execucao_motor",
+           "rotulo": "execução do motor #5 (referência 2026-09-23)"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          },
+          {
+           "id": 29,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "achados",
+       "titulo": "Achados do motor jurídico",
+       "afirmacoes": [
+        {
+         "id": "achado:25",
+         "texto": "REG-BR-CAR-001 disparou — Todo imóvel rural deve possuir inscrição no CAR. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 25,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          }
+         ]
+        },
+        {
+         "id": "achado:28",
+         "texto": "REG-FUN-002 disparou — CCIR ausente, vencido ou com taxa não quitada gera ação de emissão/regularização. Fundamento: Lei 5.868/1972, art. 2º.",
+         "evidencias": [
+          {
+           "id": 28,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-002: aplicavel_disparou"
+          },
+          {
+           "id": 65677,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 5.868/1972, art. 2º"
+          },
+          {
+           "id": 1875,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          }
+         ]
+        },
+        {
+         "id": "achado:29",
+         "texto": "REG-FUN-012 disparou — Pessoa na posse que não corresponde ao titular indica cessão, sucessão ou ocupação. Fundamento: fundamento não resolvido (fonte_ausente).",
+         "evidencias": [
+          {
+           "id": 29,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012: aplicavel_disparou"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          }
+         ]
+        },
+        {
+         "id": "achado:30",
+         "texto": "REG-GO-CAR-001 disparou — Em Goiás, o sistema operacional atual é o SIGCAR integrado ao SICAR. Fundamento: fundamento não resolvido (fonte_ausente).",
+         "evidencias": [
+          {
+           "id": 30,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-GO-CAR-001: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "alertas",
+       "titulo": "Alertas críticos",
+       "afirmacoes": [
+        {
+         "id": "alerta:29",
+         "texto": "Alerta crítico de REG-FUN-012: Titular com falecimento declarado — classificar possível sucessão. Ciência registrada em 23/09/2026: Ciente: prova do gate 4b em dev; classificação da sucessão é decisão jurídica.",
+         "evidencias": [
+          {
+           "id": 29,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-FUN-012: aplicavel_disparou"
+          },
+          {
+           "id": 2193,
+           "tipo": "observacao",
+           "rotulo": "observação #2193"
+          },
+          {
+           "id": 1,
+           "tipo": "ciencia_alerta",
+           "rotulo": "ciência do alerta"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "lacunas",
+       "titulo": "Lacunas",
+       "afirmacoes": []
+      },
+      {
+       "chave": "caminho",
+       "titulo": "Caminho validado",
+       "afirmacoes": [
+        {
+         "id": "caminho:5",
+         "texto": "Passo validado (item de proposta): Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "rota_passo",
+           "rotulo": "passo 5 da Rota 2"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Relatório preliminar: descreve o que os autos e a Rota validada sustentam; não é a peça técnica contratada nem parecer jurídico.",
+      "A situação dos autos vem do retrato de fatos do motor jurídico (ADR-073 §3); o que não está no vocabulário do motor não aparece aqui.",
+      "\"Não consta nos autos\" é fato sobre os autos, não sobre o imóvel."
+     ]
+    },
+    "afirmacoes": 12,
+    "sem_evidencia": 0
+   },
+   {
+    "id": 8,
+    "process_id": 66,
+    "tipo": "especificacao_escopo",
+    "versao": 3,
+    "rota_id": 2,
+    "execucao_motor_id": 5,
+    "estado_revisao": "aprovada",
+    "justificativa": "PROVA INC5 — escopo regerado após correção",
+    "superada": false,
+    "base_hash": "2b745fce6ce44609420654939692f810ec6455c71c8b0bd7d7c007f1677d33b0",
+    "conteudo": {
+     "secoes": [
+      {
+       "chave": "incluido",
+       "titulo": "O que será feito",
+       "afirmacoes": [
+        {
+         "id": "escopo:5",
+         "texto": "Será executado: Verificar inscrição no CAR e inscrever o imóvel. Fundamento: Lei 12.651/2012, art. 29.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "rota_passo",
+           "rotulo": "passo 5 da Rota 2"
+          },
+          {
+           "id": 41702,
+           "tipo": "dispositivo",
+           "rotulo": "Lei 12.651/2012, art. 29"
+          },
+          {
+           "id": 1313,
+           "tipo": "fonte_versao",
+           "rotulo": "versão da fonte do fundamento"
+          },
+          {
+           "id": 19,
+           "tipo": "avaliacao_regra",
+           "rotulo": "REG-BR-CAR-001: aplicavel_disparou"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "orientacoes",
+       "titulo": "Orientações (não cobradas)",
+       "afirmacoes": []
+      },
+      {
+       "chave": "fora",
+       "titulo": "Fora do escopo",
+       "afirmacoes": [
+        {
+         "id": "fora:6",
+         "texto": "Fora do escopo: Emitir ou regularizar o CCIR do imóvel. Motivo: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço.",
+         "evidencias": [
+          {
+           "id": 6,
+           "tipo": "rota_passo",
+           "rotulo": "passo 6 removido"
+          }
+         ]
+        },
+        {
+         "id": "fora:7",
+         "texto": "Fora do escopo: Reunir a prova da sucessão (óbito, inventário ou partilha). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 7,
+           "tipo": "rota_passo",
+           "rotulo": "passo 7 removido"
+          }
+         ]
+        },
+        {
+         "id": "fora:8",
+         "texto": "Fora do escopo: Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO). Motivo: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte.",
+         "evidencias": [
+          {
+           "id": 8,
+           "tipo": "rota_passo",
+           "rotulo": "passo 8 removido"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "chave": "premissas",
+       "titulo": "Premissas",
+       "afirmacoes": [
+        {
+         "id": "premissa:rota:2",
+         "texto": "Rota 2 validada pelo consultor em 23/09/2026.",
+         "evidencias": [
+          {
+           "id": 2,
+           "tipo": "rota",
+           "rotulo": "Rota 2"
+          }
+         ]
+        },
+        {
+         "id": "premissa:execucao",
+         "texto": "Avaliação do motor jurídico na data de referência 23/09/2026, conjunto de regras #1.",
+         "evidencias": [
+          {
+           "id": 5,
+           "tipo": "execucao_motor",
+           "rotulo": "execução #5"
+          }
+         ]
+        },
+        {
+         "id": "premissa:diagnostico",
+         "texto": "1 conclusão(ões) do diagnóstico em revisão: registradas como ressalva, não usadas como premissa do escopo.",
+         "evidencias": [
+          {
+           "id": 4092,
+           "tipo": "conclusao",
+           "rotulo": "conclusion:8f3d289340274729876a32bdeb085b90"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "limites": [
+      "Não inclui a peça técnica definitiva (laudo, memorial, requerimento): ela é elaborada depois da contratação, quando fizer parte do serviço contratado.",
+      "Não é contrato: a peça comercial oficial nasce da proposta aceita."
+     ]
+    },
+    "afirmacoes": 7,
+    "sem_evidencia": 0
+   }
+  ],
+  "orcamentos": [
+   {
+    "id": 1,
+    "process_id": 66,
+    "versao": 1,
+    "escopo_id": 2,
+    "total": "2700.00",
+    "estado_revisao": "aprovada",
+    "superada": true,
+    "ressalvas": [
+     {
+      "tipo": "sem_diagnostico",
+      "texto": "Caso sem diagnóstico registrado; a Rota foi validada pelo motor jurídico."
+     }
+    ],
+    "fora": [
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Reunir a prova da sucessão (óbito, inventário ou partilha)",
+      "rota_passo_id": 7
+     },
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+      "rota_passo_id": 8
+     }
+    ],
+    "base_hash": "c70d495eb79535d0b243d8402b540f85bcb4b124bf1b2ddb5a470bd0dfd9eb61"
+   },
+   {
+    "id": 2,
+    "process_id": 65,
+    "versao": 1,
+    "escopo_id": 4,
+    "total": "900.00",
+    "estado_revisao": "aprovada",
+    "superada": false,
+    "ressalvas": [
+     {
+      "tipo": "sem_diagnostico",
+      "texto": "Caso sem diagnóstico registrado; a Rota foi validada pelo motor jurídico."
+     }
+    ],
+    "fora": [
+     {
+      "motivo": "orientação (direção), não cobrada",
+      "titulo": "Mapear os componentes do imóvel (matrículas, posses e cadastros)",
+      "rota_passo_id": 1
+     },
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Confirmar: situação do titular (falecimento)",
+      "rota_passo_id": 3
+     },
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+      "rota_passo_id": 4
+     }
+    ],
+    "base_hash": "83bde68e07e03c97846c6d26c5364e7538bc59a049065e649fcaca0f766cf9ae"
+   },
+   {
+    "id": 3,
+    "process_id": 66,
+    "versao": 2,
+    "escopo_id": 6,
+    "total": "1800.00",
+    "estado_revisao": "aprovada",
+    "superada": true,
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "1 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       4092
+      ]
+     }
+    ],
+    "fora": [
+     {
+      "motivo": "removido da Rota: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço",
+      "titulo": "Emitir ou regularizar o CCIR do imóvel",
+      "rota_passo_id": 6
+     },
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Reunir a prova da sucessão (óbito, inventário ou partilha)",
+      "rota_passo_id": 7
+     },
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+      "rota_passo_id": 8
+     }
+    ],
+    "base_hash": "c238cbab57ac21ba1b22389d58a4d235b86f7a841d200f4b498ef3e6cbd78d91"
+   },
+   {
+    "id": 4,
+    "process_id": 66,
+    "versao": 3,
+    "escopo_id": 8,
+    "total": "1800.00",
+    "estado_revisao": "aprovada",
+    "superada": false,
+    "ressalvas": [
+     {
+      "tipo": "diagnostico_em_revisao",
+      "texto": "1 conclusão(ões) do diagnóstico em revisão; o documento se apoia na Rota validada, não nelas.",
+      "conclusoes": [
+       4092
+      ]
+     }
+    ],
+    "fora": [
+     {
+      "motivo": "removido da Rota: PROVA INC5 — cliente apresentará o CCIR vigente; emissão fica fora do serviço",
+      "titulo": "Emitir ou regularizar o CCIR do imóvel",
+      "rota_passo_id": 6
+     },
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Reunir a prova da sucessão (óbito, inventário ou partilha)",
+      "rota_passo_id": 7
+     },
+     {
+      "motivo": "removido da Rota: fundamento fora do catálogo normativo (norma ausente); volta quando a curadoria trouxer a fonte",
+      "titulo": "Operar o CAR no SIGCAR (Portal Ambiental SEMAD-GO)",
+      "rota_passo_id": 8
+     }
+    ],
+    "base_hash": "eb49253e96e40d596e7c1f98aee079fdfa631e88d69855715ebe43f471d6241f"
+   }
+  ],
+  "itens": [
+   {
+    "id": 1,
+    "orcamento_id": 1,
+    "ordem": 1,
+    "rota_passo_id": 5,
+    "metodo": "inscricao_car v1",
+    "escolha": "regra",
+    "quantidade": "1.00",
+    "valor_unitario": "1800.00",
+    "total": "1800.00",
+    "calculo": "valor fixo R$ 1.800,00",
+    "fundamento": {
+     "caminho": "Lei 12.651/2012, art. 29",
+     "rule_id": "REG-BR-CAR-001",
+     "dispositivo_id": 41702,
+     "fonte_versao_id": 1313
+    }
+   },
+   {
+    "id": 2,
+    "orcamento_id": 1,
+    "ordem": 2,
+    "rota_passo_id": 6,
+    "metodo": "ccir v1",
+    "escolha": "regra",
+    "quantidade": "1.00",
+    "valor_unitario": "900.00",
+    "total": "900.00",
+    "calculo": "valor fixo R$ 900,00",
+    "fundamento": {
+     "caminho": "Lei 5.868/1972, art. 2º",
+     "rule_id": "REG-FUN-002",
+     "dispositivo_id": 65677,
+     "fonte_versao_id": 1875
+    }
+   },
+   {
+    "id": 3,
+    "orcamento_id": 2,
+    "ordem": 1,
+    "rota_passo_id": 2,
+    "metodo": "ccir v1",
+    "escolha": "regra",
+    "quantidade": "1.00",
+    "valor_unitario": "900.00",
+    "total": "900.00",
+    "calculo": "valor fixo R$ 900,00",
+    "fundamento": {
+     "caminho": "Lei 5.868/1972, art. 2º",
+     "rule_id": "REG-FUN-002",
+     "dispositivo_id": 65677,
+     "fonte_versao_id": 1875
+    }
+   },
+   {
+    "id": 4,
+    "orcamento_id": 3,
+    "ordem": 1,
+    "rota_passo_id": 5,
+    "metodo": "inscricao_car v1",
+    "escolha": "regra",
+    "quantidade": "1.00",
+    "valor_unitario": "1800.00",
+    "total": "1800.00",
+    "calculo": "valor fixo R$ 1.800,00",
+    "fundamento": {
+     "caminho": "Lei 12.651/2012, art. 29",
+     "rule_id": "REG-BR-CAR-001",
+     "dispositivo_id": 41702,
+     "fonte_versao_id": 1313
+    }
+   },
+   {
+    "id": 5,
+    "orcamento_id": 4,
+    "ordem": 1,
+    "rota_passo_id": 5,
+    "metodo": "inscricao_car v1",
+    "escolha": "regra",
+    "quantidade": "1.00",
+    "valor_unitario": "1800.00",
+    "total": "1800.00",
+    "calculo": "valor fixo R$ 1.800,00",
+    "fundamento": {
+     "caminho": "Lei 12.651/2012, art. 29",
+     "rule_id": "REG-BR-CAR-001",
+     "dispositivo_id": 41702,
+     "fonte_versao_id": 1313
+    }
+   }
+  ],
+  "auditoria": [
+   {
+    "action": "orcamento_aprovada",
+    "n": 4
+   },
+   {
+    "action": "orcamento_gerado",
+    "n": 4
+   },
+   {
+    "action": "orcamento_metodo_versao",
+    "n": 3
+   },
+   {
+    "action": "redacao_comercial_aprovada",
+    "n": 4
+   }
+  ]
+ }
+]

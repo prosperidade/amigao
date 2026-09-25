@@ -391,6 +391,9 @@ class RotaPasso(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # ADR-074 §6: o motivo informado na remoção. Antes vivia só na trilha de
+    # auditoria, e o orçamento não conseguia dizer por que um item saiu.
+    remocao_motivo = Column(Text, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

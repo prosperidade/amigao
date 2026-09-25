@@ -10,7 +10,7 @@
 | Incremento 4b (motor jurídico) | **mergeado** (#208, ADR-073): seis regras do gate, Rota **validada** com fundamento por ID em #22, #23 e #25 de dev; homologação real com a Ísis (**Q-ISIS-22**) |
 | Backup de produção | **ativo no pré-deploy**: dump do schema `public` no R2 antes de toda migration, retenção de 30 dias com mínimo de 10 (#197, #200, #202) |
 | Imagem | o CI **constrói** e pergunta ao manifesto dentro dela (#206) |
-| Dívidas | abertas até **#278**; próximo número livre **279** |
+| Dívidas | abertas até **#285** (#279/#280 do PR #210, #281 da releitura); próximo número livre **286** |
 
 **A sexta prova fechou na madrugada, por força bruta:** 2 h 20 e US$ 0,9172 no dia, com três jobs
 acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#272**).
@@ -19,6 +19,18 @@ acima do teto de US$ 0,10 — o teto é por chamada, não por job (dívida **#27
 registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de chamada declarado, com
 prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
 pendente; a última tarefa do #23 foi deixada terminar sozinha.
+
+**Pulso 23/09/2026 (noite) — Incremento 5, fechamento comercial (ADR-074), PR rascunho, só dev.**
+A cadeia `gerar_proposta` passou a ser `[redator, orcamento]` e nasce da Rota validada: o
+diagnóstico saiu da cadeia comercial e, em revisão, vira ressalva — não impede o orçamento (ruptura
+4). Redator pré-contratação determinístico: relatório preliminar e especificação de escopo, **toda
+afirmação com evidência por ID** conferida no tenant e no caso. Orçamento: um item por passo
+validado, métodos e preços **do tenant** e versionados, totais em `Decimal`; passo removido sai com
+o motivo; atualidade por leitura, **sem retrocesso**. A proposta nasce do orçamento aprovado e
+atual. Percurso autenticado em dev com #23 e #25 (cadeia e API, recarga, nova sessão, remoção com
+motivo, isolamento). Achados: o diagnóstico real devolve o schema legado em vez do contrato 069
+(**#285**); o relatório lia a execução errada do motor (corrigido). Dívidas **#282–#285**. Registro:
+[COMERCIAL_INCREMENTO5.md](../arquitetura/COMERCIAL_INCREMENTO5.md).
 
 **Pulso 23/09/2026 (tarde) — #274 fechada em dev.** #208 mergeado. Remissão a outra norma ("Art. 29 da
 Lei nº 5.172…") deixou de abrir artigo: na varredura das 550 versões articuladas, 12 mudaram — 16
