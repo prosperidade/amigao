@@ -123,6 +123,9 @@ function PassoCard({
 
   const validado = passo.status === 'validado';
   const doMotor = passo.origem === 'motor';
+  // Motivo obrigatório: passo do motor (ADR-073 §6) ou Rota já assinada — o que sai
+  // depois da assinatura desatualiza o orçamento e vira "fora" com esse motivo.
+  const exigeMotivo = doMotor || fechada;
   const [removendo, setRemovendo] = useState(false);
   const [motivo, setMotivo] = useState('');
 
@@ -153,7 +156,7 @@ function PassoCard({
   const remover = (e: React.FormEvent) => {
     e.preventDefault();
     const m = motivo.trim();
-    if (doMotor && !m) return;
+    if (exigeMotivo && !m) return;
     removeMut.mutate(
       { rotaId, passoId: passo.id, motivo: m || null },
       {
@@ -311,7 +314,9 @@ function PassoCard({
               <label htmlFor={`motivo-${passo.id}`} className="block text-[11px] text-red-800 dark:text-red-300">
                 {doMotor
                   ? 'Motivo da remoção (obrigatório para passo do motor jurídico)'
-                  : 'Motivo da remoção (vai para a trilha e para o "fora do escopo")'}
+                  : fechada
+                    ? 'Motivo da remoção (obrigatório com a Rota assinada)'
+                    : 'Motivo da remoção (vai para a trilha e para o "fora do escopo")'}
               </label>
               <textarea
                 id={`motivo-${passo.id}`}
@@ -323,7 +328,7 @@ function PassoCard({
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  disabled={removeMut.isPending || (doMotor && !motivo.trim())}
+                  disabled={removeMut.isPending || (exigeMotivo && !motivo.trim())}
                   className="text-xs px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white"
                 >
                   Remover da rota
@@ -343,10 +348,10 @@ function PassoCard({
           )}
         </div>
 
-        {/* Ações do passo */}
-        {!fechada && (
-          <div className="flex items-center gap-1 shrink-0">
-            {!validado && (
+        {/* Ações do passo. Com a Rota assinada, só remover (com motivo) — a API
+            aceita, a Rota segue assinada e o orçamento sai desatualizado. */}
+        <div className="flex items-center gap-1 shrink-0">
+            {!fechada && !validado && (
               <button
                 type="button"
                 onClick={validar}
@@ -370,8 +375,7 @@ function PassoCard({
             >
               <Trash2 className="w-4 h-4" />
             </button>
-          </div>
-        )}
+        </div>
       </div>
     </Reorder.Item>
   );

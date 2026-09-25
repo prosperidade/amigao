@@ -222,6 +222,18 @@ describe('Rota — motor jurídico (#278)', () => {
     expect(screen.getByTestId('fonte-passo-6')).toBeInTheDocument();
   });
 
+  it('Rota assinada: passo ainda sai, sempre com motivo', async () => {
+    const user = userEvent.setup();
+    const manual = { ...PASSO_MOTOR, id: 9, origem: 'manual', titulo: 'Protocolar ofício', fundamento_dispositivo_id: null, origem_avaliacao_id: null };
+    servir({ '/processes/66/rota': { ...ROTA, status: 'validada', validated_at: '2026-09-23T00:00:00Z', passos: [PASSO_MOTOR, manual] }, '/motor/execucoes/ultima': EXECUCAO });
+    vi.mocked(api.delete).mockResolvedValue({ data: null });
+    render(comQuery(<RotaTab processId={66} />));
+    await user.click(await screen.findByRole('button', { name: /remover passo 2: protocolar ofício/i }));
+    expect(screen.getByLabelText(/obrigatório com a rota assinada/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /remover da rota/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /validar passo/i })).not.toBeInTheDocument();
+  });
+
   it('rodapé com o SHA está na tela da Rota', async () => {
     servir({ '/processes/66/rota': ROTA, '/motor/execucoes/ultima': EXECUCAO });
     render(comQuery(<RotaTab processId={66} />));
