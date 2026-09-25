@@ -33,8 +33,10 @@ def test_chain_keeps_independent_reading_and_stops_dependent_synthesis(committed
         assert "Espécie não determinada" in result["steps"][0]["error"]
 
 
-def test_review_gate_cannot_be_bypassed_with_stop_false_or_chain_data(committed_case, monkeypatch):
+def test_review_gate_cannot_be_bypassed_and_commercial_chain_does_not_rerun_diagnosis(committed_case, monkeypatch):
+    """ADR-074 §1: gerar_proposta no longer reruns the diagnosis nor waits for its review."""
     _, case = committed_case
+    assert CHAINS["gerar_proposta"] == ["redator", "orcamento"]
     calls = []
     def respond(prompt, **kwargs):
         envelope = json.loads(prompt)
@@ -48,18 +50,25 @@ def test_review_gate_cannot_be_bypassed_with_stop_false_or_chain_data(committed_
     monkeypatch.setattr("app.core.ai_gateway.complete", respond)
     with TestClient(app) as client:
         headers = login(client, case["email"])
-        body = {"chain_name": "gerar_proposta", "process_id": case["case"], "stop_on_review": False,
+        body = {"chain_name": "diagnostico", "process_id": case["case"], "stop_on_review": False,
                 "metadata": {"chain_data": {"diagnostico": "UNREVIEWED BYPASS TEXT"}}}
         result = client.post("/api/v1/agents/chain", headers=headers, json=body).json()
         assert result["status"] == "awaiting_review"
-        assert [s["status"] for s in result["steps"]] == ["completed", "awaiting_review", "awaiting_review"]
         assert "UNREVIEWED BYPASS TEXT" not in json.dumps(calls)
         ref = result["steps"][0]["outputs"][0]
+
+        # Unreviewed diagnosis does not hold the commercial chain; the missing Rota does, by name.
+        comercial = client.post("/api/v1/agents/chain", headers=headers,
+                                json={"chain_name": "gerar_proposta", "process_id": case["case"]}).json()
+        assert [s["status"] for s in comercial["steps"]] == ["failed", "awaiting_review"]
+        assert "Rota validada ausente" in comercial["steps"][0]["error"]
+        assert comercial["steps"][1]["waiting_for"] == ["redator"]
+        assert len(calls) == 1  # the diagnosis is never rerun to price
+
         review = client.post(f"/api/v1/evidence/cases/{case['case']}/objects/{ref['id']}/review", headers=headers,
             json={"expected_version": 1, "expected_revision": 0, "action": "rejeitar", "justification": "Unsupported"})
         assert review.status_code == 200, review.text
         resumed = client.post(f"/api/v1/evidence/executions/{result['id']}/resume", headers=headers,
                              json={"expected_revision": result["revision"]}).json()
-        assert resumed["steps"][1]["status"] == "capacidade_insuficiente"
-        assert resumed["completed"] is False
-        assert len(calls) == 1  # completed independent step is never repeated
+        assert resumed["completed"] is True
+        assert len(calls) == 1  # completed step is never repeated

@@ -10,6 +10,13 @@ from app.models.audit_log import AuditLog
 from app.models.checklist_template import ChecklistTemplate, ProcessChecklist
 from app.models.client import Client
 from app.models.client_representative import ClientRepresentative
+from app.models.comercial import (
+    Orcamento,
+    OrcamentoEscolha,
+    OrcamentoItem,
+    OrcamentoMetodo,
+    RedacaoComercial,
+)
 from app.models.communication import CommunicationThread, Message
 from app.models.contract import Contract
 from app.models.contract_template import ContractTemplate

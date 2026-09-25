@@ -182,6 +182,8 @@ class ProposalDraft:
     notes: str
     # S5-A — Rota validada de origem (proveniência no nível da proposta).
     rota_id: Optional[int] = field(default=None)
+    # ADR-074 §7 — orçamento aprovado de origem (None = caminho legado da PRICE_TABLE).
+    orcamento_id: Optional[int] = field(default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +211,12 @@ def generate_proposal_from_rota(
     ).first()
     if process is None:
         raise ProposalGenerationError("Processo não encontrado.")
+
+    # ADR-074 §7: havendo orçamento, a proposta só nasce dele. A distribuição da
+    # PRICE_TABLE abaixo é o caminho legado para caso sem orçamento (dívida #284).
+    orcamento = orcamento_para_proposta(db, tenant_id, process_id)
+    if orcamento is not None:
+        return _draft_do_orcamento(db, process, tenant_id, orcamento)
 
     rotas = (
         db.query(Rota)
@@ -294,6 +302,78 @@ def generate_proposal_from_rota(
         payment_terms=payment_terms,
         notes=_build_notes(demand_type, complexity),
         rota_id=rotas[0].id if len(rotas) == 1 else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Orçamento (ADR-074 §7)
+# ---------------------------------------------------------------------------
+
+_UNIDADE_PROPOSTA = {"hora": "h", "unidade": "un", "fixo": "serv."}
+
+
+def orcamento_para_proposta(db: Session, tenant_id: int, process_id: int, orcamento_id: Optional[int] = None):
+    """O orçamento de onde a proposta nasce, ou None se o caso não tem orçamento.
+
+    Havendo orçamento, ele manda: a versão mais nova, aprovada e atual. Pedir outra
+    versão, ou uma que não esteja aprovada e atual, é recusa honesta — nunca preço de tabela.
+    """
+    from app.services.comercial import base as base_mod  # noqa: PLC0415
+
+    orc = base_mod.ultimo_orcamento(db, tenant_id, process_id)
+    if orc is None:
+        if orcamento_id is not None:
+            raise ProposalGenerationError("Este processo não tem o orçamento informado.")
+        return None
+    if orcamento_id is not None and orcamento_id != orc.id:
+        raise ProposalGenerationError(f"A proposta nasce do orçamento mais novo (v{orc.versao}, id {orc.id}).")
+    if orc.estado_revisao != "aprovada":
+        raise ProposalGenerationError(f"O orçamento v{orc.versao} ainda não foi aprovado pelo consultor.")
+    atual = base_mod.atualidade(db, orc)
+    if atual["estado"] != "vigente":
+        raise ProposalGenerationError(f"O orçamento v{orc.versao} está desatualizado: " + "; ".join(atual["motivos"])
+                                      + ". Gere o orçamento de novo.")
+    return orc
+
+
+def itens_do_orcamento(orcamento) -> list[dict]:
+    return [{
+        "description": i.descricao,
+        "detail": i.calculo,
+        "unit": _UNIDADE_PROPOSTA.get(i.unidade, "serv."),
+        "qty": float(i.quantidade),
+        "unit_price": float(i.valor_unitario),
+        "total": float(i.total),
+        "rota_passo_id": i.rota_passo_id,
+        "orcamento_item_id": i.id,
+        "norma_ref": (i.fundamento or {}).get("caminho"),
+        "prazo_dias": None,
+    } for i in orcamento.itens]
+
+
+def _draft_do_orcamento(db: Session, process: Process, tenant_id: int, orcamento) -> ProposalDraft:
+    from app.models.rota import RotaPasso  # noqa: PLC0415
+
+    passo_ids = [i.rota_passo_id for i in orcamento.itens if i.rota_passo_id]
+    prazos = [p for (p,) in db.query(RotaPasso.prazo_estimado_dias)
+              .filter(RotaPasso.id.in_(passo_ids), RotaPasso.tenant_id == tenant_id) if p] if passo_ids else []
+    itens = itens_do_orcamento(orcamento)
+    total = float(orcamento.total)
+    complexity = _estimate_complexity(db, process.id, tenant_id, process.urgency)
+    demand_type = process.demand_type.value if process.demand_type else None
+    return ProposalDraft(
+        title=f"Proposta — {process.title}" if process.title else "Proposta Comercial",
+        demand_type=demand_type,
+        complexity=complexity,
+        scope_items=itens,
+        suggested_value_min=total,
+        suggested_value_max=total,
+        suggested_value=total,
+        estimated_days=max(prazos, default=0),
+        payment_terms="50% na assinatura do contrato e 50% na entrega do serviço.",
+        notes=f"Valores do orçamento v{orcamento.versao}, aprovado; cada item aponta o passo da Rota validada.",
+        rota_id=orcamento.rota_id,
+        orcamento_id=orcamento.id,
     )
 
 

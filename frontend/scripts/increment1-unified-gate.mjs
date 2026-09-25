@@ -94,9 +94,11 @@ try {
   await expect(page.locator('article').filter({ hasText: rejected.statement }).getByText('Rejeitada', { exact: true })).toBeVisible();
   receipt.rejected = rejected;
   receipt.accepted_auditor = accepted.map(o => o.id);
+  // ADR-074: the commercial chain no longer reruns the diagnosis; it runs as its own execution.
   const diagnostic = await request(page, 'POST', '/agents/chain',
-    { chain_name: 'gerar_proposta', process_id: caseId, idempotency_key: 'gate-partial-chain' });
+    { chain_name: 'diagnostico', process_id: caseId, idempotency_key: 'gate-diagnostic' });
   const diagnosticExecution = await request(page, 'GET', `/evidence/executions/${diagnostic.id}`);
+  expect(diagnosticExecution.status).toBe('awaiting_review');
   const proposed = (await state(page)).objects.find(r => r.object.statement === 'GATE_DIAGNOSTICO_PROPOSTO').object;
   await expect(page.locator('article').filter({ hasText: proposed.statement })).toBeVisible();
 
@@ -128,21 +130,33 @@ try {
   receipt.approval_before = row(await state(secondPage), proposed.id, 2);
 
   // G4: resume a REAL partially executed production chain, not a finished one-step run.
-  expect(diagnosticExecution.cursor).toBe(1);
-  expect(diagnosticExecution.steps[1].status).toBe('awaiting_review');
-  expect(diagnosticExecution.steps[1].job_id).toBeUndefined();
-  const resumed = await request(secondPage, 'POST', `/evidence/executions/${diagnostic.id}/resume`,
-    { expected_revision: diagnosticExecution.revision });
-  const resumedAgain = await request(secondPage, 'POST', `/evidence/executions/${diagnostic.id}/resume`,
+  // gerar_proposta (ADR-074): without a validated Rota the Redator fails by name and the
+  // orçamento waits for it; resuming records attempts and never produces a document.
+  const partial = await request(secondPage, 'POST', '/agents/chain',
+    { chain_name: 'gerar_proposta', process_id: caseId, idempotency_key: 'gate-partial-chain' });
+  const partialExecution = await request(secondPage, 'GET', `/evidence/executions/${partial.id}`);
+  expect(partialExecution.cursor).toBe(0);
+  expect(partialExecution.steps.map(s => s.agent)).toEqual(['redator', 'orcamento']);
+  expect(partialExecution.steps[0].status).toBe('failed');
+  expect(partialExecution.steps[0].error).toContain('Rota validada ausente');
+  expect(partialExecution.steps[1].status).toBe('awaiting_review');
+  expect(partialExecution.steps[1].job_id).toBeUndefined();
+  const resumed = await request(secondPage, 'POST', `/evidence/executions/${partial.id}/resume`,
+    { expected_revision: partialExecution.revision });
+  const resumedAgain = await request(secondPage, 'POST', `/evidence/executions/${partial.id}/resume`,
     { expected_revision: resumed.revision });
-  expect(resumed.status).toBe('capacidade_insuficiente');
-  expect(resumed.steps[1].agent).toBe('redator');
-  expect(resumed.steps[1].status).toBe('capacidade_insuficiente');
-  expect(resumed.steps[1].job_id).toBeTruthy();
-  expect(resumed.steps[0]).toEqual(diagnosticExecution.steps[0]);
-  expect(resumedAgain.steps[0]).toEqual(diagnosticExecution.steps[0]);
-  expect(resumedAgain.cursor).toBe(diagnosticExecution.cursor);
-  receipt.resume = { before: diagnosticExecution, first: resumed, after: resumedAgain };
+  expect(resumed.status).toBe('failed');
+  expect(resumed.steps[0].job_id).toBeTruthy();
+  expect(resumed.steps[0].job_id).not.toBe(partialExecution.steps[0].job_id);
+  expect(resumedAgain.steps[1].job_id).toBeUndefined();
+  expect(resumedAgain.cursor).toBe(partialExecution.cursor);
+  // The completed diagnostic step, resumed after its approval, is never executed again.
+  const diagnosticResumed = await request(secondPage, 'POST', `/evidence/executions/${diagnostic.id}/resume`,
+    { expected_revision: diagnosticExecution.revision });
+  expect(diagnosticResumed.steps[0]).toEqual(diagnosticExecution.steps[0]);
+  expect(diagnosticResumed.completed).toBe(true);
+  receipt.resume = { before: partialExecution, first: resumed, after: resumedAgain };
+  receipt.diagnostic = { before: diagnosticExecution, after: diagnosticResumed };
 
   // G5: both real entrypoints; real task.delay uses Celery's eager test transport.
   const sync = await run(secondPage, 'diagnostico', 'gate-sync');

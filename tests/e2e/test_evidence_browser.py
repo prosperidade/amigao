@@ -135,17 +135,19 @@ def test_incremento1_gate_nove_provas_no_mesmo_percurso(committed_case, monkeypa
         assert missing_injections == [skill_name]
         with factory() as db:
             jobs = db.query(AIJob).filter(AIJob.tenant_id == case["tenant"], AIJob.entity_id == case["case"]).all()
-            assert len(jobs) == 9
+            assert len(jobs) == 10
             by_execution = {job.chain_trace_id: job for job in jobs if job.agent_name != "redator"}
-            # G4: both resumptions retain exactly ONE original diagnostic job and its effects.
-            original_job = by_execution[receipt["resume"]["before"]["id"]]
+            # G4: resuming retains exactly ONE original diagnostic job and its effects.
+            original_job = by_execution[receipt["diagnostic"]["before"]["id"]]
             assert sum(job.chain_trace_id == original_job.chain_trace_id and job.agent_name == "diagnostico" for job in jobs) == 1
-            assert original_job.id == receipt["resume"]["before"]["steps"][0]["job_id"]
-            # Retrying an unavailable next responsibility records failed attempts,
-            # but never duplicates the completed diagnostic or creates editorial output.
+            assert original_job.id == receipt["diagnostic"]["before"]["steps"][0]["job_id"]
+            # ADR-074: the commercial chain retries the Redator (no validated Rota) and records
+            # each attempt, but never reruns the diagnosis, runs the orçamento or creates a document.
             editorial_attempts = [job for job in jobs if job.agent_name == "redator"]
-            assert len(editorial_attempts) == 2
-            assert all(job.result["status"] == "capacidade_insuficiente" for job in editorial_attempts)
+            assert len(editorial_attempts) == 3
+            assert {job.chain_trace_id for job in editorial_attempts} == {receipt["resume"]["before"]["id"]}
+            assert all("Rota validada ausente" in (job.error or "") for job in editorial_attempts)
+            assert not any(job.agent_name == "orcamento" for job in jobs)
             assert db.query(EvidenceVersion).filter(EvidenceVersion.job_id.in_([job.id for job in editorial_attempts])).count() == 0
             versions = db.query(EvidenceVersion).filter(EvidenceVersion.object_id == receipt["original"]["id"]).all()
             assert len(versions) == 2 and {v.version for v in versions} == {1, 2}

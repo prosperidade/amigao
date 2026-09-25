@@ -36,6 +36,8 @@ from app.services.mirante_documents import (
 from app.services.proposal_generator import (
     ProposalGenerationError,
     generate_proposal_from_rota,
+    itens_do_orcamento,
+    orcamento_para_proposta,
 )
 from app.services.storage import get_storage_service
 from app.services.tenant_guard import exigir_relacoes_do_tenant
@@ -95,6 +97,7 @@ class ProposalCreate(BaseModel):
     notes: Optional[str] = None
     complexity: Optional[str] = None
     rota_id: Optional[int] = None       # S5-A — Rota validada de origem
+    orcamento_id: Optional[int] = None  # ADR-074 §7 — orçamento aprovado de origem
 
 
 class ProposalUpdate(BaseModel):
@@ -132,6 +135,7 @@ def _serialize(p: Proposal) -> dict:
         "effective_status": _effective_status(p).value,
         "version_number": p.version_number,
         "rota_id": p.rota_id,
+        "orcamento_id": p.orcamento_id,
         "previous_version_id": p.previous_version_id,
         "title": p.title,
         "scope_items": p.scope_items,
@@ -188,6 +192,7 @@ def generate_draft(
         "payment_terms": draft.payment_terms,
         "notes": draft.notes,
         "rota_id": draft.rota_id,
+        "orcamento_id": draft.orcamento_id,
     }
 
 
@@ -227,20 +232,34 @@ def create_proposal(
     # este endpoint na tabela do AUD-04 ("criação não valida client/process/rota
     # do body") mas ele ficou fora da lista D1-D7; entra pela decisão de escopo.
     exigir_relacoes_do_tenant(db, current_user.tenant_id, body.model_dump())
+    # ADR-074 §7: se o caso tem orçamento, a proposta nasce dele — itens, total e
+    # Rota vêm do orçamento aprovado e atual, não do corpo da requisição.
+    scope_items, total_value, rota_id = body.scope_items, body.total_value, body.rota_id
+    orcamento = None
+    if body.process_id is not None:
+        try:
+            orcamento = orcamento_para_proposta(db, current_user.tenant_id, body.process_id, body.orcamento_id)
+        except ProposalGenerationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    elif body.orcamento_id is not None:
+        raise HTTPException(status_code=422, detail="Orçamento exige o processo de origem.")
+    if orcamento is not None:
+        scope_items, total_value, rota_id = itens_do_orcamento(orcamento), float(orcamento.total), orcamento.rota_id
     expires = datetime.now(UTC) + timedelta(days=body.validity_days)
     proposal = Proposal(
         tenant_id=current_user.tenant_id,
         client_id=body.client_id,
         process_id=body.process_id,
         title=body.title,
-        scope_items=body.scope_items,
-        total_value=body.total_value,
+        scope_items=scope_items,
+        total_value=total_value,
         validity_days=body.validity_days,
         payment_terms=body.payment_terms,
         payment_installments=body.payment_installments,
         notes=body.notes,
         complexity=body.complexity,
-        rota_id=body.rota_id,
+        rota_id=rota_id,
+        orcamento_id=orcamento.id if orcamento is not None else None,
         created_by_user_id=current_user.id,
         expires_at=expires,
     )
@@ -364,6 +383,11 @@ def update_proposal(
     proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
     if proposal.status not in (ProposalStatus.draft,):
         raise HTTPException(status_code=422, detail="Apenas propostas em rascunho podem ser editadas.")
+    mudancas = body.model_dump(exclude_none=True)
+    if proposal.orcamento_id is not None and {"scope_items", "total_value"} & mudancas.keys():
+        # ADR-074 §4: o consultor muda método e quantidade no orçamento; nunca digita total.
+        raise HTTPException(status_code=422, detail="Itens e total desta proposta vêm do orçamento: altere o "
+                                                    "orçamento e gere a proposta de novo.")
 
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(proposal, field, value)
@@ -521,17 +545,29 @@ def new_version(
             detail="Nova versão só a partir de proposta recusada ou expirada "
             f"(estado atual: {eff.value}).",
         )
+    # ADR-074 §7: caso com orçamento renegocia sobre o orçamento aprovado e atual, nunca sobre a
+    # cópia dos itens da versão recusada (que pode vir de um orçamento já superado).
+    scope_items, total_value, rota_id, orcamento_id = prev.scope_items, prev.total_value, prev.rota_id, None
+    if prev.process_id is not None:
+        try:
+            orcamento = orcamento_para_proposta(db, current_user.tenant_id, prev.process_id)
+        except ProposalGenerationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if orcamento is not None:
+            scope_items, total_value = itens_do_orcamento(orcamento), float(orcamento.total)
+            rota_id, orcamento_id = orcamento.rota_id, orcamento.id
     nova = Proposal(
         tenant_id=prev.tenant_id,
         client_id=prev.client_id,
         process_id=prev.process_id,
-        rota_id=prev.rota_id,
+        rota_id=rota_id,
+        orcamento_id=orcamento_id,
         previous_version_id=prev.id,
         version_number=(prev.version_number or 1) + 1,
         status=ProposalStatus.draft,
         title=prev.title,
-        scope_items=prev.scope_items,
-        total_value=prev.total_value,
+        scope_items=scope_items,
+        total_value=total_value,
         validity_days=prev.validity_days,
         payment_terms=prev.payment_terms,
         notes=prev.notes,
