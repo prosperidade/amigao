@@ -385,7 +385,10 @@ export default function RotaTab({ processId, onAbrirComercial }: RotaTabProps) {
   const addManualMut = useAddPassoManual(processId);
   const fecharMut = useFecharRota(processId);
 
-  const [order, setOrder] = useState<RotaPasso[]>([]);
+  // Nasce dos passos que já estiverem no cache: o ProcessDetail lê a Rota antes
+  // desta aba montar, e a sincronização abaixo só dispara quando os passos MUDAM —
+  // começar vazio deixava a lista em branco até a próxima gravação.
+  const [order, setOrder] = useState<RotaPasso[]>(rota?.passos ?? []);
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novaNota, setNovaNota] = useState('');
 

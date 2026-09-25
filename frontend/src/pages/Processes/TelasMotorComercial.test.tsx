@@ -207,6 +207,21 @@ describe('Rota — motor jurídico (#278)', () => {
     );
   });
 
+  it('Rota já no cache (lida pelo ProcessDetail) aparece com os passos ao montar a aba', async () => {
+    // Achado do gate de navegador: a lista nascia vazia e só se preenchia quando
+    // os passos mudavam — com a Rota vinda do cache, nunca.
+    servir({ '/processes/66/rota': ROTA, '/motor/execucoes/ultima': EXECUCAO });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    qc.setQueryData(['rota', 66], ROTA);
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}><RotaTab processId={66} /></QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Emitir ou regularizar o CCIR do imóvel')).toBeInTheDocument();
+    expect(screen.getByTestId('fonte-passo-6')).toBeInTheDocument();
+  });
+
   it('rodapé com o SHA está na tela da Rota', async () => {
     servir({ '/processes/66/rota': ROTA, '/motor/execucoes/ultima': EXECUCAO });
     render(comQuery(<RotaTab processId={66} />));
