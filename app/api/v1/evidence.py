@@ -114,6 +114,13 @@ def conferencia_documento(process_id: int, document_id: int, db: Db, user: UserD
             EvidenceVersion.process_id == process_id, EvidenceVersion.source_document_id == doc.id,
             EvidenceVersion.kind == "observacao").order_by(EvidenceVersion.version):
         latest[row.object_id] = row
+    latest_report = db.query(EvidenceVersion).filter_by(tenant_id=user.tenant_id, process_id=process_id,
+        object_id=f"extracao:rejeicoes:{doc.id}").order_by(EvidenceVersion.version.desc()).first()
+    relatorio = (latest_report.content["attributes"].get("normalized") or {}) if latest_report else {}
+    # Dívida #281: o que a última leitura não reencontrou fica marcado até o consultor decidir.
+    from app.services.evidence import reviews_by_evidence
+    decididas = set(reviews_by_evidence(db, user.tenant_id, process_id))
+    nao_reencontradas = {(o["id"], o["version"]) for o in relatorio.get("nao_reencontradas", [])}
     observacoes = []
     for row in latest.values():
         attrs = row.content["attributes"]
@@ -125,11 +132,9 @@ def conferencia_documento(process_id: int, document_id: int, db: Db, user: UserD
             "tipo": (row.source_record or {}).get("tipo_entrada"), "predicado": attrs.get("predicate"),
             "trecho": attrs.get("literal"), "inicio": inicio, "fim": fim, "conteudo": attrs.get("normalized"),
             "conhecimento": (row.content.get("knowledge") or {}).get("state"),
-            "superada": "superada_por" in invalidacoes.get(row.id, {}), "desatualizada": row.id in invalidacoes})
+            "superada": "superada_por" in invalidacoes.get(row.id, {}), "desatualizada": row.id in invalidacoes,
+            "nao_reencontrada": (row.object_id, row.version) in nao_reencontradas and row.id not in decididas})
     observacoes.sort(key=lambda o: (o["inicio"] is None, o["inicio"] or 0, o["fim"] or 0))
-    latest_report = db.query(EvidenceVersion).filter_by(tenant_id=user.tenant_id, process_id=process_id,
-        object_id=f"extracao:rejeicoes:{doc.id}").order_by(EvidenceVersion.version.desc()).first()
-    relatorio = (latest_report.content["attributes"].get("normalized") or {}) if latest_report else {}
     classificacao = classificacao_atual(db, doc)
     return {"documento": {"id": doc.id, "nome": doc.original_file_name,
                           "especie": (classificacao.tipo_revisado or classificacao.tipo_proposto) if classificacao

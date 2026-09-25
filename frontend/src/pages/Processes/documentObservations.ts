@@ -13,6 +13,8 @@ export interface ObservacaoConferencia {
   conhecimento: string | null;
   superada: boolean;
   desatualizada: boolean;
+  // Dívida #281: a última leitura não reencontrou esta observação; fica até o consultor decidir.
+  nao_reencontrada?: boolean;
 }
 
 export interface Segmento {

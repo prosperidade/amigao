@@ -576,10 +576,12 @@ def test_baixa_preserves_the_act_and_the_link_to_what_it_alters(committed_case, 
 
 
 def test_reextraction_supersedes_the_previous_version_except_decided_observations(committed_case, monkeypatch):
-    """#258, ADR-070: a new extraction is a new version and the previous one is superseded.
+    """#258, ADR-070, dívida #281: re-extraction supersedes only what it finds again.
 
     Decisions of the consultant (panel review, accepted projection) are not the
-    machine's to supersede. Supersession is not a collection pendency.
+    machine's to supersede. An observation the new reading did NOT find again is
+    not superseded either — reading varies, and superseding it would lose evidence:
+    it stays current, marked "não reencontrada", for the consultant to decide.
     """
     from app.models.evidence import EvidenceInvalidation
     from app.models.extracted_field_staging import ExtractedFieldStaging, ExtractedFieldStatus
@@ -615,29 +617,31 @@ def test_reextraction_supersedes_the_previous_version_except_decided_observation
         with factory() as db:
             reasons = {i.evidence_id: i.reason for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])}
             superseded = {literal for literal, (row_id, _) in first.items() if "superada_por" in reasons.get(row_id, {})}
-            assert superseded == {"Area four."}
+            assert superseded == set()  # nada foi superado: "Area four." não foi reencontrada
             assert first["Area one."][0] not in reasons  # produced again by the new version
             report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
                 object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first()
-            assert reasons[first["Area four."][0]]["superada_por"] == {"id": report.object_id, "version": report.version}
-            assert [r["id"] for r in report.content["attributes"]["normalized"]["superadas"]] == [first["Area four."][1]]
-            assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area four."][0]).count() == 0
+            normalized = report.content["attributes"]["normalized"]
+            assert normalized["superadas"] == []
+            assert [(r["id"], r["trecho"]) for r in normalized["nao_reencontradas"]] == [
+                (first["Area four."][1], "Area four.")]
+            assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area four."][0]).count() == 1
             assert db.query(ExtractedFieldStaging).filter_by(observacao_ref=first["Area three."][0]).one().status == \
                 ExtractedFieldStatus.aceito
         state = client.get(f"/api/v1/evidence/cases/{case['case']}", headers=headers).json()
         rows = {r["object"]["attributes"]["literal"]: r for r in state["objects"] if r["object"]["kind"] == "observacao"}
-        assert rows["Area four."]["superseded"] is True and rows["Area four."]["stale"] is True
+        assert rows["Area four."]["superseded"] is False and rows["Area four."]["stale"] is False
         assert rows["Area two."]["superseded"] is False and rows["Area two."]["stale"] is False
-        assert "Area four." not in {o["attributes"]["literal"] for o in state["envelope"]["observations"]}
-        # The first extraction also versions the source (documento_versao), which is a
-        # pendency of its own; supersession must not be one.
-        client.post(f"/api/v1/evidence/cases/{case['case']}/return-to-collection", headers=headers)
+        assert "Area four." in {o["attributes"]["literal"] for o in state["envelope"]["observations"]}
+        tela = client.get(f"/api/v1/evidence/cases/{case['case']}/documents/{case['doc']}/conferencia",
+                          headers=headers).json()
+        marcas = {o["trecho"]: o["nao_reencontrada"] for o in tela["observacoes"]}
+        assert marcas["Area four."] is True    # visível na tela, para decidir
+        assert marcas["Area one."] is False
     with factory() as db:
-        from app.models.evidence import RetornoColeta
-        returned = {r.invalidacao_id for r in db.query(RetornoColeta).filter_by(tenant_id=case["tenant"])}
         superseding = {i.id for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])
                        if "superada_por" in i.reason}
-        assert superseding and not returned & superseding
+        assert superseding == set()  # "supersession is not a pendency" moved to the reencounter test
 
 
 def test_field_without_support_in_its_anchor_is_persisted_empty_with_reason(committed_case, monkeypatch):
@@ -874,3 +878,51 @@ def test_run_agent_entrega_o_document_id_a_execucao(monkeypatch):
                               metadata={"document_id": 548, "document_type": "matricula"})
     assert recebido["documento_id"] == 548
     assert recebido["process_id"] == 23
+
+
+
+def test_reencontrada_com_chave_nova_e_superada_e_o_valor_corrigido_fica_dito(committed_case, monkeypatch):
+    """Dívida #281: a chave que o modelo inventa muda entre leituras; o fato é o mesmo.
+
+    Mesmo identificador, mesmo trecho, chave diferente ("alfa" → "p1"): é o mesmo
+    fato reencontrado, então a anterior é superada pela nova — e quando o valor lido
+    mudou (o nome corrigido), o relatório diz.
+    """
+    from app.models.evidence import EvidenceInvalidation
+    factory, case = committed_case
+    with factory() as db:
+        doc = db.get(Document, case["doc"])
+        doc.document_type = "certidao_matricula"
+        doc.extracted_text = "Certidao. Proprietaria: ALFA AGRO LTDA, CNPJ 11.222.333/0001-81."
+        db.commit()
+    trecho = "ALFA AGRO LTDA, CNPJ 11.222.333/0001-81"
+    primeira = {"partes": [{"chave": "alfa", "nome": "ALFA AGRO", "natureza": "pj",
+                            "identificador": "11.222.333/0001-81", "tipo_identificador": "cnpj", "trecho": trecho}]}
+    segunda = {"partes": [{"chave": "p1", "nome": "ALFA AGRO LTDA", "natureza": "pj",
+                           "identificador": "11.222.333/0001-81", "tipo_identificador": "cnpj", "trecho": trecho}]}
+    _controlled_extractions(monkeypatch, primeira, segunda)
+    with TestClient(app) as client:
+        headers = login(client, case["email"])
+        for _ in range(2):
+            assert client.post("/api/v1/agents/run", headers=headers,
+                               json={"agent_name": "extrator", "process_id": case["case"]}).json()["status"] == "completed"
+    with factory() as db:
+        report = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"],
+            object_id=f"extracao:rejeicoes:{case['doc']}").order_by(EvidenceVersion.version.desc()).first()
+        normalized = report.content["attributes"]["normalized"]
+        assert normalized["nao_reencontradas"] == []
+        [superada] = normalized["superadas"]
+        assert superada["valor_diferente"] is True  # o nome lido mudou: dito no relatório
+        assert superada["reencontrada_em"]["id"] != superada["id"]  # chave nova, identidade nova
+        invalidada = db.query(EvidenceVersion).filter_by(tenant_id=case["tenant"], object_id=superada["id"]).one()
+        assert db.query(EvidenceInvalidation).filter_by(evidence_id=invalidada.id).count() == 1
+    # The extraction also versions the source (documento_versao), which is a pendency
+    # of its own; supersession must not be one.
+    with TestClient(app) as client:
+        client.post(f"/api/v1/evidence/cases/{case['case']}/return-to-collection", headers=login(client, case["email"]))
+    with factory() as db:
+        from app.models.evidence import RetornoColeta
+        returned = {r.invalidacao_id for r in db.query(RetornoColeta).filter_by(tenant_id=case["tenant"])}
+        superseding = {i.id for i in db.query(EvidenceInvalidation).filter_by(tenant_id=case["tenant"])
+                       if "superada_por" in i.reason}
+        assert superseding and not returned & superseding

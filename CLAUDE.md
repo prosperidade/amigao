@@ -54,14 +54,14 @@ Você está autorizado a executar SEM pedir confirmação:
 - Commit e push na sua branch
 - Abrir o PR e, com o CI verde e a autorização do André, marcá-lo pronto (ready)
 - Diagnósticos, mergulhos, smokes em ambiente DEV
-- Limpeza da própria worktree/branch depois que o André mergear
+- Limpeza da própria worktree/branch depois do merge
 
-**Merge é exclusivo do André (decisão do André, 23/09/2026).** O agente prepara
-o PR — CI verde, marcado pronto (ready) — e aguarda. O agente **nunca** executa
-o merge (`gh pr merge`, botão, API ou qualquer outro caminho), nem com
-"autorizado", "pode mergear" ou equivalente: essas palavras liberam o PR para o
-André mergear, não passam o merge ao agente. Depois do merge feito por ele, o
-agente confere o CI da `main` e limpa a própria branch e worktree.
+**Merge: o André autoriza por PR; o agente executa (decisão do André, 25/09/2026,
+substitui a de 23/09).** Todo "autorizado" do André sobre um PR significa: o agente
+executa o merge daquele PR (com o CI verde, na ordem que ele deu, resolvendo antes
+os conflitos com a `main`), confere o CI da `main` depois e limpa a própria branch
+e worktree. Sem autorização do André para aquele PR, o agente não mergeia — prepara
+(CI verde, pronto) e aguarda. A autorização vale para o PR nomeado, não para outros.
 
 Tudo antes do merge é livre — não pergunte, execute e reporte ao final.
 
