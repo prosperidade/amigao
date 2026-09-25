@@ -1,6 +1,6 @@
 """Authorized review and resumption endpoints; no job-completed shortcut."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from app.api.deps import get_current_internal_user, get_db
 from app.models.evidence import AgentExecution, EvidenceInvalidation, EvidenceVersion, RetornoColeta
 from app.models.process import Process
 from app.models.user import User
-from app.schemas.evidence import ReviewRequest
+from app.schemas.evidence import EvidenceRef, ReviewRequest
 from app.services.connected_agents import execution_data, get_execution, resume_execution
 from app.services.evidence import (
     authorize,
@@ -133,7 +133,13 @@ def conferencia_documento(process_id: int, document_id: int, db: Db, user: UserD
             "trecho": attrs.get("literal"), "inicio": inicio, "fim": fim, "conteudo": attrs.get("normalized"),
             "conhecimento": (row.content.get("knowledge") or {}).get("state"),
             "superada": "superada_por" in invalidacoes.get(row.id, {}), "desatualizada": row.id in invalidacoes,
-            "nao_reencontrada": (row.object_id, row.version) in nao_reencontradas and row.id not in decididas})
+            "nao_reencontrada": (row.object_id, row.version) in nao_reencontradas and row.id not in decididas,
+            "apoio": (attrs.get("normalized") or {}).get("leituras_na_rodada")})
+    # Dívida #286 (desenho do André, 24/09): a não reencontrada que 2+ leituras da rodada viram
+    # fica mantida e marcada uma a uma; a que uma leitura só viu (ou de antes do ADR-079, sem
+    # apoio registrado) vai para a decisão em lote.
+    for o in observacoes:
+        o["no_lote"] = o["nao_reencontrada"] and ((o["apoio"] or {}).get("viram") or 1) < 2
     observacoes.sort(key=lambda o: (o["inicio"] is None, o["inicio"] or 0, o["fim"] or 0))
     classificacao = classificacao_atual(db, doc)
     return {"documento": {"id": doc.id, "nome": doc.original_file_name,
@@ -142,6 +148,36 @@ def conferencia_documento(process_id: int, document_id: int, db: Db, user: UserD
                           "extraction_status": doc.extraction_status},
             "texto": texto, "observacoes": observacoes, "rejeicoes": relatorio.get("rejeicoes", []),
             "campos_sem_suporte": relatorio.get("campos_sem_suporte", []), "reparos": relatorio.get("reparos", [])}
+
+
+class DecisaoEmLote(BaseModel):
+    acao: Literal["aprovar", "rejeitar"]
+    justificativa: str = Field(min_length=1)
+    observacoes: list[EvidenceRef] = Field(min_length=1)
+
+
+@router.post("/cases/{process_id}/documents/{document_id}/nao-reencontradas/lote")
+def decidir_nao_reencontradas_em_lote(process_id: int, document_id: int, body: DecisaoEmLote, db: Db,
+                                      user: UserDep):
+    """Dívida #286: uma decisão para as não reencontradas que uma leitura só viu.
+
+    O lote é o gesto; a trilha continua por observação — cada uma recebe a sua revisão,
+    com a mesma justificativa. Só entra no lote o que a conferência mostra no lote agora:
+    observação fora dele (decidida, reencontrada, vista por 2+ leituras) recusa o lote
+    inteiro, para a tela ser recarregada.
+    """
+    tela = conferencia_documento(process_id, document_id, db, user)
+    no_lote = {(o["id"], o["version"]) for o in tela["observacoes"] if o["no_lote"]}
+    pedidas = [(ref.id, ref.version) for ref in body.observacoes]
+    if len(set(pedidas)) != len(pedidas) or any(p not in no_lote for p in pedidas):
+        raise HTTPException(409, "Observação fora do lote de não reencontradas; recarregue a conferência")
+    justificativa = f"Decisão em lote (não reencontradas vistas por uma leitura): {body.justificativa}"
+    for object_id, version in pedidas:
+        # No lote só há observação sem decisão: a revisão esperada é a zero.
+        review_object(db, user.tenant_id, user.id, process_id, object_id, ReviewRequest(
+            expected_version=version, expected_revision=0, action=body.acao, justification=justificativa))
+    db.commit()
+    return {"decididas": len(pedidas), "acao": body.acao}
 
 
 @router.get("/cases/{process_id}/sources/{object_id}/versions/{version}")

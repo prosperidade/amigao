@@ -15,6 +15,10 @@ export interface ObservacaoConferencia {
   desatualizada: boolean;
   // Dívida #281: a última leitura não reencontrou esta observação; fica até o consultor decidir.
   nao_reencontrada?: boolean;
+  // ADR-079: quantas leituras da rodada viram a observação.
+  apoio?: { viram: number; de: number } | null;
+  // Dívida #286: não reencontrada vista por uma leitura só — vai para a decisão em lote.
+  no_lote?: boolean;
 }
 
 export interface Segmento {

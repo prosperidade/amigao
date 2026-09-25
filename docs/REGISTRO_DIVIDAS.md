@@ -2,7 +2,7 @@
 
 ## Pulso 24/09/2026 — leitura múltipla por rodada (ADR-079)
 
-- **#286 — decisão em lote das observações "não reencontradas" na tela (ABERTA):**
+- **#286 — decisão em lote das observações "não reencontradas" na tela (FECHADA, PR próprio):**
   - Pelo ADR-078, a observação que a releitura não reencontra fica corrente e marcada para o
     consultor decidir, uma a uma. Medido: ~30% da leitura anterior a cada releitura de uma leitura só
     (≈222 observações no caso ELODI com o gpt-5.6-luna). Decidir uma a uma não escala.
@@ -10,6 +10,12 @@
     da rodada viram fica **mantida**; a que uma leitura só viu vai para a **decisão em lote** na
     conferência do documento — uma justificativa, gravada como decisão de cada observação (a trilha
     continua por observação; o lote é só o gesto).
+  - **Implementado:** a conferência devolve `apoio` e `no_lote` por observação; o lote tem seção
+    própria (justificativa + "Manter todas (aprovar)" / "Descartar todas (rejeitar)") e o endpoint
+    `POST /evidence/cases/{caso}/documents/{doc}/nao-reencontradas/lote` grava uma revisão e um
+    registro de auditoria por observação. Observação fora do lote (decidida, reencontrada, vista por
+    2+ leituras) recusa o lote inteiro (409). Sem apoio registrado (leitura de antes do ADR-079)
+    conta como uma leitura.
   - O ADR-079 reduz o volume (a marca só existe entre rodadas); não substitui o lote.
 
 - **#287 — resposta não-JSON de uma fatia derruba a leitura do documento inteiro (FECHADA, PR próprio):**
