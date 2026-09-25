@@ -470,6 +470,7 @@ def test_extrator_rejected_anchor_preserves_paid_response_and_independent_observ
         db.commit()
     raw = json.dumps({"observacoes": [{"predicado": "area_documental_ha", "valor": 12,
                                       "trecho": "ANCHOR_NOT_IN_SOURCE"}, {"predicado": "area_documental_ha", "valor": 13, "trecho": "Valid area."}]})
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)  # uma leitura: tokens de UMA resposta
     monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
     monkeypatch.setattr(settings, "AI_EXTRATOR_MODEL", "gpt-5.6-luna")
     def gateway(*args, **kwargs):
@@ -839,6 +840,7 @@ def test_execucao_com_documento_le_so_ele_e_qualifica_o_caso_inteiro(committed_c
     # Leitura do caso inteiro (duas chamadas), depois só do documento 2 (uma chamada).
     from app.core.config import settings
     monkeypatch.setattr(settings, "AI_EXTRATOR_ALLOW_FALLBACK", False)
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)  # conta chamadas de UMA leitura
     respostas, textos = iter([alfa, beta, beta]), []
 
     def gateway(texto, *args, **kwargs):

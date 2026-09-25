@@ -62,7 +62,9 @@ def seeded(db_session):
     return tenant, user, process, doc
 
 
-def test_ai_job_do_extrator_guarda_modelo_tokens_custo_e_bruto(seeded, db_session):
+def test_ai_job_do_extrator_guarda_modelo_tokens_custo_e_bruto(seeded, db_session, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AI_EXTRATOR_LEITURAS_POR_RODADA", 1)  # uma leitura (ADR-079 tem teste próprio)
     # Inc2: uma chamada gera observação e projeção; preview não chama LLM.
     from hashlib import sha256
 
