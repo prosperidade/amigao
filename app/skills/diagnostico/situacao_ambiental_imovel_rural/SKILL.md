@@ -31,7 +31,7 @@ fundamentação suficiente para uma conclusão atual. Sem essa avaliação, regi
 Somente conclusões aprovadas e vigentes do envelope podem ser premissas. Não recuperar
 resumos antigos nem jobs concluídos para contornar rejeição. Lacunas não alimentam
 automaticamente escopo comercial. A saída segue o contrato versionado exigido pelo
-servidor: afirmações (ADR-079), descritas em "Formato da afirmação" abaixo.
+servidor: afirmações (ADR-080), descritas em "Formato da afirmação" abaixo.
 
 Skill principal do agente Diagnóstico. Cobre os movimentos 2 (preliminar) e 4 (consolidado)
 do método. Alimenta o `LegislacaoAgent` (movimento 5) e, por fim, o `RedatorAgent`.
@@ -520,7 +520,7 @@ parcelamento registrado, descaracterização no SNCR/Incra, e o **risco tributá
 uso rural ativo dentro do perímetro = amarelo (híbrido); sem uso rural mas sem parcelamento
 registrado = laranja (transição incompleta); RL/APP ignorada em projeto urbano = vermelho.
 
-## Formato da afirmação — ADR-079
+## Formato da afirmação — ADR-080
 
 Você produz **afirmações**, uma por conclusão, para o consultor revisar uma a uma. Cada
 afirmação é uma `conclusao` do contrato de evidência, com premissas pelo **id e versão** do
@@ -796,7 +796,7 @@ deixar essa resposta explícita.
 1. **Pipeline de transcrição estruturada.** Áudio MP3/WAV/M4A/AAC → texto → estruturação
    em 12 blocos × 5 camadas por fala. Whisper API ou Gemini 2.0 Flash. Worker
    `transcription_tasks.py` ou extensão do `ExtratorAgent`.
-2. **(Superada pelo ADR-079.)** O schema `DiagnosticoPreliminarContent` deixou de ser a saída:
+2. **(Superada pelo ADR-080.)** O schema `DiagnosticoPreliminarContent` deixou de ser a saída:
    o diagnóstico produz afirmações do contrato de evidência, com certeza, impacto e urgência.
 3. **Tool determinística de cálculo de uso do solo.** Não é skill, é função Python. A fórmula
    combina **período × localização jurídica da área** (ver seção "Regime de compensação por

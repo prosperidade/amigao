@@ -1,4 +1,4 @@
-"""Diagnóstico por afirmação no contrato de evidência (ADR-079, dívida #285).
+"""Diagnóstico por afirmação no contrato de evidência (ADR-080, dívida #285).
 
 Duas peças:
 
@@ -25,7 +25,7 @@ from app.schemas.evidence import (
     canonical_hash,
 )
 
-CONTRATO_VERSAO = "079.3"
+CONTRATO_VERSAO = "080.3"
 
 CERTEZAS = ("alta", "media", "baixa")
 IMPACTOS = ("informativo", "atencao", "alto", "critico_impeditivo_potencial")
@@ -124,7 +124,7 @@ def para_objetos(itens: list) -> list[EvidenceObject]:
 
 def prompt_base_registro() -> dict:
     return {"slug": "diagnostico_contrato", "hash": canonical_hash(PROMPT_BASE), "content": PROMPT_BASE,
-            "version": CONTRATO_VERSAO, "origin": "contrato_079"}
+            "version": CONTRATO_VERSAO, "origin": "contrato_080"}
 
 
 def erro_de_sintaxe(conteudo: str) -> str | None:
@@ -153,7 +153,7 @@ def _documentais(envelope: ExecutionEnvelope) -> set[tuple[str, int]]:
 
 
 def recusas(objects: list[EvidenceObject], envelope: ExecutionEnvelope) -> list[str]:
-    """D1 a D7 (ADR-079 §3). Lista vazia = todas as afirmações admitidas."""
+    """D1 a D7 (ADR-080 §3). Lista vazia = todas as afirmações admitidas."""
     documentais = _documentais(envelope)
     falhas: list[str] = []
     for n, obj in enumerate(objects, start=1):

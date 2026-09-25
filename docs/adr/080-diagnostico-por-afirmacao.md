@@ -1,6 +1,9 @@
-# ADR-079 — Diagnóstico por afirmação no contrato de evidência
+# ADR-080 — Diagnóstico por afirmação no contrato de evidência
 
 - **Data:** 24/09/2026
+- **Numeração:** escrito como ADR-079 e renumerado para 080 — o 079 é da leitura múltipla (#214).
+  Os jobs de dev gravaram o prompt como `079.x`; o texto não contém o número e o hash é o mesmo
+  (`8f53a2ff…` na 080.3 = 079.3, jobs 214 e 215).
 - **Estado:** proposta (Incremento 5, dívida #285). Decisões marcadas **[André]** pedem aceite no PR.
 - **Plano:** [Plano Diretor v1.1 — Incremento 5](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md)
   ("diagnóstico por afirmação com premissas · risco, urgência e serviço têm premissas e
@@ -35,8 +38,8 @@
 ### 1. Prompt-base do contrato, não o legado
 
 No contrato 069, o diagnóstico recebe um prompt-base próprio, versionado em código
-(`app/services/diagnostico_contrato.py`, `CONTRATO_VERSAO = "079.3"`), gravado no job com hash e
-origem `contrato_079`. O `diagnostico_system` legado **não é enviado**. O pedido termina no schema
+(`app/services/diagnostico_contrato.py`, `CONTRATO_VERSAO = "080.3"`), gravado no job com hash e
+origem `contrato_080`. O `diagnostico_system` legado **não é enviado**. O pedido termina no schema
 de `EvidenceObject`, como antes. O teto por chamada é o do agente
 (`AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO`), como no agente legado — o caminho do contrato tinha
 perdido o repasse e o #23 foi barrado no teto global (US$ 0,1192 > 0,10).
@@ -45,10 +48,10 @@ perdido o repasse e o #23 foi barrado no teto global (US$ 0,1192 > 0,10).
 duas ficam no job (`resposta_sem_sintaxe`) e o custo do job é o pago nas duas. Regras de admissão
 (§3) nunca ganham nova chamada. Medido no #23 de dev: um `]` faltando em `limits`.
 
-A 079.2 acrescenta um exemplo de item e a regra de forma "`kind` é sempre `conclusao`": na 079.1
+A 080.2 acrescenta um exemplo de item e a regra de forma "`kind` é sempre `conclusao`": na 080.1
 o modelo pôs a classe em `kind` do 4º item em diante (#25, job 210).
 
-**079.3 — o modelo não escolhe espécie nem identidade.** A regra de forma não bastou: no #23
+**080.3 — o modelo não escolhe espécie nem identidade.** A regra de forma não bastou: no #23
 (286 mil tokens de envelope) a classe voltou a `kind`. O diagnóstico passa a receber o schema
 `AfirmacaoDiagnostico` — só o que ele decide (texto, classe, premissas, dimensões, aplicabilidade,
 conhecimento, limites) — e o servidor monta a `conclusao` com espécie, origem e identidade, que já
@@ -92,7 +95,7 @@ repositório, cada DIAG ganha linha nesta tabela ou regra nova.
 ### 4. Skill 1.4.0
 
 A seção "O que você produz — schema `DiagnosticoPreliminarContent`" sai e dá lugar a "Formato da
-afirmação — ADR-079": a mesma taxonomia da Ísis (4 níveis de risco, 7 categorias, confiança)
+afirmação — ADR-080": a mesma taxonomia da Ísis (4 níveis de risco, 7 categorias, confiança)
 mapeada para `impact`, `certainty` e `conclusion_class`. As 24 heurísticas ficam como estão.
 
 ### 5. O que não muda

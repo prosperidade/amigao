@@ -255,7 +255,7 @@ def run_step(db, execution, step, user_id):
         objects = _audit_objects(agent, envelope)
     else:
         # Preserve the existing responsibility's base prompt; the envelope is the sole case input.
-        # ADR-079: the diagnosis has a contract base prompt — the legacy one asked for another
+        # ADR-080: the diagnosis has a contract base prompt — the legacy one asked for another
         # format and won over the contract (job 201, #25 in dev).
         from app.services import diagnostico_contrato
         base_slug = agent.prompt_slugs[0] if agent.prompt_slugs else None
@@ -308,7 +308,7 @@ def run_step(db, execution, step, user_id):
                 sintaxe = diagnostico_contrato.erro_de_sintaxe(response.content) \
                     if step["agent"] == "diagnostico" else None
                 if sintaxe:
-                    # ADR-079: a reply that is not JSON gets ONE new call (transport, not content;
+                    # ADR-080: a reply that is not JSON gets ONE new call (transport, not content;
                     # admission rules never retry). Both replies stay on the job; the job-wide
                     # cap covers both calls. Measured: #23 in dev, a missing "]" in limits.
                     invalida = {"raw": response.content, "erro": sintaxe, "model": response.model_used,
@@ -341,7 +341,7 @@ def run_step(db, execution, step, user_id):
         if step["agent"] == "diagnostico":
             recusadas = diagnostico_contrato.recusas(objects, envelope)
             if recusadas:
-                raise ValueError("Afirmação do diagnóstico recusada (ADR-079): " + "; ".join(recusadas))
+                raise ValueError("Afirmação do diagnóstico recusada (ADR-080): " + "; ".join(recusadas))
         objects = [obj.model_copy(update={"id": f"conclusion:{uuid4().hex}", "version": 1,
                                            "origin": step["agent"]}) for obj in objects]
     refs = []

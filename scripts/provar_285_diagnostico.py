@@ -1,4 +1,4 @@
-"""Prova do #285 (ADR-079) em DEV: diagnóstico REAL por afirmação no #23 e no #25, entrando em
+"""Prova do #285 (ADR-080) em DEV: diagnóstico REAL por afirmação no #23 e no #25, entrando em
 revisão e virando ressalva do orçamento (ADR-074). Só HTTP contra a API.
 
     INC285_API=http://127.0.0.1:8040 INC285_EMAIL=... INC285_SENHA=... \\
@@ -67,6 +67,17 @@ def retirar_sintetica(c: httpx.Client) -> None:
     registrar("sintetica_rejeitada", caso="#25", objeto=alvo)
 
 
+def rejeitar_pendentes(c: httpx.Client, caso: str, pid: int, motivo: str) -> None:
+    """Conclusões do diagnóstico ainda em revisão saem por rejeição justificada (nada se apaga)."""
+    for row in estado(c, pid)["objects"]:
+        obj = row["object"]
+        if obj.get("origin") == "diagnostico" and row["review"] is None and not row["stale"]:
+            ok(c.post(f"/evidence/cases/{pid}/objects/{obj['id']}/review", json={
+                "expected_version": obj["version"], "expected_revision": row["revision"],
+                "action": "rejeitar", "justification": motivo}))
+            registrar("conclusao_rejeitada", caso=caso, objeto=obj["id"], motivo=motivo)
+
+
 def diagnosticar(c: httpx.Client, caso: str, pid: int) -> list[str]:
     inicio = time.monotonic()
     r = ok(c.post("/agents/run", json={"agent_name": "diagnostico", "process_id": pid}))
@@ -125,6 +136,9 @@ def percurso() -> None:
     a = sessao()
     registrar("login", sessao="A")
     retirar_sintetica(a)
+    for caso in filter(None, (os.environ.get("INC285_REJEITAR_PENDENTES") or "").split(",")):
+        rejeitar_pendentes(a, caso, CASOS[caso], "PROVA #285 — rodada do prompt 080.2 substituída pela 080.3 "
+                                                 "(código final do PR)")
     for caso, pid in CASOS.items():
         if caso in DIAGNOSTICAR and diagnosticar(a, caso, pid):
             comercial(a, caso, pid)

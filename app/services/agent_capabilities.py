@@ -11,7 +11,7 @@ REQUIRED_SKILLS = {
     "auditor_imovel": "auditor_imovel/analise_divergencias_documentais",
     "diagnostico": "diagnostico/situacao_ambiental_imovel_rural",
 }
-# Versão exigida por agente: o diagnóstico passou a 1.4.0 com o formato de afirmação (ADR-079).
+# Versão exigida por agente: o diagnóstico passou a 1.4.0 com o formato de afirmação (ADR-080).
 REQUIRED_VERSIONS = {"auditor_imovel": "1.3.0", "diagnostico": "1.4.0"}
 
 # ADR-074: pre-contract Redator and Orçamento are deterministic contracts over the validated Rota.

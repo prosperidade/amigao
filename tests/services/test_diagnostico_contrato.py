@@ -1,4 +1,4 @@
-"""Diagnóstico por afirmação (ADR-079): prompt-base do contrato, resposta fora do contrato com
+"""Diagnóstico por afirmação (ADR-080): prompt-base do contrato, resposta fora do contrato com
 motivo nomeado, regras de admissão D1 a D6 (D7 é do schema)."""
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ def test_resposta_sem_objects_tem_motivo_nomeado():
 
 def test_prompt_base_nao_pede_formato_legado():
     registro = dc.prompt_base_registro()
-    assert registro["origin"] == "contrato_079" and registro["version"] == dc.CONTRATO_VERSAO
+    assert registro["origin"] == "contrato_080" and registro["version"] == dc.CONTRATO_VERSAO
     assert "objects" in dc.PROMPT_BASE and "nada de situacao_geral" in dc.PROMPT_BASE
 
 
@@ -139,7 +139,7 @@ def test_formato_legado_falha_com_motivo_e_nao_grava(committed_case, monkeypatch
     assert enviados[0]["max_cost_override_usd"] == settings.AI_MAX_COST_PER_JOB_USD_DIAGNOSTICO
     with factory() as db:
         job = db.query(AIJob).filter(AIJob.tenant_id == case["tenant"]).one()
-        assert job.input_payload["base_prompt"]["origin"] == "contrato_079"
+        assert job.input_payload["base_prompt"]["origin"] == "contrato_080"
         assert db.query(EvidenceVersion).filter(EvidenceVersion.job_id == job.id).count() == 0
 
 
@@ -156,7 +156,7 @@ def test_afirmacao_sem_suporte_recusa_a_execucao_inteira(committed_case, monkeyp
                          "attributes": {"certainty": "media"}}
     result, _ = _rodar(case, monkeypatch, {"objects": [risco_sem_impacto]})
     assert result["status"] == "failed"
-    assert "ADR-079" in result["steps"][0]["error"] and "D4" in result["steps"][0]["error"]
+    assert "ADR-080" in result["steps"][0]["error"] and "D4" in result["steps"][0]["error"]
     with factory() as db:
         assert db.query(EvidenceVersion).filter(EvidenceVersion.process_id == case["case"],
                                                 EvidenceVersion.kind == "conclusao").count() == 0

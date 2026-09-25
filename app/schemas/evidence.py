@@ -71,7 +71,7 @@ class EvidenceAttributes(Contract):
     method_version: str | None = None
     anchor: str | None = None
     certainty: str | None = None
-    # ADR-079: dimensões do diagnóstico, independentes da certeza. Valores validados na admissão.
+    # ADR-080: dimensões do diagnóstico, independentes da certeza. Valores validados na admissão.
     impact: str | None = None
     urgency: str | None = None
     coverage: Coverage | None = None
