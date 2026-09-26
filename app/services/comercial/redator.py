@@ -99,6 +99,11 @@ def _contexto(db: Session, *, process: Process, tenant_id: int) -> Contexto:
     if avs:
         ctx.ciencias = {c.avaliacao_id: c for c in db.query(CienciaAlerta).filter(
             CienciaAlerta.avaliacao_id.in_(list(avs)), CienciaAlerta.tenant_id == tenant_id)}
+    if execucao is not None:
+        # #289: a ciência dada numa execução de mesmo conteúdo vale para a mais recente.
+        from app.services.motor_juridico.avaliador import ciencias_vigentes  # noqa: PLC0415
+
+        ctx.ciencias.update(ciencias_vigentes(db, execucao_id=execucao.id, tenant_id=tenant_id))
     return ctx
 
 

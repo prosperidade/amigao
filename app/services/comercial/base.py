@@ -131,10 +131,24 @@ def base_escolhas(db: Session, tenant_id: int, process_id: int) -> dict[str, lis
             for r in rows}
 
 
+def conteudo_motor(db: Session, execucao_id: int | None) -> dict | None:
+    """``{fatos_hash, regras_hash}`` da execução — o que o motor leu e com que regras (#289)."""
+    if execucao_id is None:
+        return None
+    from app.models.motor_juridico import ExecucaoMotor  # noqa: PLC0415
+    from app.services.motor_juridico.avaliador import conteudo_execucao  # noqa: PLC0415
+
+    ex = db.get(ExecucaoMotor, execucao_id)
+    return conteudo_execucao(db, ex) if ex is not None else None
+
+
 def base_redacao(db: Session, tenant_id: int, process_id: int, execucao_id: int | None) -> dict:
+    # O ID da execução fica para a auditoria; a atualidade compara o CONTEÚDO (#289): reexecutar o
+    # motor sem fato nem regra novos não desatualiza nada.
     return {"rotas": base_rotas(db, tenant_id, process_id),
             "diagnostico": base_diagnostico(db, tenant_id, process_id),
-            "execucao_motor": execucao_id}
+            "execucao_motor": execucao_id,
+            "motor": conteudo_motor(db, execucao_id)}
 
 
 def base_orcamento(db: Session, tenant_id: int, process_id: int, escopo: RedacaoComercial | None,
@@ -188,8 +202,13 @@ def motivos_de_desatualizacao(antes: dict, agora: dict) -> list[str]:
     motivos = _motivos_rotas(antes.get("rotas", []), agora.get("rotas", []))
     if antes.get("diagnostico") != agora.get("diagnostico"):
         motivos.append("O diagnóstico mudou desde esta versão (nova conclusão, revisão ou versão)")
-    if "execucao_motor" in antes and antes["execucao_motor"] != agora.get("execucao_motor"):
-        motivos.append(f"Nova execução do motor jurídico (#{agora.get('execucao_motor')})")
+    if "motor" in antes and antes["motor"] != agora.get("motor"):
+        a, b = antes["motor"] or {}, agora.get("motor") or {}
+        ex = agora.get("execucao_motor")
+        if a.get("fatos_hash") != b.get("fatos_hash"):
+            motivos.append(f"Os fatos lidos pelo motor jurídico mudaram (execução #{ex})")
+        if a.get("regras_hash") != b.get("regras_hash"):
+            motivos.append(f"As regras do motor jurídico mudaram (execução #{ex})")
     if "escopo" in antes and antes["escopo"] != agora.get("escopo"):
         motivos.append(f"A especificação de escopo mudou (v{antes['escopo']['versao']} → "
                        f"v{(agora.get('escopo') or {}).get('versao')})")
@@ -241,7 +260,11 @@ def atualidade(db: Session, artefato) -> dict[str, Any]:
     """``{"estado": vigente|desatualizado|superada, "motivos": [...]}`` — só leitura."""
     if artefato.superada_em is not None:
         return {"estado": "superada", "motivos": ["Há versão mais nova deste documento"]}
-    motivos = motivos_de_desatualizacao(artefato.base, base_atual_de(db, artefato))
+    antes = artefato.base
+    if "execucao_motor" in antes and "motor" not in antes:
+        # Base gravada antes do #289 (só o ID): lê o conteúdo daquela execução.
+        antes = {**antes, "motor": conteudo_motor(db, antes["execucao_motor"])}
+    motivos = motivos_de_desatualizacao(antes, base_atual_de(db, artefato))
     if isinstance(artefato, Orcamento):
         # O orçamento só vale sobre o escopo de que nasceu, aprovado e atual: escopo rejeitado ou
         # desatualizado depois (execução nova do motor, documento novo) arrasta o orçamento junto.

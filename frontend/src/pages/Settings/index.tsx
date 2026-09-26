@@ -8,6 +8,7 @@
  *  4. Preferências Operacionais
  *  5. Preferências de IA
  *  6. Segurança
+ *  7. Métodos e preços do tenant (ADR-074, #282) — o orçamento de cada caso nasce deles
  *
  * Princípio: "configuração boa não parece painel de avião".
  */
@@ -17,9 +18,11 @@ import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import {
   User as UserIcon, CreditCard, Bell, SlidersHorizontal,
-  Sparkles, Shield, Save, Loader2, CheckCircle2, AlertCircle,
+  Sparkles, Shield, Save, Loader2, CheckCircle2, AlertCircle, Calculator,
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
+import MetodosPrecos from './MetodosPrecos';
 
 // ─── Types (espelham schemas do backend) ─────────────────────────────────────
 
@@ -92,7 +95,7 @@ interface UserMeResponse {
   preferences: UserPreferences;
 }
 
-type TabKey = 'profile' | 'billing' | 'notifications' | 'operational' | 'ai' | 'security';
+type TabKey = 'profile' | 'billing' | 'notifications' | 'operational' | 'ai' | 'security' | 'metodos';
 
 const TABS: { key: TabKey; label: string; icon: typeof UserIcon }[] = [
   { key: 'profile',       label: 'Perfil',         icon: UserIcon },
@@ -101,12 +104,18 @@ const TABS: { key: TabKey; label: string; icon: typeof UserIcon }[] = [
   { key: 'operational',   label: 'Preferências',  icon: SlidersHorizontal },
   { key: 'ai',            label: 'IA',             icon: Sparkles },
   { key: 'security',      label: 'Segurança',      icon: Shield },
+  { key: 'metodos',       label: 'Métodos e preços', icon: Calculator },
 ];
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<TabKey>('profile');
+  // Deep-link (?tab=metodos): o orçamento do caso leva direto aos métodos e preços.
+  const [params] = useSearchParams();
+  const pedida = params.get('tab');
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    TABS.some(t => t.key === pedida) ? (pedida as TabKey) : 'profile',
+  );
   const queryClient = useQueryClient();
 
   const { data: me, isLoading } = useQuery({
@@ -167,6 +176,7 @@ export default function Settings() {
         {activeTab === 'operational' && <OperationalTab me={me} onSaved={invalidate} />}
         {activeTab === 'ai' && <AiTab me={me} onSaved={invalidate} />}
         {activeTab === 'security' && <SecurityTab />}
+        {activeTab === 'metodos' && <MetodosPrecos />}
       </div>
     </div>
   );

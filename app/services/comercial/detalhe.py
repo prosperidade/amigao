@@ -113,7 +113,10 @@ def _avaliacao(db: Session, id_: int) -> dict:
     refs = [ev.ref("execucao_motor", a.execucao_id, f"execução do motor #{a.execucao_id}")]
     if a.fundamento_dispositivo_id:
         refs.append(ev.ref("dispositivo", a.fundamento_dispositivo_id, a.fundamento_caminho or "dispositivo"))
-    ciencia = db.query(CienciaAlerta).filter(CienciaAlerta.avaliacao_id == a.id).first()
+    from app.services.motor_juridico.avaliador import ciencias_vigentes  # noqa: PLC0415
+
+    # A própria ou a de execução anterior de mesmo conteúdo (#289).
+    ciencia = ciencias_vigentes(db, execucao_id=a.execucao_id, tenant_id=a.tenant_id).get(a.id)
     if ciencia:
         refs.append(ev.ref("ciencia_alerta", ciencia.id, f"ciência #{ciencia.id}"))
     return {"titulo": f"{rule_id} — {a.estado}", "texto": rv.mensagem or rv.descricao, "texto_cortado": False,

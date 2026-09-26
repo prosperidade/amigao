@@ -108,8 +108,18 @@ function LinhaAvaliacao({ processId, a }: { processId: number; a: AvaliacaoLinha
         {alerta && (
           <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">
             <AlertOctagon className="w-3 h-3" />
-            {a.alerta_critico_sem_ciencia ? 'alerta crítico sem ciência' : 'alerta crítico — ciência registrada'}
+            {a.alerta_critico_sem_ciencia
+              ? 'alerta crítico sem ciência'
+              : a.ciencia?.herdada
+                ? 'alerta crítico — ciência de execução anterior (mesmos fatos e regras)'
+                : 'alerta crítico — ciência registrada'}
           </span>
+        )}
+        {alerta && a.ciencia && (
+          <EvidenciaChip
+            processId={processId}
+            evidencia={{ tipo: 'ciencia_alerta', id: a.ciencia.id, rotulo: `ciência #${a.ciencia.id}` }}
+          />
         )}
         <EvidenciaChip processId={processId} evidencia={{ tipo: 'avaliacao_regra', id: a.avaliacao_id, rotulo: `avaliação #${a.avaliacao_id}` }} />
       </div>

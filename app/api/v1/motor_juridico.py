@@ -32,7 +32,13 @@ from app.models.user import User
 from app.schemas.rota import RotaMaterializeOut, RotaOut
 from app.services.audit_hash import stamp_audit_hash
 from app.services.motor_juridico import ciclo, importador
-from app.services.motor_juridico.avaliador import SemConjuntoAtivo, alertas_sem_ciencia, executar, ultima_execucao
+from app.services.motor_juridico.avaliador import (
+    SemConjuntoAtivo,
+    alertas_sem_ciencia,
+    ciencias_vigentes,
+    executar,
+    ultima_execucao,
+)
 from app.services.motor_juridico.rota import gerar_rota_pelo_motor
 from app.services.zona_normativa.curadoria import CuradoriaNegada, TransicaoInvalida
 
@@ -72,6 +78,8 @@ def _relatorio(db: Session, ex: ExecucaoMotor) -> dict:
            .filter(AvaliacaoRegra.execucao_id == ex.id, AvaliacaoRegra.tenant_id == ex.tenant_id)
            .order_by(Regra.rule_id).all())
     pendentes = {a.id for a in alertas_sem_ciencia(db, execucao_id=ex.id, tenant_id=ex.tenant_id)}
+    # Ciência própria ou herdada de execução anterior de mesmo conteúdo (#289).
+    vigentes = ciencias_vigentes(db, execucao_id=ex.id, tenant_id=ex.tenant_id)
     contagem: dict[str, int] = {}
     linhas = []
     for a, rule_id in avs:
@@ -85,6 +93,8 @@ def _relatorio(db: Session, ex: ExecucaoMotor) -> dict:
                 "caminho": a.fundamento_caminho, "razao": a.fundamento_razao,
             },
             "alerta_critico_sem_ciencia": a.id in pendentes,
+            "ciencia": ({"id": vigentes[a.id].id, "avaliacao_id": vigentes[a.id].avaliacao_id,
+                         "herdada": vigentes[a.id].avaliacao_id != a.id} if a.id in vigentes else None),
             "detalhe_erro": a.detalhe_erro,
         })
     return {
