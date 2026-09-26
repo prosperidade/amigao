@@ -100,7 +100,13 @@ function Detalhe({
           <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1">Cita</p>
           <div className="flex flex-wrap gap-1.5">
             {data.refs.map(r => (
-              <button key={`${r.tipo}:${r.id}`} type="button" onClick={() => onSeguir(r)} className={CHIP}>
+              <button
+                key={`${r.tipo}:${r.id}`}
+                type="button"
+                onClick={() => onSeguir(r)}
+                data-evidencia={`${r.tipo}:${r.id}`}
+                className={CHIP}
+              >
                 <Link2 className="w-3 h-3 shrink-0" />
                 <span className="truncate">{r.rotulo}</span>
               </button>

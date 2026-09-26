@@ -80,22 +80,36 @@ async function abrirRota(page, pid) {
   await page.getByText('Rota Regulatória', { exact: true }).waitFor();
 }
 
+/** Lê o painel da evidência na TELA (o detalhe pode vir do cache, sem requisição nova). */
+async function lerPainel(painel) {
+  const det = painel.getByTestId('evidencia-detalhe');
+  await det.waitFor();
+  const titulo = (await det.locator('p.font-semibold').first().textContent()).trim();
+  const texto = det.locator('p.whitespace-pre-wrap');
+  return {
+    titulo_hash: h(titulo),
+    texto_chars: (await texto.count()) ? (await texto.textContent()).length : 0,
+    campos: await det.locator('dt').count(),
+    refs: await det.locator('button[data-evidencia]').allTextContents(),
+    abre_documento: (await det.getByRole('button', { name: 'Abrir o documento' }).count()) > 0,
+  };
+}
+
 async function abrirEvidencia(page, caso, chip, rotulo) {
   const alvo = await chip.getAttribute('data-evidencia');
   const [tipo, id] = alvo.split(':');
-  const r = await gesto(page, 'GET', `/evidencias/${tipo}/${id}`, () => chip.click(), 200);
+  await chip.click();
   const painel = page.getByRole('dialog', { name: 'Evidência' });
-  await painel.getByTestId('evidencia-detalhe').waitFor();
-  const dados = { tipo, id: Number(id), titulo_hash: h(r.corpo.titulo), texto_chars: r.corpo.texto?.length ?? 0,
-                  campos: r.corpo.campos.length, refs: r.corpo.refs.map(x => `${x.tipo}:${x.id}`) };
+  await painel.getByText(new RegExp(`#${id}$`)).first().waitFor();
+  const dados = { tipo, id: Number(id), ...(await lerPainel(painel)) };
   // Segue a primeira referência que o próprio detalhe cita, e volta.
-  if (r.corpo.refs.length) {
-    const sub = r.corpo.refs[0];
-    const s = await gesto(page, 'GET', `/evidencias/${sub.tipo}/${sub.id}`,
-      () => painel.getByRole('button', { name: sub.rotulo, exact: true }).click(), 200);
-    dados.seguiu = { ref: `${sub.tipo}:${sub.id}`, titulo_hash: h(s.corpo.titulo), texto_chars: s.corpo.texto?.length ?? 0 };
+  const citas = painel.getByTestId('evidencia-detalhe').locator('button[data-evidencia]');
+  if (await citas.count()) {
+    await citas.first().click();
+    await painel.getByRole('button', { name: /voltar/ }).waitFor();
+    dados.seguiu = await lerPainel(painel);
     await painel.getByRole('button', { name: /voltar/ }).click();
-    await painel.getByTestId('evidencia-detalhe').waitFor();
+    await painel.getByText(new RegExp(`#${id}$`)).first().waitFor();
   }
   await capturar(page, `${caso}-evidencia-${rotulo}`);
   await painel.getByRole('button', { name: 'Fechar evidência' }).click();
@@ -224,7 +238,7 @@ async function percursoComercial(page, caso, pid, opcoes) {
   if (opcoes.rejeitarRelatorio) {
     await revisar(page, caso, cardRel(), 'relatório', 'rejeitar',
       'PROVA #282: rejeitado pela tela para exercer a correção', `/redacao/${rel.id}/revisar`);
-    await cardRel().getByText('Rejeitado').waitFor();
+    await page.getByTestId('selos-relatorio_preliminar').getByText('Rejeitado').waitFor();
     ({ rel, esc } = await gerarDocs());
   }
   await revisar(page, caso, cardRel(), 'relatório', 'aprovar', 'PROVA #282: relatório conferido na tela',
