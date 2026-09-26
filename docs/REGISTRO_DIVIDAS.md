@@ -10,9 +10,9 @@ Registro: [ORCAMENTO_SO_DO_TENANT_284.md](arquitetura/ORCAMENTO_SO_DO_TENANT_284
   exige o orçamento. Provado no navegador em #22, #23 e #25. **Pendente:** a lista de propostas sem
   orçamento em produção, pelo `supabase-prod-ro` (não conectado nesta sessão; consulta pronta no
   registro).
-- **#292 — proposta avulsa (sem processo) (aberta, decisão do André):** segue aceitando itens e total
-  digitados — é o único preço que não vem do orçamento. Deve existir, ou toda proposta passa a
-  exigir um caso?
+- **#292 — proposta avulsa (sem processo) (aberta; decidida pelo André em 26/09):** permanece, rotulada
+  como avulsa e sem vínculo a caso; os itens nascem do catálogo de métodos do tenant, com valor
+  editável. Frente pequena, depois do merge do #220.
 
 > **PRÓXIMO NÚMERO LIVRE: 293.** (#292 aberta pela #284, 26/09.)
 

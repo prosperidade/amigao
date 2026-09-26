@@ -9,11 +9,14 @@ Duas camadas, a mesma sequência:
 
 | camada | arquivo | prova |
 |---|---|---|
-| API (payloads) | `tests/e2e/frente_j/gate_api.py` | 6 docs → extração real → decisões → 3 decididas (uma com `reclassificar`) → consolidar → recarregar → logout/login → as 6 telas comparadas campo a campo; doc novo → diagnóstico/rota/proposta desatualizados → aceite recusado 422 |
+| API (payloads) | `tests/e2e/frente_j/gate_api.py` | 6 docs → extração real → decisões → 3 decididas (uma com `reclassificar`) → consolidar → recarregar → logout/login → as 6 telas comparadas campo a campo; proposta pelo caminho real (ADR-081): recusada sem orçamento → Rota gerada pelo motor e assinada → método do tenant → escopo e orçamento aprovados → proposta do orçamento, enviada; doc novo → diagnóstico/rota/orçamento/proposta desatualizados → aceite recusado 422 |
 | UI (gesto humano, prints) | `frontend/e2e/frente-j.spec.ts` (Playwright) | o mesmo, clicando: input de arquivo real, "Aceitar", "Editar tipo", "Gravar na base", F5, "Sair do sistema", banner e botão bloqueado na proposta |
 
 Nenhuma das duas roda no CI (exige a pilha inteira e uma chave de LLM). O
 resultado é colado em `docs/trabalhos/fechamento_contrato.md`.
+
+O `setup_db.py` semeia também o conjunto de regras do gate 4b, homologado e ativo pelo
+superusuário do seed (só no banco descartável): a Rota do gate é gerada pelo motor, sem LLM.
 
 ## Pré-requisitos
 

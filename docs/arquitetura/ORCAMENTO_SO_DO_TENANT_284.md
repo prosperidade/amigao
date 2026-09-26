@@ -1,6 +1,6 @@
 # Orçamento só do tenant — #284 (registro)
 
-26/09/2026. Implementação do [ADR-081](../adr/081-proposta-so-nasce-do-orcamento-do-tenant.md).
+26/09/2026. Implementação do [ADR-081](../adr/081-proposta-so-nasce-do-orcamento-do-tenant.md) (aceito pelo André em 26/09).
 Condição de entrada do Incremento 7 (André, 24/09). **Só dev**; produção intocada.
 
 ## 1. O que entrou
@@ -39,7 +39,27 @@ Rodada final no commit **46142bc** (rodapé "Painel 46142bc · API 46142bc · de
 Rodadas anteriores do mesmo roteiro (commits 64e9c73 e o ajuste do seletor) criaram as propostas
 17–21 no dev; ficaram como estão.
 
-## 3. Propostas sem orçamento em produção
+## 3. Gate da Frente J reescrito para o caminho real
+
+`tests/e2e/frente_j/gate_api.py` criava a proposta com itens no corpo. Agora, pela API:
+diagnóstico → rascunho **recusado sem orçamento** → Rota gerada pelo **motor** (sem LLM) e assinada
+— ciência dos alertas críticos, passo do motor sem norma no catálogo sai com motivo, um passo
+cobrado declarado — → método padrão do tenant → relatório e escopo, escopo aprovado → orçamento
+aprovado → rascunho lido do orçamento → proposta **sem itens no corpo** (itens e total conferidos
+contra o orçamento) → enviada. A invalidação por documento novo passa a exigir também o orçamento
+desatualizado. `setup_db.py` semeia o conjunto de regras do gate 4b (homologado e ativo pelo
+superusuário do seed, só no banco descartável).
+
+**Validado em 26/09** com o próprio `setup_db.py` num banco descartável (`amigao_e2e_284`, removido
+depois) e a API da worktree apontada para ele: recusa sem Rota → Rota 1 assinada (5 passos: 4 sem
+norma saíram com motivo, 1 cobrado) → orçamento 1 aprovado, R$ 1.000 → proposta 1 enviada → documento
+novo (PDF sintético) → diagnóstico, Rota, orçamento e proposta desatualizados → aceite **422**. O
+trecho de 6 documentos com extração real não foi refeito: exige os PDFs de texto de produção, que não
+são versionados. A tentativa anterior, com a Rota pela IA, falhou em `capacidade_insuficiente`
+(Legislação) — daí o motor; ela deixou no dev o cliente 65 e o processo 74 ("Gate 284 — caminho
+real", tenant 33), sintéticos.
+
+## 4. Propostas sem orçamento em produção
 
 **Pendente.** O canal somente-leitura `supabase-prod-ro` (ADR-076) não estava conectado nesta
 sessão (pede autenticação pelo `/mcp`); o conector completo do Supabase não é caminho de leitura e
@@ -73,9 +93,9 @@ assinada e orçamento.
 | aceita (`accepted`) | segue como está; contrato normal |
 | recusada / expirada | fica no histórico; a nova versão exige Rota assinada e orçamento |
 
-## 4. Em aberto
+## 5. Em aberto
 
-- **#292** — proposta avulsa (sem processo) segue com itens digitados; se deve existir é decisão de
-  produto.
+- **#292** — proposta avulsa (decisão do André, 26/09): permanece, rotulada e sem vínculo a caso;
+  itens a partir do catálogo de métodos do tenant, valor editável. Frente pequena, depois do merge.
 - A lista de produção da §3, pelo canal somente-leitura, antes do merge.
 - Merge só com a autorização do André.

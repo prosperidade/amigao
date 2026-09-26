@@ -1,7 +1,7 @@
 # ADR-081 — A proposta de um caso só nasce do orçamento do tenant
 
 - **Data:** 26/09/2026
-- **Estado:** proposto (PR da #284); aprovação do André no merge.
+- **Estado:** aceito (André, 26/09/2026, PR #220).
 - **Emenda:** [ADR-074](074-metodos-e-fechamento-comercial.md) §7 e o caminho legado do
   [ADR-028](028-proposta-nasce-da-rota.md) (faixa da `PRICE_TABLE`).
 - **Plano:** [Plano Diretor v1.1](../arquitetura/PLANO_DIRETOR_REGENTE_v1.1.md), condição de entrada
@@ -55,7 +55,8 @@ Com as telas de orçamento e de métodos e preços na `main` (#218, #219), os do
   orçamento — é o comportamento certo, e a tela diz os dois motivos.
 - Testes que criavam proposta de caso com itens no corpo passam a montar o orçamento pelo caminho
   real (`tests/comercial/apoio.py`).
-- O gate histórico da Frente J (`tests/e2e/frente_j/gate_api.py`, manual) criava proposta com
-  itens no corpo; ganhou nota de como rodá-lo agora.
+- O gate da Frente J (`tests/e2e/frente_j/gate_api.py`, manual) criava proposta com itens no
+  corpo; foi reescrito para o caminho real (Rota do motor assinada → orçamento aprovado → proposta),
+  e o `setup_db.py` semeia o conjunto de regras no banco descartável.
 - Em produção, as propostas sem `orcamento_id` ficam como estão (item 4). A lista é levantada pelo
   canal somente-leitura antes do merge (registro da frente).

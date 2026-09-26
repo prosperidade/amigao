@@ -1,10 +1,5 @@
 """Gate E2E da Frente J — a sequência inteira contra a API REAL, autenticada.
 
-HISTÓRICO (26/09/2026, ADR-081/#284): este gate cria a proposta do caso com itens digitados no
-corpo. Desde a #284 isso é recusado (422) — proposta de caso só nasce do orçamento aprovado. Para
-rodá-lo de novo, antes do passo da proposta: Rota assinada, métodos do tenant, escopo e orçamento
-aprovados (ver ``tests/comercial/apoio.py``), e o POST sem itens.
-
 Não é teste unitário: exige API + worker Celery + Redis + MinIO + Postgres
 descartável de pé (`setup_db.py`) e uma chave de LLM válida no ambiente do
 worker (a extração é real, como em produção). O que ele prova, na ordem
@@ -18,7 +13,12 @@ exigida pela reauditoria Codex de 11/09:
   5. "recarregar" (GET de novo, mesma sessão) e depois LOGOUT/LOGIN (sessão
      nova) → as mesmas decisões, mesmos estados, mesmos números nas seis
      telas (payload de cada aba, comparado campo a campo);
-  6. subir documento novo → diagnóstico, rota e proposta marcados
+  6. a proposta pelo caminho real (ADR-081, #284): Rota gerada e ASSINADA pela
+     API (um passo cobrado, os demais como direção), método padrão do tenant,
+     relatório e escopo gerados e o escopo aprovado, orçamento gerado e
+     aprovado, rascunho da proposta lido do orçamento e a proposta criada SEM
+     itens no corpo — itens e total vêm do orçamento — e enviada;
+  7. subir documento novo → diagnóstico, rota, orçamento e proposta marcados
      desatualizados; tentar aceitar a proposta → 422 com a razão.
 
 Tudo o que a API devolveu vai para `--out` (JSON), para ser colado no
@@ -242,10 +242,79 @@ class Gate:
         self.salvar("consolidacao", res)
         return res
 
+    def rota_assinada(self) -> dict[str, Any]:
+        """Rota gerada pelo MOTOR JURÍDICO e ASSINADA: um passo cobrado, os demais como direção.
+
+        A proposta nasce da Rota assinada (decisão 6). O motor é determinístico (sem LLM; o
+        conjunto do gate 4b é semeado por ``setup_db.py``); a ciência de cada alerta crítico é
+        registrada com justificativa. Os passos do motor entram como direção; o passo cobrado é
+        manual e declarado — o gate mede o fechamento, não a qualidade da Rota.
+        """
+        pid = self.seed["process_id"]
+        r = self.post(f"/processes/{pid}/rota/gerar-motor")
+        assert r.status_code == 201, f"rota/gerar-motor: {r.status_code} {r.text}"
+        execucao = r.json()["execucao"]
+        for av_id in execucao["alertas_sem_ciencia"]:
+            c = self.post(f"/processes/{pid}/motor/alertas/{av_id}/ciencia",
+                          json={"justificativa": "gate E2E Frente J — ciência do alerta"})
+            assert c.status_code == 201, f"ciência {av_id}: {c.status_code} {c.text}"
+        rota = r.json()["rota"]["rota"]
+        m = self.post(f"/rotas/{rota['id']}/passos", json={
+            "titulo": "Retificação do CAR", "classificacao": "item_proposta",
+            "origem_manual_nota": "gate E2E Frente J — passo cobrado declarado"})
+        assert m.status_code == 201, f"passo manual: {m.status_code} {m.text}"
+        rota = self.get(f"/processes/{pid}/rota").json()
+        removidos = []
+        for passo in rota["passos"]:
+            url = f"/rotas/{rota['id']}/passos/{passo['id']}"
+            if passo["origem"] == "motor" and passo["fundamento_fonte_versao_id"] is None:
+                # Sem norma no catálogo o passo do motor não se valida: sai com motivo (ADR-073 §6).
+                d = self.cli.delete(self.base + url, headers=self._h(),
+                                    params={"motivo": "gate E2E Frente J: norma fora do catálogo do banco descartável"})
+                assert d.status_code == 204, f"remover {passo['id']}: {d.status_code} {d.text}"
+                removidos.append(passo["id"])
+                continue
+            if passo["classificacao"] is None:
+                c = self.patch(url, json={"classificacao": "direcao"})
+                assert c.status_code == 200, f"classificar {passo['id']}: {c.status_code} {c.text}"
+            if passo["status"] != "validado":
+                v = self.post(url + "/validar")
+                assert v.status_code == 200, f"validar {passo['id']}: {v.status_code} {v.text}"
+        f = self.post(f"/rotas/{rota['id']}/fechar")
+        assert f.status_code == 200, f"fechar rota: {f.status_code} {f.text}"
+        self._rec("rota_assinada", rota_id=rota["id"], passos=len(rota["passos"]), status=f.json()["status"],
+                  execucao_motor=execucao["execucao_id"], alertas_com_ciencia=execucao["alertas_sem_ciencia"],
+                  removidos_com_motivo=removidos)
+        return f.json()
+
+    def orcamento_aprovado(self) -> dict[str, Any]:
+        """Método padrão do tenant → relatório e escopo → escopo aprovado → orçamento aprovado."""
+        pid = self.seed["process_id"]
+        metodos = self.get("/comercial/metodos").json()
+        if not any(m["padrao"] for m in metodos["correntes"]):
+            m = self.post("/comercial/metodos", json={
+                "codigo": "hora_tecnica", "nome": "Hora técnica", "unidade": "hora",
+                "valor_unitario": "250.00", "quantidade_padrao": "4", "padrao": True})
+            assert m.status_code == 201, f"método: {m.status_code} {m.text}"
+        red = self.post(f"/processes/{pid}/comercial/redacao")
+        assert red.status_code == 201, f"redação: {red.status_code} {red.text}"
+        escopo = red.json()["especificacao_escopo"]
+        r = self.post(f"/processes/{pid}/comercial/redacao/{escopo['id']}/revisar",
+                      json={"acao": "aprovar", "justificativa": "gate E2E Frente J"})
+        assert r.status_code == 200, f"aprovar escopo: {r.status_code} {r.text}"
+        o = self.post(f"/processes/{pid}/comercial/orcamento")
+        assert o.status_code == 201, f"orçamento: {o.status_code} {o.text}"
+        r = self.post(f"/processes/{pid}/comercial/orcamento/{o.json()['id']}/revisar",
+                      json={"acao": "aprovar", "justificativa": "gate E2E Frente J"})
+        assert r.status_code == 200, f"aprovar orçamento: {r.status_code} {r.text}"
+        orc = r.json()
+        self._rec("orcamento_aprovado", escopo_id=escopo["id"], orcamento_id=orc["id"], total=orc["total"],
+                  itens=len(orc["itens"]))
+        return orc
+
     def artefatos_e_proposta(self) -> dict[str, Any]:
-        """Diagnóstico (POST + validate), rota (via API se houver; senão registra
-        ausência) e proposta (POST + send) — o chão que o documento novo vai
-        invalidar."""
+        """Diagnóstico (POST + validate), Rota assinada, orçamento aprovado e a proposta
+        nascida dele (POST sem itens + send) — o chão que o documento novo vai invalidar."""
         pid, cid = self.seed["process_id"], self.seed["client_id"]
         diag = self.post(f"/processes/{pid}/diagnoses", json={"content": {
             "content": "Diagnóstico preliminar — gate E2E Frente J.",
@@ -257,26 +326,38 @@ class Gate:
         versao = diag.json()["version"]
         val = self.patch(f"/processes/{pid}/diagnoses/{versao}/validate")
         assert val.status_code == 200, f"validate: {val.status_code} {val.text}"
+
+        # ADR-081: sem orçamento a proposta do caso é recusada — o gate prova a recusa antes.
+        sem = self.get(f"/proposals/generate-draft?process_id={pid}")
+        assert sem.status_code == 422, f"rascunho sem orçamento deveria ser recusado: {sem.status_code}"
+        self._rec("proposta_sem_orcamento_recusada", detail=sem.json().get("detail"))
+
+        self.rota_assinada()
+        orc = self.orcamento_aprovado()
+        draft = self.get(f"/proposals/generate-draft?process_id={pid}")
+        assert draft.status_code == 200, f"generate-draft: {draft.status_code} {draft.text}"
+        assert draft.json()["orcamento_id"] == orc["id"], "rascunho não nasceu do orçamento aprovado"
         prop = self.post("/proposals/", json={
             "client_id": cid, "process_id": pid, "title": "Proposta — gate E2E Frente J",
-            "scope_items": [{"description": "Retificação do CAR", "unit": "un", "qty": 1,
-                             "unit_price": 1000.0, "total": 1000.0}],
-            "total_value": 1000.0, "validity_days": 30,
+            "orcamento_id": orc["id"], "validity_days": 30,
         })
         assert prop.status_code == 201, f"proposal: {prop.status_code} {prop.text}"
+        assert prop.json()["orcamento_id"] == orc["id"]
+        assert float(prop.json()["total_value"]) == float(orc["total"]), "total não veio do orçamento"
         prop_id = prop.json()["id"]
         env = self.post(f"/proposals/{prop_id}/send")
         assert env.status_code == 200, f"send: {env.status_code} {env.text}"
         antes = {
             "diagnostico": self.get(f"/processes/{pid}/diagnoses").json(),
             "rota": self.get(f"/processes/{pid}/rota").json(),
+            "orcamento": self.get(f"/processes/{pid}/comercial/orcamento").json(),
             "proposta": self.get(f"/proposals/{prop_id}").json(),
         }
         self.salvar("artefatos_antes", antes)
-        self._rec("artefatos_criados", diagnostico_versao=versao, proposta_id=prop_id,
-                  aviso_diag=_ultimo_aviso(antes["diagnostico"]),
+        self._rec("artefatos_criados", diagnostico_versao=versao, orcamento_id=orc["id"], proposta_id=prop_id,
+                  total=prop.json()["total_value"], aviso_diag=_ultimo_aviso(antes["diagnostico"]),
                   aviso_prop=antes["proposta"].get("aviso_desatualizado"))
-        return {"proposta_id": prop_id, "versao": versao, "antes": antes}
+        return {"proposta_id": prop_id, "orcamento_id": orc["id"], "versao": versao, "antes": antes}
 
     def invalidar_e_recusar(self, ctx: dict[str, Any]) -> dict[str, Any]:
         pid = self.seed["process_id"]
@@ -286,6 +367,7 @@ class Gate:
         depois = {
             "diagnostico": self.get(f"/processes/{pid}/diagnoses").json(),
             "rota": self.get(f"/processes/{pid}/rota").json(),
+            "orcamento": self.get(f"/processes/{pid}/comercial/orcamento").json(),
             "proposta": self.get(f"/proposals/{ctx['proposta_id']}").json(),
         }
         self.salvar("artefatos_depois", depois)
@@ -294,11 +376,15 @@ class Gate:
         aviso_rota = (depois["rota"] or {}).get("aviso_desatualizado") if depois["rota"] else "sem rota no processo"
         assert aviso_diag, "diagnóstico validado NÃO ficou desatualizado após documento novo"
         assert aviso_prop, "proposta enviada NÃO ficou desatualizada após documento novo"
+        orc_depois = (depois["orcamento"] or {}).get("orcamento") or {}
+        assert orc_depois.get("atualidade", {}).get("estado") == "desatualizado", \
+            "orçamento de origem NÃO ficou desatualizado após documento novo"
         rec = self.post(f"/proposals/{ctx['proposta_id']}/accept")
         assert rec.status_code == 422, f"aceite deveria ser recusado: {rec.status_code} {rec.text}"
         prop_final = self.get(f"/proposals/{ctx['proposta_id']}").json()
         assert prop_final["status"] == "sent", prop_final["status"]
         resultado = {"documento_novo": doc, "aviso_diagnostico": aviso_diag, "aviso_rota": aviso_rota,
+                     "orcamento_atualidade": orc_depois.get("atualidade"),
                      "aviso_proposta": aviso_prop, "aceite": {"status": rec.status_code, "detail": rec.json()},
                      "status_proposta_depois": prop_final["status"]}
         self._rec("invalidacao", **{k: v for k, v in resultado.items() if k != "documento_novo"})
