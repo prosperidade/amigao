@@ -43,7 +43,6 @@ from app.models.process import Process
 from app.models.property import Property
 from app.models.proposal import Proposal, ProposalStatus
 from app.models.tenant import Tenant
-from app.services.proposal_generator import PRICE_TABLE
 from app.services.tenant_profile import (
     IssuerProfile,
     load_issuer_profile,
@@ -228,12 +227,24 @@ class ContratoDoc:
 # Carregamento de contexto do caso
 # ---------------------------------------------------------------------------
 
+# Nome da demanda na peça. Vinha da PRICE_TABLE, que saiu com o ADR-081 (#284): aqui fica só o rótulo.
+DEMANDA_ROTULO = {
+    "car": "Cadastro Ambiental Rural (CAR)",
+    "retificacao_car": "Retificação do CAR",
+    "licenciamento": "Licenciamento Ambiental",
+    "regularizacao_fundiaria": "Regularização Fundiária",
+    "outorga": "Outorga de Uso da Água",
+    "defesa": "Defesa Administrativa Ambiental",
+    "compensacao": "Compensação Ambiental / PRAD",
+    "exigencia_bancaria": "Atendimento a Exigência Bancária",
+}
+
+
 def _demand_label(process: Optional[Process]) -> Optional[str]:
     if process is None or process.demand_type is None:
         return None
     dt = process.demand_type.value
-    info = PRICE_TABLE.get(dt)
-    return info["name"] if info else dt.replace("_", " ")
+    return DEMANDA_ROTULO.get(dt, dt.replace("_", " "))
 
 
 def _load_context(db: Session, proposal: Proposal) -> tuple[Tenant, Client, Optional[Process], Optional[Property]]:

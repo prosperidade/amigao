@@ -707,6 +707,8 @@ de remover recebe 400 num passo de origem `motor`.
 Incremento 7 saem os dois orçamentos legados de código — `OrcamentoAgent._estimate_by_rules` e a
 distribuição da `PRICE_TABLE` em `proposal_generator` —, e toda proposta nasce do orçamento derivado
 da Rota com métodos e preços do tenant (ADR-074). Depende da tela do orçamento (#282).
+*(26/09: #282 fechada no #219; #284 implementada no ADR-081 — ver
+[ORCAMENTO_SO_DO_TENANT_284.md](ORCAMENTO_SO_DO_TENANT_284.md).)*
 **Esforço:** médio. **Não é opcional.**
 
 ### INCREMENTO 8 — Aceite da Ísis e publicação controlada

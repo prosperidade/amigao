@@ -1,5 +1,21 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 26/09/2026 (tarde) — orçamento só do tenant (#284, ADR-081), só dev
+
+Registro: [ORCAMENTO_SO_DO_TENANT_284.md](arquitetura/ORCAMENTO_SO_DO_TENANT_284.md).
+
+- **#284 — FECHADA em dev (26/09):** saem a `PRICE_TABLE` e o `OrcamentoAgent._estimate_by_rules`.
+  Proposta de caso só nasce do orçamento aprovado e atual; sem Rota assinada a recusa pede a
+  assinatura (decisão 6). Propostas antigas não mudam; rascunho antigo não é enviado; renegociar
+  exige o orçamento. Provado no navegador em #22, #23 e #25. **Pendente:** a lista de propostas sem
+  orçamento em produção, pelo `supabase-prod-ro` (não conectado nesta sessão; consulta pronta no
+  registro).
+- **#292 — proposta avulsa (sem processo) (aberta; decidida pelo André em 26/09):** permanece, rotulada
+  como avulsa e sem vínculo a caso; os itens nascem do catálogo de métodos do tenant, com valor
+  editável. Frente pequena, depois do merge do #220.
+
+> **PRÓXIMO NÚMERO LIVRE: 293.** (#292 aberta pela #284, 26/09.)
+
 ## Pulso 26/09/2026 — métodos e preços (#282) e motor por conteúdo (#289), só dev
 
 Registro: [METODOS_CONTEUDO_MOTOR_282_289.md](arquitetura/METODOS_CONTEUDO_MOTOR_282_289.md).

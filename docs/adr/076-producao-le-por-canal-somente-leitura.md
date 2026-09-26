@@ -19,6 +19,17 @@ confirmação"). Nada distinguia, na execução, um `SELECT` de diagnóstico de 
 casos reais precisam ler a produção com frequência, então a leitura tem que ser
 livre — e justamente por isso não pode passar pelo canal que também escreve.
 
+## Adendo (26/09/2026) — autenticação por token quando o OAuth falha
+
+O servidor de autorização do Supabase passou a recusar o OAuth do `supabase-prod-ro` ("Resource must
+be a valid MCP endpoint"): o recurso anunciado pelo servidor MCP inclui os parâmetros da URL, e o
+login só aceita `https://mcp.supabase.com/mcp`. Tirar os parâmetros derrubaria o `read_only=true`.
+
+Caminho aceito: cada máquina pode registrar, em **escopo de usuário** (nunca no `.mcp.json`
+versionado), o servidor `supabase-prod-ro-pat` com a **mesma URL** e um token pessoal do Supabase no
+cabeçalho `Authorization`. A trava continua sendo o `read_only=true` da URL (usuário Postgres
+somente-leitura). O token é do André e fica só na máquina dele; revoga-se quando o OAuth voltar.
+
 ## Decisão
 
 1. **Leitura de produção é o padrão técnico.** O `.mcp.json` versionado define o

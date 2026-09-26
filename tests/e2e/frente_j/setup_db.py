@@ -57,6 +57,28 @@ from app.models.tenant import Tenant  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
+def _motor_ativo(db, superusuario) -> int:
+    """Conjunto de regras do gate 4b homologado e ativo — o caminho real da Rota (ADR-073).
+
+    O banco do gate nasce por ``create_all`` e não tem regra. A proposta nasce do orçamento,
+    que nasce da Rota assinada (ADR-081); a Rota do gate é gerada pelo motor, sem LLM. O
+    superusuário do seed concede a si o papel ``homologar_regra`` e homologa as regras do YAML
+    do gate — no banco descartável, não em dev nem em produção.
+    """
+    from app.services.motor_juridico import ciclo, importador  # noqa: PLC0415
+    from app.services.zona_normativa.curadoria import conceder_papel  # noqa: PLC0415
+
+    conceder_papel(db, concedente=superusuario, user_id=superusuario.id, papel="homologar_regra", area="*",
+                   motivo="gate E2E Frente J (banco descartável)")
+    imp = importador.importar(db, importador.carregar())
+    for rv in imp.criadas:
+        ciclo.homologar(db, user=superusuario, regra_versao_id=rv.id, nota="gate E2E Frente J")
+    c = ciclo.criar_conjunto(db, nome="gate 4b (E2E Frente J)", regra_versao_ids=[rv.id for rv in imp.criadas])
+    ciclo.publicar(db, user=superusuario, conjunto_id=c.id)
+    ciclo.ativar(db, user=superusuario, conjunto_id=c.id)
+    return c.id
+
+
 def _admin_url(db: str) -> str:
     return f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{db}"
 
@@ -166,11 +188,14 @@ def main() -> None:
             opened_at=datetime(2026, 9, 8, 0, 0, tzinfo=UTC),
         )
         db.add(proc)
+        db.flush()
+        conjunto = _motor_ativo(db, user)
         db.commit()
         saida = {
             "db_name": DB_NAME, "tenant_id": tenant.id, "user_id": user.id,
             "email": E2E_EMAIL, "password": E2E_PASSWORD,
             "client_id": cli.id, "property_id": prop.id, "process_id": proc.id,
+            "conjunto_regras_id": conjunto,
         }
     finally:
         db.close()

@@ -12,6 +12,7 @@ Cobre:
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.comercial.apoio import orcamento_aprovado
 
 from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
@@ -117,6 +118,8 @@ def _proposta_da_rota(db_session, tenant, cli, proc, *, status=ProposalStatus.ac
                       installments=None, total_override=None):
     """Cria uma Proposal com escopo REAL vindo da Rota (seam S5-A→S5-B)."""
     _rota_validada(db_session, tenant, proc)
+    user = db_session.query(User).filter(User.tenant_id == tenant.id).first()
+    orcamento_aprovado(db_session, process=proc, user_id=user.id)
     draft = generate_proposal_from_rota(db_session, proc.id, tenant.id)
     total = total_override if total_override is not None else draft.suggested_value
     p = Proposal(
@@ -124,6 +127,7 @@ def _proposta_da_rota(db_session, tenant, cli, proc, *, status=ProposalStatus.ac
         scope_items=draft.scope_items, total_value=total, validity_days=30,
         payment_terms="50% na assinatura e 50% na entrega.",
         payment_installments=installments or [], status=status, rota_id=draft.rota_id,
+        orcamento_id=draft.orcamento_id,
     )
     db_session.add(p)
     db_session.flush()

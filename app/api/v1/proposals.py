@@ -35,9 +35,9 @@ from app.services.mirante_documents import (
 )
 from app.services.proposal_generator import (
     ProposalGenerationError,
+    exigir_orcamento,
     generate_proposal_from_rota,
     itens_do_orcamento,
-    orcamento_para_proposta,
 )
 from app.services.storage import get_storage_service
 from app.services.tenant_guard import exigir_relacoes_do_tenant
@@ -164,11 +164,10 @@ def generate_draft(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_internal_user),
 ) -> Any:
-    """Gera rascunho de proposta A PARTIR da Rota validada (S5-A).
+    """Rascunho de proposta a partir do orçamento aprovado e atual (ADR-081).
 
-    Sem Rota validada (ou sem passo faturável) → 422 com mensagem honesta,
-    coerente com o gate E5→E6. O escopo nasce dos passos ``item_proposta`` da
-    Rota (rastreável); a PRICE_TABLE só precifica."""
+    Sem Rota assinada ou sem orçamento aprovado → 422 com o próximo passo. Itens e total vêm
+    do orçamento do tenant; cada item aponta o passo da Rota."""
     process = db.query(Process).filter(
         Process.id == process_id,
         Process.tenant_id == current_user.tenant_id,
@@ -232,13 +231,14 @@ def create_proposal(
     # este endpoint na tabela do AUD-04 ("criação não valida client/process/rota
     # do body") mas ele ficou fora da lista D1-D7; entra pela decisão de escopo.
     exigir_relacoes_do_tenant(db, current_user.tenant_id, body.model_dump())
-    # ADR-074 §7: se o caso tem orçamento, a proposta nasce dele — itens, total e
-    # Rota vêm do orçamento aprovado e atual, não do corpo da requisição.
+    # ADR-081: proposta de um caso só nasce do orçamento aprovado e atual — itens, total e Rota
+    # vêm dele, nunca do corpo. Sem Rota assinada ou sem orçamento: 422 com o próximo passo.
+    # Proposta avulsa (sem processo) segue com os itens do corpo (fora do escopo do ADR-081).
     scope_items, total_value, rota_id = body.scope_items, body.total_value, body.rota_id
     orcamento = None
     if body.process_id is not None:
         try:
-            orcamento = orcamento_para_proposta(db, current_user.tenant_id, body.process_id, body.orcamento_id)
+            orcamento = exigir_orcamento(db, current_user.tenant_id, body.process_id, body.orcamento_id)
         except ProposalGenerationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     elif body.orcamento_id is not None:
@@ -412,6 +412,12 @@ def send_proposal(
     proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
     if proposal.status != ProposalStatus.draft:
         raise HTTPException(status_code=422, detail="Proposta já foi enviada ou finalizada.")
+    if proposal.process_id is not None and proposal.orcamento_id is None:
+        # ADR-081: rascunho de caso precificado antes da #284 (tabela de código) não vai ao
+        # cliente. A enviada e a aceita seguem o ciclo — já estão com o cliente.
+        raise HTTPException(status_code=422, detail=(
+            "Este rascunho não nasceu do orçamento do escritório (foi precificado pela tabela antiga). "
+            "Gere a proposta a partir do orçamento aprovado do caso e envie a nova."))
 
     proposal.status = ProposalStatus.sent
     proposal.sent_at = datetime.now(UTC)
@@ -545,12 +551,12 @@ def new_version(
             detail="Nova versão só a partir de proposta recusada ou expirada "
             f"(estado atual: {eff.value}).",
         )
-    # ADR-074 §7: caso com orçamento renegocia sobre o orçamento aprovado e atual, nunca sobre a
-    # cópia dos itens da versão recusada (que pode vir de um orçamento já superado).
+    # ADR-081: a renegociação de um caso nasce do orçamento aprovado e atual, nunca da cópia dos
+    # itens da versão recusada — inclusive a proposta antiga precificada pela tabela de código.
     scope_items, total_value, rota_id, orcamento_id = prev.scope_items, prev.total_value, prev.rota_id, None
     if prev.process_id is not None:
         try:
-            orcamento = orcamento_para_proposta(db, current_user.tenant_id, prev.process_id)
+            orcamento = exigir_orcamento(db, current_user.tenant_id, prev.process_id)
         except ProposalGenerationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if orcamento is not None:

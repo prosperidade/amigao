@@ -511,7 +511,10 @@ def test_caminho_feliz_proposta_do_proprio_tenant(client: TestClient, mundos):
             "title": "Proposta legítima",
         },
     )
-    assert r.status_code == 201, r.text
+    # Relações do próprio tenant passam da trava; desde a #284 a regra de negócio responde (caso
+    # sem Rota assinada nem orçamento) — 422 com o próximo passo, nunca 404.
+    assert r.status_code == 422, r.text
+    assert "Rota" in r.json()["detail"]
 
 
 def test_caminho_feliz_contrato_do_proprio_tenant(client: TestClient, mundos):
