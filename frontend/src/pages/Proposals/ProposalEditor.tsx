@@ -259,7 +259,8 @@ export default function ProposalEditor() {
     proposal?.orcamento_id ?? (isNew && typeof draftData?.orcamento_id === 'number' ? draftData.orcamento_id : null);
   // ADR-081: proposta nova de um caso só sai com o orçamento aprovado (rascunho carregado dele).
   const semOrcamento = isNew && !!processId && orcamentoOrigem === null;
-  const itensEditaveis = isEditable && orcamentoOrigem === null;
+  // Itens e total só se digitam em proposta avulsa (sem caso); de caso, vêm do orçamento.
+  const itensEditaveis = isEditable && orcamentoOrigem === null && !semOrcamento;
 
   // Classes reutilizáveis
   const inputCls = "w-full rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50 transition-colors";
