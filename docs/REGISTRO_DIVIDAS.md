@@ -1,5 +1,28 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 25/09/2026 — telas do motor e do comercial (#278, #282, só dev)
+
+Registro: [TELAS_COMERCIAL_MOTOR_282_278.md](arquitetura/TELAS_COMERCIAL_MOTOR_282_278.md). Esta
+frente começa na #289.
+
+- **#278 — a tela não conhece o motor (FECHADA em dev, 25/09):** "Gerar pelo motor", relatório da
+  execução, ciência de alerta crítico com justificativa, fundamento por ID clicável e remoção com
+  motivo, provados no navegador em #23 e #25.
+- **#282 — tela de relatório, escopo, orçamento e métodos (FECHADA em dev, exceto métodos):**
+  relatório e escopo com a evidência clicável e revisão; orçamento por passo com "fora", motivos
+  de desatualização, troca de método, aprovação e proposta nascida dele. **Resta:** a tela de
+  métodos e preços do tenant (`/comercial/metodos` segue só por API).
+- **#289 — reexecutar o motor sem fato novo desatualiza a cadeia comercial e pede nova ciência
+  (aberta, decisão do André):** execuções com o mesmo `fatos_hash` (8–15 no #23; 5, 14 e 16 no #25)
+  deixam escopo e orçamento desatualizados e reabrem a ciência do mesmo alerta. **Opções:** comparar
+  a base por `fatos_hash` + conjunto de regras em vez do ID da execução, ou não criar execução nova
+  quando os fatos e o conjunto são os mesmos.
+- **#290 — texto do dispositivo com redações sucessivas (aberta, curadoria):** o art. 29 da Lei
+  12.651/2012 (dispositivo 41702, fonte 1313) traz o § 1º três vezes (original e redações de 2012),
+  como texto compilado. A tela mostra o que está gravado.
+
+> **PRÓXIMO NÚMERO LIVRE: 291.** (#289 e #290 abertas pelas telas #278/#282, 25/09.)
+
 ## Pulso 24/09/2026 — #285, diagnóstico por afirmação (ADR-080, só dev)
 
 Registro: [DIAGNOSTICO_AFIRMACAO_285.md](arquitetura/DIAGNOSTICO_AFIRMACAO_285.md). #286 e #287

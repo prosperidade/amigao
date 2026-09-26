@@ -86,5 +86,6 @@ numérico vira 422; a cadeia não reaproveita artefato rejeitado.
   009) — ver achado 1.
 - Redator com checklist de TR e peça técnica definitiva (pós-contratação).
 - Relatório da Fazenda Paraíso (INS-008) como referência de qualidade.
-- Tela: relatório, escopo, orçamento e métodos só por API (**#282**).
+- Tela: relatório, escopo, orçamento e métodos só por API (**#282**). *(25/09: telas de relatório, escopo e
+  orçamento em [TELAS_COMERCIAL_MOTOR_282_278.md](TELAS_COMERCIAL_MOTOR_282_278.md); métodos seguem por API.)*
 - Validação da Ísis do método de orçamento e do texto das afirmações.

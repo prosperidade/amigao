@@ -20,6 +20,17 @@ registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de ch
 prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
 pendente; a última tarefa do #23 foi deixada terminar sozinha.
 
+**Pulso 25/09/2026 — telas do motor (#278) e do comercial (#282), PR rascunho, só dev.** A UI sai
+do congelamento só para isto. Rota: gerar pelo motor, relatório da execução, ciência de alerta,
+fundamento por ID clicável, remoção com motivo (também em Rota assinada). Relatório e escopo com a
+evidência clicável e aprovar/rejeitar; orçamento por passo com "fora", motivos de desatualização,
+troca de método, aprovação e proposta nascida dele; rodapé com o SHA nas telas. Novo
+`GET /processes/{id}/evidencias/{tipo}/{id}` com as travas de tenant e caso. Percurso completo no
+navegador em #23 e #25, com recarga e nova sessão. O gate achou dois defeitos de tela (corrigidos) e
+abriu **#289** (motor reexecutado sem fato novo desatualiza tudo) e **#290** (curadoria). Resta da
+#282 a tela de métodos. Registro:
+[TELAS_COMERCIAL_MOTOR_282_278.md](../arquitetura/TELAS_COMERCIAL_MOTOR_282_278.md).
+
 **Pulso 24/09/2026 — #285, diagnóstico por afirmação (ADR-080), PR rascunho empilhado no #211, só
 dev.** O diagnóstico real passou a entrar em revisão pelo contrato: prompt-base próprio (o legado
 pedia `situacao_geral`), schema estreito da afirmação, regras D1–D6, teto do agente por chamada.
