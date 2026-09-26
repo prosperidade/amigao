@@ -128,11 +128,13 @@ async function renegociar(page, caso, pid, proposta) {
   await page.goto(`${BASE}/processes/${pid}?tab=commercial`);
   await page.getByTestId('comercial-rota').waitFor();
   await rodape(page, caso, 'Comercial');
-  const linha = page.locator('div').filter({ hasText: `#${proposta.id} ·` }).last();
+  // A linha da proposta: a menor div que tem o número dela e os botões de ação.
+  const linha = page.locator('div').filter({ hasText: `#${proposta.id} ·` })
+    .filter({ has: page.getByRole('button', { name: /Enviar/ }) }).last();
   await gesto(page, 'POST', `/proposals/${proposta.id}/send`, () => linha.getByRole('button', { name: /Enviar/ }).click(), 200);
-  await gesto(page, 'POST', `/proposals/${proposta.id}/reject`, () => linha.getByRole('button', { name: /Recusar/ }).click(), 200);
+  await gesto(page, 'POST', `/proposals/${proposta.id}/reject`, () => page.locator('div').filter({ hasText: `#${proposta.id} ·` }).filter({ has: page.getByRole('button', { name: /Recusar/ }) }).last().getByRole('button', { name: /Recusar/ }).click(), 200);
   const nv = await gesto(page, 'POST', `/proposals/${proposta.id}/nova-versao`,
-    () => linha.getByRole('button', { name: /Nova versão/ }).click(), 201);
+    () => page.locator('div').filter({ hasText: `#${proposta.id} ·` }).filter({ has: page.getByRole('button', { name: /Nova versão/ }) }).last().getByRole('button', { name: /Nova versão/ }).click(), 201);
   anotar(caso, 'enviar → recusar → nova versão (tela)', { anterior: proposta.id, nova: nv.corpo.id,
     versao: nv.corpo.version_number, orcamento_id: nv.corpo.orcamento_id, total_value: nv.corpo.total_value });
   if (!nv.corpo.orcamento_id) throw new Error('nova versão deveria nascer do orçamento');
