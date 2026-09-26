@@ -122,7 +122,12 @@ function LinhaAvaliacao({ processId, a }: { processId: number; a: AvaliacaoLinha
           />
         ) : (
           <span className="text-amber-700 dark:text-amber-300">
-            não resolvido — {RAZAO_LABEL[a.fundamento.razao ?? ''] ?? a.fundamento.razao ?? 'sem razão registrada'}
+            não resolvido —{' '}
+            {a.fundamento.razao
+              ? (RAZAO_LABEL[a.fundamento.razao] ?? a.fundamento.razao)
+              : a.estado === 'aplicavel_disparou' || a.estado === 'indeterminado'
+                ? 'sem razão registrada'
+                : 'a regra não disparou (o motor só resolve fundamento quando dispara ou fica indeterminada)'}
             {a.fundamento.caminho ? ` (${a.fundamento.caminho})` : ''}
           </span>
         )}

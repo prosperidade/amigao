@@ -42,7 +42,7 @@ def test_fundamento_do_passo_abre_o_texto_do_dispositivo(client: TestClient, db_
     h, p, hd, rota, passos = _rota_validada(client, db_session)
     passo = passos[CCIR]
     d = client.get(_url(p.id, "dispositivo", passo["fundamento_dispositivo_id"]), headers=hd).json()
-    assert d["texto"] and "art" in d["titulo"].lower()
+    assert d["texto"] and "art" in d["titulo"].lower() and " — " not in d["titulo"]
     assert [r["tipo"] for r in d["refs"]] == ["fonte_versao"]
     assert d["refs"][0]["id"] == passo["fundamento_fonte_versao_id"]
 

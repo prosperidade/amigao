@@ -55,7 +55,9 @@ def _dispositivo(db: Session, id_: int) -> dict:
     d = db.query(Dispositivo).filter(Dispositivo.id == id_).one()
     fv, f = _fonte_de(db, d.fonte_versao_id)
     texto, cortado = _texto(d.texto)
-    return {"titulo": f"{f.rotulo} — {d.caminho}", "texto": texto, "texto_cortado": cortado,
+    # O caminho costuma já trazer a norma ("Lei 12.651/2012, art. 29"); não repetir.
+    titulo = d.caminho if d.caminho.startswith(f.rotulo) else f"{f.rotulo} — {d.caminho}"
+    return {"titulo": titulo, "texto": texto, "texto_cortado": cortado,
             "campos": _campos(("Norma", f.rotulo), ("Dispositivo", d.caminho), ("Versão da fonte", fv.id),
                               ("Validação da fonte", fv.status_validacao), ("Vigência", fv.vigencia_estado),
                               ("Hash do dispositivo", d.hash)),
