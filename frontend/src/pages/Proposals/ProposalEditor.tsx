@@ -171,6 +171,8 @@ export default function ProposalEditor() {
         payment_terms: paymentTerms,
         notes,
         rota_id: rotaId ?? undefined,
+        // ADR-081: proposta de um caso nasce do orçamento aprovado; o servidor recusa sem ele.
+        orcamento_id: isNew && typeof draftData?.orcamento_id === 'number' ? draftData.orcamento_id : undefined,
       };
       if (isNew) return api.post('/proposals/', body);
       return api.patch(`/proposals/${id}`, body);
@@ -253,7 +255,10 @@ export default function ProposalEditor() {
 
   const statusCfg = proposal ? (STATUS_CONFIG[proposal.status] ?? STATUS_CONFIG.draft) : STATUS_CONFIG.draft;
   const isEditable = !proposal || proposal.status === 'draft';
-  const orcamentoOrigem: number | null = proposal?.orcamento_id ?? null;
+  const orcamentoOrigem: number | null =
+    proposal?.orcamento_id ?? (isNew && typeof draftData?.orcamento_id === 'number' ? draftData.orcamento_id : null);
+  // ADR-081: proposta nova de um caso só sai com o orçamento aprovado (rascunho carregado dele).
+  const semOrcamento = isNew && !!processId && orcamentoOrigem === null;
   const itensEditaveis = isEditable && orcamentoOrigem === null;
 
   // Classes reutilizáveis
@@ -373,6 +378,13 @@ export default function ProposalEditor() {
               Proposta ainda não pode ser gerada
             </p>
             <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">{draftBlockedMsg}</p>
+            <button
+              type="button"
+              onClick={() => navigate(`/processes/${processId}?tab=commercial`)}
+              className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-300 underline"
+            >
+              Ir para relatório, escopo e orçamento do caso →
+            </button>
           </div>
         </div>
       )}
@@ -592,7 +604,8 @@ export default function ProposalEditor() {
           {isEditable && (
             <button
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || !title || !clientId}
+              disabled={saveMutation.isPending || !title || !clientId || semOrcamento}
+              title={semOrcamento ? 'A proposta do caso nasce do orçamento aprovado' : undefined}
               className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-medium text-sm transition-all flex items-center justify-center gap-2"
             >
               {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

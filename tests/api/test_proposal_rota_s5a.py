@@ -1,16 +1,19 @@
 """S5-A — a proposta nasce da Rota validada + máquina de estados.
 
-Cobre: escopo rastreável (item→passo), bloqueio sem Rota validada, precificação
-via PRICE_TABLE, transições (válidas e inválidas), renegociação com histórico,
-expiração derivada, e gate E6 (has_proposal_accepted) intacto.
+Cobre: escopo rastreável (item→passo), bloqueio sem Rota validada, transições (válidas e
+inválidas), renegociação com histórico, expiração derivada, e gate E6 (has_proposal_accepted)
+intacto. Desde a #284 (ADR-081) o preço vem do orçamento aprovado do tenant — a PRICE_TABLE saiu.
 """
 
+import time
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
+from tests.comercial.apoio import orcamento_aprovado
 
 from app.core.security import get_password_hash
 from app.models.client import Client, ClientStatus, ClientType
+from app.models.comercial import Orcamento
 from app.models.document import Document, OcrStatus
 from app.models.process import DemandType, Process, ProcessStatus
 from app.models.property import Property
@@ -84,10 +87,27 @@ def _rota_validada(db_session, tenant, proc, *, billable=2, direcao=1, demand="c
 # Rota → Proposta (escopo rastreável + precificação)
 # ---------------------------------------------------------------------------
 
-def test_escopo_nasce_dos_passos_faturaveis_rastreavel(client: TestClient, db_session):
+def _usuario(db_session, tenant) -> User:
+    return db_session.query(User).filter(User.tenant_id == tenant.id).first()
+
+
+def test_rota_assinada_sem_orcamento_pede_o_orcamento(client: TestClient, db_session):
+    """ADR-081: sem orçamento não há preço — nada de tabela de código."""
+    tenant, _cli, _prop, proc = _setup(db_session, "rota.semorc@ex.com")
+    _rota_validada(db_session, tenant, proc, billable=2, direcao=1)
+    db_session.commit()
+    h = _login(client, "rota.semorc@ex.com")
+
+    r = client.get(f"/api/v1/proposals/generate-draft?process_id={proc.id}", headers=h)
+    assert r.status_code == 422
+    assert "orçamento" in r.json()["detail"]
+
+
+def test_escopo_nasce_do_orcamento_rastreavel_ao_passo(client: TestClient, db_session):
     tenant, _cli, _prop, proc = _setup(db_session, "rota.ok@ex.com")
     rota = _rota_validada(db_session, tenant, proc, billable=2, direcao=1)
     passo_ids = [p.id for p in rota.passos if p.classificacao == RotaPassoClassificacao.item_proposta]
+    orc = orcamento_aprovado(db_session, process=proc, user_id=_usuario(db_session, tenant).id)
     db_session.commit()
     h = _login(client, "rota.ok@ex.com")
 
@@ -96,11 +116,10 @@ def test_escopo_nasce_dos_passos_faturaveis_rastreavel(client: TestClient, db_se
     body = r.json()
     # só os 2 faturáveis viram itens (a 'direção' não entra no escopo cobrável)
     assert len(body["scope_items"]) == 2
-    # cada item aponta o passo de origem (rastreável)
     assert {it["rota_passo_id"] for it in body["scope_items"]} == set(passo_ids)
-    # PRICE_TABLE precifica: car/baixa 800–1500 → sugerido 1200 distribuído
-    assert body["suggested_value"] == 1200
-    assert sum(it["total"] for it in body["scope_items"]) == 1200
+    # o preço é o do orçamento do tenant: 2 passos × 4 h × R$ 150
+    assert body["suggested_value"] == 1200 == float(orc.total)
+    assert body["orcamento_id"] == orc.id
     assert body["rota_id"] == rota.id
 
 
@@ -125,25 +144,38 @@ def test_rota_validada_sem_passo_faturavel_bloqueada(client: TestClient, db_sess
 
     r = client.get(f"/api/v1/proposals/generate-draft?process_id={proc.id}", headers=h)
     assert r.status_code == 422
-    assert "faturáveis" in r.json()["detail"]
+    assert "orçamento" in r.json()["detail"]
+    # e o escopo não se especifica sem passo cobrado: o Redator recusa, dizendo por quê
+    r = client.post(f"/api/v1/processes/{proc.id}/comercial/redacao", headers=h)
+    assert r.status_code == 422
+    assert "item de proposta" in r.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
 # Máquina de estados
 # ---------------------------------------------------------------------------
 
-def _criar(client, h, cli_id, proc_id):
-    return client.post("/api/v1/proposals/", headers=h, json={
-        "client_id": cli_id, "process_id": proc_id, "title": "P",
-        "scope_items": [], "total_value": 1000, "validity_days": 30,
-    }).json()["id"]
+def _criar(client, h, db_session, cli, proc):
+    """Proposta do caso: Rota assinada → orçamento aprovado → proposta (ADR-081)."""
+    tenant_id = proc.tenant_id
+    if not db_session.query(Rota).filter(Rota.process_id == proc.id, Rota.status == RotaStatus.validada).first():
+        _rota_validada(db_session, db_session.get(Tenant, tenant_id), proc)
+        orcamento_aprovado(db_session, process=proc,
+                           user_id=db_session.query(User).filter(User.tenant_id == tenant_id).first().id)
+        db_session.commit()
+    r = client.post("/api/v1/proposals/", headers=h, json={
+        "client_id": cli.id, "process_id": proc.id, "title": "P", "validity_days": 30,
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["orcamento_id"] is not None
+    return r.json()["id"]
 
 
 def test_transicoes_validas_draft_send_accept(client: TestClient, db_session):
     tenant, cli, _prop, proc = _setup(db_session, "tr.ok@ex.com")
     db_session.commit()
     h = _login(client, "tr.ok@ex.com")
-    pid = _criar(client, h, cli.id, proc.id)
+    pid = _criar(client, h, db_session, cli, proc)
     assert client.post(f"/api/v1/proposals/{pid}/send", headers=h).json()["status"] == "sent"
     acc = client.post(f"/api/v1/proposals/{pid}/accept", headers=h)
     assert acc.status_code == 200
@@ -154,16 +186,20 @@ def test_aceite_recusa_proposta_desatualizada_com_razao(client: TestClient, db_s
     tenant, cli, _prop, proc = _setup(db_session, "tr.stale@ex.com")
     db_session.commit()
     h = _login(client, "tr.stale@ex.com")
-    pid = _criar(client, h, cli.id, proc.id)
+    pid = _criar(client, h, db_session, cli, proc)
     assert client.post(f"/api/v1/proposals/{pid}/send", headers=h).status_code == 200
 
     proposta = db_session.query(Proposal).filter(Proposal.id == pid).one()
+    # O documento entra depois da proposta (relógio do Postgres) E do orçamento (relógio do
+    # Python): os dois relógios podem divergir por milissegundos, então o marco é o maior deles.
+    orcamento = db_session.get(Orcamento, proposta.orcamento_id)
+    entrada = max(proposta.created_at, orcamento.created_at) + timedelta(milliseconds=1)
     doc = Document(
         tenant_id=tenant.id, process_id=proc.id, client_id=cli.id,
         original_file_name="matricula-nova.pdf", filename="matricula-nova.pdf",
         content_type="application/pdf", storage_key=f"stale/{tenant.id}/{proc.id}",
         ocr_status=OcrStatus.done,
-        created_at=proposta.created_at + timedelta(minutes=1),
+        created_at=entrada,
     )
     db_session.add(doc)
     db_session.commit()
@@ -181,11 +217,22 @@ def test_aceite_recusa_proposta_desatualizada_com_razao(client: TestClient, db_s
     assert proposta.status == ProposalStatus.sent
 
     # E o caminho que a mensagem indica funciona de fato: recusar → nova versão.
+    # Desde a #284 a nova versão nasce do orçamento aprovado e ATUAL: o documento novo
+    # desatualizou o orçamento, então ela é recusada até o consultor refazer escopo e orçamento.
     rec = client.post(f"/api/v1/proposals/{pid}/reject", headers=h, json={"reason": "escopo desatualizado"})
     assert rec.status_code == 200, rec.text
     nova = client.post(f"/api/v1/proposals/{pid}/nova-versao", headers=h)
+    assert nova.status_code == 422
+    assert "desatualizado" in nova.json()["detail"]
+    # Regerar depois do documento: espera o relógio local passar do marco de entrada.
+    while datetime.now(UTC) <= entrada:
+        time.sleep(0.01)
+    novo_orc = orcamento_aprovado(db_session, process=proc, user_id=_usuario(db_session, tenant).id)
+    db_session.commit()
+    nova = client.post(f"/api/v1/proposals/{pid}/nova-versao", headers=h)
     assert nova.status_code == 201, nova.text
     assert nova.json()["status"] == "draft"
+    assert nova.json()["orcamento_id"] == novo_orc.id
 
 
 def test_aceitar_rascunho_bloqueado(client: TestClient, db_session):
@@ -193,7 +240,7 @@ def test_aceitar_rascunho_bloqueado(client: TestClient, db_session):
     tenant, cli, _prop, proc = _setup(db_session, "tr.draft@ex.com")
     db_session.commit()
     h = _login(client, "tr.draft@ex.com")
-    pid = _criar(client, h, cli.id, proc.id)
+    pid = _criar(client, h, db_session, cli, proc)
     r = client.post(f"/api/v1/proposals/{pid}/accept", headers=h)
     assert r.status_code == 422
     assert "enviada" in r.json()["detail"]
@@ -203,7 +250,7 @@ def test_recusa_e_nova_versao_preserva_historico(client: TestClient, db_session)
     tenant, cli, _prop, proc = _setup(db_session, "reneg@ex.com")
     db_session.commit()
     h = _login(client, "reneg@ex.com")
-    pid = _criar(client, h, cli.id, proc.id)
+    pid = _criar(client, h, db_session, cli, proc)
     client.post(f"/api/v1/proposals/{pid}/send", headers=h)
     client.post(f"/api/v1/proposals/{pid}/reject", headers=h, json={"reason": "caro"})
 
@@ -222,7 +269,7 @@ def test_nova_versao_so_de_recusada_ou_expirada(client: TestClient, db_session):
     tenant, cli, _prop, proc = _setup(db_session, "reneg.bad@ex.com")
     db_session.commit()
     h = _login(client, "reneg.bad@ex.com")
-    pid = _criar(client, h, cli.id, proc.id)
+    pid = _criar(client, h, db_session, cli, proc)
     # rascunho não gera nova versão
     r = client.post(f"/api/v1/proposals/{pid}/nova-versao", headers=h)
     assert r.status_code == 422
@@ -247,10 +294,18 @@ def test_expirada_derivada_no_read_e_nao_aceita(client: TestClient, db_session):
     r = client.post(f"/api/v1/proposals/{p.id}/accept", headers=h)
     assert r.status_code == 422
     assert "expirada" in r.json()["detail"].lower()
-    # mas pode virar nova versão
+    # Proposta antiga sem orçamento (como as precificadas pela tabela de código): a nova versão
+    # só nasce depois da Rota assinada e do orçamento aprovado (ADR-081).
     nv = client.post(f"/api/v1/proposals/{p.id}/nova-versao", headers=h)
-    assert nv.status_code == 201
+    assert nv.status_code == 422
+    assert "Rota" in nv.json()["detail"]
+    _rota_validada(db_session, tenant, proc)
+    orc = orcamento_aprovado(db_session, process=proc, user_id=_usuario(db_session, tenant).id)
+    db_session.commit()
+    nv = client.post(f"/api/v1/proposals/{p.id}/nova-versao", headers=h)
+    assert nv.status_code == 201, nv.text
     assert nv.json()["version_number"] == 2
+    assert nv.json()["orcamento_id"] == orc.id
 
 
 def test_gate_e6_intacto_apos_aceite(client: TestClient, db_session):
@@ -260,7 +315,7 @@ def test_gate_e6_intacto_apos_aceite(client: TestClient, db_session):
     db_session.commit()
     h = _login(client, "gate@ex.com")
     assert has_proposal_accepted(db_session, tenant.id, proc.id) is False
-    pid = _criar(client, h, cli.id, proc.id)
+    pid = _criar(client, h, db_session, cli, proc)
     client.post(f"/api/v1/proposals/{pid}/send", headers=h)
     client.post(f"/api/v1/proposals/{pid}/accept", headers=h)
     db_session.expire_all()

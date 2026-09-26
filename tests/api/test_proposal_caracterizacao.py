@@ -54,7 +54,7 @@ def test_criar_proposta_nasce_draft_com_validade(client: TestClient, db_session)
     h = _login(client, "prop.carac@example.com")
 
     r = client.post("/api/v1/proposals/", headers=h, json={
-        "client_id": cli.id, "process_id": proc.id, "title": "Proposta X",
+        "client_id": cli.id, "title": "Proposta X",
         "scope_items": [{"description": "Serviço", "unit": "serv.", "qty": 1,
                          "unit_price": 1000, "total": 1000}],
         "total_value": 1000, "validity_days": 30,
@@ -71,9 +71,23 @@ def test_update_so_em_draft(client: TestClient, db_session):
     db_session.commit()
     h = _login(client, "prop.carac@example.com")
     pid = client.post("/api/v1/proposals/", headers=h, json={
-        "client_id": cli.id, "process_id": proc.id, "title": "P",
+        "client_id": cli.id, "title": "P",
         "scope_items": [], "validity_days": 30,
     }).json()["id"]
     client.post(f"/api/v1/proposals/{pid}/send", headers=h)
     r = client.patch(f"/api/v1/proposals/{pid}", headers=h, json={"title": "novo"})
     assert r.status_code == 422
+
+
+def test_proposta_de_caso_sem_orcamento_e_recusada(client: TestClient, db_session):
+    """ADR-081 (#284): proposta de um caso sem Rota assinada nem orçamento não nasce do corpo."""
+    _tenant, cli, _prop, proc = _setup(db_session, "prop.semorc@example.com")
+    db_session.commit()
+    h = _login(client, "prop.semorc@example.com")
+    r = client.post("/api/v1/proposals/", headers=h, json={
+        "client_id": cli.id, "process_id": proc.id, "title": "Proposta X",
+        "scope_items": [{"description": "Serviço", "unit": "serv.", "qty": 1, "unit_price": 1000, "total": 1000}],
+        "total_value": 1000, "validity_days": 30,
+    })
+    assert r.status_code == 422
+    assert "Rota" in r.json()["detail"]
