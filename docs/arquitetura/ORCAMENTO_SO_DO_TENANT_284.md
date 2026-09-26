@@ -61,23 +61,45 @@ real", tenant 33), sintéticos.
 
 ## 4. Propostas sem orçamento em produção
 
-**Pendente.** O canal somente-leitura `supabase-prod-ro` (ADR-076) não estava conectado nesta
-sessão (pede autenticação pelo `/mcp`); o conector completo do Supabase não é caminho de leitura e
-não foi usado. A consulta está pronta e foi validada no dev:
+Lido em 26/09 pelo canal somente-leitura (`read_only=true`, ADR-076), só `SELECT`. Produção em
+`076mc001` (tabela `orcamento` e coluna `proposals.orcamento_id` existem) e com **uma proposta** ao
+todo:
+
+| Proposta | Processo | Tenant | Estado | Valor | `orcamento_id` | Rota | Contratos | Orçamento aprovado no caso | Métodos do tenant |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 16 | 1 | **rascunho** (criada 05/08, nunca enviada; validade gravada até 04/09) | R$ 1.400 | nenhum | Rota 2, assinada | 0 | não | **0** |
+
+**O que acontece com ela depois do merge:** fica como está (nada é apagado nem reprecificado), mas
+**não pode ser enviada** — o envio devolve 422 pedindo a proposta a partir do orçamento. Para o caso
+16 ter proposta: cadastrar métodos e preços do tenant (Configurações › Métodos e preços; hoje são
+zero), gerar e aprovar relatório, escopo e orçamento da Rota 2 e criar a proposta nova, que nasce do
+orçamento.
+
+**Achado:** o tenant 1 de produção não tem nenhum método. Sem método padrão, o orçamento é recusado
+("sem método padrão") — nenhum caso de produção gera proposta até a consultoria cadastrar os seus
+preços. É a consequência esperada do ADR-081 (preço é do escritório), e precisa estar no roteiro de
+implantação.
+
+Consulta usada:
 
 ```sql
-select p.id as proposta, p.process_id as processo, p.tenant_id, p.status, p.total_value,
-       p.created_at::date as criada, p.accepted_at::date as aceita,
+select p.id as proposta, p.process_id as processo, p.tenant_id, p.status, p.total_value, p.orcamento_id,
+       p.rota_id, p.version_number, p.created_at::date as criada, p.sent_at::date as enviada,
+       p.accepted_at::date as aceita, p.expires_at::date as expira,
        (select count(*) from contracts c where c.proposal_id = p.id) as contratos,
        exists (select 1 from rotas r where r.process_id = p.process_id and r.status = 'validada') as rota_assinada,
-       exists (select 1 from orcamento o where o.process_id = p.process_id and o.estado_revisao = 'aprovada') as tem_orcamento_aprovado
-from proposals p
-where p.orcamento_id is null
-order by p.id;
+       exists (select 1 from orcamento o where o.process_id = p.process_id and o.estado_revisao = 'aprovada') as tem_orcamento_aprovado,
+       (select count(*) from orcamento_metodo m where m.tenant_id = p.tenant_id) as metodos_do_tenant
+from proposals p order by p.id;
 ```
 
-Se a produção ainda não tiver a migration `076mc001` (tabela `orcamento` e coluna `orcamento_id`),
-toda proposta de produção é "sem orçamento": tirar o filtro e a última coluna.
+**Canal:** o OAuth do `supabase-prod-ro` passou a ser recusado pelo servidor de autorização do
+Supabase ("Resource must be a valid MCP endpoint": o recurso anunciado leva os parâmetros da URL, o
+servidor de login só aceita a URL sem eles). O André configurou na máquina dele o servidor
+`supabase-prod-ro-pat` — **mesma URL, com `read_only=true`**, autenticado por token pessoal no
+cabeçalho, em escopo de usuário (o `.mcp.json` versionado ficou intacto). Como a sessão já estava
+aberta, a leitura foi por uma chamada `claude -p` restrita a `mcp__supabase-prod-ro-pat__execute_sql`
+(o contorno de 21/09), lendo o `tool_result` literal. Registrado no ADR-076.
 
 **No dev** (análogo): 5 propostas, todas **aceitas e com contrato**, sem Rota assinada nem
 orçamento (ids 1, 2, 3, 5 e 6, tenant 2, abril e maio). Pela regra do ADR-081 §4 elas **não mudam**:
@@ -97,5 +119,4 @@ assinada e orçamento.
 
 - **#292** — proposta avulsa (decisão do André, 26/09): permanece, rotulada e sem vínculo a caso;
   itens a partir do catálogo de métodos do tenant, valor editável. Frente pequena, depois do merge.
-- A lista de produção da §3, pelo canal somente-leitura, antes do merge.
 - Merge só com a autorização do André.
