@@ -48,5 +48,6 @@ usuário 38 é a do #218).
   ([ZONA_NORMATIVA_INCREMENTO4A.md](ZONA_NORMATIVA_INCREMENTO4A.md) §7).
 - A comparação cobre fatos e regras, como decidido; a data de referência da execução não entra no
   conteúdo. Se a vigência de uma norma mudar entre duas execuções com os mesmos fatos e regras, isso
-  não desatualiza a cadeia por esta via — não medido nesta frente.
+  não desatualiza a cadeia por esta via. Aberta como **#291** (26/09): o `regras_hash` vai incluir a
+  versão do dispositivo citado — zona normativa, junto com a #290.
 - Merge do #218 e deste PR só com a autorização do André.

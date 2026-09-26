@@ -16,8 +16,14 @@ Empilhado no PR #218.
 - **#290 — reclassificada (26/09, André):** caso de **versão de dispositivo** para a curadoria da zona
   normativa; registrada em [ZONA_NORMATIVA_INCREMENTO4A.md](arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md) §7.
   Não se corrige na frente das telas.
+- **#291 — o conteúdo do motor não vê a versão da norma citada (aberta, zona normativa, junto com a
+  #290; André, 26/09):** o `regras_hash` do #289 cobre versões e conteúdo das regras, não a versão do
+  dispositivo que cada regra cita. Mudança de redação ou de vigência da norma, com os mesmos fatos e
+  regras, não deixa escopo e orçamento desatualizados. **Correção:** o `regras_hash` inclui a versão
+  do dispositivo citado (fonte, versão e hash do dispositivo resolvido na data de referência); a
+  mudança desatualiza escopo e orçamento com o motivo e reabre a ciência.
 
-> **PRÓXIMO NÚMERO LIVRE: 291.**
+> **PRÓXIMO NÚMERO LIVRE: 292.** (#291 aberta em 26/09.)
 
 ## Pulso 25/09/2026 — telas do motor e do comercial (#278, #282, só dev)
 

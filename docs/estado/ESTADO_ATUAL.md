@@ -25,7 +25,8 @@ dev.** Configurações ganhou a aba Métodos e preços (versão nova a cada muda
 desativar/reativar, histórico); a #282 fecha e a #284 fica desbloqueada. O motor passa a ser
 comparado pelo conteúdo (`fatos_hash` + `regras_hash`): reexecutar sem fato nem regra novos não
 desatualiza escopo nem orçamento e não reabre a ciência, que vale como herdada. Provado no navegador
-em #23 e #25. A #290 foi para a curadoria da zona normativa como caso de versão de dispositivo.
+em #23 e #25. A #290 foi para a curadoria da zona normativa como caso de versão de dispositivo; a **#291**
+(versão do dispositivo citado no `regras_hash`) vai junto. Próximo número livre de dívida: **292**.
 Registro: [METODOS_CONTEUDO_MOTOR_282_289.md](../arquitetura/METODOS_CONTEUDO_MOTOR_282_289.md).
 
 **Pulso 25/09/2026 — telas do motor (#278) e do comercial (#282), PR rascunho, só dev.** A UI sai
