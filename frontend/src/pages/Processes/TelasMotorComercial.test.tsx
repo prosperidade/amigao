@@ -222,6 +222,24 @@ describe('Rota — motor jurídico (#278)', () => {
     expect(screen.getByTestId('fonte-passo-6')).toBeInTheDocument();
   });
 
+  it('ciência herdada de execução de mesmo conteúdo aparece como tal, clicável (#289)', async () => {
+    const semPendencia = {
+      ...EXECUCAO,
+      alertas_sem_ciencia: [],
+      avaliacoes: EXECUCAO.avaliacoes.map(a =>
+        a.avaliacao_id === 29
+          ? { ...a, alerta_critico_sem_ciencia: false, ciencia: { id: 3, avaliacao_id: 12, herdada: true } }
+          : { ...a, ciencia: null },
+      ),
+    };
+    servir({ '/processes/66/rota': ROTA, '/motor/execucoes/ultima': semPendencia });
+    render(comQuery(<RotaTab processId={66} />));
+    const alerta = await screen.findByTestId('avaliacao-REG-FUN-012');
+    expect(within(alerta).getByText(/ciência de execução anterior \(mesmos fatos e regras\)/)).toBeInTheDocument();
+    expect(within(alerta).getByRole('button', { name: 'ciência #3' })).toHaveAttribute('data-evidencia', 'ciencia_alerta:3');
+    expect(within(alerta).queryByRole('button', { name: /registrar ciência/i })).not.toBeInTheDocument();
+  });
+
   it('Rota assinada: passo ainda sai, sempre com motivo', async () => {
     const user = userEvent.setup();
     const manual = { ...PASSO_MOTOR, id: 9, origem: 'manual', titulo: 'Protocolar ofício', fundamento_dispositivo_id: null, origem_avaliacao_id: null };

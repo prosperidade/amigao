@@ -17,7 +17,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
-from app.models.motor_juridico import AvaliacaoRegra, ConjuntoRegras, ExecucaoMotor, Regra, RegraVersao
+from app.models.motor_juridico import AvaliacaoRegra, CienciaAlerta, ConjuntoRegras, ExecucaoMotor, Regra, RegraVersao
 from app.models.process import Process
 from app.services.motor_juridico import fundamento as fund
 from app.services.motor_juridico.ciclo import conjuntos_ativos, versoes_do_conjunto
@@ -170,10 +170,68 @@ def ultima_execucao(session: Session, *, process_id: int, tenant_id: int) -> Exe
     )
 
 
-def alertas_sem_ciencia(session: Session, *, execucao_id: int, tenant_id: int) -> list[AvaliacaoRegra]:
-    """Alertas críticos da execução que ainda não têm ciência registrada."""
-    from app.models.motor_juridico import CienciaAlerta  # noqa: PLC0415
+def regras_hash(session: Session, *, execucao_id: int) -> str:
+    """Hash do conjunto de regras que a execução avaliou: (versão, hash do conteúdo), ordenado.
 
+    Com o ``fatos_hash``, é o CONTEÚDO da execução (#289): duas execuções com os dois hashes
+    iguais chegaram ao mesmo resultado — a segunda não desatualiza nada nem reabre ciência.
+    """
+    from app.schemas.evidence import canonical_hash  # noqa: PLC0415
+
+    pares = (session.query(RegraVersao.id, RegraVersao.hash_conteudo)
+             .join(AvaliacaoRegra, AvaliacaoRegra.regra_versao_id == RegraVersao.id)
+             .filter(AvaliacaoRegra.execucao_id == execucao_id)
+             .order_by(RegraVersao.id).all())
+    return canonical_hash([[rv_id, h] for rv_id, h in pares])
+
+
+def conteudo_execucao(session: Session, execucao: ExecucaoMotor) -> dict[str, str]:
+    return {"fatos_hash": execucao.fatos_hash, "regras_hash": regras_hash(session, execucao_id=execucao.id)}
+
+
+def execucoes_equivalentes(session: Session, execucao: ExecucaoMotor) -> list[ExecucaoMotor]:
+    """Execuções anteriores do mesmo caso com o mesmo conteúdo (fatos e regras), mais nova primeiro."""
+    candidatas = (session.query(ExecucaoMotor)
+                  .filter(ExecucaoMotor.tenant_id == execucao.tenant_id,
+                          ExecucaoMotor.process_id == execucao.process_id,
+                          ExecucaoMotor.fatos_hash == execucao.fatos_hash,
+                          ExecucaoMotor.id < execucao.id)
+                  .order_by(ExecucaoMotor.id.desc()).all())
+    if not candidatas:
+        return []
+    alvo = regras_hash(session, execucao_id=execucao.id)
+    return [c for c in candidatas if regras_hash(session, execucao_id=c.id) == alvo]
+
+
+def ciencias_vigentes(session: Session, *, execucao_id: int, tenant_id: int) -> dict[int, CienciaAlerta]:
+    """Ciência que vale para cada avaliação da execução: a própria ou, se não houver, a da mesma
+    regra numa execução anterior de MESMO conteúdo (#289). Fato ou regra diferente ⇒ não vale."""
+    avs = (session.query(AvaliacaoRegra)
+           .filter(AvaliacaoRegra.execucao_id == execucao_id, AvaliacaoRegra.tenant_id == tenant_id)
+           .all())
+    if not avs:
+        return {}
+    out = {c.avaliacao_id: c for c in session.query(CienciaAlerta).filter(
+        CienciaAlerta.tenant_id == tenant_id, CienciaAlerta.avaliacao_id.in_([a.id for a in avs]))}
+    faltam = {a.regra_versao_id: a.id for a in avs if a.id not in out}
+    if faltam:
+        ex = session.get(ExecucaoMotor, execucao_id)
+        for anterior in execucoes_equivalentes(session, ex) if ex is not None else []:
+            for c, rv_id in (session.query(CienciaAlerta, AvaliacaoRegra.regra_versao_id)
+                             .join(AvaliacaoRegra, AvaliacaoRegra.id == CienciaAlerta.avaliacao_id)
+                             .filter(AvaliacaoRegra.execucao_id == anterior.id,
+                                     CienciaAlerta.tenant_id == tenant_id,
+                                     AvaliacaoRegra.regra_versao_id.in_(list(faltam)))
+                             .order_by(CienciaAlerta.id.desc())):
+                if rv_id in faltam and faltam[rv_id] not in out:
+                    out[faltam[rv_id]] = c
+            if all(av_id in out for av_id in faltam.values()):
+                break
+    return out
+
+
+def alertas_sem_ciencia(session: Session, *, execucao_id: int, tenant_id: int) -> list[AvaliacaoRegra]:
+    """Alertas críticos da execução sem ciência vigente (a própria ou a de execução de mesmo conteúdo)."""
     avs = (
         session.query(AvaliacaoRegra)
         .filter(AvaliacaoRegra.execucao_id == execucao_id, AvaliacaoRegra.tenant_id == tenant_id,
@@ -181,10 +239,7 @@ def alertas_sem_ciencia(session: Session, *, execucao_id: int, tenant_id: int) -
         .order_by(AvaliacaoRegra.id)
         .all()
     )
-    com_ciencia = {
-        a for (a,) in session.query(CienciaAlerta.avaliacao_id)
-        .filter(CienciaAlerta.tenant_id == tenant_id, CienciaAlerta.avaliacao_id.in_([a.id for a in avs]))
-    } if avs else set()
+    com_ciencia = set(ciencias_vigentes(session, execucao_id=execucao_id, tenant_id=tenant_id)) if avs else set()
     return [
         a for a in avs
         if a.id not in com_ciencia

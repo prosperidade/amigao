@@ -159,6 +159,8 @@ Lei 9.784. A sonda de anexo mira o art. 21, e passa.
 | #264 | As quatro naturezas do §6 com tabela própria, a partir dos insumos da `RegenteLandpage` |
 | #265 | Extrator de artigos: citação sem aspas de número maior abre artigo; revisar normas de alteração antes de validar |
 | #266 | Dispositivo curto perde nos dois ramos: o art. 22 do Decreto 6.514/2008 (436 caracteres) fica em 78º por vetor e 66º por lexical |
+| #290 | **Versão de dispositivo (curadoria, 26/09):** o art. 29 da Lei 12.651/2012 (dispositivo 41702, fonte 1313) guarda o § 1º três vezes — o original e as redações de 2012 — como texto compilado. É caso de versão de dispositivo: cada redação com a sua vigência, a citada pelo motor sendo a vigente na data de referência. Decisão do André: registrar para a curadoria, não corrigir na frente das telas |
+| #291 | **Versão do dispositivo no conteúdo do motor (26/09, junto com a #290):** o `regras_hash` do #289 passa a incluir a versão do dispositivo citado por cada regra (fonte, versão, hash); redação ou vigência nova da norma desatualiza escopo e orçamento e reabre a ciência |
 | #267 | Deduplicar por hash de texto: 20 textos idênticos sob identidades diferentes (3 arquivos repetidos da SEMAD, 17 segmentos `nao_determinado` do DOE-MT em duas coletâneas) |
 
 Numeradas a partir do maior número visto em todas as branches (#259) em 22/09; a frente 4b

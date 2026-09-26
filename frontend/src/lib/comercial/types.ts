@@ -179,6 +179,8 @@ export interface AvaliacaoLinha {
     razao: string | null;
   };
   alerta_critico_sem_ciencia: boolean;
+  /** Ciência vigente: a própria ou, com `herdada`, a de execução anterior de mesmo conteúdo (#289). */
+  ciencia: { id: number; avaliacao_id: number; herdada: boolean } | null;
   detalhe_erro: string | null;
 }
 

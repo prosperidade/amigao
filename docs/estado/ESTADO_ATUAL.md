@@ -20,6 +20,15 @@ registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de ch
 prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
 pendente; a última tarefa do #23 foi deixada terminar sozinha.
 
+**Pulso 26/09/2026 — métodos e preços (#282) e motor por conteúdo (#289), empilhado no #218, só
+dev.** Configurações ganhou a aba Métodos e preços (versão nova a cada mudança, regras do motor,
+desativar/reativar, histórico); a #282 fecha e a #284 fica desbloqueada. O motor passa a ser
+comparado pelo conteúdo (`fatos_hash` + `regras_hash`): reexecutar sem fato nem regra novos não
+desatualiza escopo nem orçamento e não reabre a ciência, que vale como herdada. Provado no navegador
+em #23 e #25. A #290 foi para a curadoria da zona normativa como caso de versão de dispositivo; a **#291**
+(versão do dispositivo citado no `regras_hash`) vai junto. Próximo número livre de dívida: **292**.
+Registro: [METODOS_CONTEUDO_MOTOR_282_289.md](../arquitetura/METODOS_CONTEUDO_MOTOR_282_289.md).
+
 **Pulso 25/09/2026 — telas do motor (#278) e do comercial (#282), PR rascunho, só dev.** A UI sai
 do congelamento só para isto. Rota: gerar pelo motor, relatório da execução, ciência de alerta,
 fundamento por ID clicável, remoção com motivo (também em Rota assinada). Relatório e escopo com a

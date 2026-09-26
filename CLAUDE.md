@@ -150,7 +150,7 @@ cd frontend && NODE_OPTIONS=--experimental-require-module npx vitest run
 > 22.11 o `require()` de ES Module ainda não é suportado, e a cadeia
 > jsdom → `@asamuzakjp/css-color` → `@csstools/css-calc` derruba **14 workers
 > na largada**: o resumo sai "12 passed" com os 14 arquivos que não rodaram
-> escondidos em "Errors". Com a flag: 32 arquivos, 194 testes (25/09/2026).
+> escondidos em "Errors". Com a flag: 33 arquivos, 200 testes (26/09/2026).
 
 > `client-portal/` e `mobile/` não rodam em CI no estado congelado. Buildá-los pode falhar — não tente subir esses serviços sem checar o ADR-009.
 

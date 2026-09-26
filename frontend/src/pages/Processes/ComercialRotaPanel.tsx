@@ -11,7 +11,7 @@
  * exigem justificativa, como na API.
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Check, FilePlus2, FileText, Loader2, RefreshCw, X } from 'lucide-react';
@@ -384,7 +384,12 @@ function OrcamentoCard({
           </tfoot>
         </table>
       </div>
-      <p className="text-[10px] text-gray-400">Mudar método ou quantidade gera a versão seguinte, que volta para revisão.</p>
+      <p className="text-[10px] text-gray-400">
+        Mudar método ou quantidade gera a versão seguinte, que volta para revisão.{' '}
+        <Link to="/settings?tab=metodos" className="underline text-gray-500 dark:text-slate-300">
+          Métodos e preços do escritório →
+        </Link>
+      </p>
 
       {orcamento.fora.length > 0 && (
         <div data-testid="orcamento-fora">

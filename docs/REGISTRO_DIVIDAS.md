@@ -1,5 +1,30 @@
 # Registro de dívidas — Regente (consolidado pós-PROMPT_11 · 2026-05-26)
 
+## Pulso 26/09/2026 — métodos e preços (#282) e motor por conteúdo (#289), só dev
+
+Registro: [METODOS_CONTEUDO_MOTOR_282_289.md](arquitetura/METODOS_CONTEUDO_MOTOR_282_289.md).
+Empilhado no PR #218.
+
+- **#282 — FECHADA em dev (26/09):** a tela de métodos e preços do tenant (Configurações › Métodos e
+  preços) fecha o que restava. Preço novo pela tela → orçamento desatualizado com o motivo → versão
+  nova com o preço novo → proposta, nos casos #23 e #25. **Desbloqueia a #284.**
+- **#289 — FECHADA em dev (26/09), decisão do André:** execução nova sempre; a cadeia comercial só
+  desatualiza, e a ciência do alerta crítico só reabre, quando o `fatos_hash` ou o `regras_hash`
+  (versões e hash das regras avaliadas) mudam. Base antiga, só com o ID da execução, é lida pelo
+  conteúdo daquela execução. Provado no navegador: execuções 17 (#23) e 18 (#25) sem desatualizar
+  nada; no #25 a ciência 3 vale como herdada.
+- **#290 — reclassificada (26/09, André):** caso de **versão de dispositivo** para a curadoria da zona
+  normativa; registrada em [ZONA_NORMATIVA_INCREMENTO4A.md](arquitetura/ZONA_NORMATIVA_INCREMENTO4A.md) §7.
+  Não se corrige na frente das telas.
+- **#291 — o conteúdo do motor não vê a versão da norma citada (aberta, zona normativa, junto com a
+  #290; André, 26/09):** o `regras_hash` do #289 cobre versões e conteúdo das regras, não a versão do
+  dispositivo que cada regra cita. Mudança de redação ou de vigência da norma, com os mesmos fatos e
+  regras, não deixa escopo e orçamento desatualizados. **Correção:** o `regras_hash` inclui a versão
+  do dispositivo citado (fonte, versão e hash do dispositivo resolvido na data de referência); a
+  mudança desatualiza escopo e orçamento com o motivo e reabre a ciência.
+
+> **PRÓXIMO NÚMERO LIVRE: 292.** (#291 aberta em 26/09.)
+
 ## Pulso 25/09/2026 — telas do motor e do comercial (#278, #282, só dev)
 
 Registro: [TELAS_COMERCIAL_MOTOR_282_278.md](arquitetura/TELAS_COMERCIAL_MOTOR_282_278.md). Esta

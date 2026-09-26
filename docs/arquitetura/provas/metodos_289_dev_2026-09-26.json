@@ -1,0 +1,236 @@
+{
+  "inicio": "2026-09-26T13:31:56.827Z",
+  "base": "http://127.0.0.1:5182",
+  "passos": [
+    {
+      "caso": "#23",
+      "passo": "Gerar pelo motor sem fato novo",
+      "execucao": 17,
+      "fatos_hash": "c844a5286d693f18",
+      "alertas_sem_ciencia": [],
+      "alertas": []
+    },
+    {
+      "caso": "#23",
+      "passo": "cadeia comercial depois (tela)",
+      "orcamento": 12,
+      "escopo": 30,
+      "antes_orcamento": 12,
+      "estados": {
+        "escopo": {
+          "estado": "vigente",
+          "motivos": []
+        },
+        "relatorio": {
+          "estado": "vigente",
+          "motivos": []
+        },
+        "orcamento": {
+          "estado": "vigente",
+          "motivos": []
+        }
+      }
+    },
+    {
+      "caso": "#23",
+      "passo": "rodapé Comercial",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "rodapé Métodos e preços",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "preço mudado na tela",
+      "codigo": "ccir",
+      "versao": 2,
+      "valor": "950.00"
+    },
+    {
+      "caso": "#23",
+      "passo": "orçamento depois do preço novo (tela)",
+      "id": 12,
+      "versao": 4,
+      "atualidade": {
+        "estado": "desatualizado",
+        "motivos": [
+          "Método \"ccir\" mudou (v1 → v2)"
+        ]
+      }
+    },
+    {
+      "caso": "#23",
+      "passo": "orçamento regerado com o preço novo (tela)",
+      "id": 16,
+      "versao": 5,
+      "total": "950.00",
+      "itens": [
+        {
+          "passo": 2,
+          "metodo": "ccir v2",
+          "total": "950.00"
+        }
+      ]
+    },
+    {
+      "caso": "#23",
+      "passo": "proposta do orçamento com preço novo (tela)",
+      "orcamento": 16,
+      "estado": "aprovada",
+      "proposta": 11,
+      "total_value": 950,
+      "orcamento_total": "950.00"
+    },
+    {
+      "caso": "#23",
+      "passo": "rodapé Comercial (recarga)",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "recarga: mesmo estado",
+      "orcamento": 16,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "950.00"
+    },
+    {
+      "caso": "#23",
+      "passo": "rodapé Comercial (nova sessão)",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "nova sessão: mesmo estado",
+      "orcamento": 16,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "950.00"
+    },
+    {
+      "caso": "#25",
+      "passo": "Gerar pelo motor sem fato novo",
+      "execucao": 18,
+      "fatos_hash": "31297776d64fd3f3",
+      "alertas_sem_ciencia": [],
+      "alertas": [
+        {
+          "rule_id": "REG-FUN-012",
+          "avaliacao": 107,
+          "ciencia": {
+            "id": 3,
+            "avaliacao_id": 95,
+            "herdada": true
+          }
+        }
+      ]
+    },
+    {
+      "caso": "#25",
+      "passo": "cadeia comercial depois (tela)",
+      "orcamento": 15,
+      "escopo": 32,
+      "antes_orcamento": 15,
+      "estados": {
+        "escopo": {
+          "estado": "vigente",
+          "motivos": []
+        },
+        "relatorio": {
+          "estado": "vigente",
+          "motivos": []
+        },
+        "orcamento": {
+          "estado": "vigente",
+          "motivos": []
+        }
+      }
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Comercial",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Métodos e preços",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "preço mudado na tela",
+      "codigo": "inscricao_car",
+      "versao": 2,
+      "valor": "1900.00"
+    },
+    {
+      "caso": "#25",
+      "passo": "orçamento depois do preço novo (tela)",
+      "id": 15,
+      "versao": 11,
+      "atualidade": {
+        "estado": "desatualizado",
+        "motivos": [
+          "Método \"inscricao_car\" mudou (v1 → v2)"
+        ]
+      }
+    },
+    {
+      "caso": "#25",
+      "passo": "orçamento regerado com o preço novo (tela)",
+      "id": 17,
+      "versao": 12,
+      "total": "1900.00",
+      "itens": [
+        {
+          "passo": 5,
+          "metodo": "inscricao_car v2",
+          "total": "1900.00"
+        }
+      ]
+    },
+    {
+      "caso": "#25",
+      "passo": "proposta do orçamento com preço novo (tela)",
+      "orcamento": 17,
+      "estado": "aprovada",
+      "proposta": 12,
+      "total_value": 1900,
+      "orcamento_total": "1900.00"
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Comercial (recarga)",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "recarga: mesmo estado",
+      "orcamento": 17,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "1900.00"
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Comercial (nova sessão)",
+      "texto": "Painel 2b966cb · API 2b966cb · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "nova sessão: mesmo estado",
+      "orcamento": 17,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "1900.00"
+    }
+  ],
+  "api": {
+    "commit": "2b966cba1e0283042bc43c3109aec505f0885191",
+    "ambiente": "development"
+  },
+  "resultado": "ok",
+  "fim": "2026-09-26T13:33:24.609Z"
+}
