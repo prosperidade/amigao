@@ -25,15 +25,17 @@ interface AcoesTabProps {
   /** Macroetapa que o consultor está visualizando. Na E5 (`caminho_regulatorio`)
    *  a aba Ações vira a Rota Regulatória (Ficha §8.1 — não é 7ª aba). */
   currentStage?: string;
+  /** Da Rota assinada para a aba Comercial (relatório, escopo e orçamento). */
+  onAbrirComercial?: () => void;
 }
 
 type StatusFilter = AcaoStatus | 'all';
 type TriagemFilter = AcaoTipoTriagem | 'all';
 
-export default function AcoesTab({ processId, currentStage }: AcoesTabProps) {
+export default function AcoesTab({ processId, currentStage, onAbrirComercial }: AcoesTabProps) {
   // Ficha §8.1: na etapa E5, a aba Ações renderiza a Rota. Fora da E5, segue normal.
   if (currentStage === 'caminho_regulatorio') {
-    return <RotaTab processId={processId} />;
+    return <RotaTab processId={processId} onAbrirComercial={onAbrirComercial} />;
   }
   return <AcoesList processId={processId} />;
 }

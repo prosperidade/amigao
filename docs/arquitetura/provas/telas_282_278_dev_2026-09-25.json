@@ -1,0 +1,581 @@
+{
+  "inicio": "2026-09-26T01:24:50.775Z",
+  "base": "http://127.0.0.1:5182",
+  "passos": [
+    {
+      "caso": "#23",
+      "passo": "rodapé Rota",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "Gerar pelo motor",
+      "status": 201,
+      "execucao": 15,
+      "avaliadas": 6,
+      "contagem": {
+        "aplicavel_nao_disparou": 2,
+        "aplicavel_disparou": 3,
+        "indeterminado": 1
+      },
+      "alertas_sem_ciencia": [],
+      "created": 0,
+      "suprimidos": 2,
+      "rota_status": "validada"
+    },
+    {
+      "caso": "#23",
+      "passo": "relatório da execução na tela",
+      "indeterminadas": [
+        {
+          "rule_id": "REG-FUN-012",
+          "faltantes": [
+            "titular.falecimento_declarado"
+          ]
+        }
+      ],
+      "sem_fundamento": [
+        {
+          "rule_id": "REG-BR-CAR-001",
+          "razao": null
+        },
+        {
+          "rule_id": "REG-BR-CAR-002",
+          "razao": null
+        },
+        {
+          "rule_id": "REG-FUN-012",
+          "razao": "fonte_ausente"
+        },
+        {
+          "rule_id": "REG-GO-CAR-001",
+          "razao": "fonte_ausente"
+        }
+      ]
+    },
+    {
+      "caso": "#23",
+      "passo": "evidência aberta (fundamento-do-passo)",
+      "tipo": "dispositivo",
+      "id": 65677,
+      "titulo_hash": "cc3251cf926734da",
+      "texto_chars": 1241,
+      "campos": 6,
+      "refs": [
+        "Lei 5.868/1972 (versão 1875)"
+      ],
+      "abre_documento": false,
+      "seguiu": {
+        "titulo_hash": "e2dc63d33f3fed7d",
+        "texto_chars": 6000,
+        "campos": 6,
+        "refs": [],
+        "abre_documento": false
+      }
+    },
+    {
+      "caso": "#23",
+      "passo": "passo do motor removido com motivo",
+      "titulo": "Mapear os componentes do imóvel",
+      "sem_motivo_bloqueado": true,
+      "status": 204,
+      "motivo_hash": "e74a3a1a767cc67a"
+    },
+    {
+      "caso": "#23",
+      "passo": "rodapé Comercial",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "orçamento antes (tela)",
+      "id": 8,
+      "versao": 3,
+      "atualidade": {
+        "estado": "desatualizado",
+        "motivos": [
+          "Escopo de origem: Nova execução do motor jurídico (#15)"
+        ]
+      },
+      "total": "900.00"
+    },
+    {
+      "caso": "#23",
+      "passo": "Gerar relatório e escopo (tela)",
+      "relatorio": {
+        "id": 27,
+        "versao": 8,
+        "afirmacoes": 11,
+        "evidencias": 67
+      },
+      "escopo": {
+        "id": 28,
+        "versao": 8,
+        "afirmacoes": 7,
+        "fora": 3
+      }
+    },
+    {
+      "caso": "#23",
+      "passo": "evidência aberta (afirmação-do-relatório)",
+      "tipo": "avaliacao_regra",
+      "id": 85,
+      "titulo_hash": "0fea90271f52e638",
+      "texto_chars": 82,
+      "campos": 3,
+      "refs": [
+        "execução do motor #15"
+      ],
+      "abre_documento": false,
+      "seguiu": {
+        "titulo_hash": "f0d0a8fd4c8a44ee",
+        "texto_chars": 0,
+        "campos": 6,
+        "refs": [],
+        "abre_documento": false
+      }
+    },
+    {
+      "caso": "#23",
+      "passo": "evidência aberta (documento-do-relatório)",
+      "tipo": "documento",
+      "id": 145,
+      "titulo_hash": "d7644cc72bdcf2ca",
+      "texto_chars": 0,
+      "campos": 3,
+      "refs": [],
+      "abre_documento": true
+    },
+    {
+      "caso": "#23",
+      "passo": "evidência aberta (fundamento-do-escopo)",
+      "tipo": "dispositivo",
+      "id": 65677,
+      "titulo_hash": "cc3251cf926734da",
+      "texto_chars": 1241,
+      "campos": 6,
+      "refs": [
+        "Lei 5.868/1972 (versão 1875)"
+      ],
+      "abre_documento": false,
+      "seguiu": {
+        "titulo_hash": "e2dc63d33f3fed7d",
+        "texto_chars": 6000,
+        "campos": 6,
+        "refs": [],
+        "abre_documento": false
+      }
+    },
+    {
+      "caso": "#23",
+      "passo": "Rejeitar relatório (tela)",
+      "id": 27,
+      "versao": 8,
+      "estado_revisao": "rejeitada",
+      "atualidade": "vigente"
+    },
+    {
+      "caso": "#23",
+      "passo": "Gerar relatório e escopo (tela)",
+      "relatorio": {
+        "id": 29,
+        "versao": 9,
+        "afirmacoes": 11,
+        "evidencias": 67
+      },
+      "escopo": {
+        "id": 30,
+        "versao": 9,
+        "afirmacoes": 7,
+        "fora": 3
+      }
+    },
+    {
+      "caso": "#23",
+      "passo": "Aprovar relatório (tela)",
+      "id": 29,
+      "versao": 9,
+      "estado_revisao": "aprovada",
+      "atualidade": "vigente"
+    },
+    {
+      "caso": "#23",
+      "passo": "Aprovar escopo (tela)",
+      "id": 30,
+      "versao": 9,
+      "estado_revisao": "aprovada",
+      "atualidade": "vigente"
+    },
+    {
+      "caso": "#23",
+      "passo": "Gerar orçamento (tela)",
+      "id": 12,
+      "versao": 4,
+      "total": "900.00",
+      "itens": [
+        {
+          "passo": 2,
+          "metodo": "ccir",
+          "escolha": "regra",
+          "total": "900.00"
+        }
+      ],
+      "fora": [
+        {
+          "passo": 1,
+          "motivo_hash": "74a4eac06e18ad95"
+        },
+        {
+          "passo": 3,
+          "motivo_hash": "1d4884c441f10375"
+        },
+        {
+          "passo": 4,
+          "motivo_hash": "1d4884c441f10375"
+        }
+      ],
+      "ressalvas": [
+        {
+          "tipo": "diagnostico_em_revisao",
+          "conclusoes": 9
+        }
+      ]
+    },
+    {
+      "caso": "#23",
+      "passo": "\"fora\" com motivo na tela",
+      "itens_fora": 3
+    },
+    {
+      "caso": "#23",
+      "passo": "Aprovar orçamento (tela)",
+      "id": 12,
+      "versao": 4,
+      "estado_revisao": "aprovada",
+      "atualidade": "vigente"
+    },
+    {
+      "caso": "#23",
+      "passo": "proposta criada do orçamento (tela)",
+      "proposta": 9,
+      "orcamento_id": 12,
+      "total_value": 900,
+      "itens": 1,
+      "orcamento_total": "900.00"
+    },
+    {
+      "caso": "#23",
+      "passo": "rodapé Comercial (recarga)",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "recarga: mesmo estado",
+      "orcamento": 12,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "900.00",
+      "relatorio": 29,
+      "relatorio_estado": "aprovada",
+      "escopo": 30,
+      "escopo_estado": "aprovada"
+    },
+    {
+      "caso": "#23",
+      "passo": "rodapé Comercial (nova sessão)",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#23",
+      "passo": "nova sessão: mesmo estado",
+      "orcamento": 12,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "900.00",
+      "relatorio": 29,
+      "relatorio_estado": "aprovada",
+      "escopo": 30,
+      "escopo_estado": "aprovada"
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Rota",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "Gerar pelo motor",
+      "status": 201,
+      "execucao": 16,
+      "avaliadas": 6,
+      "contagem": {
+        "aplicavel_disparou": 4,
+        "aplicavel_nao_disparou": 2
+      },
+      "alertas_sem_ciencia": [
+        95
+      ],
+      "created": 0,
+      "suprimidos": 3,
+      "rota_status": "validada"
+    },
+    {
+      "caso": "#25",
+      "passo": "relatório da execução na tela",
+      "indeterminadas": [],
+      "sem_fundamento": [
+        {
+          "rule_id": "REG-BR-CAR-002",
+          "razao": null
+        },
+        {
+          "rule_id": "REG-BR-CAR-007",
+          "razao": null
+        },
+        {
+          "rule_id": "REG-FUN-012",
+          "razao": "fonte_ausente"
+        },
+        {
+          "rule_id": "REG-GO-CAR-001",
+          "razao": "fonte_ausente"
+        }
+      ]
+    },
+    {
+      "caso": "#25",
+      "passo": "ciência do alerta crítico",
+      "avaliacao": 95,
+      "ciencia": 3
+    },
+    {
+      "caso": "#25",
+      "passo": "evidência aberta (fundamento-do-passo)",
+      "tipo": "dispositivo",
+      "id": 41702,
+      "titulo_hash": "a7fe700ed5720c8b",
+      "texto_chars": 3736,
+      "campos": 6,
+      "refs": [
+        "Lei 12.651/2012 (versão 1313)"
+      ],
+      "abre_documento": false,
+      "seguiu": {
+        "titulo_hash": "8c87a1f70d1f3a61",
+        "texto_chars": 6000,
+        "campos": 6,
+        "refs": [],
+        "abre_documento": false
+      }
+    },
+    {
+      "caso": "#25",
+      "passo": "remover passo do motor sem motivo fica bloqueado",
+      "sem_motivo_bloqueado": true
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Comercial",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "orçamento antes (tela)",
+      "id": 11,
+      "versao": 8,
+      "atualidade": {
+        "estado": "desatualizado",
+        "motivos": [
+          "Escopo de origem: Nova execução do motor jurídico (#16)"
+        ]
+      },
+      "total": "1800.00"
+    },
+    {
+      "caso": "#25",
+      "passo": "Gerar relatório e escopo (tela)",
+      "relatorio": {
+        "id": 31,
+        "versao": 7,
+        "afirmacoes": 12,
+        "evidencias": 33
+      },
+      "escopo": {
+        "id": 32,
+        "versao": 7,
+        "afirmacoes": 7,
+        "fora": 3
+      }
+    },
+    {
+      "caso": "#25",
+      "passo": "evidência aberta (afirmação-do-relatório)",
+      "tipo": "avaliacao_regra",
+      "id": 91,
+      "titulo_hash": "c183245e5585ec7f",
+      "texto_chars": 82,
+      "campos": 5,
+      "refs": [
+        "execução do motor #16",
+        "Lei 12.651/2012, art. 29"
+      ],
+      "abre_documento": false,
+      "seguiu": {
+        "titulo_hash": "aa9cef63c9b09f5d",
+        "texto_chars": 0,
+        "campos": 6,
+        "refs": [],
+        "abre_documento": false
+      }
+    },
+    {
+      "caso": "#25",
+      "passo": "evidência aberta (fundamento-do-escopo)",
+      "tipo": "dispositivo",
+      "id": 41702,
+      "titulo_hash": "a7fe700ed5720c8b",
+      "texto_chars": 3736,
+      "campos": 6,
+      "refs": [
+        "Lei 12.651/2012 (versão 1313)"
+      ],
+      "abre_documento": false,
+      "seguiu": {
+        "titulo_hash": "8c87a1f70d1f3a61",
+        "texto_chars": 6000,
+        "campos": 6,
+        "refs": [],
+        "abre_documento": false
+      }
+    },
+    {
+      "caso": "#25",
+      "passo": "Aprovar relatório (tela)",
+      "id": 31,
+      "versao": 7,
+      "estado_revisao": "aprovada",
+      "atualidade": "vigente"
+    },
+    {
+      "caso": "#25",
+      "passo": "Aprovar escopo (tela)",
+      "id": 32,
+      "versao": 7,
+      "estado_revisao": "aprovada",
+      "atualidade": "vigente"
+    },
+    {
+      "caso": "#25",
+      "passo": "Gerar orçamento (tela)",
+      "id": 13,
+      "versao": 9,
+      "total": "1800.00",
+      "itens": [
+        {
+          "passo": 5,
+          "metodo": "inscricao_car",
+          "escolha": "consultor",
+          "total": "1800.00"
+        }
+      ],
+      "fora": [
+        {
+          "passo": 6,
+          "motivo_hash": "69687e79c86800bb"
+        },
+        {
+          "passo": 7,
+          "motivo_hash": "1d4884c441f10375"
+        },
+        {
+          "passo": 8,
+          "motivo_hash": "1d4884c441f10375"
+        }
+      ],
+      "ressalvas": [
+        {
+          "tipo": "diagnostico_em_revisao",
+          "conclusoes": 10
+        }
+      ]
+    },
+    {
+      "caso": "#25",
+      "passo": "\"fora\" com motivo na tela",
+      "itens_fora": 3
+    },
+    {
+      "caso": "#25",
+      "passo": 5,
+      "metodo": "hora_tecnica",
+      "versao": 10,
+      "total": "2000.00",
+      "escolha": "consultor"
+    },
+    {
+      "caso": "#25",
+      "passo": 5,
+      "metodo": "inscricao_car",
+      "versao": 11,
+      "total": "1800.00",
+      "escolha": "consultor"
+    },
+    {
+      "caso": "#25",
+      "passo": "Aprovar orçamento (tela)",
+      "id": 15,
+      "versao": 11,
+      "estado_revisao": "aprovada",
+      "atualidade": "vigente"
+    },
+    {
+      "caso": "#25",
+      "passo": "proposta criada do orçamento (tela)",
+      "proposta": 10,
+      "orcamento_id": 15,
+      "total_value": 1800,
+      "itens": 1,
+      "orcamento_total": "1800.00"
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Comercial (recarga)",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "recarga: mesmo estado",
+      "orcamento": 15,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "1800.00",
+      "relatorio": 31,
+      "relatorio_estado": "aprovada",
+      "escopo": 32,
+      "escopo_estado": "aprovada"
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Comercial (nova sessão)",
+      "texto": "Painel 169bc30 · API 169bc30 · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "nova sessão: mesmo estado",
+      "orcamento": 15,
+      "estado": "aprovada",
+      "atualidade": "vigente",
+      "total": "1800.00",
+      "relatorio": 31,
+      "relatorio_estado": "aprovada",
+      "escopo": 32,
+      "escopo_estado": "aprovada"
+    }
+  ],
+  "api": {
+    "commit": "169bc30e17f2fcc0a85ca32f6f436891bb63168b",
+    "ambiente": "development"
+  },
+  "resultado": "ok",
+  "fim": "2026-09-26T01:26:58.239Z"
+}

@@ -18,6 +18,7 @@ import { AlertCircle, Zap, X } from 'lucide-react';
 
 import { Process, TABS } from './ProcessDetailTypes';
 import { isTabVisible, resolveActiveTab } from '@/lib/tabFlags';
+import { useRota } from '@/lib/rota/hooks';
 import { MACROETAPA_LABELS } from './quadro-types';
 import ProcessHeader from './ProcessHeader';
 import DiagnosisTab from './DiagnosisTab';
@@ -96,6 +97,12 @@ export default function ProcessDetail() {
     enabled: !!processId,
     staleTime: 30_000,
   });
+
+  // ADR-074: a cadeia comercial nasce da Rota assinada, não da macroetapa. Com a
+  // Rota assinada, a aba Comercial aparece mesmo antes da E6 (o relatório, o
+  // escopo e o orçamento já têm o que fazer).
+  const { data: rota } = useRota(processId);
+  const rotaAssinada = !!rota?.validated_at;
 
   // CAM3WS-005 — validar action via painel direito
   const validateActionMutation = useMutation({
@@ -267,7 +274,8 @@ export default function ProcessDetail() {
             }
             if (tab.block_type === 'conditional' &&
                 typeof tab.min_stage_index === 'number' &&
-                currentIndex < tab.min_stage_index) {
+                currentIndex < tab.min_stage_index &&
+                !(tab.key === 'commercial' && rotaAssinada)) {
               return null;
             }
             const Icon = tab.icon;
@@ -333,7 +341,13 @@ export default function ProcessDetail() {
             />
           )}
           {effectiveTab === 'alertas' && <ConferenciaTab processId={processId} />}
-          {effectiveTab === 'acoes' && <AcoesTab processId={processId} currentStage={viewingStage ?? currentStage} />}
+          {effectiveTab === 'acoes' && (
+            <AcoesTab
+              processId={processId}
+              currentStage={viewingStage ?? currentStage}
+              onAbrirComercial={() => setActiveTab('commercial')}
+            />
+          )}
           {effectiveTab === 'dossier' && <ProcessDossier processId={processId} />}
           {effectiveTab === 'decisions' && <DecisionsTab processId={processId} currentMacroetapa={viewingStage ?? currentStage} />}
           {effectiveTab === 'commercial' && <ProcessCommercial processId={processId} />}

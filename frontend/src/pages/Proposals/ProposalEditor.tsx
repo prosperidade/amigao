@@ -158,12 +158,15 @@ export default function ProposalEditor() {
   // Mutations
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // ADR-074 §7: itens e total da proposta nascida do orçamento são do orçamento —
+      // reenviá-los no PATCH dá 422. O consultor muda o orçamento, não a proposta.
+      const doOrcamento = !isNew && !!proposal?.orcamento_id;
       const body = {
         title,
         client_id: parseInt(clientId),
         process_id: processId ? parseInt(processId) : undefined,
-        scope_items: scopeItems,
-        total_value: totalValue ? parseFloat(totalValue) : undefined,
+        scope_items: doOrcamento ? undefined : scopeItems,
+        total_value: doOrcamento ? undefined : totalValue ? parseFloat(totalValue) : undefined,
         validity_days: parseInt(validityDays),
         payment_terms: paymentTerms,
         notes,
@@ -250,6 +253,8 @@ export default function ProposalEditor() {
 
   const statusCfg = proposal ? (STATUS_CONFIG[proposal.status] ?? STATUS_CONFIG.draft) : STATUS_CONFIG.draft;
   const isEditable = !proposal || proposal.status === 'draft';
+  const orcamentoOrigem: number | null = proposal?.orcamento_id ?? null;
+  const itensEditaveis = isEditable && orcamentoOrigem === null;
 
   // Classes reutilizáveis
   const inputCls = "w-full rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50 transition-colors";
@@ -451,8 +456,15 @@ export default function ProposalEditor() {
           {/* Escopo */}
           <div className={`${cardCls} space-y-3`}>
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200">Itens de Escopo</h2>
-              {isEditable && (
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                Itens de Escopo
+                {orcamentoOrigem !== null && (
+                  <span className="ml-2 text-xs font-normal text-indigo-600 dark:text-indigo-300">
+                    do orçamento #{orcamentoOrigem} — altere no orçamento
+                  </span>
+                )}
+              </h2>
+              {itensEditaveis && (
                 <button
                   onClick={addScopeItem}
                   className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors"
@@ -478,14 +490,14 @@ export default function ProposalEditor() {
                     <input
                       value={item.description}
                       onChange={e => updateScopeItem(idx, 'description', e.target.value)}
-                      disabled={!isEditable}
+                      disabled={!itensEditaveis}
                       placeholder="Descrição do serviço"
                       className="col-span-6 bg-white dark:bg-transparent border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50"
                     />
                     <input
                       value={item.qty}
                       onChange={e => updateScopeItem(idx, 'qty', parseFloat(e.target.value) || 0)}
-                      disabled={!isEditable}
+                      disabled={!itensEditaveis}
                       type="number"
                       min="0"
                       className="col-span-2 bg-white dark:bg-transparent border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50"
@@ -493,7 +505,7 @@ export default function ProposalEditor() {
                     <input
                       value={item.unit_price}
                       onChange={e => updateScopeItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
-                      disabled={!isEditable}
+                      disabled={!itensEditaveis}
                       type="number"
                       min="0"
                       className="col-span-2 bg-white dark:bg-transparent border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white text-right focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 disabled:opacity-50"
@@ -501,7 +513,7 @@ export default function ProposalEditor() {
                     <div className="col-span-1 text-xs text-emerald-600 dark:text-emerald-400 text-right font-medium">
                       {item.total > 0 ? item.total.toLocaleString('pt-BR', { minimumFractionDigits: 0 }) : '—'}
                     </div>
-                    {isEditable && (
+                    {itensEditaveis && (
                       <button onClick={() => removeScopeItem(idx)} className="col-span-1 text-gray-400 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 flex justify-center">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -536,7 +548,7 @@ export default function ProposalEditor() {
               <input
                 value={totalValue}
                 onChange={e => setTotalValue(e.target.value)}
-                disabled={!isEditable}
+                disabled={!itensEditaveis}
                 type="number"
                 min="0"
                 placeholder="0,00"

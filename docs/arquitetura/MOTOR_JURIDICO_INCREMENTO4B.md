@@ -99,6 +99,7 @@ nenhuma regra falhou). Os dois estão nos testes de contrato (`test_regra_de_go_
 6. **A tela não conhece o motor.** O painel mostra os passos (`origem: 'motor'` entrou no tipo), mas
    não tem "gerar pelo motor", relatório da execução, ciência de alerta nem motivo na remoção — a
    remoção pela tela atual recebe **400** num passo do motor. O percurso do gate foi por API. Dívida **#278**.
+   *(Fechada em dev em 25/09: [TELAS_COMERCIAL_MOTOR_282_278.md](TELAS_COMERCIAL_MOTOR_282_278.md).)*
 7. **O container `api` do compose não sobe com o dev em `075mj001`**: ele roda a `main`, que não
    conhece a revisão. Efeito de ambiente até o merge (ou `alembic downgrade 074zn001`), não do código.
 

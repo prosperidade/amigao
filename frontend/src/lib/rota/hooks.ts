@@ -89,8 +89,12 @@ export function useUpdatePasso(processId: number) {
 export function useRemovePasso(processId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ rotaId, passoId }: { rotaId: number; passoId: number }) =>
-      api.delete(`/rotas/${rotaId}/passos/${passoId}`).then(r => r.data),
+    // Motivo vai como query (`DELETE` sem corpo): obrigatório no passo do motor (ADR-073 §6).
+    mutationFn: ({ rotaId, passoId, motivo }: { rotaId: number; passoId: number; motivo?: string | null }) =>
+      (motivo
+        ? api.delete(`/rotas/${rotaId}/passos/${passoId}`, { params: { motivo } })
+        : api.delete(`/rotas/${rotaId}/passos/${passoId}`)
+      ).then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: rotaKeys.detail(processId) });
     },

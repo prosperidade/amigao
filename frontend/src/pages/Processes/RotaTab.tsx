@@ -8,6 +8,11 @@
  *
  * Regras: validar exige classificação; "Fechar rota" só habilita com TODOS os
  * passos validados; rota 'desatualizada' trava o fechamento até aceitar o diff.
+ *
+ * Motor jurídico (ADR-073, dívida #278): "Gerar pelo motor" materializa a Rota
+ * das regras homologadas; o relatório da execução fica acima dos passos, com a
+ * ciência de alerta crítico; o passo do motor mostra o fundamento por ID
+ * (clicável) e só sai da Rota com motivo — o backend recusa sem ele.
  */
 import { useState } from 'react';
 import { AxiosError } from 'axios';
@@ -25,8 +30,13 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Scale,
   Trash2,
 } from 'lucide-react';
+import EvidenciaChip from '@/components/EvidenciaChip';
+import RodapeVersao from '@/components/RodapeVersao';
+import { useGerarRotaMotor } from '@/lib/comercial/hooks';
+import MotorExecucaoPanel from './MotorExecucaoPanel';
 import {
   useAddPassoManual,
   useFecharRota,
@@ -48,6 +58,8 @@ import {
 
 interface RotaTabProps {
   processId: number;
+  /** Leva à aba Comercial (relatório, escopo e orçamento nascem da Rota validada). */
+  onAbrirComercial?: () => void;
 }
 
 function detalheErro(err: unknown, fallback: string): string {
@@ -110,6 +122,12 @@ function PassoCard({
   const validarMut = useValidarPasso(processId);
 
   const validado = passo.status === 'validado';
+  const doMotor = passo.origem === 'motor';
+  // Motivo obrigatório: passo do motor (ADR-073 §6) ou Rota já assinada — o que sai
+  // depois da assinatura desatualiza o orçamento e vira "fora" com esse motivo.
+  const exigeMotivo = doMotor || fechada;
+  const [removendo, setRemovendo] = useState(false);
+  const [motivo, setMotivo] = useState('');
 
   const setClassificacao = (classificacao: RotaPassoClassificacao) => {
     updateMut.mutate(
@@ -132,10 +150,23 @@ function PassoCard({
     );
   };
 
-  const remover = () => {
+  // ADR-073 §6: passo do motor só sai com motivo (o backend devolve 400 sem ele).
+  // Nos demais o motivo é opcional, mas pedido do mesmo jeito: vai para a trilha
+  // e para o "fora do escopo" do orçamento.
+  const remover = (e: React.FormEvent) => {
+    e.preventDefault();
+    const m = motivo.trim();
+    if (exigeMotivo && !m) return;
     removeMut.mutate(
-      { rotaId, passoId: passo.id },
-      { onError: () => toast.error('Falha ao remover o passo.') },
+      { rotaId, passoId: passo.id, motivo: m || null },
+      {
+        onSuccess: () => {
+          setRemovendo(false);
+          setMotivo('');
+          toast.success('Passo removido — o motivo ficou na trilha.');
+        },
+        onError: err => toast.error(detalheErro(err, 'Falha ao remover o passo.')),
+      },
     );
   };
 
@@ -202,7 +233,12 @@ function PassoCard({
                 manual
               </span>
             )}
-            <FonteChip passo={passo} />
+            {doMotor && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-1">
+                <Scale className="w-3 h-3" /> motor jurídico
+              </span>
+            )}
+            {!doMotor && <FonteChip passo={passo} />}
             {validado && (
               <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
                 <Check className="w-3 h-3" /> validado
@@ -218,6 +254,38 @@ function PassoCard({
             {passo.prazo_estimado_dias !== null && <span>Prazo: ~{passo.prazo_estimado_dias} dias</span>}
             {passo.origem_manual_nota && <span>Origem: {passo.origem_manual_nota}</span>}
           </div>
+
+          {/* Fonte por ID (ADR-073): o dispositivo que fundamenta o passo e a
+              avaliação da regra que o gerou — clicáveis. Passo do motor sem
+              dispositivo diz isso, não finge fonte. */}
+          {doMotor && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-2" data-testid={`fonte-passo-${passo.id}`}>
+              {passo.fundamento_dispositivo_id ? (
+                <EvidenciaChip
+                  processId={processId}
+                  evidencia={{
+                    tipo: 'dispositivo',
+                    id: passo.fundamento_dispositivo_id,
+                    rotulo: passo.norma_ref ?? `dispositivo #${passo.fundamento_dispositivo_id}`,
+                  }}
+                />
+              ) : (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  ⚠ fundamento não resolvido no catálogo
+                </span>
+              )}
+              {passo.origem_avaliacao_id && (
+                <EvidenciaChip
+                  processId={processId}
+                  evidencia={{
+                    tipo: 'avaliacao_regra',
+                    id: passo.origem_avaliacao_id,
+                    rotulo: `avaliação #${passo.origem_avaliacao_id}`,
+                  }}
+                />
+              )}
+            </div>
+          )}
 
           {/* Classificação (Ficha §8.1) — obrigatória para validar */}
           <div className="flex items-center gap-1.5 mt-3">
@@ -240,12 +308,50 @@ function PassoCard({
               );
             })}
           </div>
+
+          {removendo && (
+            <form onSubmit={remover} className="mt-3 space-y-1.5 rounded-lg border border-red-200 dark:border-red-500/30 p-2.5">
+              <label htmlFor={`motivo-${passo.id}`} className="block text-[11px] text-red-800 dark:text-red-300">
+                {doMotor
+                  ? 'Motivo da remoção (obrigatório para passo do motor jurídico)'
+                  : fechada
+                    ? 'Motivo da remoção (obrigatório com a Rota assinada)'
+                    : 'Motivo da remoção (vai para a trilha e para o "fora do escopo")'}
+              </label>
+              <textarea
+                id={`motivo-${passo.id}`}
+                value={motivo}
+                onChange={e => setMotivo(e.target.value)}
+                rows={2}
+                className="w-full rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white px-2 py-1.5 text-xs focus:outline-none focus:border-red-500"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={removeMut.isPending || (exigeMotivo && !motivo.trim())}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white"
+                >
+                  Remover da rota
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRemovendo(false);
+                    setMotivo('');
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
         </div>
 
-        {/* Ações do passo */}
-        {!fechada && (
-          <div className="flex items-center gap-1 shrink-0">
-            {!validado && (
+        {/* Ações do passo. Com a Rota assinada, só remover (com motivo) — a API
+            aceita, a Rota segue assinada e o orçamento sai desatualizado. */}
+        <div className="flex items-center gap-1 shrink-0">
+            {!fechada && !validado && (
               <button
                 type="button"
                 onClick={validar}
@@ -258,8 +364,8 @@ function PassoCard({
             )}
             <button
               type="button"
-              onClick={remover}
-              disabled={removeMut.isPending}
+              onClick={() => setRemovendo(true)}
+              disabled={removeMut.isPending || removendo}
               title="Remover passo"
               // Nome acessível com o título: com vários cards na tela, "Remover
               // passo" sozinho não diz QUAL — nem para o leitor de tela, nem
@@ -269,21 +375,24 @@ function PassoCard({
             >
               <Trash2 className="w-4 h-4" />
             </button>
-          </div>
-        )}
+        </div>
       </div>
     </Reorder.Item>
   );
 }
 
-export default function RotaTab({ processId }: RotaTabProps) {
+export default function RotaTab({ processId, onAbrirComercial }: RotaTabProps) {
   const { data: rota, isLoading } = useRota(processId);
   const gerarMut = useGerarRota(processId);
+  const gerarMotorMut = useGerarRotaMotor(processId);
   const reordenarMut = useReordenarRota(processId);
   const addManualMut = useAddPassoManual(processId);
   const fecharMut = useFecharRota(processId);
 
-  const [order, setOrder] = useState<RotaPasso[]>([]);
+  // Nasce dos passos que já estiverem no cache: o ProcessDetail lê a Rota antes
+  // desta aba montar, e a sincronização abaixo só dispara quando os passos MUDAM —
+  // começar vazio deixava a lista em branco até a próxima gravação.
+  const [order, setOrder] = useState<RotaPasso[]>(rota?.passos ?? []);
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novaNota, setNovaNota] = useState('');
 
@@ -314,6 +423,21 @@ export default function RotaTab({ processId }: RotaTabProps) {
         }
       },
       onError: err => toast.error(detalheErro(err, 'Falha ao gerar a rota.')),
+    });
+  };
+
+  const gerarPeloMotor = () => {
+    gerarMotorMut.mutate(undefined, {
+      onSuccess: ({ rota: r, execucao }) => {
+        const suprimidos = r.suprimidos ? ` ${r.suprimidos} passo(s) que você removeu continuam fora.` : '';
+        const alertas = execucao.alertas_sem_ciencia.length
+          ? ` ${execucao.alertas_sem_ciencia.length} alerta(s) crítico(s) pedem ciência.`
+          : '';
+        toast.success(
+          `Motor: ${execucao.avaliacoes.length} regra(s) avaliada(s), ${r.created} passo(s) novo(s).${suprimidos}${alertas}`,
+        );
+      },
+      onError: err => toast.error(detalheErro(err, 'Falha ao gerar a rota pelo motor.')),
     });
   };
 
@@ -403,6 +527,19 @@ export default function RotaTab({ processId }: RotaTabProps) {
           {gerarMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           Gerar rota
         </button>
+        <button
+          type="button"
+          onClick={gerarPeloMotor}
+          disabled={gerarMotorMut.isPending}
+          className="ml-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+        >
+          {gerarMotorMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scale className="w-4 h-4" />}
+          Gerar pelo motor
+        </button>
+        <div className="mt-6 text-left">
+          <MotorExecucaoPanel processId={processId} />
+        </div>
+        <RodapeVersao />
       </div>
     );
   }
@@ -441,17 +578,30 @@ export default function RotaTab({ processId }: RotaTabProps) {
             {`A IA propõe a rota; você reordena, classifica e assina. Nenhum passo sem decisão.`}
           </p>
         </div>
-        {!fechada && (
+        <div className="flex gap-2 shrink-0">
+          {!fechada && (
+            <button
+              type="button"
+              onClick={gerar}
+              disabled={gerarMut.isPending}
+              className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800 dark:bg-white/10 hover:bg-gray-700 dark:hover:bg-white/20 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+            >
+              {gerarMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Atualizar da IA
+            </button>
+          )}
+          {/* O motor avalia de novo mesmo com a Rota fechada: fato novo pode trazer
+              passo novo (a Rota vira 'desatualizada') ou alerta que pede ciência. */}
           <button
             type="button"
-            onClick={gerar}
-            disabled={gerarMut.isPending}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800 dark:bg-white/10 hover:bg-gray-700 dark:hover:bg-white/20 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+            onClick={gerarPeloMotor}
+            disabled={gerarMotorMut.isPending}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
           >
-            {gerarMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Atualizar da IA
+            {gerarMotorMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scale className="w-4 h-4" />}
+            Gerar pelo motor
           </button>
-        )}
+        </div>
       </div>
 
       {/* Banner desatualizada */}
@@ -482,6 +632,8 @@ export default function RotaTab({ processId }: RotaTabProps) {
           </p>
         </div>
       )}
+
+      <MotorExecucaoPanel processId={processId} />
 
       {/* Lista ordenável (framer Reorder) */}
       {rota.passos.length === 0 ? (
@@ -539,8 +691,13 @@ export default function RotaTab({ processId }: RotaTabProps) {
       <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100 dark:border-white/10">
         <p className="text-xs text-gray-500 dark:text-slate-400">
           {fechada ? (
-            <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex flex-wrap items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
               <ShieldCheck className="w-4 h-4" /> Rota assinada — registrada na trilha de auditoria.
+              {onAbrirComercial && (
+                <button type="button" onClick={onAbrirComercial} className="underline text-emerald-700 dark:text-emerald-300">
+                  Relatório, escopo e orçamento →
+                </button>
+              )}
             </span>
           ) : pendentes > 0 ? (
             desatualizada
@@ -568,6 +725,7 @@ export default function RotaTab({ processId }: RotaTabProps) {
           </button>
         )}
       </div>
+      <RodapeVersao />
     </div>
   );
 }
