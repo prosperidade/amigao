@@ -20,6 +20,14 @@ registral (R/AV) antes do extrator, âncora por fragmento, tamanho máximo de ch
 prova em dev na matrícula de 82 mil caracteres. Nenhum disparo novo em produção foi deixado
 pendente; a última tarefa do #23 foi deixada terminar sozinha.
 
+**Pulso 26/09/2026 (tarde) — orçamento só do tenant (#284, ADR-081), PR, só dev.** Saem os dois
+orçamentos de código (`PRICE_TABLE` e `OrcamentoAgent._estimate_by_rules`): a proposta de um caso
+só nasce do orçamento aprovado e atual, e sem Rota assinada a recusa pede a assinatura. Propostas
+antigas ficam como estão (rascunho antigo não é enviado; renegociar exige orçamento). Prova no
+navegador em #22 (Rota sem passo cobrável: escopo e proposta recusados com o motivo), #23 e #25.
+A lista de produção espera o canal somente-leitura. Dívida **#292** (proposta avulsa). Registro:
+[ORCAMENTO_SO_DO_TENANT_284.md](../arquitetura/ORCAMENTO_SO_DO_TENANT_284.md).
+
 **Pulso 26/09/2026 — métodos e preços (#282) e motor por conteúdo (#289), empilhado no #218, só
 dev.** Configurações ganhou a aba Métodos e preços (versão nova a cada mudança, regras do motor,
 desativar/reativar, histórico); a #282 fecha e a #284 fica desbloqueada. O motor passa a ser

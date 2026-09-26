@@ -1,0 +1,95 @@
+{
+  "inicio": "2026-09-26T17:35:36.635Z",
+  "base": "http://127.0.0.1:5182",
+  "passos": [
+    {
+      "caso": "#22",
+      "passo": "rodapé Comercial",
+      "texto": "Painel 46142bc · API 46142bc · desenvolvimento"
+    },
+    {
+      "caso": "#22",
+      "passo": "gerar relatório e escopo (tela)",
+      "status": 422,
+      "detalhe": "A Rota validada não tem passo validado classificado como item de proposta: não há escopo a especificar."
+    },
+    {
+      "caso": "#22",
+      "passo": "proposta nova (rascunho)",
+      "status": 422,
+      "detalhe": "A proposta nasce do orçamento: gere e aprove o relatório, o escopo e o orçamento da Rota assinada (aba Comercial) antes da proposta."
+    },
+    {
+      "caso": "#22",
+      "passo": "salvar bloqueado na tela",
+      "bloqueado": true
+    },
+    {
+      "caso": "#22",
+      "passo": "atalho para o Comercial do caso",
+      "url": "/processes/69?tab=commercial"
+    },
+    {
+      "caso": "#23",
+      "passo": "proposta nova (rascunho)",
+      "status": 200,
+      "orcamento_id": 22,
+      "total": 950,
+      "itens": 1
+    },
+    {
+      "caso": "#23",
+      "passo": "itens travados no rascunho",
+      "item_editavel": false
+    },
+    {
+      "caso": "#23",
+      "passo": "proposta criada (tela)",
+      "proposta": 22,
+      "orcamento_id": 22,
+      "total_value": 950,
+      "itens": 1
+    },
+    {
+      "caso": "#25",
+      "passo": "proposta nova (rascunho)",
+      "status": 200,
+      "orcamento_id": 23,
+      "total": 1900,
+      "itens": 1
+    },
+    {
+      "caso": "#25",
+      "passo": "itens travados no rascunho",
+      "item_editavel": false
+    },
+    {
+      "caso": "#25",
+      "passo": "proposta criada (tela)",
+      "proposta": 23,
+      "orcamento_id": 23,
+      "total_value": 1900,
+      "itens": 1
+    },
+    {
+      "caso": "#25",
+      "passo": "rodapé Comercial",
+      "texto": "Painel 46142bc · API 46142bc · desenvolvimento"
+    },
+    {
+      "caso": "#25",
+      "passo": "enviar → recusar → nova versão (tela)",
+      "anterior": 23,
+      "nova": 24,
+      "versao": 2,
+      "orcamento_id": 23,
+      "total_value": 1900
+    }
+  ],
+  "api": {
+    "commit": "46142bc614733eda918c523a733d75d9beb2001a",
+    "ambiente": "development"
+  },
+  "resultado": "ok",
+  "fim": "2026-09-26T17:36:20.253Z"
+}
