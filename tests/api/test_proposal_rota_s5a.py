@@ -320,3 +320,22 @@ def test_gate_e6_intacto_apos_aceite(client: TestClient, db_session):
     client.post(f"/api/v1/proposals/{pid}/accept", headers=h)
     db_session.expire_all()
     assert has_proposal_accepted(db_session, tenant.id, proc.id) is True
+
+
+def test_rascunho_antigo_sem_orcamento_nao_e_enviado(client: TestClient, db_session):
+    """ADR-081: rascunho de caso precificado pela tabela antiga não vai ao cliente; a aceita segue."""
+    tenant, cli, _prop, proc = _setup(db_session, "legado@ex.com")
+    antigo = Proposal(tenant_id=tenant.id, process_id=proc.id, client_id=cli.id, status=ProposalStatus.draft,
+                      title="Antiga", scope_items=[{"description": "Serviço", "total": 1200}], total_value=1200,
+                      validity_days=30)
+    aceita = Proposal(tenant_id=tenant.id, process_id=proc.id, client_id=cli.id, status=ProposalStatus.accepted,
+                      title="Aceita", scope_items=[], total_value=1500, validity_days=30)
+    db_session.add_all([antigo, aceita])
+    db_session.commit()
+    h = _login(client, "legado@ex.com")
+
+    r = client.post(f"/api/v1/proposals/{antigo.id}/send", headers=h)
+    assert r.status_code == 422
+    assert "orçamento" in r.json()["detail"]
+    got = client.get(f"/api/v1/proposals/{aceita.id}", headers=h).json()
+    assert got["status"] == "accepted" and got["total_value"] == 1500

@@ -1,5 +1,10 @@
 """Gate E2E da Frente J — a sequência inteira contra a API REAL, autenticada.
 
+HISTÓRICO (26/09/2026, ADR-081/#284): este gate cria a proposta do caso com itens digitados no
+corpo. Desde a #284 isso é recusado (422) — proposta de caso só nasce do orçamento aprovado. Para
+rodá-lo de novo, antes do passo da proposta: Rota assinada, métodos do tenant, escopo e orçamento
+aprovados (ver ``tests/comercial/apoio.py``), e o POST sem itens.
+
 Não é teste unitário: exige API + worker Celery + Redis + MinIO + Postgres
 descartável de pé (`setup_db.py`) e uma chave de LLM válida no ambiente do
 worker (a extração é real, como em produção). O que ele prova, na ordem

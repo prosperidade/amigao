@@ -412,6 +412,12 @@ def send_proposal(
     proposal = _get_proposal_or_404(db, proposal_id, current_user.tenant_id)
     if proposal.status != ProposalStatus.draft:
         raise HTTPException(status_code=422, detail="Proposta já foi enviada ou finalizada.")
+    if proposal.process_id is not None and proposal.orcamento_id is None:
+        # ADR-081: rascunho de caso precificado antes da #284 (tabela de código) não vai ao
+        # cliente. A enviada e a aceita seguem o ciclo — já estão com o cliente.
+        raise HTTPException(status_code=422, detail=(
+            "Este rascunho não nasceu do orçamento do escritório (foi precificado pela tabela antiga). "
+            "Gere a proposta a partir do orçamento aprovado do caso e envie a nova."))
 
     proposal.status = ProposalStatus.sent
     proposal.sent_at = datetime.now(UTC)
